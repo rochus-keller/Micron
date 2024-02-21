@@ -158,9 +158,9 @@ Token Lexer::nextTokenImp()
 
         if( ch == '"' || ch == '\'' )
             return string();
-        else if( ch == '$' )
+        else if( ch == '#' )
                 return hexstring();
-        else if( ::isalpha(ch) || ( ch == '_' ) )
+        else if( ::isalpha(ch) || ( ch == '_' ) || ( ch == '$' ))
             return ident();
         else if( ::isdigit(ch) )
             return number();
@@ -228,7 +228,13 @@ Token Lexer::token(TokenType tt, int len, const QByteArray& val)
     d_colNr += len;
     t.d_sourcePath = d_sourcePath;
     if( tt > TT_Keywords && tt < TT_Specials)
+    {
         t.d_code = tt;
+        t.d_type = Tok_ident;
+        // there are no keywords; whenever one is found it is
+        // acutally an ident which can also be used as a keyword
+    }
+
     return t;
 }
 
@@ -236,6 +242,8 @@ static inline bool isAllLowerCase( const QByteArray& str )
 {
     for( int i = 0; i < str.size(); i++ )
     {
+        if( str[i] == '_' || ::isdigit(str[i]) )
+            continue;
         if( !::islower(str[i] ) )
                 return false;
     }
@@ -275,14 +283,8 @@ Token Lexer::ident()
     TokenType t = tokenTypeFromString( keyword, &pos );
     if( t != Tok_Invalid && pos != keyword.size() )
         t = Tok_Invalid;
-    if( t == Tok_Invalid && d_enableExt )
-    {
-        t = tokenTypeFromString( str, &pos );
-        if( t != Tok_Invalid && pos != keyword.size() )
-            t = Tok_Invalid;
-    }
     if( t != Tok_Invalid )
-        return token( t, off );
+        return token( t, off, str );
     else
         return token( Tok_ident, off, str );
 }
@@ -579,7 +581,7 @@ static int readHex( QByteArray& to, const QByteArray& from, int& pos )
     for( ; pos < from.size(); pos++ )
     {
         const char ch = from[pos];
-        if( ch == '$' )
+        if( ch == '#' )
         {
             res = HEX_END;
             pos++;
@@ -600,9 +602,6 @@ static int readHex( QByteArray& to, const QByteArray& from, int& pos )
 Token Lexer::hexstring()
 {
     countLine();
-    // inofficial extension of Oberon found in ProjectOberon,
-    // e.g. arrow := SYSTEM.ADR($0F0F 0060 0070 0038 001C 000E 0007 8003 C101 E300 7700 3F00 1F00 3F00 7F00 FF00$);
-    // in Display.Mod; sogar über mehrere Zeilen zulässig
 
     const int startLine = d_lineNr;
     const int startCol = d_colNr;
@@ -637,14 +636,14 @@ Token Lexer::hexstring()
         return t;
     }else
     {
-        Token t1( Tok_Dlr, startLine, startCol + 1,
+        Token t1( Tok_Hash, startLine, startCol + 1,
                  startLine == d_lineNr ? pos - startCol : str.size(), str );
         t1.d_sourcePath = d_sourcePath;
         d_lastToken = t1;
         d_colNr = pos;
         if( res == HEX_END )
         {
-            Token t2(Tok_Dlr,d_lineNr, pos - 1, 2 );
+            Token t2(Tok_Hash,d_lineNr, pos - 1, 2 );
             t2.d_sourcePath = d_sourcePath;
             d_lastToken = t2;
             d_buffer.append( t2 );
@@ -658,7 +657,7 @@ bool Lexer::isHexstring(int off) const
     for( int i = d_colNr + off; i < d_line.size(); i++ )
     {
         const char ch = d_line[i];
-        if( ch == '$' )
+        if( ch == '#' )
             return true;
         if( !isHexDigit(ch) && !::isspace(ch) )
             return false;
@@ -667,7 +666,7 @@ bool Lexer::isHexstring(int off) const
     for( int i = 0; i < buf.size(); i++ )
     {
         const char ch = buf[i];
-        if( ch == '$' )
+        if( ch == '#' )
             return true;
         if( !isHexDigit(ch) && !::isspace(ch) )
             return false;
@@ -681,4 +680,3 @@ void Lexer::countLine()
         d_sloc++;
     d_lineCounted = true;
 }
-

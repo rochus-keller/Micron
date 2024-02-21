@@ -7,7 +7,7 @@ static inline bool FIRST_Mil(int tt) {
 }
 
 static inline bool FIRST_integer(int tt) {
-	return tt == Tok_Minus || tt == Tok_Plus || tt == Tok_unsigned;
+	return tt == Tok_unsigned || tt == Tok_Minus || tt == Tok_Plus;
 }
 
 static inline bool FIRST_qualident(int tt) {
@@ -27,12 +27,12 @@ static inline bool FIRST_type(int tt) {
 	case Tok_POINTER:
 	case Tok_ARRAY:
 	case Tok_STRUCT:
+	case Tok_Hat:
+	case Tok_ident:
 	case Tok_PROCEDURE:
 	case Tok_PROC:
-	case Tok_Lbrack:
-	case Tok_ident:
 	case Tok_UNION:
-	case Tok_Hat:
+	case Tok_Lbrack:
 		return true;
 	default: return false;
 	}
@@ -75,7 +75,7 @@ static inline bool FIRST_VariableDeclaration(int tt) {
 }
 
 static inline bool FIRST_VariableType(int tt) {
-	return tt == Tok_POINTER || tt == Tok_ident || tt == Tok_Hat;
+	return tt == Tok_POINTER || tt == Tok_Hat || tt == Tok_ident;
 }
 
 static inline bool FIRST_ProcedureDeclaration(int tt) {
@@ -87,7 +87,7 @@ static inline bool FIRST_ProcedureHeading(int tt) {
 }
 
 static inline bool FIRST_ProcedureBody(int tt) {
-	return tt == Tok_BEGIN || tt == Tok_VAR;
+	return tt == Tok_VAR || tt == Tok_BEGIN;
 }
 
 static inline bool FIRST_LocalDeclaration(int tt) {
@@ -127,111 +127,111 @@ static inline bool FIRST_ImportPath(int tt) {
 }
 
 static inline bool FIRST_DeclarationSequence(int tt) {
-	return tt == Tok_PROCEDURE || tt == Tok_PROC || tt == Tok_TYPE || tt == Tok_VAR;
+	return tt == Tok_VAR || tt == Tok_TYPE || tt == Tok_PROCEDURE || tt == Tok_PROC;
 }
 
 static inline bool FIRST_Expression(int tt) {
 	switch(tt){
-	case Tok_ldloc_1:
-	case Tok_rem:
-	case Tok_ldloc_s:
-	case Tok_conv_u1:
-	case Tok_ldind_u8:
-	case Tok_call:
-	case Tok_add:
-	case Tok_ldelem_u2:
-	case Tok_ldelem:
-	case Tok_ldarg_0:
-	case Tok_ldarg_2:
-	case Tok_ldelema:
-	case Tok_ldelem_ip:
-	case Tok_ldind_r8:
-	case Tok_shr:
-	case Tok_ldelem_r4:
-	case Tok_ldc_i4_2:
-	case Tok_ldelem_i4:
-	case Tok_conv_r8:
-	case Tok_ldelem_u1:
-	case Tok_ldarg:
-	case Tok_ldc_i4_6:
-	case Tok_ldc_i4_5:
-	case Tok_ldc_i4_7:
-	case Tok_ldind_r4:
-	case Tok_clt:
-	case Tok_ldarg_s:
-	case Tok_conv_i1:
-	case Tok_newobj:
-	case Tok_ldelem_i2:
-	case Tok_cgt_un:
-	case Tok_ldind_i4:
-	case Tok_ldc_r4:
-	case Tok_ceq:
-	case Tok_newvla:
-	case Tok_ldind_u4:
-	case Tok_ldc_i4_3:
-	case Tok_ldloc:
-	case Tok_ldarga:
-	case Tok_dup:
-	case Tok_mul:
-	case Tok_calli:
-	case Tok_ldind_u1:
-	case Tok_ldelem_r8:
-	case Tok_ldvara:
-	case Tok_cgt:
-	case Tok_ldarg_1:
-	case Tok_ldind_i8:
-	case Tok_ldc_i4_m1:
-	case Tok_ldloca:
-	case Tok_conv_i4:
-	case Tok_ldnull:
-	case Tok_ldloc_0:
-	case Tok_conv_u4:
-	case Tok_ldobj:
-	case Tok_xor:
-	case Tok_ldarg_3:
-	case Tok_ldvar:
-	case Tok_ldelem_i8:
-	case Tok_ldproc:
-	case Tok_ldc_i4_8:
-	case Tok_ldind_ip:
-	case Tok_or:
-	case Tok_conv_u2:
-	case Tok_ldelem_u4:
-	case Tok_ldc_i4_4:
-	case Tok_ldstr:
-	case Tok_ldelem_u8:
-	case Tok_not:
-	case Tok_conv_i2:
-	case Tok_clt_un:
-	case Tok_ldarga_s:
-	case Tok_ldftn:
-	case Tok_castptr:
-	case Tok_ldflda:
-	case Tok_ldelem_i1:
-	case Tok_ldc_i4_0:
-	case Tok_ldc_i8:
-	case Tok_shr_un:
-	case Tok_ldind_i2:
-	case Tok_ldloc_2:
-	case Tok_ldc_i4_s:
-	case Tok_neg:
-	case Tok_conv_i8:
-	case Tok_ldloca_s:
-	case Tok_ldind_i1:
-	case Tok_ldc_i4:
-	case Tok_newarr:
-	case Tok_and:
-	case Tok_ldfld:
-	case Tok_conv_r4:
-	case Tok_shl:
-	case Tok_ldloc_3:
-	case Tok_ldc_i4_1:
-	case Tok_ldc_r8:
-	case Tok_ldind_u2:
-	case Tok_sub:
-	case Tok_conv_ip:
-	case Tok_div:
-	case Tok_conv_u8:
+	case Tok_LDOBJ:
+	case Tok_SUB:
+	case Tok_LDC_I4_4:
+	case Tok_CONV_I4:
+	case Tok_LDIND_I1:
+	case Tok_SHR_UN:
+	case Tok_CONV_U1:
+	case Tok_SHR:
+	case Tok_CONV_U2:
+	case Tok_LDARG:
+	case Tok_CALL:
+	case Tok_NEG:
+	case Tok_LDELEM_U8:
+	case Tok_LDIND_U1:
+	case Tok_CONV_R4:
+	case Tok_LDC_R8:
+	case Tok_LDIND_IP:
+	case Tok_LDLOC_0:
+	case Tok_CONV_I1:
+	case Tok_LDELEM_R4:
+	case Tok_DIV:
+	case Tok_LDIND_U4:
+	case Tok_LDLOC_2:
+	case Tok_CASTPTR:
+	case Tok_LDIND_I4:
+	case Tok_LDLOC_S:
+	case Tok_LDELEM_U1:
+	case Tok_LDC_I4_1:
+	case Tok_LDELEM_U4:
+	case Tok_CONV_U8:
+	case Tok_LDLOCA_S:
+	case Tok_LDIND_R4:
+	case Tok_LDLOC_1:
+	case Tok_LDC_I8:
+	case Tok_LDC_I4_6:
+	case Tok_LDC_I4_8:
+	case Tok_LDARG_2:
+	case Tok_LDIND_I2:
+	case Tok_LDC_R4:
+	case Tok_XOR:
+	case Tok_LDNULL:
+	case Tok_LDELEM_U2:
+	case Tok_LDELEM_I4:
+	case Tok_ADD:
+	case Tok_LDVAR:
+	case Tok_LDFLD:
+	case Tok_LDARG_3:
+	case Tok_AND:
+	case Tok_LDELEM_IP:
+	case Tok_LDIND_U8:
+	case Tok_LDC_I4_5:
+	case Tok_CONV_U4:
+	case Tok_LDARG_S:
+	case Tok_MUL:
+	case Tok_CALLI:
+	case Tok_CLT_UN:
+	case Tok_LDIND_R8:
+	case Tok_LDVARA:
+	case Tok_NEWARR:
+	case Tok_LDELEM_I8:
+	case Tok_LDELEM:
+	case Tok_LDARGA:
+	case Tok_LDC_I4_3:
+	case Tok_LDC_I4_0:
+	case Tok_SHL:
+	case Tok_CONV_I8:
+	case Tok_LDARGA_S:
+	case Tok_DUP:
+	case Tok_CGT_UN:
+	case Tok_LDELEM_R8:
+	case Tok_LDELEM_I1:
+	case Tok_CONV_I2:
+	case Tok_CONV_IP:
+	case Tok_NOT:
+	case Tok_LDARG_0:
+	case Tok_LDC_I4_M1:
+	case Tok_LDLOCA:
+	case Tok_LDPROC:
+	case Tok_LDIND_U2:
+	case Tok_LDIND_I8:
+	case Tok_CGT:
+	case Tok_LDC_I4_2:
+	case Tok_CONV_R8:
+	case Tok_LDARG_1:
+	case Tok_OR:
+	case Tok_CLT:
+	case Tok_CEQ:
+	case Tok_NEWVLA:
+	case Tok_LDLOC_3:
+	case Tok_REM:
+	case Tok_LDC_I4_S:
+	case Tok_LDC_I4:
+	case Tok_NEWOBJ:
+	case Tok_LDFTN:
+	case Tok_LDC_I4_7:
+	case Tok_LDELEMA:
+	case Tok_LDSTR:
+	case Tok_LDELEM_I2:
+	case Tok_LDLOC:
+	case Tok_LDFLDA:
 		return true;
 	default: return false;
 	}
@@ -239,106 +239,106 @@ static inline bool FIRST_Expression(int tt) {
 
 static inline bool FIRST_ExpInstr(int tt) {
 	switch(tt){
-	case Tok_ldloc_1:
-	case Tok_rem:
-	case Tok_ldloc_s:
-	case Tok_conv_u1:
-	case Tok_ldind_u8:
-	case Tok_call:
-	case Tok_add:
-	case Tok_ldelem_u2:
-	case Tok_ldelem:
-	case Tok_ldarg_0:
-	case Tok_ldarg_2:
-	case Tok_ldelema:
-	case Tok_ldelem_ip:
-	case Tok_ldind_r8:
-	case Tok_shr:
-	case Tok_ldelem_r4:
-	case Tok_ldc_i4_2:
-	case Tok_ldelem_i4:
-	case Tok_conv_r8:
-	case Tok_ldelem_u1:
-	case Tok_ldarg:
-	case Tok_ldc_i4_6:
-	case Tok_ldc_i4_5:
-	case Tok_ldc_i4_7:
-	case Tok_ldind_r4:
-	case Tok_clt:
-	case Tok_ldarg_s:
-	case Tok_conv_i1:
-	case Tok_newobj:
-	case Tok_ldelem_i2:
-	case Tok_cgt_un:
-	case Tok_ldind_i4:
-	case Tok_ldc_r4:
-	case Tok_ceq:
-	case Tok_newvla:
-	case Tok_ldind_u4:
-	case Tok_ldc_i4_3:
-	case Tok_ldloc:
-	case Tok_ldarga:
-	case Tok_dup:
-	case Tok_mul:
-	case Tok_calli:
-	case Tok_ldind_u1:
-	case Tok_ldelem_r8:
-	case Tok_ldvara:
-	case Tok_cgt:
-	case Tok_ldarg_1:
-	case Tok_ldind_i8:
-	case Tok_ldc_i4_m1:
-	case Tok_ldloca:
-	case Tok_conv_i4:
-	case Tok_ldnull:
-	case Tok_ldloc_0:
-	case Tok_conv_u4:
-	case Tok_ldobj:
-	case Tok_xor:
-	case Tok_ldarg_3:
-	case Tok_ldvar:
-	case Tok_ldelem_i8:
-	case Tok_ldproc:
-	case Tok_ldc_i4_8:
-	case Tok_ldind_ip:
-	case Tok_or:
-	case Tok_conv_u2:
-	case Tok_ldelem_u4:
-	case Tok_ldc_i4_4:
-	case Tok_ldstr:
-	case Tok_ldelem_u8:
-	case Tok_not:
-	case Tok_conv_i2:
-	case Tok_clt_un:
-	case Tok_ldarga_s:
-	case Tok_ldftn:
-	case Tok_castptr:
-	case Tok_ldflda:
-	case Tok_ldelem_i1:
-	case Tok_ldc_i4_0:
-	case Tok_ldc_i8:
-	case Tok_shr_un:
-	case Tok_ldind_i2:
-	case Tok_ldloc_2:
-	case Tok_ldc_i4_s:
-	case Tok_neg:
-	case Tok_conv_i8:
-	case Tok_ldloca_s:
-	case Tok_ldind_i1:
-	case Tok_ldc_i4:
-	case Tok_newarr:
-	case Tok_and:
-	case Tok_ldfld:
-	case Tok_conv_r4:
-	case Tok_shl:
-	case Tok_ldloc_3:
-	case Tok_ldc_i4_1:
-	case Tok_ldc_r8:
-	case Tok_ldind_u2:
-	case Tok_sub:
-	case Tok_conv_ip:
-	case Tok_div:
-	case Tok_conv_u8:
+	case Tok_LDOBJ:
+	case Tok_SUB:
+	case Tok_LDC_I4_4:
+	case Tok_CONV_I4:
+	case Tok_LDIND_I1:
+	case Tok_SHR_UN:
+	case Tok_CONV_U1:
+	case Tok_SHR:
+	case Tok_CONV_U2:
+	case Tok_LDARG:
+	case Tok_CALL:
+	case Tok_NEG:
+	case Tok_LDELEM_U8:
+	case Tok_LDIND_U1:
+	case Tok_CONV_R4:
+	case Tok_LDC_R8:
+	case Tok_LDIND_IP:
+	case Tok_LDLOC_0:
+	case Tok_CONV_I1:
+	case Tok_LDELEM_R4:
+	case Tok_DIV:
+	case Tok_LDIND_U4:
+	case Tok_LDLOC_2:
+	case Tok_CASTPTR:
+	case Tok_LDIND_I4:
+	case Tok_LDLOC_S:
+	case Tok_LDELEM_U1:
+	case Tok_LDC_I4_1:
+	case Tok_LDELEM_U4:
+	case Tok_CONV_U8:
+	case Tok_LDLOCA_S:
+	case Tok_LDIND_R4:
+	case Tok_LDLOC_1:
+	case Tok_LDC_I8:
+	case Tok_LDC_I4_6:
+	case Tok_LDC_I4_8:
+	case Tok_LDARG_2:
+	case Tok_LDIND_I2:
+	case Tok_LDC_R4:
+	case Tok_XOR:
+	case Tok_LDNULL:
+	case Tok_LDELEM_U2:
+	case Tok_LDELEM_I4:
+	case Tok_ADD:
+	case Tok_LDVAR:
+	case Tok_LDFLD:
+	case Tok_LDARG_3:
+	case Tok_AND:
+	case Tok_LDELEM_IP:
+	case Tok_LDIND_U8:
+	case Tok_LDC_I4_5:
+	case Tok_CONV_U4:
+	case Tok_LDARG_S:
+	case Tok_MUL:
+	case Tok_CALLI:
+	case Tok_CLT_UN:
+	case Tok_LDIND_R8:
+	case Tok_LDVARA:
+	case Tok_NEWARR:
+	case Tok_LDELEM_I8:
+	case Tok_LDELEM:
+	case Tok_LDARGA:
+	case Tok_LDC_I4_3:
+	case Tok_LDC_I4_0:
+	case Tok_SHL:
+	case Tok_CONV_I8:
+	case Tok_LDARGA_S:
+	case Tok_DUP:
+	case Tok_CGT_UN:
+	case Tok_LDELEM_R8:
+	case Tok_LDELEM_I1:
+	case Tok_CONV_I2:
+	case Tok_CONV_IP:
+	case Tok_NOT:
+	case Tok_LDARG_0:
+	case Tok_LDC_I4_M1:
+	case Tok_LDLOCA:
+	case Tok_LDPROC:
+	case Tok_LDIND_U2:
+	case Tok_LDIND_I8:
+	case Tok_CGT:
+	case Tok_LDC_I4_2:
+	case Tok_CONV_R8:
+	case Tok_LDARG_1:
+	case Tok_OR:
+	case Tok_CLT:
+	case Tok_CEQ:
+	case Tok_NEWVLA:
+	case Tok_LDLOC_3:
+	case Tok_REM:
+	case Tok_LDC_I4_S:
+	case Tok_LDC_I4:
+	case Tok_NEWOBJ:
+	case Tok_LDFTN:
+	case Tok_LDC_I4_7:
+	case Tok_LDELEMA:
+	case Tok_LDSTR:
+	case Tok_LDELEM_I2:
+	case Tok_LDLOC:
+	case Tok_LDFLDA:
 		return true;
 	default: return false;
 	}
@@ -346,46 +346,46 @@ static inline bool FIRST_ExpInstr(int tt) {
 
 static inline bool FIRST_StatementSequence(int tt) {
 	switch(tt){
-	case Tok_stloc_2:
-	case Tok_stfld:
-	case Tok_stind_i4:
-	case Tok_stind_ip:
-	case Tok_SWITCH:
-	case Tok_IF:
-	case Tok_stind_r4:
-	case Tok_starg_s:
-	case Tok_stloc_s:
-	case Tok_REPEAT:
-	case Tok_line:
-	case Tok_calli:
-	case Tok_pop:
-	case Tok_call:
-	case Tok_stloc_1:
-	case Tok_stloc:
-	case Tok_stelem_i8:
-	case Tok_starg:
-	case Tok_disp:
-	case Tok_stelem_i2:
-	case Tok_stind_i1:
-	case Tok_label:
-	case Tok_goto:
-	case Tok_stind_i2:
-	case Tok_stelem_i4:
-	case Tok_WHILE:
-	case Tok_stloc_3:
-	case Tok_exit:
-	case Tok_ret:
-	case Tok_stind_r8:
-	case Tok_stloc_0:
-	case Tok_stelem_r4:
-	case Tok_stind_i8:
-	case Tok_stelem:
-	case Tok_stelem_r8:
-	case Tok_stvar:
-	case Tok_stelem_i1:
-	case Tok_stelem_ip:
-	case Tok_stobj:
+	case Tok_STOBJ:
+	case Tok_STARG:
+	case Tok_STLOC:
+	case Tok_EXIT:
+	case Tok_STELEM:
+	case Tok_STELEM_I8:
+	case Tok_STIND_I8:
+	case Tok_STIND_I2:
+	case Tok_STIND_IP:
+	case Tok_CALL:
+	case Tok_STARG_S:
+	case Tok_CALLI:
+	case Tok_STLOC_3:
+	case Tok_STELEM_I2:
+	case Tok_GOTO:
+	case Tok_LABEL:
+	case Tok_STELEM_R4:
+	case Tok_STFLD:
+	case Tok_RET:
+	case Tok_LINE:
+	case Tok_STELEM_R8:
+	case Tok_STIND_I1:
 	case Tok_LOOP:
+	case Tok_STLOC_S:
+	case Tok_STLOC_1:
+	case Tok_STIND_I4:
+	case Tok_POP:
+	case Tok_STLOC_0:
+	case Tok_STELEM_I4:
+	case Tok_DISP:
+	case Tok_STVAR:
+	case Tok_IF:
+	case Tok_WHILE:
+	case Tok_SWITCH:
+	case Tok_REPEAT:
+	case Tok_STLOC_2:
+	case Tok_STIND_R4:
+	case Tok_STELEM_IP:
+	case Tok_STIND_R8:
+	case Tok_STELEM_I1:
 		return true;
 	default: return false;
 	}
@@ -393,46 +393,46 @@ static inline bool FIRST_StatementSequence(int tt) {
 
 static inline bool FIRST_Statement(int tt) {
 	switch(tt){
-	case Tok_stloc_2:
-	case Tok_stfld:
-	case Tok_stind_i4:
-	case Tok_stind_ip:
-	case Tok_SWITCH:
-	case Tok_IF:
-	case Tok_stind_r4:
-	case Tok_starg_s:
-	case Tok_stloc_s:
-	case Tok_REPEAT:
-	case Tok_line:
-	case Tok_calli:
-	case Tok_pop:
-	case Tok_call:
-	case Tok_stloc_1:
-	case Tok_stloc:
-	case Tok_stelem_i8:
-	case Tok_starg:
-	case Tok_disp:
-	case Tok_stelem_i2:
-	case Tok_stind_i1:
-	case Tok_label:
-	case Tok_goto:
-	case Tok_stind_i2:
-	case Tok_stelem_i4:
-	case Tok_WHILE:
-	case Tok_stloc_3:
-	case Tok_exit:
-	case Tok_ret:
-	case Tok_stind_r8:
-	case Tok_stloc_0:
-	case Tok_stelem_r4:
-	case Tok_stind_i8:
-	case Tok_stelem:
-	case Tok_stelem_r8:
-	case Tok_stvar:
-	case Tok_stelem_i1:
-	case Tok_stelem_ip:
-	case Tok_stobj:
+	case Tok_STOBJ:
+	case Tok_STARG:
+	case Tok_STLOC:
+	case Tok_EXIT:
+	case Tok_STELEM:
+	case Tok_STELEM_I8:
+	case Tok_STIND_I8:
+	case Tok_STIND_I2:
+	case Tok_STIND_IP:
+	case Tok_CALL:
+	case Tok_STARG_S:
+	case Tok_CALLI:
+	case Tok_STLOC_3:
+	case Tok_STELEM_I2:
+	case Tok_GOTO:
+	case Tok_LABEL:
+	case Tok_STELEM_R4:
+	case Tok_STFLD:
+	case Tok_RET:
+	case Tok_LINE:
+	case Tok_STELEM_R8:
+	case Tok_STIND_I1:
 	case Tok_LOOP:
+	case Tok_STLOC_S:
+	case Tok_STLOC_1:
+	case Tok_STIND_I4:
+	case Tok_POP:
+	case Tok_STLOC_0:
+	case Tok_STELEM_I4:
+	case Tok_DISP:
+	case Tok_STVAR:
+	case Tok_IF:
+	case Tok_WHILE:
+	case Tok_SWITCH:
+	case Tok_REPEAT:
+	case Tok_STLOC_2:
+	case Tok_STIND_R4:
+	case Tok_STELEM_IP:
+	case Tok_STIND_R8:
+	case Tok_STELEM_I1:
 		return true;
 	default: return false;
 	}
@@ -543,9 +543,7 @@ void Parser::TypeDeclaration(SynTree* st) {
 
 void Parser::type(SynTree* st) {
 	{ SynTree* tmp = new SynTree(SynTree::R_type, la); st->d_children.append(tmp); st = tmp; }
-	if( FIRST_NamedType(la.d_type) ) {
-		NamedType(st);
-	} else if( FIRST_ArrayType(la.d_type) || FIRST_ArrayType(la.d_code) ) {
+	if( FIRST_ArrayType(la.d_type) || FIRST_ArrayType(la.d_code) ) {
 		ArrayType(st);
 	} else if( FIRST_StructUnionType(la.d_type) || FIRST_StructUnionType(la.d_code) ) {
 		StructUnionType(st);
@@ -553,6 +551,8 @@ void Parser::type(SynTree* st) {
 		PointerType(st);
 	} else if( FIRST_ProcedureType(la.d_type) || FIRST_ProcedureType(la.d_code) ) {
 		ProcedureType(st);
+	} else if( FIRST_NamedType(la.d_type) ) {
+		NamedType(st);
 	} else
 		invalid("type");
 }
@@ -595,7 +595,7 @@ void Parser::StructUnionType(SynTree* st) {
 		if( expect(Tok_UNION, true, "StructUnionType") ) addTerminal(st);
 	} else
 		invalid("StructUnionType");
-	while( FIRST_FieldList(la.d_type) ) {
+	while( ( !( peek(1).d_code == Tok_END ) )  ) {
 		FieldList(st);
 		if( la.d_type == Tok_Semi ) {
 			if( expect(Tok_Semi, false, "StructUnionType") ) addTerminal(st);
@@ -841,7 +841,7 @@ void Parser::DeclarationSequence(SynTree* st) {
 	while( la.d_code == Tok_TYPE || la.d_code == Tok_VAR || FIRST_ProcedureDeclaration(la.d_type) || FIRST_ProcedureDeclaration(la.d_code) ) {
 		if( la.d_code == Tok_TYPE ) {
 			if( expect(Tok_TYPE, true, "DeclarationSequence") ) addTerminal(st);
-			while( FIRST_TypeDeclaration(la.d_type) ) {
+			while( ( peek(1).d_type == Tok_ident && !( ( peek(1).d_code == Tok_PROC || peek(1).d_code == Tok_PROCEDURE || peek(1).d_code == Tok_VAR ) ) )  ) {
 				TypeDeclaration(st);
 				if( la.d_type == Tok_Semi ) {
 					if( expect(Tok_Semi, false, "DeclarationSequence") ) addTerminal(st);
@@ -849,7 +849,7 @@ void Parser::DeclarationSequence(SynTree* st) {
 			}
 		} else if( la.d_code == Tok_VAR ) {
 			if( expect(Tok_VAR, true, "DeclarationSequence") ) addTerminal(st);
-			while( FIRST_VariableDeclaration(la.d_type) ) {
+			while( ( peek(1).d_type == Tok_ident && !( ( peek(1).d_code == Tok_PROC || peek(1).d_code == Tok_PROCEDURE || peek(1).d_code == Tok_TYPE ) ) )  ) {
 				VariableDeclaration(st);
 				if( la.d_type == Tok_Semi ) {
 					if( expect(Tok_Semi, false, "DeclarationSequence") ) addTerminal(st);
@@ -874,62 +874,62 @@ void Parser::Expression(SynTree* st) {
 
 void Parser::ExpInstr(SynTree* st) {
 	{ SynTree* tmp = new SynTree(SynTree::R_ExpInstr, la); st->d_children.append(tmp); st = tmp; }
-	if( la.d_code == Tok_add ) {
-		if( expect(Tok_add, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_and ) {
-		if( expect(Tok_and, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_call || la.d_code == Tok_calli ) {
-		if( la.d_code == Tok_call ) {
-			if( expect(Tok_call, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_calli ) {
-			if( expect(Tok_calli, true, "ExpInstr") ) addTerminal(st);
+	if( la.d_code == Tok_ADD ) {
+		if( expect(Tok_ADD, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_AND ) {
+		if( expect(Tok_AND, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CALL || la.d_code == Tok_CALLI ) {
+		if( la.d_code == Tok_CALL ) {
+			if( expect(Tok_CALL, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_CALLI ) {
+			if( expect(Tok_CALLI, true, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
 		qualident(st);
-	} else if( la.d_code == Tok_castptr ) {
-		if( expect(Tok_castptr, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CASTPTR ) {
+		if( expect(Tok_CASTPTR, true, "ExpInstr") ) addTerminal(st);
 		qualident(st);
-	} else if( la.d_code == Tok_ceq ) {
-		if( expect(Tok_ceq, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_cgt ) {
-		if( expect(Tok_cgt, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_cgt_un ) {
-		if( expect(Tok_cgt_un, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_clt ) {
-		if( expect(Tok_clt, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_clt_un ) {
-		if( expect(Tok_clt_un, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_i1 ) {
-		if( expect(Tok_conv_i1, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_i2 ) {
-		if( expect(Tok_conv_i2, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_i4 ) {
-		if( expect(Tok_conv_i4, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_i8 ) {
-		if( expect(Tok_conv_i8, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_r4 ) {
-		if( expect(Tok_conv_r4, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_r8 ) {
-		if( expect(Tok_conv_r8, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_u1 ) {
-		if( expect(Tok_conv_u1, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_u2 ) {
-		if( expect(Tok_conv_u2, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_u4 ) {
-		if( expect(Tok_conv_u4, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_u8 ) {
-		if( expect(Tok_conv_u8, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_conv_ip ) {
-		if( expect(Tok_conv_ip, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_div ) {
-		if( expect(Tok_div, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_dup ) {
-		if( expect(Tok_dup, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldarg || la.d_code == Tok_ldarg_s ) {
-		if( la.d_code == Tok_ldarg ) {
-			if( expect(Tok_ldarg, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldarg_s ) {
-			if( expect(Tok_ldarg_s, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CEQ ) {
+		if( expect(Tok_CEQ, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CGT ) {
+		if( expect(Tok_CGT, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CGT_UN ) {
+		if( expect(Tok_CGT_UN, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CLT ) {
+		if( expect(Tok_CLT, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CLT_UN ) {
+		if( expect(Tok_CLT_UN, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_I1 ) {
+		if( expect(Tok_CONV_I1, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_I2 ) {
+		if( expect(Tok_CONV_I2, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_I4 ) {
+		if( expect(Tok_CONV_I4, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_I8 ) {
+		if( expect(Tok_CONV_I8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_R4 ) {
+		if( expect(Tok_CONV_R4, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_R8 ) {
+		if( expect(Tok_CONV_R8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_U1 ) {
+		if( expect(Tok_CONV_U1, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_U2 ) {
+		if( expect(Tok_CONV_U2, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_U4 ) {
+		if( expect(Tok_CONV_U4, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_U8 ) {
+		if( expect(Tok_CONV_U8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_CONV_IP ) {
+		if( expect(Tok_CONV_IP, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_DIV ) {
+		if( expect(Tok_DIV, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_DUP ) {
+		if( expect(Tok_DUP, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDARG || la.d_code == Tok_LDARG_S ) {
+		if( la.d_code == Tok_LDARG ) {
+			if( expect(Tok_LDARG, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDARG_S ) {
+			if( expect(Tok_LDARG_S, true, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
 		if( la.d_type == Tok_unsigned ) {
@@ -938,19 +938,19 @@ void Parser::ExpInstr(SynTree* st) {
 			if( expect(Tok_ident, false, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
-	} else if( la.d_code == Tok_ldarg_0 ) {
-		if( expect(Tok_ldarg_0, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldarg_1 ) {
-		if( expect(Tok_ldarg_1, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldarg_2 ) {
-		if( expect(Tok_ldarg_2, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldarg_3 ) {
-		if( expect(Tok_ldarg_3, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldarga || la.d_code == Tok_ldarga_s ) {
-		if( la.d_code == Tok_ldarga ) {
-			if( expect(Tok_ldarga, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldarga_s ) {
-			if( expect(Tok_ldarga_s, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDARG_0 ) {
+		if( expect(Tok_LDARG_0, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDARG_1 ) {
+		if( expect(Tok_LDARG_1, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDARG_2 ) {
+		if( expect(Tok_LDARG_2, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDARG_3 ) {
+		if( expect(Tok_LDARG_3, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDARGA || la.d_code == Tok_LDARGA_S ) {
+		if( la.d_code == Tok_LDARGA ) {
+			if( expect(Tok_LDARGA, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDARGA_S ) {
+			if( expect(Tok_LDARGA_S, true, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
 		if( la.d_type == Tok_unsigned ) {
@@ -959,118 +959,118 @@ void Parser::ExpInstr(SynTree* st) {
 			if( expect(Tok_ident, false, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
-	} else if( la.d_code == Tok_ldc_i4 || la.d_code == Tok_ldc_i8 || la.d_code == Tok_ldc_i4_s ) {
-		if( la.d_code == Tok_ldc_i4 ) {
-			if( expect(Tok_ldc_i4, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldc_i8 ) {
-			if( expect(Tok_ldc_i8, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldc_i4_s ) {
-			if( expect(Tok_ldc_i4_s, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4 || la.d_code == Tok_LDC_I8 || la.d_code == Tok_LDC_I4_S ) {
+		if( la.d_code == Tok_LDC_I4 ) {
+			if( expect(Tok_LDC_I4, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDC_I8 ) {
+			if( expect(Tok_LDC_I8, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDC_I4_S ) {
+			if( expect(Tok_LDC_I4_S, true, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
 		integer(st);
-	} else if( la.d_code == Tok_ldc_r4 || la.d_code == Tok_ldc_r8 ) {
-		if( la.d_code == Tok_ldc_r4 ) {
-			if( expect(Tok_ldc_r4, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldc_r8 ) {
-			if( expect(Tok_ldc_r8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_R4 || la.d_code == Tok_LDC_R8 ) {
+		if( la.d_code == Tok_LDC_R4 ) {
+			if( expect(Tok_LDC_R4, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDC_R8 ) {
+			if( expect(Tok_LDC_R8, true, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
 		if( expect(Tok_real, false, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldc_i4_0 ) {
-		if( expect(Tok_ldc_i4_0, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldc_i4_1 ) {
-		if( expect(Tok_ldc_i4_1, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldc_i4_2 ) {
-		if( expect(Tok_ldc_i4_2, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldc_i4_3 ) {
-		if( expect(Tok_ldc_i4_3, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldc_i4_4 ) {
-		if( expect(Tok_ldc_i4_4, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldc_i4_5 ) {
-		if( expect(Tok_ldc_i4_5, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldc_i4_6 ) {
-		if( expect(Tok_ldc_i4_6, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldc_i4_7 ) {
-		if( expect(Tok_ldc_i4_7, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldc_i4_8 ) {
-		if( expect(Tok_ldc_i4_8, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldc_i4_m1 ) {
-		if( expect(Tok_ldc_i4_m1, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem || la.d_code == Tok_ldelema ) {
-		if( la.d_code == Tok_ldelem ) {
-			if( expect(Tok_ldelem, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldelema ) {
-			if( expect(Tok_ldelema, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4_0 ) {
+		if( expect(Tok_LDC_I4_0, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4_1 ) {
+		if( expect(Tok_LDC_I4_1, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4_2 ) {
+		if( expect(Tok_LDC_I4_2, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4_3 ) {
+		if( expect(Tok_LDC_I4_3, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4_4 ) {
+		if( expect(Tok_LDC_I4_4, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4_5 ) {
+		if( expect(Tok_LDC_I4_5, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4_6 ) {
+		if( expect(Tok_LDC_I4_6, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4_7 ) {
+		if( expect(Tok_LDC_I4_7, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4_8 ) {
+		if( expect(Tok_LDC_I4_8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDC_I4_M1 ) {
+		if( expect(Tok_LDC_I4_M1, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM || la.d_code == Tok_LDELEMA ) {
+		if( la.d_code == Tok_LDELEM ) {
+			if( expect(Tok_LDELEM, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDELEMA ) {
+			if( expect(Tok_LDELEMA, true, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
 		qualident(st);
-	} else if( la.d_code == Tok_ldelem_i1 ) {
-		if( expect(Tok_ldelem_i1, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem_i2 ) {
-		if( expect(Tok_ldelem_i2, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem_i4 ) {
-		if( expect(Tok_ldelem_i4, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem_i8 ) {
-		if( expect(Tok_ldelem_i8, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem_u1 ) {
-		if( expect(Tok_ldelem_u1, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem_u2 ) {
-		if( expect(Tok_ldelem_u2, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem_u4 ) {
-		if( expect(Tok_ldelem_u4, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem_u8 ) {
-		if( expect(Tok_ldelem_u8, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem_r4 ) {
-		if( expect(Tok_ldelem_r4, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem_r8 ) {
-		if( expect(Tok_ldelem_r8, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldelem_ip ) {
-		if( expect(Tok_ldelem_ip, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldfld || la.d_code == Tok_ldflda ) {
-		if( la.d_code == Tok_ldfld ) {
-			if( expect(Tok_ldfld, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldflda ) {
-			if( expect(Tok_ldflda, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_I1 ) {
+		if( expect(Tok_LDELEM_I1, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_I2 ) {
+		if( expect(Tok_LDELEM_I2, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_I4 ) {
+		if( expect(Tok_LDELEM_I4, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_I8 ) {
+		if( expect(Tok_LDELEM_I8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_U1 ) {
+		if( expect(Tok_LDELEM_U1, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_U2 ) {
+		if( expect(Tok_LDELEM_U2, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_U4 ) {
+		if( expect(Tok_LDELEM_U4, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_U8 ) {
+		if( expect(Tok_LDELEM_U8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_R4 ) {
+		if( expect(Tok_LDELEM_R4, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_R8 ) {
+		if( expect(Tok_LDELEM_R8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDELEM_IP ) {
+		if( expect(Tok_LDELEM_IP, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDFLD || la.d_code == Tok_LDFLDA ) {
+		if( la.d_code == Tok_LDFLD ) {
+			if( expect(Tok_LDFLD, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDFLDA ) {
+			if( expect(Tok_LDFLDA, true, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
 		qualident(st);
 		if( expect(Tok_Dot, false, "ExpInstr") ) addTerminal(st);
 		if( expect(Tok_ident, false, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldftn ) {
-		if( expect(Tok_ldftn, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDFTN ) {
+		if( expect(Tok_LDFTN, true, "ExpInstr") ) addTerminal(st);
 		qualident(st);
-	} else if( la.d_code == Tok_ldind_i1 ) {
-		if( expect(Tok_ldind_i1, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldind_i2 ) {
-		if( expect(Tok_ldind_i2, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldind_i4 ) {
-		if( expect(Tok_ldind_i4, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldind_i8 ) {
-		if( expect(Tok_ldind_i8, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldind_u1 ) {
-		if( expect(Tok_ldind_u1, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldind_u2 ) {
-		if( expect(Tok_ldind_u2, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldind_u4 ) {
-		if( expect(Tok_ldind_u4, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldind_r4 ) {
-		if( expect(Tok_ldind_r4, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldind_u8 ) {
-		if( expect(Tok_ldind_u8, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldind_r8 ) {
-		if( expect(Tok_ldind_r8, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldind_ip ) {
-		if( expect(Tok_ldind_ip, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldloc || la.d_code == Tok_ldloc_s || la.d_code == Tok_ldloca || la.d_code == Tok_ldloca_s ) {
-		if( la.d_code == Tok_ldloc ) {
-			if( expect(Tok_ldloc, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldloc_s ) {
-			if( expect(Tok_ldloc_s, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldloca ) {
-			if( expect(Tok_ldloca, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldloca_s ) {
-			if( expect(Tok_ldloca_s, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_I1 ) {
+		if( expect(Tok_LDIND_I1, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_I2 ) {
+		if( expect(Tok_LDIND_I2, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_I4 ) {
+		if( expect(Tok_LDIND_I4, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_I8 ) {
+		if( expect(Tok_LDIND_I8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_U1 ) {
+		if( expect(Tok_LDIND_U1, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_U2 ) {
+		if( expect(Tok_LDIND_U2, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_U4 ) {
+		if( expect(Tok_LDIND_U4, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_R4 ) {
+		if( expect(Tok_LDIND_R4, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_U8 ) {
+		if( expect(Tok_LDIND_U8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_R8 ) {
+		if( expect(Tok_LDIND_R8, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDIND_IP ) {
+		if( expect(Tok_LDIND_IP, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDLOC || la.d_code == Tok_LDLOC_S || la.d_code == Tok_LDLOCA || la.d_code == Tok_LDLOCA_S ) {
+		if( la.d_code == Tok_LDLOC ) {
+			if( expect(Tok_LDLOC, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDLOC_S ) {
+			if( expect(Tok_LDLOC_S, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDLOCA ) {
+			if( expect(Tok_LDLOCA, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDLOCA_S ) {
+			if( expect(Tok_LDLOCA_S, true, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
 		if( la.d_type == Tok_unsigned ) {
@@ -1079,63 +1079,63 @@ void Parser::ExpInstr(SynTree* st) {
 			if( expect(Tok_ident, false, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
-	} else if( la.d_code == Tok_ldloc_0 ) {
-		if( expect(Tok_ldloc_0, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldloc_1 ) {
-		if( expect(Tok_ldloc_1, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldloc_2 ) {
-		if( expect(Tok_ldloc_2, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldloc_3 ) {
-		if( expect(Tok_ldloc_3, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldnull ) {
-		if( expect(Tok_ldnull, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldobj ) {
-		if( expect(Tok_ldobj, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDLOC_0 ) {
+		if( expect(Tok_LDLOC_0, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDLOC_1 ) {
+		if( expect(Tok_LDLOC_1, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDLOC_2 ) {
+		if( expect(Tok_LDLOC_2, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDLOC_3 ) {
+		if( expect(Tok_LDLOC_3, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDNULL ) {
+		if( expect(Tok_LDNULL, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDOBJ ) {
+		if( expect(Tok_LDOBJ, true, "ExpInstr") ) addTerminal(st);
 		qualident(st);
-	} else if( la.d_code == Tok_ldproc ) {
-		if( expect(Tok_ldproc, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDPROC ) {
+		if( expect(Tok_LDPROC, true, "ExpInstr") ) addTerminal(st);
 		qualident(st);
-	} else if( la.d_code == Tok_ldstr ) {
-		if( expect(Tok_ldstr, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDSTR ) {
+		if( expect(Tok_LDSTR, true, "ExpInstr") ) addTerminal(st);
 		if( expect(Tok_string, false, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_ldvar || la.d_code == Tok_ldvara ) {
-		if( la.d_code == Tok_ldvar ) {
-			if( expect(Tok_ldvar, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_ldvara ) {
-			if( expect(Tok_ldvara, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_LDVAR || la.d_code == Tok_LDVARA ) {
+		if( la.d_code == Tok_LDVAR ) {
+			if( expect(Tok_LDVAR, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_LDVARA ) {
+			if( expect(Tok_LDVARA, true, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
 		qualident(st);
-	} else if( la.d_code == Tok_mul ) {
-		if( expect(Tok_mul, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_neg ) {
-		if( expect(Tok_neg, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_newarr || la.d_code == Tok_newvla || la.d_code == Tok_newobj ) {
-		if( la.d_code == Tok_newarr ) {
-			if( expect(Tok_newarr, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_newvla ) {
-			if( expect(Tok_newvla, true, "ExpInstr") ) addTerminal(st);
-		} else if( la.d_code == Tok_newobj ) {
-			if( expect(Tok_newobj, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_MUL ) {
+		if( expect(Tok_MUL, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_NEG ) {
+		if( expect(Tok_NEG, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_NEWARR || la.d_code == Tok_NEWVLA || la.d_code == Tok_NEWOBJ ) {
+		if( la.d_code == Tok_NEWARR ) {
+			if( expect(Tok_NEWARR, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_NEWVLA ) {
+			if( expect(Tok_NEWVLA, true, "ExpInstr") ) addTerminal(st);
+		} else if( la.d_code == Tok_NEWOBJ ) {
+			if( expect(Tok_NEWOBJ, true, "ExpInstr") ) addTerminal(st);
 		} else
 			invalid("ExpInstr");
 		qualident(st);
-	} else if( la.d_code == Tok_not ) {
-		if( expect(Tok_not, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_or ) {
-		if( expect(Tok_or, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_rem ) {
-		if( expect(Tok_rem, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_shl ) {
-		if( expect(Tok_shl, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_shr ) {
-		if( expect(Tok_shr, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_shr_un ) {
-		if( expect(Tok_shr_un, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_sub ) {
-		if( expect(Tok_sub, true, "ExpInstr") ) addTerminal(st);
-	} else if( la.d_code == Tok_xor ) {
-		if( expect(Tok_xor, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_NOT ) {
+		if( expect(Tok_NOT, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_OR ) {
+		if( expect(Tok_OR, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_REM ) {
+		if( expect(Tok_REM, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_SHL ) {
+		if( expect(Tok_SHL, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_SHR ) {
+		if( expect(Tok_SHR, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_SHR_UN ) {
+		if( expect(Tok_SHR_UN, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_SUB ) {
+		if( expect(Tok_SUB, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_XOR ) {
+		if( expect(Tok_XOR, true, "ExpInstr") ) addTerminal(st);
 	} else
 		invalid("ExpInstr");
 }
@@ -1149,42 +1149,42 @@ void Parser::StatementSequence(SynTree* st) {
 
 void Parser::Statement(SynTree* st) {
 	{ SynTree* tmp = new SynTree(SynTree::R_Statement, la); st->d_children.append(tmp); st = tmp; }
-	if( la.d_code == Tok_call || la.d_code == Tok_calli ) {
-		if( la.d_code == Tok_call ) {
-			if( expect(Tok_call, true, "Statement") ) addTerminal(st);
-		} else if( la.d_code == Tok_calli ) {
-			if( expect(Tok_calli, true, "Statement") ) addTerminal(st);
+	if( la.d_code == Tok_CALL || la.d_code == Tok_CALLI ) {
+		if( la.d_code == Tok_CALL ) {
+			if( expect(Tok_CALL, true, "Statement") ) addTerminal(st);
+		} else if( la.d_code == Tok_CALLI ) {
+			if( expect(Tok_CALLI, true, "Statement") ) addTerminal(st);
 		} else
 			invalid("Statement");
 		qualident(st);
-	} else if( la.d_code == Tok_disp ) {
-		if( expect(Tok_disp, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_DISP ) {
+		if( expect(Tok_DISP, true, "Statement") ) addTerminal(st);
 	} else if( FIRST_RepeatUntil(la.d_type) || FIRST_RepeatUntil(la.d_code) ) {
 		RepeatUntil(st);
-	} else if( la.d_code == Tok_exit ) {
-		if( expect(Tok_exit, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_goto ) {
-		if( expect(Tok_goto, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_EXIT ) {
+		if( expect(Tok_EXIT, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_GOTO ) {
+		if( expect(Tok_GOTO, true, "Statement") ) addTerminal(st);
 		if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
 	} else if( FIRST_IfThenElse(la.d_type) || FIRST_IfThenElse(la.d_code) ) {
 		IfThenElse(st);
-	} else if( la.d_code == Tok_label ) {
-		if( expect(Tok_label, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_LABEL ) {
+		if( expect(Tok_LABEL, true, "Statement") ) addTerminal(st);
 		if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_line ) {
-		if( expect(Tok_line, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_LINE ) {
+		if( expect(Tok_LINE, true, "Statement") ) addTerminal(st);
 		if( expect(Tok_unsigned, false, "Statement") ) addTerminal(st);
 	} else if( FIRST_Loop(la.d_type) || FIRST_Loop(la.d_code) ) {
 		Loop(st);
-	} else if( la.d_code == Tok_pop ) {
-		if( expect(Tok_pop, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_ret ) {
-		if( expect(Tok_ret, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_starg || la.d_code == Tok_starg_s ) {
-		if( la.d_code == Tok_starg ) {
-			if( expect(Tok_starg, true, "Statement") ) addTerminal(st);
-		} else if( la.d_code == Tok_starg_s ) {
-			if( expect(Tok_starg_s, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_POP ) {
+		if( expect(Tok_POP, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_RET ) {
+		if( expect(Tok_RET, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STARG || la.d_code == Tok_STARG_S ) {
+		if( la.d_code == Tok_STARG ) {
+			if( expect(Tok_STARG, true, "Statement") ) addTerminal(st);
+		} else if( la.d_code == Tok_STARG_S ) {
+			if( expect(Tok_STARG_S, true, "Statement") ) addTerminal(st);
 		} else
 			invalid("Statement");
 		if( la.d_type == Tok_unsigned ) {
@@ -1193,47 +1193,47 @@ void Parser::Statement(SynTree* st) {
 			if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
 		} else
 			invalid("Statement");
-	} else if( la.d_code == Tok_stelem ) {
-		if( expect(Tok_stelem, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STELEM ) {
+		if( expect(Tok_STELEM, true, "Statement") ) addTerminal(st);
 		qualident(st);
-	} else if( la.d_code == Tok_stelem_i1 ) {
-		if( expect(Tok_stelem_i1, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stelem_i2 ) {
-		if( expect(Tok_stelem_i2, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stelem_i4 ) {
-		if( expect(Tok_stelem_i4, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stelem_i8 ) {
-		if( expect(Tok_stelem_i8, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stelem_r4 ) {
-		if( expect(Tok_stelem_r4, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stelem_r8 ) {
-		if( expect(Tok_stelem_r8, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stelem_ip ) {
-		if( expect(Tok_stelem_ip, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stfld ) {
-		if( expect(Tok_stfld, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STELEM_I1 ) {
+		if( expect(Tok_STELEM_I1, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STELEM_I2 ) {
+		if( expect(Tok_STELEM_I2, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STELEM_I4 ) {
+		if( expect(Tok_STELEM_I4, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STELEM_I8 ) {
+		if( expect(Tok_STELEM_I8, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STELEM_R4 ) {
+		if( expect(Tok_STELEM_R4, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STELEM_R8 ) {
+		if( expect(Tok_STELEM_R8, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STELEM_IP ) {
+		if( expect(Tok_STELEM_IP, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STFLD ) {
+		if( expect(Tok_STFLD, true, "Statement") ) addTerminal(st);
 		qualident(st);
 		if( expect(Tok_Dot, false, "Statement") ) addTerminal(st);
 		if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stind_i1 ) {
-		if( expect(Tok_stind_i1, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stind_i2 ) {
-		if( expect(Tok_stind_i2, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stind_i4 ) {
-		if( expect(Tok_stind_i4, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stind_i8 ) {
-		if( expect(Tok_stind_i8, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stind_r4 ) {
-		if( expect(Tok_stind_r4, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stind_r8 ) {
-		if( expect(Tok_stind_r8, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stind_ip ) {
-		if( expect(Tok_stind_ip, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stloc || la.d_code == Tok_stloc_s ) {
-		if( la.d_code == Tok_stloc ) {
-			if( expect(Tok_stloc, true, "Statement") ) addTerminal(st);
-		} else if( la.d_code == Tok_stloc_s ) {
-			if( expect(Tok_stloc_s, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STIND_I1 ) {
+		if( expect(Tok_STIND_I1, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STIND_I2 ) {
+		if( expect(Tok_STIND_I2, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STIND_I4 ) {
+		if( expect(Tok_STIND_I4, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STIND_I8 ) {
+		if( expect(Tok_STIND_I8, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STIND_R4 ) {
+		if( expect(Tok_STIND_R4, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STIND_R8 ) {
+		if( expect(Tok_STIND_R8, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STIND_IP ) {
+		if( expect(Tok_STIND_IP, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STLOC || la.d_code == Tok_STLOC_S ) {
+		if( la.d_code == Tok_STLOC ) {
+			if( expect(Tok_STLOC, true, "Statement") ) addTerminal(st);
+		} else if( la.d_code == Tok_STLOC_S ) {
+			if( expect(Tok_STLOC_S, true, "Statement") ) addTerminal(st);
 		} else
 			invalid("Statement");
 		if( la.d_type == Tok_unsigned ) {
@@ -1242,19 +1242,19 @@ void Parser::Statement(SynTree* st) {
 			if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
 		} else
 			invalid("Statement");
-	} else if( la.d_code == Tok_stloc_0 ) {
-		if( expect(Tok_stloc_0, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stloc_1 ) {
-		if( expect(Tok_stloc_1, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stloc_2 ) {
-		if( expect(Tok_stloc_2, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stloc_3 ) {
-		if( expect(Tok_stloc_3, true, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_stobj ) {
-		if( expect(Tok_stobj, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STLOC_0 ) {
+		if( expect(Tok_STLOC_0, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STLOC_1 ) {
+		if( expect(Tok_STLOC_1, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STLOC_2 ) {
+		if( expect(Tok_STLOC_2, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STLOC_3 ) {
+		if( expect(Tok_STLOC_3, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STOBJ ) {
+		if( expect(Tok_STOBJ, true, "Statement") ) addTerminal(st);
 		qualident(st);
-	} else if( la.d_code == Tok_stvar ) {
-		if( expect(Tok_stvar, true, "Statement") ) addTerminal(st);
+	} else if( la.d_code == Tok_STVAR ) {
+		if( expect(Tok_STVAR, true, "Statement") ) addTerminal(st);
 		qualident(st);
 		if( expect(Tok_Dot, false, "Statement") ) addTerminal(st);
 		if( expect(Tok_ident, false, "Statement") ) addTerminal(st);

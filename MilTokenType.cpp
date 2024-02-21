@@ -5,7 +5,7 @@ namespace Mil {
 	const char* tokenTypeString( int r ) {
 		switch(r) {
 			case Tok_Invalid: return "<invalid>";
-			case Tok_Dlr: return "$";
+			case Tok_Hash: return "#";
 			case Tok_Lpar: return "(";
 			case Tok_Latt: return "(*";
 			case Tok_Rpar: return ")";
@@ -24,23 +24,155 @@ namespace Mil {
 			case Tok_Lbrack: return "[";
 			case Tok_Rbrack: return "]";
 			case Tok_Hat: return "^";
+			case Tok_ADD: return "ADD";
+			case Tok_AND: return "AND";
 			case Tok_ARRAY: return "ARRAY";
 			case Tok_BEGIN: return "BEGIN";
+			case Tok_CALL: return "CALL";
+			case Tok_CALLI: return "CALLI";
 			case Tok_CASE: return "CASE";
+			case Tok_CASTPTR: return "CASTPTR";
+			case Tok_CEQ: return "CEQ";
+			case Tok_CGT: return "CGT";
+			case Tok_CGT_UN: return "CGT_UN";
+			case Tok_CLT: return "CLT";
+			case Tok_CLT_UN: return "CLT_UN";
+			case Tok_CONV_I1: return "CONV_I1";
+			case Tok_CONV_I2: return "CONV_I2";
+			case Tok_CONV_I4: return "CONV_I4";
+			case Tok_CONV_I8: return "CONV_I8";
+			case Tok_CONV_IP: return "CONV_IP";
+			case Tok_CONV_R4: return "CONV_R4";
+			case Tok_CONV_R8: return "CONV_R8";
+			case Tok_CONV_U1: return "CONV_U1";
+			case Tok_CONV_U2: return "CONV_U2";
+			case Tok_CONV_U4: return "CONV_U4";
+			case Tok_CONV_U8: return "CONV_U8";
+			case Tok_DISP: return "DISP";
+			case Tok_DIV: return "DIV";
 			case Tok_DO: return "DO";
+			case Tok_DUP: return "DUP";
 			case Tok_ELSE: return "ELSE";
 			case Tok_END: return "END";
+			case Tok_EXIT: return "EXIT";
+			case Tok_GOTO: return "GOTO";
 			case Tok_IF: return "IF";
 			case Tok_IMPORT: return "IMPORT";
 			case Tok_INLINE: return "INLINE";
+			case Tok_LABEL: return "LABEL";
+			case Tok_LDARG: return "LDARG";
+			case Tok_LDARGA: return "LDARGA";
+			case Tok_LDARGA_S: return "LDARGA_S";
+			case Tok_LDARG_0: return "LDARG_0";
+			case Tok_LDARG_1: return "LDARG_1";
+			case Tok_LDARG_2: return "LDARG_2";
+			case Tok_LDARG_3: return "LDARG_3";
+			case Tok_LDARG_S: return "LDARG_S";
+			case Tok_LDC_I4: return "LDC_I4";
+			case Tok_LDC_I4_0: return "LDC_I4_0";
+			case Tok_LDC_I4_1: return "LDC_I4_1";
+			case Tok_LDC_I4_2: return "LDC_I4_2";
+			case Tok_LDC_I4_3: return "LDC_I4_3";
+			case Tok_LDC_I4_4: return "LDC_I4_4";
+			case Tok_LDC_I4_5: return "LDC_I4_5";
+			case Tok_LDC_I4_6: return "LDC_I4_6";
+			case Tok_LDC_I4_7: return "LDC_I4_7";
+			case Tok_LDC_I4_8: return "LDC_I4_8";
+			case Tok_LDC_I4_M1: return "LDC_I4_M1";
+			case Tok_LDC_I4_S: return "LDC_I4_S";
+			case Tok_LDC_I8: return "LDC_I8";
+			case Tok_LDC_R4: return "LDC_R4";
+			case Tok_LDC_R8: return "LDC_R8";
+			case Tok_LDELEM: return "LDELEM";
+			case Tok_LDELEMA: return "LDELEMA";
+			case Tok_LDELEM_I1: return "LDELEM_I1";
+			case Tok_LDELEM_I2: return "LDELEM_I2";
+			case Tok_LDELEM_I4: return "LDELEM_I4";
+			case Tok_LDELEM_I8: return "LDELEM_I8";
+			case Tok_LDELEM_IP: return "LDELEM_IP";
+			case Tok_LDELEM_R4: return "LDELEM_R4";
+			case Tok_LDELEM_R8: return "LDELEM_R8";
+			case Tok_LDELEM_U1: return "LDELEM_U1";
+			case Tok_LDELEM_U2: return "LDELEM_U2";
+			case Tok_LDELEM_U4: return "LDELEM_U4";
+			case Tok_LDELEM_U8: return "LDELEM_U8";
+			case Tok_LDFLD: return "LDFLD";
+			case Tok_LDFLDA: return "LDFLDA";
+			case Tok_LDFTN: return "LDFTN";
+			case Tok_LDIND_I1: return "LDIND_I1";
+			case Tok_LDIND_I2: return "LDIND_I2";
+			case Tok_LDIND_I4: return "LDIND_I4";
+			case Tok_LDIND_I8: return "LDIND_I8";
+			case Tok_LDIND_IP: return "LDIND_IP";
+			case Tok_LDIND_R4: return "LDIND_R4";
+			case Tok_LDIND_R8: return "LDIND_R8";
+			case Tok_LDIND_U1: return "LDIND_U1";
+			case Tok_LDIND_U2: return "LDIND_U2";
+			case Tok_LDIND_U4: return "LDIND_U4";
+			case Tok_LDIND_U8: return "LDIND_U8";
+			case Tok_LDLOC: return "LDLOC";
+			case Tok_LDLOCA: return "LDLOCA";
+			case Tok_LDLOCA_S: return "LDLOCA_S";
+			case Tok_LDLOC_0: return "LDLOC_0";
+			case Tok_LDLOC_1: return "LDLOC_1";
+			case Tok_LDLOC_2: return "LDLOC_2";
+			case Tok_LDLOC_3: return "LDLOC_3";
+			case Tok_LDLOC_S: return "LDLOC_S";
+			case Tok_LDNULL: return "LDNULL";
+			case Tok_LDOBJ: return "LDOBJ";
+			case Tok_LDPROC: return "LDPROC";
+			case Tok_LDSTR: return "LDSTR";
+			case Tok_LDVAR: return "LDVAR";
+			case Tok_LDVARA: return "LDVARA";
+			case Tok_LINE: return "LINE";
 			case Tok_LOOP: return "LOOP";
 			case Tok_MODULE: return "MODULE";
+			case Tok_MUL: return "MUL";
+			case Tok_NEG: return "NEG";
+			case Tok_NEWARR: return "NEWARR";
+			case Tok_NEWOBJ: return "NEWOBJ";
+			case Tok_NEWVLA: return "NEWVLA";
+			case Tok_NOT: return "NOT";
 			case Tok_OF: return "OF";
+			case Tok_OR: return "OR";
 			case Tok_POINTER: return "POINTER";
+			case Tok_POP: return "POP";
 			case Tok_PROC: return "PROC";
 			case Tok_PROCEDURE: return "PROCEDURE";
+			case Tok_REM: return "REM";
 			case Tok_REPEAT: return "REPEAT";
+			case Tok_RET: return "RET";
+			case Tok_SHL: return "SHL";
+			case Tok_SHR: return "SHR";
+			case Tok_SHR_UN: return "SHR_UN";
+			case Tok_STARG: return "STARG";
+			case Tok_STARG_S: return "STARG_S";
+			case Tok_STELEM: return "STELEM";
+			case Tok_STELEM_I1: return "STELEM_I1";
+			case Tok_STELEM_I2: return "STELEM_I2";
+			case Tok_STELEM_I4: return "STELEM_I4";
+			case Tok_STELEM_I8: return "STELEM_I8";
+			case Tok_STELEM_IP: return "STELEM_IP";
+			case Tok_STELEM_R4: return "STELEM_R4";
+			case Tok_STELEM_R8: return "STELEM_R8";
+			case Tok_STFLD: return "STFLD";
+			case Tok_STIND_I1: return "STIND_I1";
+			case Tok_STIND_I2: return "STIND_I2";
+			case Tok_STIND_I4: return "STIND_I4";
+			case Tok_STIND_I8: return "STIND_I8";
+			case Tok_STIND_IP: return "STIND_IP";
+			case Tok_STIND_R4: return "STIND_R4";
+			case Tok_STIND_R8: return "STIND_R8";
+			case Tok_STLOC: return "STLOC";
+			case Tok_STLOC_0: return "STLOC_0";
+			case Tok_STLOC_1: return "STLOC_1";
+			case Tok_STLOC_2: return "STLOC_2";
+			case Tok_STLOC_3: return "STLOC_3";
+			case Tok_STLOC_S: return "STLOC_S";
+			case Tok_STOBJ: return "STOBJ";
 			case Tok_STRUCT: return "STRUCT";
+			case Tok_STVAR: return "STVAR";
+			case Tok_SUB: return "SUB";
 			case Tok_SWITCH: return "SWITCH";
 			case Tok_THEN: return "THEN";
 			case Tok_TO: return "TO";
@@ -49,139 +181,7 @@ namespace Mil {
 			case Tok_UNTIL: return "UNTIL";
 			case Tok_VAR: return "VAR";
 			case Tok_WHILE: return "WHILE";
-			case Tok_add: return "add";
-			case Tok_and: return "and";
-			case Tok_call: return "call";
-			case Tok_calli: return "calli";
-			case Tok_castptr: return "castptr";
-			case Tok_ceq: return "ceq";
-			case Tok_cgt: return "cgt";
-			case Tok_cgt_un: return "cgt_un";
-			case Tok_clt: return "clt";
-			case Tok_clt_un: return "clt_un";
-			case Tok_conv_i1: return "conv_i1";
-			case Tok_conv_i2: return "conv_i2";
-			case Tok_conv_i4: return "conv_i4";
-			case Tok_conv_i8: return "conv_i8";
-			case Tok_conv_ip: return "conv_ip";
-			case Tok_conv_r4: return "conv_r4";
-			case Tok_conv_r8: return "conv_r8";
-			case Tok_conv_u1: return "conv_u1";
-			case Tok_conv_u2: return "conv_u2";
-			case Tok_conv_u4: return "conv_u4";
-			case Tok_conv_u8: return "conv_u8";
-			case Tok_disp: return "disp";
-			case Tok_div: return "div";
-			case Tok_dup: return "dup";
-			case Tok_exit: return "exit";
-			case Tok_goto: return "goto";
-			case Tok_label: return "label";
-			case Tok_ldarg: return "ldarg";
-			case Tok_ldarg_0: return "ldarg_0";
-			case Tok_ldarg_1: return "ldarg_1";
-			case Tok_ldarg_2: return "ldarg_2";
-			case Tok_ldarg_3: return "ldarg_3";
-			case Tok_ldarg_s: return "ldarg_s";
-			case Tok_ldarga: return "ldarga";
-			case Tok_ldarga_s: return "ldarga_s";
-			case Tok_ldc_i4: return "ldc_i4";
-			case Tok_ldc_i4_0: return "ldc_i4_0";
-			case Tok_ldc_i4_1: return "ldc_i4_1";
-			case Tok_ldc_i4_2: return "ldc_i4_2";
-			case Tok_ldc_i4_3: return "ldc_i4_3";
-			case Tok_ldc_i4_4: return "ldc_i4_4";
-			case Tok_ldc_i4_5: return "ldc_i4_5";
-			case Tok_ldc_i4_6: return "ldc_i4_6";
-			case Tok_ldc_i4_7: return "ldc_i4_7";
-			case Tok_ldc_i4_8: return "ldc_i4_8";
-			case Tok_ldc_i4_m1: return "ldc_i4_m1";
-			case Tok_ldc_i4_s: return "ldc_i4_s";
-			case Tok_ldc_i8: return "ldc_i8";
-			case Tok_ldc_r4: return "ldc_r4";
-			case Tok_ldc_r8: return "ldc_r8";
-			case Tok_ldelem: return "ldelem";
-			case Tok_ldelem_i1: return "ldelem_i1";
-			case Tok_ldelem_i2: return "ldelem_i2";
-			case Tok_ldelem_i4: return "ldelem_i4";
-			case Tok_ldelem_i8: return "ldelem_i8";
-			case Tok_ldelem_ip: return "ldelem_ip";
-			case Tok_ldelem_r4: return "ldelem_r4";
-			case Tok_ldelem_r8: return "ldelem_r8";
-			case Tok_ldelem_u1: return "ldelem_u1";
-			case Tok_ldelem_u2: return "ldelem_u2";
-			case Tok_ldelem_u4: return "ldelem_u4";
-			case Tok_ldelem_u8: return "ldelem_u8";
-			case Tok_ldelema: return "ldelema";
-			case Tok_ldfld: return "ldfld";
-			case Tok_ldflda: return "ldflda";
-			case Tok_ldftn: return "ldftn";
-			case Tok_ldind_i1: return "ldind_i1";
-			case Tok_ldind_i2: return "ldind_i2";
-			case Tok_ldind_i4: return "ldind_i4";
-			case Tok_ldind_i8: return "ldind_i8";
-			case Tok_ldind_ip: return "ldind_ip";
-			case Tok_ldind_r4: return "ldind_r4";
-			case Tok_ldind_r8: return "ldind_r8";
-			case Tok_ldind_u1: return "ldind_u1";
-			case Tok_ldind_u2: return "ldind_u2";
-			case Tok_ldind_u4: return "ldind_u4";
-			case Tok_ldind_u8: return "ldind_u8";
-			case Tok_ldloc: return "ldloc";
-			case Tok_ldloc_0: return "ldloc_0";
-			case Tok_ldloc_1: return "ldloc_1";
-			case Tok_ldloc_2: return "ldloc_2";
-			case Tok_ldloc_3: return "ldloc_3";
-			case Tok_ldloc_s: return "ldloc_s";
-			case Tok_ldloca: return "ldloca";
-			case Tok_ldloca_s: return "ldloca_s";
-			case Tok_ldnull: return "ldnull";
-			case Tok_ldobj: return "ldobj";
-			case Tok_ldproc: return "ldproc";
-			case Tok_ldstr: return "ldstr";
-			case Tok_ldvar: return "ldvar";
-			case Tok_ldvara: return "ldvara";
-			case Tok_line: return "line";
-			case Tok_mul: return "mul";
-			case Tok_neg: return "neg";
-			case Tok_newarr: return "newarr";
-			case Tok_newobj: return "newobj";
-			case Tok_newvla: return "newvla";
-			case Tok_not: return "not";
-			case Tok_or: return "or";
-			case Tok_pop: return "pop";
-			case Tok_rem: return "rem";
-			case Tok_ret: return "ret";
-			case Tok_shl: return "shl";
-			case Tok_shr: return "shr";
-			case Tok_shr_un: return "shr_un";
-			case Tok_starg: return "starg";
-			case Tok_starg_s: return "starg_s";
-			case Tok_stelem: return "stelem";
-			case Tok_stelem_i1: return "stelem_i1";
-			case Tok_stelem_i2: return "stelem_i2";
-			case Tok_stelem_i4: return "stelem_i4";
-			case Tok_stelem_i8: return "stelem_i8";
-			case Tok_stelem_ip: return "stelem_ip";
-			case Tok_stelem_r4: return "stelem_r4";
-			case Tok_stelem_r8: return "stelem_r8";
-			case Tok_stfld: return "stfld";
-			case Tok_stind_i1: return "stind_i1";
-			case Tok_stind_i2: return "stind_i2";
-			case Tok_stind_i4: return "stind_i4";
-			case Tok_stind_i8: return "stind_i8";
-			case Tok_stind_ip: return "stind_ip";
-			case Tok_stind_r4: return "stind_r4";
-			case Tok_stind_r8: return "stind_r8";
-			case Tok_stloc: return "stloc";
-			case Tok_stloc_0: return "stloc_0";
-			case Tok_stloc_1: return "stloc_1";
-			case Tok_stloc_2: return "stloc_2";
-			case Tok_stloc_3: return "stloc_3";
-			case Tok_stloc_s: return "stloc_s";
-			case Tok_stobj: return "stobj";
-			case Tok_stvar: return "stvar";
-			case Tok_sub: return "sub";
-			case Tok_xor: return "xor";
+			case Tok_XOR: return "XOR";
 			case Tok_ident: return "ident";
 			case Tok_unsigned: return "unsigned";
 			case Tok_real: return "real";
@@ -195,7 +195,7 @@ namespace Mil {
 	const char* tokenTypeName( int r ) {
 		switch(r) {
 			case Tok_Invalid: return "Tok_Invalid";
-			case Tok_Dlr: return "Tok_Dlr";
+			case Tok_Hash: return "Tok_Hash";
 			case Tok_Lpar: return "Tok_Lpar";
 			case Tok_Latt: return "Tok_Latt";
 			case Tok_Rpar: return "Tok_Rpar";
@@ -214,23 +214,155 @@ namespace Mil {
 			case Tok_Lbrack: return "Tok_Lbrack";
 			case Tok_Rbrack: return "Tok_Rbrack";
 			case Tok_Hat: return "Tok_Hat";
+			case Tok_ADD: return "Tok_ADD";
+			case Tok_AND: return "Tok_AND";
 			case Tok_ARRAY: return "Tok_ARRAY";
 			case Tok_BEGIN: return "Tok_BEGIN";
+			case Tok_CALL: return "Tok_CALL";
+			case Tok_CALLI: return "Tok_CALLI";
 			case Tok_CASE: return "Tok_CASE";
+			case Tok_CASTPTR: return "Tok_CASTPTR";
+			case Tok_CEQ: return "Tok_CEQ";
+			case Tok_CGT: return "Tok_CGT";
+			case Tok_CGT_UN: return "Tok_CGT_UN";
+			case Tok_CLT: return "Tok_CLT";
+			case Tok_CLT_UN: return "Tok_CLT_UN";
+			case Tok_CONV_I1: return "Tok_CONV_I1";
+			case Tok_CONV_I2: return "Tok_CONV_I2";
+			case Tok_CONV_I4: return "Tok_CONV_I4";
+			case Tok_CONV_I8: return "Tok_CONV_I8";
+			case Tok_CONV_IP: return "Tok_CONV_IP";
+			case Tok_CONV_R4: return "Tok_CONV_R4";
+			case Tok_CONV_R8: return "Tok_CONV_R8";
+			case Tok_CONV_U1: return "Tok_CONV_U1";
+			case Tok_CONV_U2: return "Tok_CONV_U2";
+			case Tok_CONV_U4: return "Tok_CONV_U4";
+			case Tok_CONV_U8: return "Tok_CONV_U8";
+			case Tok_DISP: return "Tok_DISP";
+			case Tok_DIV: return "Tok_DIV";
 			case Tok_DO: return "Tok_DO";
+			case Tok_DUP: return "Tok_DUP";
 			case Tok_ELSE: return "Tok_ELSE";
 			case Tok_END: return "Tok_END";
+			case Tok_EXIT: return "Tok_EXIT";
+			case Tok_GOTO: return "Tok_GOTO";
 			case Tok_IF: return "Tok_IF";
 			case Tok_IMPORT: return "Tok_IMPORT";
 			case Tok_INLINE: return "Tok_INLINE";
+			case Tok_LABEL: return "Tok_LABEL";
+			case Tok_LDARG: return "Tok_LDARG";
+			case Tok_LDARGA: return "Tok_LDARGA";
+			case Tok_LDARGA_S: return "Tok_LDARGA_S";
+			case Tok_LDARG_0: return "Tok_LDARG_0";
+			case Tok_LDARG_1: return "Tok_LDARG_1";
+			case Tok_LDARG_2: return "Tok_LDARG_2";
+			case Tok_LDARG_3: return "Tok_LDARG_3";
+			case Tok_LDARG_S: return "Tok_LDARG_S";
+			case Tok_LDC_I4: return "Tok_LDC_I4";
+			case Tok_LDC_I4_0: return "Tok_LDC_I4_0";
+			case Tok_LDC_I4_1: return "Tok_LDC_I4_1";
+			case Tok_LDC_I4_2: return "Tok_LDC_I4_2";
+			case Tok_LDC_I4_3: return "Tok_LDC_I4_3";
+			case Tok_LDC_I4_4: return "Tok_LDC_I4_4";
+			case Tok_LDC_I4_5: return "Tok_LDC_I4_5";
+			case Tok_LDC_I4_6: return "Tok_LDC_I4_6";
+			case Tok_LDC_I4_7: return "Tok_LDC_I4_7";
+			case Tok_LDC_I4_8: return "Tok_LDC_I4_8";
+			case Tok_LDC_I4_M1: return "Tok_LDC_I4_M1";
+			case Tok_LDC_I4_S: return "Tok_LDC_I4_S";
+			case Tok_LDC_I8: return "Tok_LDC_I8";
+			case Tok_LDC_R4: return "Tok_LDC_R4";
+			case Tok_LDC_R8: return "Tok_LDC_R8";
+			case Tok_LDELEM: return "Tok_LDELEM";
+			case Tok_LDELEMA: return "Tok_LDELEMA";
+			case Tok_LDELEM_I1: return "Tok_LDELEM_I1";
+			case Tok_LDELEM_I2: return "Tok_LDELEM_I2";
+			case Tok_LDELEM_I4: return "Tok_LDELEM_I4";
+			case Tok_LDELEM_I8: return "Tok_LDELEM_I8";
+			case Tok_LDELEM_IP: return "Tok_LDELEM_IP";
+			case Tok_LDELEM_R4: return "Tok_LDELEM_R4";
+			case Tok_LDELEM_R8: return "Tok_LDELEM_R8";
+			case Tok_LDELEM_U1: return "Tok_LDELEM_U1";
+			case Tok_LDELEM_U2: return "Tok_LDELEM_U2";
+			case Tok_LDELEM_U4: return "Tok_LDELEM_U4";
+			case Tok_LDELEM_U8: return "Tok_LDELEM_U8";
+			case Tok_LDFLD: return "Tok_LDFLD";
+			case Tok_LDFLDA: return "Tok_LDFLDA";
+			case Tok_LDFTN: return "Tok_LDFTN";
+			case Tok_LDIND_I1: return "Tok_LDIND_I1";
+			case Tok_LDIND_I2: return "Tok_LDIND_I2";
+			case Tok_LDIND_I4: return "Tok_LDIND_I4";
+			case Tok_LDIND_I8: return "Tok_LDIND_I8";
+			case Tok_LDIND_IP: return "Tok_LDIND_IP";
+			case Tok_LDIND_R4: return "Tok_LDIND_R4";
+			case Tok_LDIND_R8: return "Tok_LDIND_R8";
+			case Tok_LDIND_U1: return "Tok_LDIND_U1";
+			case Tok_LDIND_U2: return "Tok_LDIND_U2";
+			case Tok_LDIND_U4: return "Tok_LDIND_U4";
+			case Tok_LDIND_U8: return "Tok_LDIND_U8";
+			case Tok_LDLOC: return "Tok_LDLOC";
+			case Tok_LDLOCA: return "Tok_LDLOCA";
+			case Tok_LDLOCA_S: return "Tok_LDLOCA_S";
+			case Tok_LDLOC_0: return "Tok_LDLOC_0";
+			case Tok_LDLOC_1: return "Tok_LDLOC_1";
+			case Tok_LDLOC_2: return "Tok_LDLOC_2";
+			case Tok_LDLOC_3: return "Tok_LDLOC_3";
+			case Tok_LDLOC_S: return "Tok_LDLOC_S";
+			case Tok_LDNULL: return "Tok_LDNULL";
+			case Tok_LDOBJ: return "Tok_LDOBJ";
+			case Tok_LDPROC: return "Tok_LDPROC";
+			case Tok_LDSTR: return "Tok_LDSTR";
+			case Tok_LDVAR: return "Tok_LDVAR";
+			case Tok_LDVARA: return "Tok_LDVARA";
+			case Tok_LINE: return "Tok_LINE";
 			case Tok_LOOP: return "Tok_LOOP";
 			case Tok_MODULE: return "Tok_MODULE";
+			case Tok_MUL: return "Tok_MUL";
+			case Tok_NEG: return "Tok_NEG";
+			case Tok_NEWARR: return "Tok_NEWARR";
+			case Tok_NEWOBJ: return "Tok_NEWOBJ";
+			case Tok_NEWVLA: return "Tok_NEWVLA";
+			case Tok_NOT: return "Tok_NOT";
 			case Tok_OF: return "Tok_OF";
+			case Tok_OR: return "Tok_OR";
 			case Tok_POINTER: return "Tok_POINTER";
+			case Tok_POP: return "Tok_POP";
 			case Tok_PROC: return "Tok_PROC";
 			case Tok_PROCEDURE: return "Tok_PROCEDURE";
+			case Tok_REM: return "Tok_REM";
 			case Tok_REPEAT: return "Tok_REPEAT";
+			case Tok_RET: return "Tok_RET";
+			case Tok_SHL: return "Tok_SHL";
+			case Tok_SHR: return "Tok_SHR";
+			case Tok_SHR_UN: return "Tok_SHR_UN";
+			case Tok_STARG: return "Tok_STARG";
+			case Tok_STARG_S: return "Tok_STARG_S";
+			case Tok_STELEM: return "Tok_STELEM";
+			case Tok_STELEM_I1: return "Tok_STELEM_I1";
+			case Tok_STELEM_I2: return "Tok_STELEM_I2";
+			case Tok_STELEM_I4: return "Tok_STELEM_I4";
+			case Tok_STELEM_I8: return "Tok_STELEM_I8";
+			case Tok_STELEM_IP: return "Tok_STELEM_IP";
+			case Tok_STELEM_R4: return "Tok_STELEM_R4";
+			case Tok_STELEM_R8: return "Tok_STELEM_R8";
+			case Tok_STFLD: return "Tok_STFLD";
+			case Tok_STIND_I1: return "Tok_STIND_I1";
+			case Tok_STIND_I2: return "Tok_STIND_I2";
+			case Tok_STIND_I4: return "Tok_STIND_I4";
+			case Tok_STIND_I8: return "Tok_STIND_I8";
+			case Tok_STIND_IP: return "Tok_STIND_IP";
+			case Tok_STIND_R4: return "Tok_STIND_R4";
+			case Tok_STIND_R8: return "Tok_STIND_R8";
+			case Tok_STLOC: return "Tok_STLOC";
+			case Tok_STLOC_0: return "Tok_STLOC_0";
+			case Tok_STLOC_1: return "Tok_STLOC_1";
+			case Tok_STLOC_2: return "Tok_STLOC_2";
+			case Tok_STLOC_3: return "Tok_STLOC_3";
+			case Tok_STLOC_S: return "Tok_STLOC_S";
+			case Tok_STOBJ: return "Tok_STOBJ";
 			case Tok_STRUCT: return "Tok_STRUCT";
+			case Tok_STVAR: return "Tok_STVAR";
+			case Tok_SUB: return "Tok_SUB";
 			case Tok_SWITCH: return "Tok_SWITCH";
 			case Tok_THEN: return "Tok_THEN";
 			case Tok_TO: return "Tok_TO";
@@ -239,139 +371,7 @@ namespace Mil {
 			case Tok_UNTIL: return "Tok_UNTIL";
 			case Tok_VAR: return "Tok_VAR";
 			case Tok_WHILE: return "Tok_WHILE";
-			case Tok_add: return "Tok_add";
-			case Tok_and: return "Tok_and";
-			case Tok_call: return "Tok_call";
-			case Tok_calli: return "Tok_calli";
-			case Tok_castptr: return "Tok_castptr";
-			case Tok_ceq: return "Tok_ceq";
-			case Tok_cgt: return "Tok_cgt";
-			case Tok_cgt_un: return "Tok_cgt_un";
-			case Tok_clt: return "Tok_clt";
-			case Tok_clt_un: return "Tok_clt_un";
-			case Tok_conv_i1: return "Tok_conv_i1";
-			case Tok_conv_i2: return "Tok_conv_i2";
-			case Tok_conv_i4: return "Tok_conv_i4";
-			case Tok_conv_i8: return "Tok_conv_i8";
-			case Tok_conv_ip: return "Tok_conv_ip";
-			case Tok_conv_r4: return "Tok_conv_r4";
-			case Tok_conv_r8: return "Tok_conv_r8";
-			case Tok_conv_u1: return "Tok_conv_u1";
-			case Tok_conv_u2: return "Tok_conv_u2";
-			case Tok_conv_u4: return "Tok_conv_u4";
-			case Tok_conv_u8: return "Tok_conv_u8";
-			case Tok_disp: return "Tok_disp";
-			case Tok_div: return "Tok_div";
-			case Tok_dup: return "Tok_dup";
-			case Tok_exit: return "Tok_exit";
-			case Tok_goto: return "Tok_goto";
-			case Tok_label: return "Tok_label";
-			case Tok_ldarg: return "Tok_ldarg";
-			case Tok_ldarg_0: return "Tok_ldarg_0";
-			case Tok_ldarg_1: return "Tok_ldarg_1";
-			case Tok_ldarg_2: return "Tok_ldarg_2";
-			case Tok_ldarg_3: return "Tok_ldarg_3";
-			case Tok_ldarg_s: return "Tok_ldarg_s";
-			case Tok_ldarga: return "Tok_ldarga";
-			case Tok_ldarga_s: return "Tok_ldarga_s";
-			case Tok_ldc_i4: return "Tok_ldc_i4";
-			case Tok_ldc_i4_0: return "Tok_ldc_i4_0";
-			case Tok_ldc_i4_1: return "Tok_ldc_i4_1";
-			case Tok_ldc_i4_2: return "Tok_ldc_i4_2";
-			case Tok_ldc_i4_3: return "Tok_ldc_i4_3";
-			case Tok_ldc_i4_4: return "Tok_ldc_i4_4";
-			case Tok_ldc_i4_5: return "Tok_ldc_i4_5";
-			case Tok_ldc_i4_6: return "Tok_ldc_i4_6";
-			case Tok_ldc_i4_7: return "Tok_ldc_i4_7";
-			case Tok_ldc_i4_8: return "Tok_ldc_i4_8";
-			case Tok_ldc_i4_m1: return "Tok_ldc_i4_m1";
-			case Tok_ldc_i4_s: return "Tok_ldc_i4_s";
-			case Tok_ldc_i8: return "Tok_ldc_i8";
-			case Tok_ldc_r4: return "Tok_ldc_r4";
-			case Tok_ldc_r8: return "Tok_ldc_r8";
-			case Tok_ldelem: return "Tok_ldelem";
-			case Tok_ldelem_i1: return "Tok_ldelem_i1";
-			case Tok_ldelem_i2: return "Tok_ldelem_i2";
-			case Tok_ldelem_i4: return "Tok_ldelem_i4";
-			case Tok_ldelem_i8: return "Tok_ldelem_i8";
-			case Tok_ldelem_ip: return "Tok_ldelem_ip";
-			case Tok_ldelem_r4: return "Tok_ldelem_r4";
-			case Tok_ldelem_r8: return "Tok_ldelem_r8";
-			case Tok_ldelem_u1: return "Tok_ldelem_u1";
-			case Tok_ldelem_u2: return "Tok_ldelem_u2";
-			case Tok_ldelem_u4: return "Tok_ldelem_u4";
-			case Tok_ldelem_u8: return "Tok_ldelem_u8";
-			case Tok_ldelema: return "Tok_ldelema";
-			case Tok_ldfld: return "Tok_ldfld";
-			case Tok_ldflda: return "Tok_ldflda";
-			case Tok_ldftn: return "Tok_ldftn";
-			case Tok_ldind_i1: return "Tok_ldind_i1";
-			case Tok_ldind_i2: return "Tok_ldind_i2";
-			case Tok_ldind_i4: return "Tok_ldind_i4";
-			case Tok_ldind_i8: return "Tok_ldind_i8";
-			case Tok_ldind_ip: return "Tok_ldind_ip";
-			case Tok_ldind_r4: return "Tok_ldind_r4";
-			case Tok_ldind_r8: return "Tok_ldind_r8";
-			case Tok_ldind_u1: return "Tok_ldind_u1";
-			case Tok_ldind_u2: return "Tok_ldind_u2";
-			case Tok_ldind_u4: return "Tok_ldind_u4";
-			case Tok_ldind_u8: return "Tok_ldind_u8";
-			case Tok_ldloc: return "Tok_ldloc";
-			case Tok_ldloc_0: return "Tok_ldloc_0";
-			case Tok_ldloc_1: return "Tok_ldloc_1";
-			case Tok_ldloc_2: return "Tok_ldloc_2";
-			case Tok_ldloc_3: return "Tok_ldloc_3";
-			case Tok_ldloc_s: return "Tok_ldloc_s";
-			case Tok_ldloca: return "Tok_ldloca";
-			case Tok_ldloca_s: return "Tok_ldloca_s";
-			case Tok_ldnull: return "Tok_ldnull";
-			case Tok_ldobj: return "Tok_ldobj";
-			case Tok_ldproc: return "Tok_ldproc";
-			case Tok_ldstr: return "Tok_ldstr";
-			case Tok_ldvar: return "Tok_ldvar";
-			case Tok_ldvara: return "Tok_ldvara";
-			case Tok_line: return "Tok_line";
-			case Tok_mul: return "Tok_mul";
-			case Tok_neg: return "Tok_neg";
-			case Tok_newarr: return "Tok_newarr";
-			case Tok_newobj: return "Tok_newobj";
-			case Tok_newvla: return "Tok_newvla";
-			case Tok_not: return "Tok_not";
-			case Tok_or: return "Tok_or";
-			case Tok_pop: return "Tok_pop";
-			case Tok_rem: return "Tok_rem";
-			case Tok_ret: return "Tok_ret";
-			case Tok_shl: return "Tok_shl";
-			case Tok_shr: return "Tok_shr";
-			case Tok_shr_un: return "Tok_shr_un";
-			case Tok_starg: return "Tok_starg";
-			case Tok_starg_s: return "Tok_starg_s";
-			case Tok_stelem: return "Tok_stelem";
-			case Tok_stelem_i1: return "Tok_stelem_i1";
-			case Tok_stelem_i2: return "Tok_stelem_i2";
-			case Tok_stelem_i4: return "Tok_stelem_i4";
-			case Tok_stelem_i8: return "Tok_stelem_i8";
-			case Tok_stelem_ip: return "Tok_stelem_ip";
-			case Tok_stelem_r4: return "Tok_stelem_r4";
-			case Tok_stelem_r8: return "Tok_stelem_r8";
-			case Tok_stfld: return "Tok_stfld";
-			case Tok_stind_i1: return "Tok_stind_i1";
-			case Tok_stind_i2: return "Tok_stind_i2";
-			case Tok_stind_i4: return "Tok_stind_i4";
-			case Tok_stind_i8: return "Tok_stind_i8";
-			case Tok_stind_ip: return "Tok_stind_ip";
-			case Tok_stind_r4: return "Tok_stind_r4";
-			case Tok_stind_r8: return "Tok_stind_r8";
-			case Tok_stloc: return "Tok_stloc";
-			case Tok_stloc_0: return "Tok_stloc_0";
-			case Tok_stloc_1: return "Tok_stloc_1";
-			case Tok_stloc_2: return "Tok_stloc_2";
-			case Tok_stloc_3: return "Tok_stloc_3";
-			case Tok_stloc_s: return "Tok_stloc_s";
-			case Tok_stobj: return "Tok_stobj";
-			case Tok_stvar: return "Tok_stvar";
-			case Tok_sub: return "Tok_sub";
-			case Tok_xor: return "Tok_xor";
+			case Tok_XOR: return "Tok_XOR";
 			case Tok_ident: return "Tok_ident";
 			case Tok_unsigned: return "Tok_unsigned";
 			case Tok_real: return "Tok_real";
@@ -401,8 +401,8 @@ namespace Mil {
 		int i = ( pos != 0 ? *pos: 0 );
 		TokenType res = Tok_Invalid;
 		switch( at(str,len,i) ){
-		case '$':
-			res = Tok_Dlr; i += 1;
+		case '#':
+			res = Tok_Hash; i += 1;
 			break;
 		case '(':
 			if( at(str,len,i+1) == '*' ){
@@ -456,7 +456,18 @@ namespace Mil {
 			res = Tok_Eq; i += 1;
 			break;
 		case 'A':
-			if( at(str,len,i+1) == 'R' ){
+			switch( at(str,len,i+1) ){
+			case 'D':
+				if( at(str,len,i+2) == 'D' ){
+					res = Tok_ADD; i += 3;
+				}
+				break;
+			case 'N':
+				if( at(str,len,i+2) == 'D' ){
+					res = Tok_AND; i += 3;
+				}
+				break;
+			case 'R':
 				if( at(str,len,i+2) == 'R' ){
 					if( at(str,len,i+3) == 'A' ){
 						if( at(str,len,i+4) == 'Y' ){
@@ -464,6 +475,7 @@ namespace Mil {
 						}
 					}
 				}
+				break;
 			}
 			break;
 		case 'B':
@@ -478,17 +490,146 @@ namespace Mil {
 			}
 			break;
 		case 'C':
-			if( at(str,len,i+1) == 'A' ){
-				if( at(str,len,i+2) == 'S' ){
-					if( at(str,len,i+3) == 'E' ){
+			switch( at(str,len,i+1) ){
+			case 'A':
+				switch( at(str,len,i+2) ){
+				case 'L':
+					if( at(str,len,i+3) == 'L' ){
+						if( at(str,len,i+4) == 'I' ){
+							res = Tok_CALLI; i += 5;
+						} else {
+							res = Tok_CALL; i += 4;
+						}
+					}
+					break;
+				case 'S':
+					switch( at(str,len,i+3) ){
+					case 'E':
 						res = Tok_CASE; i += 4;
+						break;
+					case 'T':
+						if( at(str,len,i+4) == 'P' ){
+							if( at(str,len,i+5) == 'T' ){
+								if( at(str,len,i+6) == 'R' ){
+									res = Tok_CASTPTR; i += 7;
+								}
+							}
+						}
+						break;
+					}
+					break;
+				}
+				break;
+			case 'E':
+				if( at(str,len,i+2) == 'Q' ){
+					res = Tok_CEQ; i += 3;
+				}
+				break;
+			case 'G':
+				if( at(str,len,i+2) == 'T' ){
+					if( at(str,len,i+3) == '_' ){
+						if( at(str,len,i+4) == 'U' ){
+							if( at(str,len,i+5) == 'N' ){
+								res = Tok_CGT_UN; i += 6;
+							}
+						}
+					} else {
+						res = Tok_CGT; i += 3;
 					}
 				}
+				break;
+			case 'L':
+				if( at(str,len,i+2) == 'T' ){
+					if( at(str,len,i+3) == '_' ){
+						if( at(str,len,i+4) == 'U' ){
+							if( at(str,len,i+5) == 'N' ){
+								res = Tok_CLT_UN; i += 6;
+							}
+						}
+					} else {
+						res = Tok_CLT; i += 3;
+					}
+				}
+				break;
+			case 'O':
+				if( at(str,len,i+2) == 'N' ){
+					if( at(str,len,i+3) == 'V' ){
+						if( at(str,len,i+4) == '_' ){
+							switch( at(str,len,i+5) ){
+							case 'I':
+								switch( at(str,len,i+6) ){
+								case '1':
+									res = Tok_CONV_I1; i += 7;
+									break;
+								case '2':
+									res = Tok_CONV_I2; i += 7;
+									break;
+								case '4':
+									res = Tok_CONV_I4; i += 7;
+									break;
+								case '8':
+									res = Tok_CONV_I8; i += 7;
+									break;
+								case 'P':
+									res = Tok_CONV_IP; i += 7;
+									break;
+								}
+								break;
+							case 'R':
+								switch( at(str,len,i+6) ){
+								case '4':
+									res = Tok_CONV_R4; i += 7;
+									break;
+								case '8':
+									res = Tok_CONV_R8; i += 7;
+									break;
+								}
+								break;
+							case 'U':
+								switch( at(str,len,i+6) ){
+								case '1':
+									res = Tok_CONV_U1; i += 7;
+									break;
+								case '2':
+									res = Tok_CONV_U2; i += 7;
+									break;
+								case '4':
+									res = Tok_CONV_U4; i += 7;
+									break;
+								case '8':
+									res = Tok_CONV_U8; i += 7;
+									break;
+								}
+								break;
+							}
+						}
+					}
+				}
+				break;
 			}
 			break;
 		case 'D':
-			if( at(str,len,i+1) == 'O' ){
+			switch( at(str,len,i+1) ){
+			case 'I':
+				switch( at(str,len,i+2) ){
+				case 'S':
+					if( at(str,len,i+3) == 'P' ){
+						res = Tok_DISP; i += 4;
+					}
+					break;
+				case 'V':
+					res = Tok_DIV; i += 3;
+					break;
+				}
+				break;
+			case 'O':
 				res = Tok_DO; i += 2;
+				break;
+			case 'U':
+				if( at(str,len,i+2) == 'P' ){
+					res = Tok_DUP; i += 3;
+				}
+				break;
 			}
 			break;
 		case 'E':
@@ -505,6 +646,22 @@ namespace Mil {
 					res = Tok_END; i += 3;
 				}
 				break;
+			case 'X':
+				if( at(str,len,i+2) == 'I' ){
+					if( at(str,len,i+3) == 'T' ){
+						res = Tok_EXIT; i += 4;
+					}
+				}
+				break;
+			}
+			break;
+		case 'G':
+			if( at(str,len,i+1) == 'O' ){
+				if( at(str,len,i+2) == 'T' ){
+					if( at(str,len,i+3) == 'O' ){
+						res = Tok_GOTO; i += 4;
+					}
+				}
 			}
 			break;
 		case 'I':
@@ -537,16 +694,364 @@ namespace Mil {
 			}
 			break;
 		case 'L':
-			if( at(str,len,i+1) == 'O' ){
+			switch( at(str,len,i+1) ){
+			case 'A':
+				if( at(str,len,i+2) == 'B' ){
+					if( at(str,len,i+3) == 'E' ){
+						if( at(str,len,i+4) == 'L' ){
+							res = Tok_LABEL; i += 5;
+						}
+					}
+				}
+				break;
+			case 'D':
+				switch( at(str,len,i+2) ){
+				case 'A':
+					if( at(str,len,i+3) == 'R' ){
+						if( at(str,len,i+4) == 'G' ){
+							switch( at(str,len,i+5) ){
+							case 'A':
+								if( at(str,len,i+6) == '_' ){
+									if( at(str,len,i+7) == 'S' ){
+										res = Tok_LDARGA_S; i += 8;
+									}
+								} else {
+									res = Tok_LDARGA; i += 6;
+								}
+								break;
+							case '_':
+								switch( at(str,len,i+6) ){
+								case '0':
+									res = Tok_LDARG_0; i += 7;
+									break;
+								case '1':
+									res = Tok_LDARG_1; i += 7;
+									break;
+								case '2':
+									res = Tok_LDARG_2; i += 7;
+									break;
+								case '3':
+									res = Tok_LDARG_3; i += 7;
+									break;
+								case 'S':
+									res = Tok_LDARG_S; i += 7;
+									break;
+								}
+								break;
+							default:
+								res = Tok_LDARG; i += 5;
+								break;
+							}
+						}
+					}
+					break;
+				case 'C':
+					if( at(str,len,i+3) == '_' ){
+						switch( at(str,len,i+4) ){
+						case 'I':
+							switch( at(str,len,i+5) ){
+							case '4':
+								if( at(str,len,i+6) == '_' ){
+									switch( at(str,len,i+7) ){
+									case '0':
+										res = Tok_LDC_I4_0; i += 8;
+										break;
+									case '1':
+										res = Tok_LDC_I4_1; i += 8;
+										break;
+									case '2':
+										res = Tok_LDC_I4_2; i += 8;
+										break;
+									case '3':
+										res = Tok_LDC_I4_3; i += 8;
+										break;
+									case '4':
+										res = Tok_LDC_I4_4; i += 8;
+										break;
+									case '5':
+										res = Tok_LDC_I4_5; i += 8;
+										break;
+									case '6':
+										res = Tok_LDC_I4_6; i += 8;
+										break;
+									case '7':
+										res = Tok_LDC_I4_7; i += 8;
+										break;
+									case '8':
+										res = Tok_LDC_I4_8; i += 8;
+										break;
+									case 'M':
+										if( at(str,len,i+8) == '1' ){
+											res = Tok_LDC_I4_M1; i += 9;
+										}
+										break;
+									case 'S':
+										res = Tok_LDC_I4_S; i += 8;
+										break;
+									}
+								} else {
+									res = Tok_LDC_I4; i += 6;
+								}
+								break;
+							case '8':
+								res = Tok_LDC_I8; i += 6;
+								break;
+							}
+							break;
+						case 'R':
+							switch( at(str,len,i+5) ){
+							case '4':
+								res = Tok_LDC_R4; i += 6;
+								break;
+							case '8':
+								res = Tok_LDC_R8; i += 6;
+								break;
+							}
+							break;
+						}
+					}
+					break;
+				case 'E':
+					if( at(str,len,i+3) == 'L' ){
+						if( at(str,len,i+4) == 'E' ){
+							if( at(str,len,i+5) == 'M' ){
+								switch( at(str,len,i+6) ){
+								case 'A':
+									res = Tok_LDELEMA; i += 7;
+									break;
+								case '_':
+									switch( at(str,len,i+7) ){
+									case 'I':
+										switch( at(str,len,i+8) ){
+										case '1':
+											res = Tok_LDELEM_I1; i += 9;
+											break;
+										case '2':
+											res = Tok_LDELEM_I2; i += 9;
+											break;
+										case '4':
+											res = Tok_LDELEM_I4; i += 9;
+											break;
+										case '8':
+											res = Tok_LDELEM_I8; i += 9;
+											break;
+										case 'P':
+											res = Tok_LDELEM_IP; i += 9;
+											break;
+										}
+										break;
+									case 'R':
+										switch( at(str,len,i+8) ){
+										case '4':
+											res = Tok_LDELEM_R4; i += 9;
+											break;
+										case '8':
+											res = Tok_LDELEM_R8; i += 9;
+											break;
+										}
+										break;
+									case 'U':
+										switch( at(str,len,i+8) ){
+										case '1':
+											res = Tok_LDELEM_U1; i += 9;
+											break;
+										case '2':
+											res = Tok_LDELEM_U2; i += 9;
+											break;
+										case '4':
+											res = Tok_LDELEM_U4; i += 9;
+											break;
+										case '8':
+											res = Tok_LDELEM_U8; i += 9;
+											break;
+										}
+										break;
+									}
+									break;
+								default:
+									res = Tok_LDELEM; i += 6;
+									break;
+								}
+							}
+						}
+					}
+					break;
+				case 'F':
+					switch( at(str,len,i+3) ){
+					case 'L':
+						if( at(str,len,i+4) == 'D' ){
+							if( at(str,len,i+5) == 'A' ){
+								res = Tok_LDFLDA; i += 6;
+							} else {
+								res = Tok_LDFLD; i += 5;
+							}
+						}
+						break;
+					case 'T':
+						if( at(str,len,i+4) == 'N' ){
+							res = Tok_LDFTN; i += 5;
+						}
+						break;
+					}
+					break;
+				case 'I':
+					if( at(str,len,i+3) == 'N' ){
+						if( at(str,len,i+4) == 'D' ){
+							if( at(str,len,i+5) == '_' ){
+								switch( at(str,len,i+6) ){
+								case 'I':
+									switch( at(str,len,i+7) ){
+									case '1':
+										res = Tok_LDIND_I1; i += 8;
+										break;
+									case '2':
+										res = Tok_LDIND_I2; i += 8;
+										break;
+									case '4':
+										res = Tok_LDIND_I4; i += 8;
+										break;
+									case '8':
+										res = Tok_LDIND_I8; i += 8;
+										break;
+									case 'P':
+										res = Tok_LDIND_IP; i += 8;
+										break;
+									}
+									break;
+								case 'R':
+									switch( at(str,len,i+7) ){
+									case '4':
+										res = Tok_LDIND_R4; i += 8;
+										break;
+									case '8':
+										res = Tok_LDIND_R8; i += 8;
+										break;
+									}
+									break;
+								case 'U':
+									switch( at(str,len,i+7) ){
+									case '1':
+										res = Tok_LDIND_U1; i += 8;
+										break;
+									case '2':
+										res = Tok_LDIND_U2; i += 8;
+										break;
+									case '4':
+										res = Tok_LDIND_U4; i += 8;
+										break;
+									case '8':
+										res = Tok_LDIND_U8; i += 8;
+										break;
+									}
+									break;
+								}
+							}
+						}
+					}
+					break;
+				case 'L':
+					if( at(str,len,i+3) == 'O' ){
+						if( at(str,len,i+4) == 'C' ){
+							switch( at(str,len,i+5) ){
+							case 'A':
+								if( at(str,len,i+6) == '_' ){
+									if( at(str,len,i+7) == 'S' ){
+										res = Tok_LDLOCA_S; i += 8;
+									}
+								} else {
+									res = Tok_LDLOCA; i += 6;
+								}
+								break;
+							case '_':
+								switch( at(str,len,i+6) ){
+								case '0':
+									res = Tok_LDLOC_0; i += 7;
+									break;
+								case '1':
+									res = Tok_LDLOC_1; i += 7;
+									break;
+								case '2':
+									res = Tok_LDLOC_2; i += 7;
+									break;
+								case '3':
+									res = Tok_LDLOC_3; i += 7;
+									break;
+								case 'S':
+									res = Tok_LDLOC_S; i += 7;
+									break;
+								}
+								break;
+							default:
+								res = Tok_LDLOC; i += 5;
+								break;
+							}
+						}
+					}
+					break;
+				case 'N':
+					if( at(str,len,i+3) == 'U' ){
+						if( at(str,len,i+4) == 'L' ){
+							if( at(str,len,i+5) == 'L' ){
+								res = Tok_LDNULL; i += 6;
+							}
+						}
+					}
+					break;
+				case 'O':
+					if( at(str,len,i+3) == 'B' ){
+						if( at(str,len,i+4) == 'J' ){
+							res = Tok_LDOBJ; i += 5;
+						}
+					}
+					break;
+				case 'P':
+					if( at(str,len,i+3) == 'R' ){
+						if( at(str,len,i+4) == 'O' ){
+							if( at(str,len,i+5) == 'C' ){
+								res = Tok_LDPROC; i += 6;
+							}
+						}
+					}
+					break;
+				case 'S':
+					if( at(str,len,i+3) == 'T' ){
+						if( at(str,len,i+4) == 'R' ){
+							res = Tok_LDSTR; i += 5;
+						}
+					}
+					break;
+				case 'V':
+					if( at(str,len,i+3) == 'A' ){
+						if( at(str,len,i+4) == 'R' ){
+							if( at(str,len,i+5) == 'A' ){
+								res = Tok_LDVARA; i += 6;
+							} else {
+								res = Tok_LDVAR; i += 5;
+							}
+						}
+					}
+					break;
+				}
+				break;
+			case 'I':
+				if( at(str,len,i+2) == 'N' ){
+					if( at(str,len,i+3) == 'E' ){
+						res = Tok_LINE; i += 4;
+					}
+				}
+				break;
+			case 'O':
 				if( at(str,len,i+2) == 'O' ){
 					if( at(str,len,i+3) == 'P' ){
 						res = Tok_LOOP; i += 4;
 					}
 				}
+				break;
 			}
 			break;
 		case 'M':
-			if( at(str,len,i+1) == 'O' ){
+			switch( at(str,len,i+1) ){
+			case 'O':
 				if( at(str,len,i+2) == 'D' ){
 					if( at(str,len,i+3) == 'U' ){
 						if( at(str,len,i+4) == 'L' ){
@@ -556,17 +1061,70 @@ namespace Mil {
 						}
 					}
 				}
+				break;
+			case 'U':
+				if( at(str,len,i+2) == 'L' ){
+					res = Tok_MUL; i += 3;
+				}
+				break;
+			}
+			break;
+		case 'N':
+			switch( at(str,len,i+1) ){
+			case 'E':
+				switch( at(str,len,i+2) ){
+				case 'G':
+					res = Tok_NEG; i += 3;
+					break;
+				case 'W':
+					switch( at(str,len,i+3) ){
+					case 'A':
+						if( at(str,len,i+4) == 'R' ){
+							if( at(str,len,i+5) == 'R' ){
+								res = Tok_NEWARR; i += 6;
+							}
+						}
+						break;
+					case 'O':
+						if( at(str,len,i+4) == 'B' ){
+							if( at(str,len,i+5) == 'J' ){
+								res = Tok_NEWOBJ; i += 6;
+							}
+						}
+						break;
+					case 'V':
+						if( at(str,len,i+4) == 'L' ){
+							if( at(str,len,i+5) == 'A' ){
+								res = Tok_NEWVLA; i += 6;
+							}
+						}
+						break;
+					}
+					break;
+				}
+				break;
+			case 'O':
+				if( at(str,len,i+2) == 'T' ){
+					res = Tok_NOT; i += 3;
+				}
+				break;
 			}
 			break;
 		case 'O':
-			if( at(str,len,i+1) == 'F' ){
+			switch( at(str,len,i+1) ){
+			case 'F':
 				res = Tok_OF; i += 2;
+				break;
+			case 'R':
+				res = Tok_OR; i += 2;
+				break;
 			}
 			break;
 		case 'P':
 			switch( at(str,len,i+1) ){
 			case 'O':
-				if( at(str,len,i+2) == 'I' ){
+				switch( at(str,len,i+2) ){
+				case 'I':
 					if( at(str,len,i+3) == 'N' ){
 						if( at(str,len,i+4) == 'T' ){
 							if( at(str,len,i+5) == 'E' ){
@@ -576,6 +1134,10 @@ namespace Mil {
 							}
 						}
 					}
+					break;
+				case 'P':
+					res = Tok_POP; i += 3;
+					break;
 				}
 				break;
 			case 'R':
@@ -601,7 +1163,11 @@ namespace Mil {
 			break;
 		case 'R':
 			if( at(str,len,i+1) == 'E' ){
-				if( at(str,len,i+2) == 'P' ){
+				switch( at(str,len,i+2) ){
+				case 'M':
+					res = Tok_REM; i += 3;
+					break;
+				case 'P':
 					if( at(str,len,i+3) == 'E' ){
 						if( at(str,len,i+4) == 'A' ){
 							if( at(str,len,i+5) == 'T' ){
@@ -609,13 +1175,172 @@ namespace Mil {
 							}
 						}
 					}
+					break;
+				case 'T':
+					res = Tok_RET; i += 3;
+					break;
 				}
 			}
 			break;
 		case 'S':
 			switch( at(str,len,i+1) ){
+			case 'H':
+				switch( at(str,len,i+2) ){
+				case 'L':
+					res = Tok_SHL; i += 3;
+					break;
+				case 'R':
+					if( at(str,len,i+3) == '_' ){
+						if( at(str,len,i+4) == 'U' ){
+							if( at(str,len,i+5) == 'N' ){
+								res = Tok_SHR_UN; i += 6;
+							}
+						}
+					} else {
+						res = Tok_SHR; i += 3;
+					}
+					break;
+				}
+				break;
 			case 'T':
-				if( at(str,len,i+2) == 'R' ){
+				switch( at(str,len,i+2) ){
+				case 'A':
+					if( at(str,len,i+3) == 'R' ){
+						if( at(str,len,i+4) == 'G' ){
+							if( at(str,len,i+5) == '_' ){
+								if( at(str,len,i+6) == 'S' ){
+									res = Tok_STARG_S; i += 7;
+								}
+							} else {
+								res = Tok_STARG; i += 5;
+							}
+						}
+					}
+					break;
+				case 'E':
+					if( at(str,len,i+3) == 'L' ){
+						if( at(str,len,i+4) == 'E' ){
+							if( at(str,len,i+5) == 'M' ){
+								if( at(str,len,i+6) == '_' ){
+									switch( at(str,len,i+7) ){
+									case 'I':
+										switch( at(str,len,i+8) ){
+										case '1':
+											res = Tok_STELEM_I1; i += 9;
+											break;
+										case '2':
+											res = Tok_STELEM_I2; i += 9;
+											break;
+										case '4':
+											res = Tok_STELEM_I4; i += 9;
+											break;
+										case '8':
+											res = Tok_STELEM_I8; i += 9;
+											break;
+										case 'P':
+											res = Tok_STELEM_IP; i += 9;
+											break;
+										}
+										break;
+									case 'R':
+										switch( at(str,len,i+8) ){
+										case '4':
+											res = Tok_STELEM_R4; i += 9;
+											break;
+										case '8':
+											res = Tok_STELEM_R8; i += 9;
+											break;
+										}
+										break;
+									}
+								} else {
+									res = Tok_STELEM; i += 6;
+								}
+							}
+						}
+					}
+					break;
+				case 'F':
+					if( at(str,len,i+3) == 'L' ){
+						if( at(str,len,i+4) == 'D' ){
+							res = Tok_STFLD; i += 5;
+						}
+					}
+					break;
+				case 'I':
+					if( at(str,len,i+3) == 'N' ){
+						if( at(str,len,i+4) == 'D' ){
+							if( at(str,len,i+5) == '_' ){
+								switch( at(str,len,i+6) ){
+								case 'I':
+									switch( at(str,len,i+7) ){
+									case '1':
+										res = Tok_STIND_I1; i += 8;
+										break;
+									case '2':
+										res = Tok_STIND_I2; i += 8;
+										break;
+									case '4':
+										res = Tok_STIND_I4; i += 8;
+										break;
+									case '8':
+										res = Tok_STIND_I8; i += 8;
+										break;
+									case 'P':
+										res = Tok_STIND_IP; i += 8;
+										break;
+									}
+									break;
+								case 'R':
+									switch( at(str,len,i+7) ){
+									case '4':
+										res = Tok_STIND_R4; i += 8;
+										break;
+									case '8':
+										res = Tok_STIND_R8; i += 8;
+										break;
+									}
+									break;
+								}
+							}
+						}
+					}
+					break;
+				case 'L':
+					if( at(str,len,i+3) == 'O' ){
+						if( at(str,len,i+4) == 'C' ){
+							if( at(str,len,i+5) == '_' ){
+								switch( at(str,len,i+6) ){
+								case '0':
+									res = Tok_STLOC_0; i += 7;
+									break;
+								case '1':
+									res = Tok_STLOC_1; i += 7;
+									break;
+								case '2':
+									res = Tok_STLOC_2; i += 7;
+									break;
+								case '3':
+									res = Tok_STLOC_3; i += 7;
+									break;
+								case 'S':
+									res = Tok_STLOC_S; i += 7;
+									break;
+								}
+							} else {
+								res = Tok_STLOC; i += 5;
+							}
+						}
+					}
+					break;
+				case 'O':
+					if( at(str,len,i+3) == 'B' ){
+						if( at(str,len,i+4) == 'J' ){
+							res = Tok_STOBJ; i += 5;
+						}
+					}
+					break;
+				case 'R':
 					if( at(str,len,i+3) == 'U' ){
 						if( at(str,len,i+4) == 'C' ){
 							if( at(str,len,i+5) == 'T' ){
@@ -623,6 +1348,19 @@ namespace Mil {
 							}
 						}
 					}
+					break;
+				case 'V':
+					if( at(str,len,i+3) == 'A' ){
+						if( at(str,len,i+4) == 'R' ){
+							res = Tok_STVAR; i += 5;
+						}
+					}
+					break;
+				}
+				break;
+			case 'U':
+				if( at(str,len,i+2) == 'B' ){
+					res = Tok_SUB; i += 3;
 				}
 				break;
 			case 'W':
@@ -697,6 +1435,13 @@ namespace Mil {
 				}
 			}
 			break;
+		case 'X':
+			if( at(str,len,i+1) == 'O' ){
+				if( at(str,len,i+2) == 'R' ){
+					res = Tok_XOR; i += 3;
+				}
+			}
+			break;
 		case '[':
 			res = Tok_Lbrack; i += 1;
 			break;
@@ -705,775 +1450,6 @@ namespace Mil {
 			break;
 		case '^':
 			res = Tok_Hat; i += 1;
-			break;
-		case 'a':
-			switch( at(str,len,i+1) ){
-			case 'd':
-				if( at(str,len,i+2) == 'd' ){
-					res = Tok_add; i += 3;
-				}
-				break;
-			case 'n':
-				if( at(str,len,i+2) == 'd' ){
-					res = Tok_and; i += 3;
-				}
-				break;
-			}
-			break;
-		case 'c':
-			switch( at(str,len,i+1) ){
-			case 'a':
-				switch( at(str,len,i+2) ){
-				case 'l':
-					if( at(str,len,i+3) == 'l' ){
-						if( at(str,len,i+4) == 'i' ){
-							res = Tok_calli; i += 5;
-						} else {
-							res = Tok_call; i += 4;
-						}
-					}
-					break;
-				case 's':
-					if( at(str,len,i+3) == 't' ){
-						if( at(str,len,i+4) == 'p' ){
-							if( at(str,len,i+5) == 't' ){
-								if( at(str,len,i+6) == 'r' ){
-									res = Tok_castptr; i += 7;
-								}
-							}
-						}
-					}
-					break;
-				}
-				break;
-			case 'e':
-				if( at(str,len,i+2) == 'q' ){
-					res = Tok_ceq; i += 3;
-				}
-				break;
-			case 'g':
-				if( at(str,len,i+2) == 't' ){
-					if( at(str,len,i+3) == '_' ){
-						if( at(str,len,i+4) == 'u' ){
-							if( at(str,len,i+5) == 'n' ){
-								res = Tok_cgt_un; i += 6;
-							}
-						}
-					} else {
-						res = Tok_cgt; i += 3;
-					}
-				}
-				break;
-			case 'l':
-				if( at(str,len,i+2) == 't' ){
-					if( at(str,len,i+3) == '_' ){
-						if( at(str,len,i+4) == 'u' ){
-							if( at(str,len,i+5) == 'n' ){
-								res = Tok_clt_un; i += 6;
-							}
-						}
-					} else {
-						res = Tok_clt; i += 3;
-					}
-				}
-				break;
-			case 'o':
-				if( at(str,len,i+2) == 'n' ){
-					if( at(str,len,i+3) == 'v' ){
-						if( at(str,len,i+4) == '_' ){
-							switch( at(str,len,i+5) ){
-							case 'i':
-								switch( at(str,len,i+6) ){
-								case '1':
-									res = Tok_conv_i1; i += 7;
-									break;
-								case '2':
-									res = Tok_conv_i2; i += 7;
-									break;
-								case '4':
-									res = Tok_conv_i4; i += 7;
-									break;
-								case '8':
-									res = Tok_conv_i8; i += 7;
-									break;
-								case 'p':
-									res = Tok_conv_ip; i += 7;
-									break;
-								}
-								break;
-							case 'r':
-								switch( at(str,len,i+6) ){
-								case '4':
-									res = Tok_conv_r4; i += 7;
-									break;
-								case '8':
-									res = Tok_conv_r8; i += 7;
-									break;
-								}
-								break;
-							case 'u':
-								switch( at(str,len,i+6) ){
-								case '1':
-									res = Tok_conv_u1; i += 7;
-									break;
-								case '2':
-									res = Tok_conv_u2; i += 7;
-									break;
-								case '4':
-									res = Tok_conv_u4; i += 7;
-									break;
-								case '8':
-									res = Tok_conv_u8; i += 7;
-									break;
-								}
-								break;
-							}
-						}
-					}
-				}
-				break;
-			}
-			break;
-		case 'd':
-			switch( at(str,len,i+1) ){
-			case 'i':
-				switch( at(str,len,i+2) ){
-				case 's':
-					if( at(str,len,i+3) == 'p' ){
-						res = Tok_disp; i += 4;
-					}
-					break;
-				case 'v':
-					res = Tok_div; i += 3;
-					break;
-				}
-				break;
-			case 'u':
-				if( at(str,len,i+2) == 'p' ){
-					res = Tok_dup; i += 3;
-				}
-				break;
-			}
-			break;
-		case 'e':
-			if( at(str,len,i+1) == 'x' ){
-				if( at(str,len,i+2) == 'i' ){
-					if( at(str,len,i+3) == 't' ){
-						res = Tok_exit; i += 4;
-					}
-				}
-			}
-			break;
-		case 'g':
-			if( at(str,len,i+1) == 'o' ){
-				if( at(str,len,i+2) == 't' ){
-					if( at(str,len,i+3) == 'o' ){
-						res = Tok_goto; i += 4;
-					}
-				}
-			}
-			break;
-		case 'l':
-			switch( at(str,len,i+1) ){
-			case 'a':
-				if( at(str,len,i+2) == 'b' ){
-					if( at(str,len,i+3) == 'e' ){
-						if( at(str,len,i+4) == 'l' ){
-							res = Tok_label; i += 5;
-						}
-					}
-				}
-				break;
-			case 'd':
-				switch( at(str,len,i+2) ){
-				case 'a':
-					if( at(str,len,i+3) == 'r' ){
-						if( at(str,len,i+4) == 'g' ){
-							switch( at(str,len,i+5) ){
-							case '_':
-								switch( at(str,len,i+6) ){
-								case '0':
-									res = Tok_ldarg_0; i += 7;
-									break;
-								case '1':
-									res = Tok_ldarg_1; i += 7;
-									break;
-								case '2':
-									res = Tok_ldarg_2; i += 7;
-									break;
-								case '3':
-									res = Tok_ldarg_3; i += 7;
-									break;
-								case 's':
-									res = Tok_ldarg_s; i += 7;
-									break;
-								}
-								break;
-							case 'a':
-								if( at(str,len,i+6) == '_' ){
-									if( at(str,len,i+7) == 's' ){
-										res = Tok_ldarga_s; i += 8;
-									}
-								} else {
-									res = Tok_ldarga; i += 6;
-								}
-								break;
-							default:
-								res = Tok_ldarg; i += 5;
-								break;
-							}
-						}
-					}
-					break;
-				case 'c':
-					if( at(str,len,i+3) == '_' ){
-						switch( at(str,len,i+4) ){
-						case 'i':
-							switch( at(str,len,i+5) ){
-							case '4':
-								if( at(str,len,i+6) == '_' ){
-									switch( at(str,len,i+7) ){
-									case '0':
-										res = Tok_ldc_i4_0; i += 8;
-										break;
-									case '1':
-										res = Tok_ldc_i4_1; i += 8;
-										break;
-									case '2':
-										res = Tok_ldc_i4_2; i += 8;
-										break;
-									case '3':
-										res = Tok_ldc_i4_3; i += 8;
-										break;
-									case '4':
-										res = Tok_ldc_i4_4; i += 8;
-										break;
-									case '5':
-										res = Tok_ldc_i4_5; i += 8;
-										break;
-									case '6':
-										res = Tok_ldc_i4_6; i += 8;
-										break;
-									case '7':
-										res = Tok_ldc_i4_7; i += 8;
-										break;
-									case '8':
-										res = Tok_ldc_i4_8; i += 8;
-										break;
-									case 'm':
-										if( at(str,len,i+8) == '1' ){
-											res = Tok_ldc_i4_m1; i += 9;
-										}
-										break;
-									case 's':
-										res = Tok_ldc_i4_s; i += 8;
-										break;
-									}
-								} else {
-									res = Tok_ldc_i4; i += 6;
-								}
-								break;
-							case '8':
-								res = Tok_ldc_i8; i += 6;
-								break;
-							}
-							break;
-						case 'r':
-							switch( at(str,len,i+5) ){
-							case '4':
-								res = Tok_ldc_r4; i += 6;
-								break;
-							case '8':
-								res = Tok_ldc_r8; i += 6;
-								break;
-							}
-							break;
-						}
-					}
-					break;
-				case 'e':
-					if( at(str,len,i+3) == 'l' ){
-						if( at(str,len,i+4) == 'e' ){
-							if( at(str,len,i+5) == 'm' ){
-								switch( at(str,len,i+6) ){
-								case '_':
-									switch( at(str,len,i+7) ){
-									case 'i':
-										switch( at(str,len,i+8) ){
-										case '1':
-											res = Tok_ldelem_i1; i += 9;
-											break;
-										case '2':
-											res = Tok_ldelem_i2; i += 9;
-											break;
-										case '4':
-											res = Tok_ldelem_i4; i += 9;
-											break;
-										case '8':
-											res = Tok_ldelem_i8; i += 9;
-											break;
-										case 'p':
-											res = Tok_ldelem_ip; i += 9;
-											break;
-										}
-										break;
-									case 'r':
-										switch( at(str,len,i+8) ){
-										case '4':
-											res = Tok_ldelem_r4; i += 9;
-											break;
-										case '8':
-											res = Tok_ldelem_r8; i += 9;
-											break;
-										}
-										break;
-									case 'u':
-										switch( at(str,len,i+8) ){
-										case '1':
-											res = Tok_ldelem_u1; i += 9;
-											break;
-										case '2':
-											res = Tok_ldelem_u2; i += 9;
-											break;
-										case '4':
-											res = Tok_ldelem_u4; i += 9;
-											break;
-										case '8':
-											res = Tok_ldelem_u8; i += 9;
-											break;
-										}
-										break;
-									}
-									break;
-								case 'a':
-									res = Tok_ldelema; i += 7;
-									break;
-								default:
-									res = Tok_ldelem; i += 6;
-									break;
-								}
-							}
-						}
-					}
-					break;
-				case 'f':
-					switch( at(str,len,i+3) ){
-					case 'l':
-						if( at(str,len,i+4) == 'd' ){
-							if( at(str,len,i+5) == 'a' ){
-								res = Tok_ldflda; i += 6;
-							} else {
-								res = Tok_ldfld; i += 5;
-							}
-						}
-						break;
-					case 't':
-						if( at(str,len,i+4) == 'n' ){
-							res = Tok_ldftn; i += 5;
-						}
-						break;
-					}
-					break;
-				case 'i':
-					if( at(str,len,i+3) == 'n' ){
-						if( at(str,len,i+4) == 'd' ){
-							if( at(str,len,i+5) == '_' ){
-								switch( at(str,len,i+6) ){
-								case 'i':
-									switch( at(str,len,i+7) ){
-									case '1':
-										res = Tok_ldind_i1; i += 8;
-										break;
-									case '2':
-										res = Tok_ldind_i2; i += 8;
-										break;
-									case '4':
-										res = Tok_ldind_i4; i += 8;
-										break;
-									case '8':
-										res = Tok_ldind_i8; i += 8;
-										break;
-									case 'p':
-										res = Tok_ldind_ip; i += 8;
-										break;
-									}
-									break;
-								case 'r':
-									switch( at(str,len,i+7) ){
-									case '4':
-										res = Tok_ldind_r4; i += 8;
-										break;
-									case '8':
-										res = Tok_ldind_r8; i += 8;
-										break;
-									}
-									break;
-								case 'u':
-									switch( at(str,len,i+7) ){
-									case '1':
-										res = Tok_ldind_u1; i += 8;
-										break;
-									case '2':
-										res = Tok_ldind_u2; i += 8;
-										break;
-									case '4':
-										res = Tok_ldind_u4; i += 8;
-										break;
-									case '8':
-										res = Tok_ldind_u8; i += 8;
-										break;
-									}
-									break;
-								}
-							}
-						}
-					}
-					break;
-				case 'l':
-					if( at(str,len,i+3) == 'o' ){
-						if( at(str,len,i+4) == 'c' ){
-							switch( at(str,len,i+5) ){
-							case '_':
-								switch( at(str,len,i+6) ){
-								case '0':
-									res = Tok_ldloc_0; i += 7;
-									break;
-								case '1':
-									res = Tok_ldloc_1; i += 7;
-									break;
-								case '2':
-									res = Tok_ldloc_2; i += 7;
-									break;
-								case '3':
-									res = Tok_ldloc_3; i += 7;
-									break;
-								case 's':
-									res = Tok_ldloc_s; i += 7;
-									break;
-								}
-								break;
-							case 'a':
-								if( at(str,len,i+6) == '_' ){
-									if( at(str,len,i+7) == 's' ){
-										res = Tok_ldloca_s; i += 8;
-									}
-								} else {
-									res = Tok_ldloca; i += 6;
-								}
-								break;
-							default:
-								res = Tok_ldloc; i += 5;
-								break;
-							}
-						}
-					}
-					break;
-				case 'n':
-					if( at(str,len,i+3) == 'u' ){
-						if( at(str,len,i+4) == 'l' ){
-							if( at(str,len,i+5) == 'l' ){
-								res = Tok_ldnull; i += 6;
-							}
-						}
-					}
-					break;
-				case 'o':
-					if( at(str,len,i+3) == 'b' ){
-						if( at(str,len,i+4) == 'j' ){
-							res = Tok_ldobj; i += 5;
-						}
-					}
-					break;
-				case 'p':
-					if( at(str,len,i+3) == 'r' ){
-						if( at(str,len,i+4) == 'o' ){
-							if( at(str,len,i+5) == 'c' ){
-								res = Tok_ldproc; i += 6;
-							}
-						}
-					}
-					break;
-				case 's':
-					if( at(str,len,i+3) == 't' ){
-						if( at(str,len,i+4) == 'r' ){
-							res = Tok_ldstr; i += 5;
-						}
-					}
-					break;
-				case 'v':
-					if( at(str,len,i+3) == 'a' ){
-						if( at(str,len,i+4) == 'r' ){
-							if( at(str,len,i+5) == 'a' ){
-								res = Tok_ldvara; i += 6;
-							} else {
-								res = Tok_ldvar; i += 5;
-							}
-						}
-					}
-					break;
-				}
-				break;
-			case 'i':
-				if( at(str,len,i+2) == 'n' ){
-					if( at(str,len,i+3) == 'e' ){
-						res = Tok_line; i += 4;
-					}
-				}
-				break;
-			}
-			break;
-		case 'm':
-			if( at(str,len,i+1) == 'u' ){
-				if( at(str,len,i+2) == 'l' ){
-					res = Tok_mul; i += 3;
-				}
-			}
-			break;
-		case 'n':
-			switch( at(str,len,i+1) ){
-			case 'e':
-				switch( at(str,len,i+2) ){
-				case 'g':
-					res = Tok_neg; i += 3;
-					break;
-				case 'w':
-					switch( at(str,len,i+3) ){
-					case 'a':
-						if( at(str,len,i+4) == 'r' ){
-							if( at(str,len,i+5) == 'r' ){
-								res = Tok_newarr; i += 6;
-							}
-						}
-						break;
-					case 'o':
-						if( at(str,len,i+4) == 'b' ){
-							if( at(str,len,i+5) == 'j' ){
-								res = Tok_newobj; i += 6;
-							}
-						}
-						break;
-					case 'v':
-						if( at(str,len,i+4) == 'l' ){
-							if( at(str,len,i+5) == 'a' ){
-								res = Tok_newvla; i += 6;
-							}
-						}
-						break;
-					}
-					break;
-				}
-				break;
-			case 'o':
-				if( at(str,len,i+2) == 't' ){
-					res = Tok_not; i += 3;
-				}
-				break;
-			}
-			break;
-		case 'o':
-			if( at(str,len,i+1) == 'r' ){
-				res = Tok_or; i += 2;
-			}
-			break;
-		case 'p':
-			if( at(str,len,i+1) == 'o' ){
-				if( at(str,len,i+2) == 'p' ){
-					res = Tok_pop; i += 3;
-				}
-			}
-			break;
-		case 'r':
-			if( at(str,len,i+1) == 'e' ){
-				switch( at(str,len,i+2) ){
-				case 'm':
-					res = Tok_rem; i += 3;
-					break;
-				case 't':
-					res = Tok_ret; i += 3;
-					break;
-				}
-			}
-			break;
-		case 's':
-			switch( at(str,len,i+1) ){
-			case 'h':
-				switch( at(str,len,i+2) ){
-				case 'l':
-					res = Tok_shl; i += 3;
-					break;
-				case 'r':
-					if( at(str,len,i+3) == '_' ){
-						if( at(str,len,i+4) == 'u' ){
-							if( at(str,len,i+5) == 'n' ){
-								res = Tok_shr_un; i += 6;
-							}
-						}
-					} else {
-						res = Tok_shr; i += 3;
-					}
-					break;
-				}
-				break;
-			case 't':
-				switch( at(str,len,i+2) ){
-				case 'a':
-					if( at(str,len,i+3) == 'r' ){
-						if( at(str,len,i+4) == 'g' ){
-							if( at(str,len,i+5) == '_' ){
-								if( at(str,len,i+6) == 's' ){
-									res = Tok_starg_s; i += 7;
-								}
-							} else {
-								res = Tok_starg; i += 5;
-							}
-						}
-					}
-					break;
-				case 'e':
-					if( at(str,len,i+3) == 'l' ){
-						if( at(str,len,i+4) == 'e' ){
-							if( at(str,len,i+5) == 'm' ){
-								if( at(str,len,i+6) == '_' ){
-									switch( at(str,len,i+7) ){
-									case 'i':
-										switch( at(str,len,i+8) ){
-										case '1':
-											res = Tok_stelem_i1; i += 9;
-											break;
-										case '2':
-											res = Tok_stelem_i2; i += 9;
-											break;
-										case '4':
-											res = Tok_stelem_i4; i += 9;
-											break;
-										case '8':
-											res = Tok_stelem_i8; i += 9;
-											break;
-										case 'p':
-											res = Tok_stelem_ip; i += 9;
-											break;
-										}
-										break;
-									case 'r':
-										switch( at(str,len,i+8) ){
-										case '4':
-											res = Tok_stelem_r4; i += 9;
-											break;
-										case '8':
-											res = Tok_stelem_r8; i += 9;
-											break;
-										}
-										break;
-									}
-								} else {
-									res = Tok_stelem; i += 6;
-								}
-							}
-						}
-					}
-					break;
-				case 'f':
-					if( at(str,len,i+3) == 'l' ){
-						if( at(str,len,i+4) == 'd' ){
-							res = Tok_stfld; i += 5;
-						}
-					}
-					break;
-				case 'i':
-					if( at(str,len,i+3) == 'n' ){
-						if( at(str,len,i+4) == 'd' ){
-							if( at(str,len,i+5) == '_' ){
-								switch( at(str,len,i+6) ){
-								case 'i':
-									switch( at(str,len,i+7) ){
-									case '1':
-										res = Tok_stind_i1; i += 8;
-										break;
-									case '2':
-										res = Tok_stind_i2; i += 8;
-										break;
-									case '4':
-										res = Tok_stind_i4; i += 8;
-										break;
-									case '8':
-										res = Tok_stind_i8; i += 8;
-										break;
-									case 'p':
-										res = Tok_stind_ip; i += 8;
-										break;
-									}
-									break;
-								case 'r':
-									switch( at(str,len,i+7) ){
-									case '4':
-										res = Tok_stind_r4; i += 8;
-										break;
-									case '8':
-										res = Tok_stind_r8; i += 8;
-										break;
-									}
-									break;
-								}
-							}
-						}
-					}
-					break;
-				case 'l':
-					if( at(str,len,i+3) == 'o' ){
-						if( at(str,len,i+4) == 'c' ){
-							if( at(str,len,i+5) == '_' ){
-								switch( at(str,len,i+6) ){
-								case '0':
-									res = Tok_stloc_0; i += 7;
-									break;
-								case '1':
-									res = Tok_stloc_1; i += 7;
-									break;
-								case '2':
-									res = Tok_stloc_2; i += 7;
-									break;
-								case '3':
-									res = Tok_stloc_3; i += 7;
-									break;
-								case 's':
-									res = Tok_stloc_s; i += 7;
-									break;
-								}
-							} else {
-								res = Tok_stloc; i += 5;
-							}
-						}
-					}
-					break;
-				case 'o':
-					if( at(str,len,i+3) == 'b' ){
-						if( at(str,len,i+4) == 'j' ){
-							res = Tok_stobj; i += 5;
-						}
-					}
-					break;
-				case 'v':
-					if( at(str,len,i+3) == 'a' ){
-						if( at(str,len,i+4) == 'r' ){
-							res = Tok_stvar; i += 5;
-						}
-					}
-					break;
-				}
-				break;
-			case 'u':
-				if( at(str,len,i+2) == 'b' ){
-					res = Tok_sub; i += 3;
-				}
-				break;
-			}
-			break;
-		case 'x':
-			if( at(str,len,i+1) == 'o' ){
-				if( at(str,len,i+2) == 'r' ){
-					res = Tok_xor; i += 3;
-				}
-			}
 			break;
 		}
 		if(pos) *pos = i;
