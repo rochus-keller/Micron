@@ -13,14 +13,16 @@ INCLUDEPATH += ..
 DEFINES += _DEBUG
 
 SOURCES += \
-    ParserTest.cpp \
+    MicParserTest.cpp \
     MicLexer.cpp \
     MicParser.cpp \
     MicPpLexer.cpp \
     MicRowCol.cpp \
     MicSynTree.cpp \
     MicToken.cpp \
-    MicTokenType.cpp
+    MicTokenType.cpp \
+    MicParser2.cpp \
+    MicAst.cpp
 
 HEADERS += \
     MicLexer.h \
@@ -29,7 +31,9 @@ HEADERS += \
     MicRowCol.h \
     MicSynTree.h \
     MicToken.h \
-    MicTokenType.h
+    MicTokenType.h \
+    MicParser2.h \
+    MicAst.h
 
 
 

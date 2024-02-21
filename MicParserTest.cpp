@@ -24,8 +24,9 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QElapsedTimer>
-#include <MicLexer.h>
+#include <MicPpLexer.h>
 #include <MicParser.h>
+#include <MicParser2.h>
 using namespace Mic;
 
 QStringList collectFiles( const QDir& dir, const QStringList& suffix )
@@ -46,6 +47,7 @@ QStringList collectFiles( const QDir& dir, const QStringList& suffix )
 
 static QString root;
 
+#if 1
 static void dump(QTextStream& out, const SynTree* node, int level)
 {
     QByteArray str;
@@ -76,11 +78,27 @@ static void dump(QTextStream& out, const SynTree* node, int level)
     foreach( SynTree* sub, node->d_children )
         dump( out, sub, level + 1 );
 }
+#endif
 
 class Lex : public Scanner
 {
 public:
-    Lexer lex;
+    PpLexer lex;
+    Token next()
+    {
+        return lex.nextToken();
+    }
+
+    Token peek(int offset)
+    {
+        return lex.peekToken(offset);
+    }
+};
+
+class Lex2 : public Scanner2
+{
+public:
+    PpLexer lex;
     Token next()
     {
         return lex.nextToken();
@@ -119,7 +137,36 @@ static void checkParser(const QStringList& files)
         out.open(QIODevice::WriteOnly);
         QTextStream s(&out);
         dump(s,&p.root,0);
+#else
+        QTextStream s(stdout);
+        dump(s,&p.root,0);
 #endif
+    }
+    qDebug() << "#### finished with" << ok << "files ok of total" << files.size() << "files" << "in" << timer.elapsed() << " [ms]";
+}
+
+static void checkParser2(const QStringList& files)
+{
+    int ok = 0;
+    QElapsedTimer timer;
+    timer.start();
+    foreach( const QString& file, files )
+    {
+        Lex2 lex;
+        lex.lex.setStream(file);
+        Parser2 p(&lex);
+        qDebug() << "**** parsing" << file.mid(root.size()+1);
+        p.RunParser();
+        if( !p.errors.isEmpty() )
+        {
+            foreach( const Parser2::Error& e, p.errors )
+                qCritical() << e.path.mid(root.size()+1) << e.row << e.col << e.msg;
+            // break;
+        }else
+        {
+            ok++;
+            qDebug() << "ok";
+        }
     }
     qDebug() << "#### finished with" << ok << "files ok of total" << files.size() << "files" << "in" << timer.elapsed() << " [ms]";
 }
@@ -147,12 +194,13 @@ int main(int argc, char *argv[])
         Token t = lex.lex.nextToken();
         while( !t.isEof() )
         {
-            qDebug() << t.getString();
+            qDebug() << t.getString() << t.d_val.constData();
             t = lex.lex.nextToken();
         }
     }
 #else
-    checkParser(files);
+    // checkParser(files);
+    checkParser2(files);
 #endif
 
     return 0;

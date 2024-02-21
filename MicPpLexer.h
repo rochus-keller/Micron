@@ -32,10 +32,12 @@ namespace Mic
 class PpLexer
 {
 public:
-    PpLexer(Lexer*);
+    PpLexer();
     ~PpLexer();
 
     bool reset(const QByteArrayList& options);
+    void setStream( QIODevice*, const QString& sourcePath, const QDateTime& ts = QDateTime() );
+    bool setStream(const QString& sourcePath);
 
     Token nextToken();
     Token peekToken(quint8 lookAhead = 1);
@@ -85,7 +87,7 @@ protected:
         }
     }
 private:
-    Lexer* d_lex;
+    Lexer d_lex;
     QList<Token> d_buffer;
     Token d_err;
     quint32 d_sloc; // number of lines of code without empty or comment lines
