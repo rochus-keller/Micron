@@ -22,7 +22,9 @@ SOURCES += \
     MicToken.cpp \
     MicTokenType.cpp \
     MicParser2.cpp \
-    MicAst.cpp
+    MicAst.cpp \
+    MicMilEmitter.cpp \
+    MicMilOp.cpp
 
 HEADERS += \
     MicLexer.h \
@@ -33,7 +35,9 @@ HEADERS += \
     MicToken.h \
     MicTokenType.h \
     MicParser2.h \
-    MicAst.h
+    MicAst.h \
+    MicMilEmitter.h \
+    MicMilOp.h
 
 
 
