@@ -24,10 +24,11 @@
 #include <QFile>
 #include <QIODevice>
 #include <QtDebug>
+#include <QtMath>
 #include <ctype.h>
 using namespace Mic;
 
-QHash<QByteArray,QByteArray> Lexer::d_symbols;
+QHash<QByteArray,QByteArray> d_symbols;
 
 Lexer::Lexer(QObject *parent) : QObject(parent),
     d_lastToken(Tok_Invalid),d_lineNr(0),d_colNr(0),d_in(0),
@@ -115,16 +116,6 @@ QList<Token> Lexer::tokens(const QByteArray& code, const QString& path)
         t = nextToken();
     }
     return res;
-}
-
-QByteArray Lexer::getSymbol(const QByteArray& str)
-{
-    if( str.isEmpty() )
-        return str;
-    QByteArray& sym = d_symbols[str];
-    if( sym.isEmpty() )
-        sym = str;
-    return sym;
 }
 
 static inline bool isHexDigit( char c )
@@ -222,7 +213,7 @@ Token Lexer::token(TokenType tt, int len, const QByteArray& val)
 
     QByteArray v = val;
     if( tt != Tok_Comment && tt != Tok_Invalid )
-        v = getSymbol(v);
+        v = Token::getSymbol(v);
     Token t( tt, d_lineNr, d_colNr + 1, len, v );
     d_lastToken = t;
     d_colNr += len;
@@ -281,25 +272,34 @@ Token Lexer::ident()
         return token( Tok_ident, off, str );
 }
 
-static inline bool checkHexNumber( QByteArray str )
+static inline bool allDecimal( QByteArray str, int suffix = 0 )
 {
-    const int pos = str.indexOf('\'');
-    if( pos != -1 )
-        str = str.left(pos);
-    if( str.size() < 2 || ( !str.endsWith('H') && !str.endsWith('h')
-                            && !str.endsWith('L') && !str.endsWith('l')
-                            && !str.endsWith('I') && !str.endsWith('i')
-                            && !str.endsWith('X') && !str.endsWith('x') ) )
-        return false;
-    else
-        return true;
+    for( int i = 0; i < (str.size() - suffix); i++ )
+    {
+        if( !::isdigit(str[i]) && str[i] != '_' )
+            return false;
+    }
+    return true;
 }
 
-static inline bool checkDecNumber( QByteArray str, bool oneOff = false )
+static inline bool allBinary( const QByteArray& str, int suffix )
 {
-    for( int i = 0; i < (str.size() - (oneOff ? 1 : 0)); i++ )
+    for( int i = 0; i < (str.size()-suffix); i++ )
     {
-        if( !::isdigit(str[i]) )
+        const char c = str[i];
+        if( !( c == '0' || c == '1' || c == '_' ) )
+            return false;
+    }
+    return true;
+}
+
+static inline bool allOctal( const QByteArray& str, int suffix )
+{
+    for( int i = 0; i < (str.size()-suffix); i++ )
+    {
+        const char c = str[i];
+        if( !( c == '0' || c == '1' || c == '2' || c == '3' || c == '4' || c == '5'
+               || c == '6' || c == '7' || c == '_' ) )
             return false;
     }
     return true;
@@ -307,61 +307,65 @@ static inline bool checkDecNumber( QByteArray str, bool oneOff = false )
 
 Token Lexer::number()
 {
-    // integer      ::=  digit {digit} ['I' | 'L'] | digit {hexDigit} 'H' ['I' | 'L']
-    // real         ::=  digit {digit} '.' {digit} [ScaleFactor]
-    // ScaleFactor  ::=  ('E'|'D'|'S') ['+' | '-'] digit {digit}
+    // number   = integer | real
+    // integer  = digit {hexDigit|'_'} ['O'|'B'|'H'] ['U1'|'U2'|'U4'|'U8'|'I1'|'I2'|'I4'|'I8']
+    // real     = digit {digit|'_'} '.' {digit} [Exponent]
+    // Exponent = ('E' | 'D' | 'F' ) ['+' | '-'] digit {digit}
+    // hexDigit = digit | 'A' ... 'F'
+    // digit    = '0' ... '9'
+
     int lhsPlaces = 0, rhsPlaces = 0, expPlaces = 0;
     int off = 1;
+    char c;
     while( true )
     {
-        const char c = lookAhead(off);
-        if( !isHexDigit(c) ) // also accepts d and e!
+        c = lookAhead(off);
+        if( !isHexDigit(c) && c != '_' )
             break;
         else
             off++;
     }
     lhsPlaces = off;
     bool isHex = false;
-    bool is64bit = false;
-    bool is32bit = false;
+    bool isBinary = false;
+    bool isOctal = false;
+    bool isDecimal = false;
+    bool isSigned = false;
     bool isChar = false;
     bool isReal = false;
-    int commaPos = -1, ePos = -1;
-    const char o1 = lookAhead(off);
-    if( o1 == 'L' || o1 == 'l' )
+    quint8 byteWidth = 0;
+    int dotPos = -1, expPos = -1;
+    int suffix = 0;
+    const char om1 = lookAhead(off-1);
+    c = lookAhead(off);
+    if( c == 'O' || c == 'o' )
     {
-        is64bit = true;
+        isOctal = true;
+        suffix++;
         off++;
-    }else if( o1 == 'I' || o1 == 'i' )
+    }else if( ( om1 == 'B' || om1 == 'b' ) && allDecimal(d_line.mid(d_colNr, off - 1 ) ) &&
+              !(  c == 'H' || c == 'h' || c == 'X' || c == 'x' ) )
     {
-        is32bit = true;
-        off++;
-    }else if( o1 == 'H' || o1 == 'h' )
+        isBinary = true;
+        suffix++;
+    }else if( c == 'H' || c == 'h' )
     {
         isHex = true;
+        suffix++;
         off++;
-        const char o2 = lookAhead(off);
-        if( o2 == 'L' || o2 == 'l' )
-        {
-            is64bit = true;
-            off++;
-        }else if( o2 == 'I' || o2 == 'i' )
-        {
-            is32bit = true;
-            off++;
-        }
-    }else if( o1 == 'X' || o1 == 'x' )
+    }else if( c == 'X' || c == 'x' )
     {
         isChar = true;
+        suffix++;
         off++;
-    }else if( o1 == '.' && lookAhead(off+1) == '.' )
+    }else if( c == '.' && lookAhead(off+1) == '.' )
     {
-        ; // look for decimal point but not for range
-    }else if( o1 == '.'  )
+        ; // this is rather a range expression
+    }else if( c == '.'  )
     {
-        if( !checkDecNumber(d_line.mid(d_colNr, off) ) )
+        if( !allDecimal(d_line.mid(d_colNr, off) ) )
                 return token( Tok_Invalid, off, "invalid mantissa" );
-        commaPos = off;
+        dotPos = off;
         off++;
         isReal = true;
         while( true )
@@ -374,12 +378,14 @@ Token Lexer::number()
             rhsPlaces++;
         }
         const char de = lookAhead(off);
-        if( de == 'E' || de == 'D' || de == 'S' || de == 'e' || de == 'd' || de == 's' )
+        if( de == 'E' || de == 'D' || de == 'F' || de == 'e' || de == 'd' || de == 'f' )
         {
-            is64bit = ( de == 'D' || de == 'd' );
-            is32bit = ( de == 'S' || de == 's' );
+            if( de == 'D' || de == 'd' )
+                byteWidth = 8;
+            else if( de == 'F' || de == 'f' )
+                byteWidth = 4;
 
-            ePos = off;
+            expPos = off;
             off++;
             char o = lookAhead(off);
             if( o == '+' || o == '-' )
@@ -400,42 +406,84 @@ Token Lexer::number()
             }
         }
     }
+    if( !isHex && !isBinary && !isOctal && !isChar && !isReal )
+        isDecimal = true;
+    if( isHex || isBinary || isOctal || isDecimal )
+    {
+        c = lookAhead(off);
+        if( c == 'U' || c == 'u' || c == 'I' || c == 'i' )
+        {
+            const char c2 = lookAhead(off+1);
+            if( c2 == '1' || c2 == '2' || c2 == '4' || c2 == '8' )
+            {
+                off += 2;
+                suffix += 2;
+                byteWidth = c2 - '0';
+            }else
+            {
+                off += 1;
+                suffix += 1;
+            }
+            if( c == 'I' || c == 'i' )
+                isSigned = true;
+       }
+    }
+
     QByteArray str = d_line.mid(d_colNr, off );
     Q_ASSERT( !str.isEmpty() );
-    if( isHex && !checkHexNumber(str) )
-        return token( Tok_Invalid, off, "invalid hexadecimal integer" );
-    else if( isChar && !checkHexNumber(str) )
-        return token( Tok_Invalid, off, "invalid hexadecimal string" );
+    if( isOctal && !allOctal(str, suffix) )
+        return token( Tok_Invalid, off, "invalid octal integer" );
+    if( isDecimal && !allDecimal(str, suffix) )
+        return token( Tok_Invalid, off, "invalid decimal integer" );
+    if( isBinary && !allBinary(str,suffix) )
+        return token( Tok_Invalid, off, "invalid binary integer" );
+    // binary was already checked
 
     if( isChar )
     {
+        if( suffix != 1 )
+            return token( Tok_Invalid, off, "invalid CHAR literal" );
+        if( str.left(str.length()-suffix).toUInt() > 255 )
+            return token( Tok_Invalid, off, "literal too large for CHAR" );
         return token( Tok_hexchar, off, str );
-    }
-    else if( isReal)
+    }else if( isReal)
     {
         Token tok = token( Tok_real, off, str );
-        QByteArray mantissa = ePos != -1 ? str.left(ePos) : str;
+        QByteArray mantissa = expPos != -1 ? str.left(expPos) : str;
         QByteArray lhs = mantissa;
-        if( commaPos != -1 )
+        if( dotPos != -1 )
         {
-            lhs = lhs.left(commaPos);
-            mantissa.remove(commaPos,1);
+            lhs = lhs.left(dotPos);
+            mantissa.remove(dotPos,1);
         }
+        lhs.replace('_',"");
+        mantissa.replace('_',"");
         bool mOk, lOk;
         const quint64 l = lhs.toULongLong(&lOk);
         const quint64 m = mantissa.toULongLong(&mOk); // !ok if mantissa is too large
-        const int e = ePos != -1 ? str.mid(ePos+1).toInt() : 0;
-        tok.d_double = !is32bit && ( !mOk || is64bit || e > 127 || e < -126 || m > 8388607 );
-        if( is32bit && ( !lOk || e > 127 || e < -126 || l > 8388607 ) )
+        const int e = expPos != -1 ? str.mid(expPos+1).toInt() : 0;
+        tok.d_double = byteWidth != 4 && ( !mOk || byteWidth == 8 || e > 127 || e < -126 || m > 8388607 );
+        if( byteWidth == 4 && ( !lOk || e > 127 || e < -126 || l > 8388607 ) )
             return token( Tok_Invalid, off, "literal too large for REAL" );
         if( tok.d_double && ( e > 1023 || e < -1022 || l > 9007199254740991L ) )
             return token( Tok_Invalid, off, "literal too large for LONGREAL" );
         return tok;
-    }else if( !isHex && !checkDecNumber(str, is32bit || is64bit) )
-        return token( Tok_Invalid, off, "invalid decimal integer" );
-    else
-        // NOTE: we dont have to deal with is32bit and is64bit here because the string includes the suffices
+    }else
+    {
+        if( byteWidth )
+        {
+            bool ok;
+            QByteArray digits = str.left(str.size()-suffix);
+            digits.replace('_',"");
+            const int base = isHex ? 16 : isOctal ? 8 : isBinary ? 2 : 10;
+            const quint64 number = digits.toULongLong(&ok, base);
+            const quint64 limit = qPow(255,byteWidth) / ( isSigned ? 2.0 : 1.0 );
+            if( number >  limit || !ok )
+                return token( Tok_Invalid, off, QString("literal too large for an %1 bit %2integer")
+                              .arg(byteWidth*8).arg(isSigned ? "signed ":"" ).toUtf8() );
+        }
         return token( Tok_integer, off, str );
+    }
 }
 
 void Lexer::parseComment( const QByteArray& str, int& pos, int& level )
@@ -603,8 +651,9 @@ Token Lexer::string()
         if( c == 0 )
             return token( Tok_Invalid, off, "non-terminated string" );
     }
-    const QByteArray str = d_line.mid(d_colNr, off );
-    return token( Tok_string, off, str );
+    QByteArray str = d_line.mid(d_colNr, off ); // don't strip quotes here because of syntax highlighter
+    str = QString::fromUtf8(str).toLatin1();
+    return token( Tok_string, str.size(), str );
 }
 
 enum { HEX_PENDING, HEX_END, HEX_INVALID };
@@ -634,10 +683,8 @@ static int readHex( QByteArray& to, const QByteArray& from, int& pos )
 
 Token Lexer::hexstring()
 {
+    // this is redundant to array constructors and just for Oberon+ compat.
     countLine();
-    // inofficial extension of Oberon found in ProjectOberon,
-    // e.g. arrow := SYSTEM.ADR($0F0F 0060 0070 0038 001C 000E 0007 8003 C101 E300 7700 3F00 1F00 3F00 7F00 FF00$);
-    // in Display.Mod; sogar über mehrere Zeilen zulässig
 
     const int startLine = d_lineNr;
     const int startCol = d_colNr;

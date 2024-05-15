@@ -1,0 +1,34 @@
+module Enum1
+	
+	type 
+		T = ( A, B, C D E )
+	var
+		t : T
+
+begin
+	println("Enum1 start")
+	t := B
+	println(t)
+	println("upwards:")
+	(* TODO
+	for t := A to E do
+		println(t)
+	end
+	println("downwards:")
+	for t := D to B do
+		println(t)
+	end
+	*)
+	println("inc dec:")
+	t := B
+	inc(t)
+	println( t )
+	t := D
+	dec(t)
+	println( t )
+	(* TODO
+	println( max(T) )
+	println( min(T) )
+	*)
+	println("Enum1 done")
+end Enum1

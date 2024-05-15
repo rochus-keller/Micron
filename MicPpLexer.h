@@ -42,6 +42,7 @@ public:
     Token nextToken();
     Token peekToken(quint8 lookAhead = 1);
     quint32 getSloc() const { return d_sloc; }
+    QString getSource() const { return d_lex.getSource(); }
     const QHash<QString,Ranges>& getMutes() const { return d_mutes; }
 protected:
     Token nextTokenImp();

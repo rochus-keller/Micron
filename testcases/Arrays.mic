@@ -1,0 +1,33 @@
+module Arrays
+
+	type 
+	   T = record s: array 10 of char end
+	   S = record c: array 4 of T end
+	   A = array of byte
+	var a : array 20 of shortint
+		c : array 10 of char
+		e : array 4 of byte
+		
+	proc sub
+		var b : array 10 of byte
+	begin
+		b[1] := 30
+		println(b[1])
+		a[4] := 50
+	end sub
+begin
+	println("Arrays start")
+	a[3] := 42
+	sub
+	println(a[3])
+	println(a[4])
+	c := "test"
+	println(c)
+	println(c[3])
+	
+	e := $20 61 62 63$ 
+	// equal to 
+	e := A{ 20h 61h 62h 63h }
+	println(e[2])
+	println("Arrays done")
+end Arrays

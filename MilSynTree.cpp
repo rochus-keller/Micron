@@ -11,37 +11,37 @@ SynTree::SynTree(quint16 r, const Token& t ):d_tok(r){
 const char* SynTree::rToStr( quint16 r ) {
 	switch(r) {
 		case R_ArrayType: return "ArrayType";
-		case R_DeclarationSequence: return "DeclarationSequence";
-		case R_ExpInstr: return "ExpInstr";
+		case R_ConstExpression: return "ConstExpression";
 		case R_Expression: return "Expression";
 		case R_FPSection: return "FPSection";
 		case R_FieldList: return "FieldList";
 		case R_FormalParameters: return "FormalParameters";
-		case R_FormalType: return "FormalType";
 		case R_IdentList: return "IdentList";
 		case R_IfThenElse: return "IfThenElse";
 		case R_ImportList: return "ImportList";
 		case R_ImportPath: return "ImportPath";
 		case R_LocalDeclaration: return "LocalDeclaration";
 		case R_Loop: return "Loop";
+		case R_MetaActuals: return "MetaActuals";
+		case R_MetaParams: return "MetaParams";
+		case R_MetaSection: return "MetaSection";
 		case R_Mil: return "Mil";
 		case R_NamedType: return "NamedType";
 		case R_PointerType: return "PointerType";
-		case R_ProcedureBody: return "ProcedureBody";
 		case R_ProcedureDeclaration: return "ProcedureDeclaration";
-		case R_ProcedureHeading: return "ProcedureHeading";
 		case R_ProcedureType: return "ProcedureType";
 		case R_RepeatUntil: return "RepeatUntil";
 		case R_ReturnType: return "ReturnType";
-		case R_Statement: return "Statement";
 		case R_StatementSequence: return "StatementSequence";
 		case R_StructUnionType: return "StructUnionType";
 		case R_Switch: return "Switch";
 		case R_TypeDeclaration: return "TypeDeclaration";
 		case R_VariableDeclaration: return "VariableDeclaration";
-		case R_VariableType: return "VariableType";
 		case R_WhileDo: return "WhileDo";
 		case R_comment_: return "comment";
+		case R_component: return "component";
+		case R_component_list: return "component_list";
+		case R_constructor: return "constructor";
 		case R_hexstringdelim_: return "hexstringdelim";
 		case R_identdef: return "identdef";
 		case R_import: return "import";
@@ -49,6 +49,7 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_length: return "length";
 		case R_module: return "module";
 		case R_qualident: return "qualident";
+		case R_trident: return "trident";
 		case R_type: return "type";
 	default: if(r<R_First) return tokenTypeName(r); else return "";
 }

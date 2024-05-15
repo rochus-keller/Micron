@@ -20,7 +20,6 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_DeclarationSequence: return "DeclarationSequence";
 		case R_ElseStatement: return "ElseStatement";
 		case R_ElsifStatement: return "ElsifStatement";
-		case R_ElsifStatement2: return "ElsifStatement2";
 		case R_ExitStatement: return "ExitStatement";
 		case R_ExpList: return "ExpList";
 		case R_FPSection: return "FPSection";

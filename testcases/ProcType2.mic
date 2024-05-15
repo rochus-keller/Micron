@@ -1,0 +1,22 @@
+module ProcType2
+
+	proc sayHello(const str: ^array of char)
+	begin
+		println("hello from proc:")
+		println(str)
+	end sayHello
+	
+	type P = proc (const str: ^array of char)
+
+	proc test1( p: P )
+	begin
+		p("1234")
+	end test1
+		
+begin
+	println("ProcType2 start")
+
+	test1(sayHello)
+
+	println("ProcType2 done")
+end ProcType2

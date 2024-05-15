@@ -40,7 +40,7 @@ bool PpLexer::reset(const QByteArrayList& options)
     d_sloc = 0;
     d_options.clear();
     foreach( const QByteArray& o, options )
-        d_options[ Lexer::getSymbol(o).constData() ] = true;
+        d_options[ Token::getSymbol(o).constData() ] = true;
     return true;
 }
 

@@ -1,0 +1,22 @@
+module ProcType1
+
+	var p : proc (const str: ^array of char)
+
+	
+	proc outer()
+		proc inner(const str: ^array of char)
+		begin
+			println("hello from inner:")
+			println(str)
+		end inner
+	begin
+		p := inner
+	end outer
+
+begin
+	println("ProcType1 start")
+	outer()
+	p("1234")
+
+	println("ProcType1 done")
+end ProcType1

@@ -215,6 +215,23 @@ int Lexer::lookAhead(int off) const
         return 0;
 }
 
+static inline bool isKeyword(TokenType tt)
+{
+    switch( tt )
+    {
+    case Tok_TYPE:
+    case Tok_VAR:
+    case Tok_END:
+    case Tok_PROCEDURE:
+    case Tok_PROC:
+    case Tok_BEGIN:
+    case Tok_IMPORT:
+        return true;
+    default:
+        return false;
+    }
+}
+
 Token Lexer::token(TokenType tt, int len, const QByteArray& val)
 {
     if( tt != Tok_Invalid && tt != Tok_Comment && tt != Tok_Eof )
@@ -230,7 +247,10 @@ Token Lexer::token(TokenType tt, int len, const QByteArray& val)
     if( tt > TT_Keywords && tt < TT_Specials)
     {
         t.d_code = tt;
-        t.d_type = Tok_ident;
+        if( isKeyword(tt) )
+            t.d_type = tt;
+        else
+            t.d_type = Tok_ident;
         // there are no keywords; whenever one is found it is
         // acutally an ident which can also be used as a keyword
     }
@@ -256,7 +276,7 @@ Token Lexer::ident()
     while( true )
     {
         const char c = lookAhead(off);
-        if( !::isalnum(c) && c != '_' )
+        if( !::isalnum(c) && c != '_' && c != '$' )
             break;
         else
             off++;

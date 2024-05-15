@@ -1,5 +1,5 @@
-#ifndef MONROWCOL_H
-#define MONROWCOL_H
+#ifndef MIC_ROWCOL_H
+#define MIC_ROWCOL_H
 
 /*
 * Copyright 2024 Rochus Keller <mailto:me@rochus-keller.ch>
@@ -62,4 +62,4 @@ namespace Mic
     };
 }
 
-#endif // MONROWCOL_H
+#endif // MIC_ROWCOL_H

@@ -1,0 +1,60 @@
+module Procs1
+
+	proc Proc1(): integer
+		var i : integer
+	begin
+		i := 1
+		i := 2
+		return i
+		i := 3
+		i := 4
+	end Proc1
+	
+	proc Proc2():integer
+		var i : integer
+		proc Proc3(a,b:integer):integer
+		begin
+			return a + b
+		end Proc3
+	begin
+		i := Proc3(40, 2)
+		return i
+	end Proc2
+
+	proc Proc3( const str: ^array of char )
+	begin
+		println(str)
+	end Proc3
+	
+	var x : integer
+	proc Proc4( x : ^integer )
+	begin
+		x^ := 13
+	end Proc4
+	
+	proc Proc5(str: array 32 of char)
+	begin
+		println(str)
+	end Proc5
+
+	var str: array 30 of char
+		str2: array 3 of char
+		str3: pointer to char
+		str4: pointer to array of char
+begin
+	println("Procs1 start")
+	println( Proc1() )
+	println( Proc2() )
+	Proc3("Test") // works because of const
+	Proc5("Test")
+	// str2 := "Test" // compiler error
+	// str3 := "Test" // compiler error
+	// str4 := "Test" // compiler error
+	str := "Test"
+	str4 := @str
+	x := 12
+	Proc4(@x)
+	println(x)
+	println("Procs1 done")
+end Procs1
+

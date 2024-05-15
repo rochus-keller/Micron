@@ -1,0 +1,5 @@
+module Mini
+
+begin
+	println("Hello")
+end Mini

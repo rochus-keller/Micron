@@ -1,0 +1,11 @@
+module Goto
+
+proc P1()
+begin
+	if true then
+		label:
+		goto label
+	end
+end P1
+
+end Goto

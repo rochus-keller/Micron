@@ -13,11 +13,12 @@ NOTE that this project is in an early stage and work-in-progress.
 #### Planned features
 
 - [x] Implement lexer with directive support
-- [x] Implement parser
+- [x] Implement parser and IR generator
+- [x] Evaluate an existing compiler backend
+- [ ] Implement a native backend
 - [ ] Migrate some notable C projects to Micron as a proof-of-concept and to optimize the language
 - [ ] Implement the analyzer/validator 
 - [ ] Implement a C99 generator
-- [ ] Implement a native backend
 
 
 #### Status on February 4, 2024
@@ -28,6 +29,9 @@ Generated a parser using [the grammar](https://github.com/micron-language/specif
 
 Meanwhile I prepared a manual Micron parser and designed an intermediate language (see [the grammar](https://github.com/micron-language/specification/blob/master/Micron_Intermediate_Language.ebnf) and [the specification](https://htmlpreview.github.io/?https://github.com/micron-language/specification/blob/master/The_Micron_Intermediate_Language_Specification.html)) which the Micron frontend will generate. There is also an automatically generated parser for the intermediate language which successfully works with initial test files.
 
+#### Status on May 15, 2024
+
+The programming and intermediate language have matured in parallel with the parser and code generator implementation. The IR code generator is integrated with the parser and operates in the same pass. Though not all parts of the language are yet supported by the IR generator (e.g. imports, VLAs and generics). Instead I was on a long quest for a suitable compiler backend that I could re-use for Micron (and other of my projects). The journey brought me to all sorts of toolkits and re-targetable compilers and I spent a lot of time studying and experimenting. There would be enough material for a treatise of its own. I also invested a lot of time in TCC, trying to modularize the code (that spaghetti lovers would be delighted with) and work out a minimal backend interface; I even started to add another frontend and had to grit my teeth over the TCC functionality, which - despite the introduction of modularization - turned out to be still almost incomprehensible. During this phase, [user tarkonian drew my attention to the Eigen Compiler Suite](https://github.com/rochus-keller/Oberon/discussions/55), which looked very promising. After a thorough review of the large code base and excellent documentation, and an extensive exchange with the author, I came to the conclusion that Eigen is probably the best option currently available. It supports many more architectures than TCC (or e.g. QBE, Firm, , and the linker is also integrated (as with TCC), so you don't need any other dependencies, and the generated code [is significantly faster than that of TCC](https://software.openbrace.org/projects/ecs/activity?from=2024-03-28). I also managed to make the relevant parts [build with GCC 4.8 and MSVC 2015](https://github.com/rochus-keller/EiGen). The current focus is on implementing an Eigen IR generator for Micron; this will likely require more supporting activities (like e.g. an EBNF for the IR and translation examples with Oberon and C).
 
 #### Precompiled versions
 

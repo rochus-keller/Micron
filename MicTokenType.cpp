@@ -38,6 +38,7 @@ namespace Mic {
 			case Tok_Bar: return "|";
 			case Tok_Rbrace: return "}";
 			case Tok_Tilde: return "~";
+			case Tok_AND: return "AND";
 			case Tok_ARRAY: return "ARRAY";
 			case Tok_BEGIN: return "BEGIN";
 			case Tok_BY: return "BY";
@@ -49,6 +50,7 @@ namespace Mic {
 			case Tok_ELSIF: return "ELSIF";
 			case Tok_END: return "END";
 			case Tok_EXIT: return "EXIT";
+			case Tok_EXTERN: return "EXTERN";
 			case Tok_FALSE: return "FALSE";
 			case Tok_FOR: return "FOR";
 			case Tok_GOTO: return "GOTO";
@@ -56,10 +58,12 @@ namespace Mic {
 			case Tok_IMPORT: return "IMPORT";
 			case Tok_IN: return "IN";
 			case Tok_INLINE: return "INLINE";
+			case Tok_INVAR: return "INVAR";
 			case Tok_LOOP: return "LOOP";
 			case Tok_MOD: return "MOD";
 			case Tok_MODULE: return "MODULE";
 			case Tok_NIL: return "NIL";
+			case Tok_NOT: return "NOT";
 			case Tok_OF: return "OF";
 			case Tok_OR: return "OR";
 			case Tok_POINTER: return "POINTER";
@@ -122,6 +126,7 @@ namespace Mic {
 			case Tok_Bar: return "Tok_Bar";
 			case Tok_Rbrace: return "Tok_Rbrace";
 			case Tok_Tilde: return "Tok_Tilde";
+			case Tok_AND: return "Tok_AND";
 			case Tok_ARRAY: return "Tok_ARRAY";
 			case Tok_BEGIN: return "Tok_BEGIN";
 			case Tok_BY: return "Tok_BY";
@@ -133,6 +138,7 @@ namespace Mic {
 			case Tok_ELSIF: return "Tok_ELSIF";
 			case Tok_END: return "Tok_END";
 			case Tok_EXIT: return "Tok_EXIT";
+			case Tok_EXTERN: return "Tok_EXTERN";
 			case Tok_FALSE: return "Tok_FALSE";
 			case Tok_FOR: return "Tok_FOR";
 			case Tok_GOTO: return "Tok_GOTO";
@@ -140,10 +146,12 @@ namespace Mic {
 			case Tok_IMPORT: return "Tok_IMPORT";
 			case Tok_IN: return "Tok_IN";
 			case Tok_INLINE: return "Tok_INLINE";
+			case Tok_INVAR: return "Tok_INVAR";
 			case Tok_LOOP: return "Tok_LOOP";
 			case Tok_MOD: return "Tok_MOD";
 			case Tok_MODULE: return "Tok_MODULE";
 			case Tok_NIL: return "Tok_NIL";
+			case Tok_NOT: return "Tok_NOT";
 			case Tok_OF: return "Tok_OF";
 			case Tok_OR: return "Tok_OR";
 			case Tok_POINTER: return "Tok_POINTER";
@@ -281,7 +289,13 @@ namespace Mic {
 			res = Tok_At; i += 1;
 			break;
 		case 'A':
-			if( at(str,len,i+1) == 'R' ){
+			switch( at(str,len,i+1) ){
+			case 'N':
+				if( at(str,len,i+2) == 'D' ){
+					res = Tok_AND; i += 3;
+				}
+				break;
+			case 'R':
 				if( at(str,len,i+2) == 'R' ){
 					if( at(str,len,i+3) == 'A' ){
 						if( at(str,len,i+4) == 'Y' ){
@@ -289,6 +303,7 @@ namespace Mic {
 						}
 					}
 				}
+				break;
 			}
 			break;
 		case 'B':
@@ -361,10 +376,21 @@ namespace Mic {
 				}
 				break;
 			case 'X':
-				if( at(str,len,i+2) == 'I' ){
+				switch( at(str,len,i+2) ){
+				case 'I':
 					if( at(str,len,i+3) == 'T' ){
 						res = Tok_EXIT; i += 4;
 					}
+					break;
+				case 'T':
+					if( at(str,len,i+3) == 'E' ){
+						if( at(str,len,i+4) == 'R' ){
+							if( at(str,len,i+5) == 'N' ){
+								res = Tok_EXTERN; i += 6;
+							}
+						}
+					}
+					break;
 				}
 				break;
 			}
@@ -413,7 +439,8 @@ namespace Mic {
 				}
 				break;
 			case 'N':
-				if( at(str,len,i+2) == 'L' ){
+				switch( at(str,len,i+2) ){
+				case 'L':
 					if( at(str,len,i+3) == 'I' ){
 						if( at(str,len,i+4) == 'N' ){
 							if( at(str,len,i+5) == 'E' ){
@@ -421,8 +448,17 @@ namespace Mic {
 							}
 						}
 					}
-				} else {
+					break;
+				case 'V':
+					if( at(str,len,i+3) == 'A' ){
+						if( at(str,len,i+4) == 'R' ){
+							res = Tok_INVAR; i += 5;
+						}
+					}
+					break;
+				default:
 					res = Tok_IN; i += 2;
+					break;
 				}
 				break;
 			}
@@ -452,10 +488,17 @@ namespace Mic {
 			}
 			break;
 		case 'N':
-			if( at(str,len,i+1) == 'I' ){
+			switch( at(str,len,i+1) ){
+			case 'I':
 				if( at(str,len,i+2) == 'L' ){
 					res = Tok_NIL; i += 3;
 				}
+				break;
+			case 'O':
+				if( at(str,len,i+2) == 'T' ){
+					res = Tok_NOT; i += 3;
+				}
+				break;
 			}
 			break;
 		case 'O':

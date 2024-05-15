@@ -28,6 +28,7 @@ namespace Mil {
 		void Mil(SynTree*);
 		void integer(SynTree*);
 		void qualident(SynTree*);
+		void trident(SynTree*);
 		void identdef(SynTree*);
 		void TypeDeclaration(SynTree*);
 		void type(SynTree*);
@@ -40,15 +41,12 @@ namespace Mil {
 		void PointerType(SynTree*);
 		void ProcedureType(SynTree*);
 		void VariableDeclaration(SynTree*);
-		void VariableType(SynTree*);
 		void ProcedureDeclaration(SynTree*);
-		void ProcedureHeading(SynTree*);
 		void ProcedureBody(SynTree*);
 		void LocalDeclaration(SynTree*);
 		void FormalParameters(SynTree*);
 		void ReturnType(SynTree*);
 		void FPSection(SynTree*);
-		void FormalType(SynTree*);
 		void module(SynTree*);
 		void ImportList(SynTree*);
 		void import(SynTree*);
@@ -63,6 +61,13 @@ namespace Mil {
 		void Switch(SynTree*);
 		void RepeatUntil(SynTree*);
 		void WhileDo(SynTree*);
+		void MetaActuals(SynTree*);
+		void MetaParams(SynTree*);
+		void MetaSection(SynTree*);
+		void ConstExpression(SynTree*);
+		void constructor(SynTree*);
+		void component_list(SynTree*);
+		void component(SynTree*);
 	protected:
 		Token cur;
 		Token la;

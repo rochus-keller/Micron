@@ -18,7 +18,10 @@
 */
 
 #include "MicToken.h"
+#include <QHash>
 using namespace Mic;
+
+static QHash<QByteArray,QByteArray> d_symbols;
 
 bool Token::isValid() const
 {
@@ -40,3 +43,12 @@ const char*Token::getString() const
     return tokenTypeString(d_type);
 }
 
+QByteArray Token::getSymbol(const QByteArray& str)
+{
+    if( str.isEmpty() )
+        return str;
+    QByteArray& sym = d_symbols[str];
+    if( sym.isEmpty() )
+        sym = str;
+    return sym;
+}

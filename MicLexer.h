@@ -25,7 +25,6 @@
 #include <QObject>
 #include <MicToken.h>
 #include <QDateTime>
-#include <QHash>
 
 class QIODevice;
 
@@ -50,8 +49,8 @@ namespace Mic
         QList<Token> tokens( const QString& code );
         QList<Token> tokens( const QByteArray& code, const QString& path = QString() );
         quint32 getSloc() const { return d_sloc; }
+        QString getSource() const { return d_sourcePath; }
 
-        static QByteArray getSymbol( const QByteArray& );
         static void parseComment( const QByteArray& str, int& pos, int& level );
 
         static QByteArray extractText(QIODevice*); // recognizes Oberon file format and ASCII, returns Latin-1 UTF-8
@@ -82,7 +81,6 @@ namespace Mic
         QByteArray d_line;
         QList<Token> d_buffer;
         quint32 d_sloc; // number of lines of code without empty or comment lines
-        static QHash<QByteArray,QByteArray> d_symbols;
         Token d_lastToken;
         bool d_ignoreComments;  // don't deliver comment tokens
         bool d_packComments;    // Only deliver one Tok_Comment for (*...*) instead of Tok_Latt and Tok_Ratt

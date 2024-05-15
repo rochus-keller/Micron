@@ -21,7 +21,6 @@ namespace Mic {
 			R_DeclarationSequence,
 			R_ElseStatement,
 			R_ElsifStatement,
-			R_ElsifStatement2,
 			R_ExitStatement,
 			R_ExpList,
 			R_FPSection,

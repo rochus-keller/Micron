@@ -1,0 +1,19 @@
+module Record1
+
+type
+	PA = pointer to A
+	A = record i,j: integer end
+	B = record inline a: A; str: array 10 of char end
+	PB = pointer to B
+
+var
+	a: PA
+	b: pointer to B
+
+begin
+	println("start Record1")
+	new(b)
+	a := b
+
+	println("end Record1")
+end Record1

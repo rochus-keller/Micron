@@ -1,0 +1,15 @@
+module Test
+
+type Str = array 32 of char
+proc Proc5(str: Str)
+begin
+	println(str)
+end Proc5
+var str: Str
+begin
+	Proc5("Hello")
+	
+	str := "Hello"
+	Proc5(str)
+
+end Test

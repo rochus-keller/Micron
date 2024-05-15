@@ -1,0 +1,9 @@
+module Procs1
+  type $1 = array of char;
+  type $2 = pointer to $1;
+  procedure Proc3()
+  begin
+  end Proc3
+
+end Procs1
+

@@ -36,7 +36,7 @@ namespace Mil
     public:
         explicit Lexer(QObject *parent = 0);
 
-        void setStream( QIODevice*, const QString& sourcePath, const QDateTime& ts = QDateTime() );
+        void setStream( QIODevice*, const QString& sourcePath = QString(), const QDateTime& ts = QDateTime() );
         bool setStream(const QString& sourcePath);
         void setIgnoreComments( bool b ) { d_ignoreComments = b; }
         void setPackComments( bool b ) { d_packComments = b; }

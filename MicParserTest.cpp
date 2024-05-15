@@ -27,6 +27,7 @@
 #include <MicPpLexer.h>
 #include <MicParser.h>
 #include <MicParser2.h>
+#include <MicMilEmitter.h>
 using namespace Mic;
 
 QStringList collectFiles( const QDir& dir, const QStringList& suffix )
@@ -103,11 +104,11 @@ public:
     {
         return lex.nextToken();
     }
-
     Token peek(int offset)
     {
         return lex.peekToken(offset);
     }
+    QString source() const { return lex.getSource(); }
 };
 
 static void checkParser(const QStringList& files)
@@ -154,7 +155,12 @@ static void checkParser2(const QStringList& files)
     {
         Lex2 lex;
         lex.lex.setStream(file);
-        Parser2 p(&lex);
+        QFile out;
+        out.open(stdout, QIODevice::WriteOnly);
+        IlAsmRenderer ar(&out);
+        MilEmitter e(&ar);
+        AstModel mdl;
+        Parser2 p(&mdl,&lex, &e);
         qDebug() << "**** parsing" << file.mid(root.size()+1);
         p.RunParser();
         if( !p.errors.isEmpty() )

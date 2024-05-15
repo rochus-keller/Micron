@@ -1,5 +1,5 @@
-#ifndef MONTOKEN_H
-#define MONTOKEN_H
+#ifndef MIL_TOKEN_H
+#define MIL_TOKEN_H
 
 /*
 * Copyright 2024 Rochus Keller <mailto:me@rochus-keller.ch>
@@ -64,4 +64,4 @@ namespace Mil
     typedef QList<Token> TokenList;
 }
 
-#endif // MONTOKEN_H
+#endif // MIL_TOKEN_H

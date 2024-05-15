@@ -1,0 +1,26 @@
+module ProcType3
+
+	type P = proc (const str: ^array of char)
+
+	proc generate1():P
+		proc sayHello(const str: ^array of char)
+		begin
+			println("hello from proc:")
+			println(str)
+		end sayHello
+	begin
+		return sayHello
+	end generate1
+	
+		
+	var p: P
+
+begin
+	println("ProcType3 start")
+	generate1()("1234")
+		
+	p := generate1()
+	p("5678")
+		
+	println("ProcType3 done")
+end ProcType3

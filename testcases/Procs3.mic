@@ -1,0 +1,30 @@
+module Procs3
+
+	type 	D = array 3 of array 4 of integer	
+	var d : D
+		i,j: integer
+
+	proc Q( d: pointer to D )
+		proc Inner( d: pointer to array of integer; m: uint32 )
+		begin
+			d[ 2 * m + 3 ] := 12
+		end Inner
+		var i: uint32
+	begin
+		i := len(d[0])
+		Inner(d, len(d[0]))
+	end Q
+	
+begin
+	println("Procs3 start")
+	for i := 0 to len(d)-1 do
+		for j := 0 to len(d[0])-1 do
+			d[i][j] := i + j + i * j
+		end
+	end
+    println(d[2][3])
+	Q(@d)
+    println(d[2][3])
+	
+	println("Procs3 done")
+end Procs3

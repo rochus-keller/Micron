@@ -1,0 +1,11 @@
+(* Source: The Oakwood Guidelines for Oberon-2 Compiler Developers, Revision: 1A First Issue, Oct. 1995 *)
+MODULE Out;
+PROCEDURE Open EXTERN;
+PROCEDURE Char (ch: CHAR) EXTERN;
+PROCEDURE String (str: POINTER TO ARRAY OF CHAR) EXTERN;
+PROCEDURE Int (i: INT64;n: INT32) EXTERN;
+PROCEDURE Real (x: REAL; n: INT32) EXTERN;
+PROCEDURE LongReal (x: LONGREAL; n: INT32) EXTERN;
+PROCEDURE Ln EXTERN;
+END Out.
+
