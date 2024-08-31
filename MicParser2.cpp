@@ -149,10 +149,6 @@ static inline bool FIRST_constEnum(int tt) {
 	return tt == Tok_ident;
 }
 
-static inline bool FIRST_symbolEnum(int tt) {
-	return tt == Tok_Colon;
-}
-
 static inline bool FIRST_VariableDeclaration(int tt) {
 	return tt == Tok_ident;
 }
@@ -593,13 +589,15 @@ static inline bool FIRST_MetaSection(int tt) {
 }
 
 Parser2::Parser2(AstModel* m, Scanner2* s, MilEmitter* out, Importer* i):
-    mdl(m),scanner(s),out(out),imp(i),thisMod(0)
+    mdl(m),scanner(s),out(out),imp(i),thisMod(0), thisDecl(0)
 {
     ev = new MicEvaluator(m,out);
 }
 
 Parser2::~Parser2()
 {
+    if( thisMod )
+        delete thisMod;
     delete ev;
 }
 
@@ -607,6 +605,13 @@ void Parser2::RunParser() {
 	errors.clear();
 	next();
     module();
+}
+
+Declaration*Parser2::takeModule()
+{
+    Declaration* res = thisMod;
+    thisMod = 0;
+    return res;
 }
 
 void Parser2::next() {
@@ -645,6 +650,11 @@ void Parser2::error(const Token& t, const QString& msg)
     errors << Error(msg,t.d_lineNr, t.d_colNr, t.d_sourcePath);
 }
 
+void Parser2::error(int row, int col, const QString& msg)
+{
+    errors << Error(msg, row, col, scanner->source());
+}
+
 Declaration* Parser2::findDecl(const Token& id)
 {
     Declaration* x = mdl->findDecl(id.d_val);
@@ -655,6 +665,9 @@ Declaration* Parser2::findDecl(const Token& id)
 
 bool Parser2::assigCompat(Type* lhs, Type* rhs) const
 {
+    if( lhs == 0 || rhs == 0 )
+        return false;
+
     if( sameType(lhs,rhs) )
         return true;
 
@@ -718,7 +731,7 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs) const
         return matchFormals(lhs->subs, rhs->getParams()) && matchResultType(lhs->base,rhs->type);
 
     // Tv is an enumeration type and e is a valid element of the enumeration;
-    if( lhs->form == Type::ConstEnum || lhs->form == Type::SymEnum )
+    if( lhs->form == Type::ConstEnum )
         return lhs->subs.contains(rhs);
 
     if( lhs->form == Type::Array && lhs->base->form == BasicType::CHAR && lhs->len > 0 &&
@@ -784,6 +797,8 @@ bool Parser2::matchFormals(const QList<Declaration*>& a, const QList<Declaration
 
 bool Parser2::matchResultType(Type* lhs, Type* rhs) const
 {
+    if( lhs == 0 || rhs == 0 ) // TODO: is this a valid state?
+        return false;
     return sameType(lhs,rhs) || (lhs->form == BasicType::NoType && rhs->form == BasicType::NoType);
 }
 
@@ -827,6 +842,9 @@ void Parser2::ForwardDeclaration()
     if( FIRST_FormalParameters(la.d_type) ) {
         forwardDecl->type = FormalParameters();
     }
+    if( forwardDecl->type == 0 )
+        forwardDecl->type = mdl->getType(BasicType::NoType);
+
     mdl->closeScope();
 
     if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR || la.d_type == Tok_EXTERN ) {
@@ -997,8 +1015,10 @@ void Parser2::TypeDeclaration() {
     const IdentDef id = identdef();
 	expect(Tok_Eq, false, "TypeDeclaration");
     Type* t = 0;
-    // first read type before adding the declaration so it is not known in the type(),
-    // and also allow to declare anonymous types used by this one before this one
+
+    // declare the type immediately so it is known in the forthcoming declaration
+    Declaration* d = addDecl(id,Declaration::TypeDecl);
+    thisDecl = d;
     Quali q;
     // Token tok = la;
     if( FIRST_NamedType(la.d_type) ) {
@@ -1006,13 +1026,14 @@ void Parser2::TypeDeclaration() {
     }else
         t = type(false);
     // No, it is allowed here: openArrayError(tok,t);
-    Declaration* d = addDecl(id,Declaration::TypeDecl);
     if( t->decl == 0 )
     {
         t->decl = d;
         d->ownstype = true;
     }
     d->type = t;
+    resolveAndCheckType(d);
+    thisDecl = 0;
     emitType(t, q);
 }
 
@@ -1042,13 +1063,29 @@ Type* Parser2::type(bool deanonymize) {
 Type* Parser2::NamedType(Quali* qout) {
     const Token tok = la;
     Declaration* d = resolveQualident(qout);
+    if( d == 0 )
+        return 0;
+    Type* t = d->type;
+    if( thisDecl != 0 )
+    {
+        t = new Type();
+        t->form = Type::NameRef;
+        t->subs.append(d);
+        t->base = d->type;
+    }
     if( d == 0 || d->type == 0 || d->mode != Declaration::TypeDecl )
     {
-        if( d )
+        if( d == thisDecl )
+        {
+            // we are in a type declaration using itself;
+            // the type is not yet known and has to be resolved later
+            t->selfref = true;
+            return t;
+        }else if( d )
             error(tok, QString("invalid type: %1").arg(d->name.constData()) );
         return mdl->getType(BasicType::Undefined);
     }else
-        return d->type;
+        return t;
 }
 
 Type* Parser2::ArrayType() {
@@ -1237,7 +1274,7 @@ Type* Parser2::PointerType() {
     if( FIRST_NamedType(la.d_type) ) {
         Quali q;
         const Token tok = la;
-        Declaration* d = resolveQualident(&q, true);
+        Declaration* d = resolveQualident(&q, false); // TODO: was true
         if( d == 0 || d->type == 0 || d->mode != Declaration::TypeDecl )
         {
             res->base = mdl->getType(BasicType::Undefined);
@@ -1267,9 +1304,6 @@ Type* Parser2::enumeration() {
         foreach( Declaration* d, res->subs )
             d->type = res;
         res->form = Type::ConstEnum;
-    } else if( FIRST_symbolEnum(la.d_type) ) {
-        res->subs = symbolEnum();
-        res->form = Type::SymEnum;
     } else
 		invalid("enumeration");
 	expect(Tok_Rpar, false, "enumeration");
@@ -1312,49 +1346,13 @@ Parser2::DeclList Parser2::constEnum() {
     return res;
 }
 
-Parser2::DeclList Parser2::symbolEnum() {
-    DeclList res;
-
-	expect(Tok_Colon, false, "symbolEnum");
-	expect(Tok_ident, false, "symbolEnum");
-
-    bool doublette;
-    Declaration* d = mdl->addDecl(cur.d_val, &doublette);
-    if( !doublette )
-    {
-        d->mode = Declaration::ConstDecl;
-        d->type = mdl->getType(BasicType::String);
-        d->symbol = true;
-        d->data = thisMod->data.value<QByteArrayList>().join('.') + "." + d->name;
-    }else if( d->mode != Declaration::ConstDecl && !d->symbol )
-        error(cur, QString("symbol name collides with existing declaration: %1").arg(cur.d_val.constData()) );
-    res << d;
-
-	while( la.d_type == Tok_Comma || la.d_type == Tok_Colon ) {
-		if( la.d_type == Tok_Comma ) {
-			expect(Tok_Comma, false, "symbolEnum");
-		}
-		expect(Tok_Colon, false, "symbolEnum");
-		expect(Tok_ident, false, "symbolEnum");
-        d = mdl->addDecl(cur.d_val, &doublette);
-        if( !doublette )
-        {
-            d->mode = Declaration::ConstDecl;
-            d->type = mdl->getType(BasicType::SYMBOL);
-            d->symbol = true;
-            d->data = thisMod->name + "." + d->name;
-        }else if( d->mode != Declaration::ConstDecl && !d->symbol )
-            error(cur, QString("symbol name collides with existing declaration: %1").arg(cur.d_val.constData()) );
-        res << d;
-    }
-    return res;
-}
-
 void Parser2::VariableDeclaration() {
     const IdentDefList ids = IdentList();
 	expect(Tok_Colon, false, "VariableDeclaration");
     const Token tok = la;
     Type* t = type();
+    if( t == 0 )
+        return;
     openArrayError(tok,t);
     Declaration* outer = mdl->getTopScope();
     foreach( const IdentDef& id, ids )
@@ -1428,7 +1426,7 @@ void Parser2::emitType(Type* t, const Quali& q)
         {
             out->beginType(MicEvaluator::toDesig(t),t->decl->isPublic(), MilEmitter::ProcType );
             foreach( Declaration* param, t->subs )
-                out->addArgument(param->name,MicEvaluator::toDesig(param->type));
+                out->addArgument(MicEvaluator::toDesig(param->type), param->name);
             if( t->base && t->base->form != BasicType::NoType )
                 out->setReturnType(MicEvaluator::toDesig(t->base));
         }
@@ -1453,9 +1451,6 @@ void Parser2::emitType(Type* t, const Quali& q)
     }else if( t->form == Type::ConstEnum )
     {
         out->addType(MicEvaluator::toDesig(t),t->decl->isPublic(),"int32", MilEmitter::Alias);
-    }else if( t->form == Type::SymEnum )
-    {
-        out->addType(MicEvaluator::toDesig(t),t->decl->isPublic(),"char", MilEmitter::Pointer);
     }else
         Q_ASSERT(false);
 }
@@ -1486,7 +1481,7 @@ Declaration*Parser2::addTemp(Type* t)
 
 void Parser2::openArrayError(const Token& tok, Type* t)
 {
-    if( t->form == Type::Array && t->len == 0)
+    if( t && t->form == Type::Array && t->len == 0)
         error(tok,"open array cannot be used here");
 }
 
@@ -1500,6 +1495,71 @@ void Parser2::prepareParam(const Parser2::DeclList& formals, const Parser2::Args
         error(actual.first, "actual argument not compatible with formal parameter");
     else
         ev->prepareRhs(formal->type); // actual.second is ev->top()
+}
+
+Type*Parser2::deref(Type* t)
+{
+    if( t == 0 )
+        return 0;
+    if( t->form == Type::NameRef )
+        return deref(t->base);
+    else
+        return t;
+}
+
+void Parser2::resolveAndCheckType(Declaration* d)
+{
+    if( d == 0 || d->type == 0 )
+        return; // already reported
+    if( d->type->selfref )
+        error(d->row, d->col, "circular type declaration");
+    d->type = resolveAndCheckType(d->type, false);
+    foreach( Type* t, deferDeleteNamedType )
+    {
+        t->subs.clear();
+        t->base = 0;
+        delete t;
+    }
+    deferDeleteNamedType.clear();
+}
+
+Type*Parser2::resolveAndCheckType(Type* t, bool selfRefBroken)
+{
+    if( t == 0 || t->form < BasicType::Max || t->form == Type::ConstEnum )
+        return t;
+    Type* res = t;
+    switch( t->form )
+    {
+    case Type::Pointer:
+        t->base = resolveAndCheckType(t->base, true);
+        break;
+    case Type::Proc:
+        t->base = resolveAndCheckType(t->base, true);
+        for( int i = 0; i < t->subs.size(); i++ )
+            t->subs[i]->type = resolveAndCheckType(t->subs[i]->type, true);
+        break;
+    case Type::Array:
+        if( !selfRefBroken && t->base->selfref )
+            error(t->base->subs.first()->row, t->base->subs.first()->col,"a structured type cannot contain itself");
+        t->base = resolveAndCheckType(t->base, selfRefBroken);
+        break;
+    case Type::Record:
+        for( int i = 0; i < t->subs.size(); i++ )
+        {
+            if( !selfRefBroken && t->subs[i]->type && t->subs[i]->type->selfref )
+                error(t->subs[i]->row, t->subs[i]->col,"a structured type cannot contain itself");
+            t->subs[i]->type = resolveAndCheckType(t->subs[i]->type, selfRefBroken);
+        }
+        break;
+    case Type::NameRef:
+        res = t->base;
+        if( t->selfref )
+            res = t->subs.first()->type;
+        deferDeleteNamedType.insert(t); // because more than one field can point to same type
+        // stop at named refs
+        break;
+    }
+    return res;
 }
 
 QByteArray Parser2::toDesig(const Parser2::Quali& q)
@@ -1534,6 +1594,7 @@ void Parser2::designator(bool lvalue) {
 
     Value v;
     Token tok = la;
+
     maybeQualident(v);
     ev->push(v);
 
@@ -1808,7 +1869,9 @@ Parser2::DeclList Parser2::toList(Declaration* d)
     while( d )
     {
         res << d;
+        Declaration* old = d;
         d = d->next;
+        old->next = 0; // the next based list is converted to DeclList, avoid two redundant lists
     }
     return res;
 }
@@ -2169,6 +2232,8 @@ void Parser2::factor(bool lvalue) {
         designator(true);
 
         Value v = ev->pop();
+        if( !v.ref )
+            return;
         Q_ASSERT(v.ref);
         Type* ptr = new Type();
         ptr->base = v.type;
@@ -2586,14 +2651,17 @@ void Parser2::ProcedureDeclaration() {
         if( FIRST_FormalParameters(la.d_type) ) {
             procDecl->type = FormalParameters();
         }
+        if( procDecl->type == 0 )
+            procDecl->type = mdl->getType(BasicType::NoType);
 
         if( forward )
         {
-            if( !matchFormals(forward->getParams(), procDecl->getParams() ) &&
-                    !matchResultType(forward->type, procDecl->type) &&
-                    forward->extern_ != procDecl->extern_ &&
-                    forward->inline_ != procDecl->inline_ &&
-                    forward->invar != procDecl->invar )
+            if( !matchFormals(forward->getParams(), procDecl->getParams() ) ||
+                    !matchResultType(forward->type, procDecl->type) ||
+                    forward->extern_ != procDecl->extern_ ||
+                    forward->inline_ != procDecl->inline_ ||
+                    forward->invar != procDecl->invar ||
+                    forward->visi != procDecl->visi )
                 error(id.name,"procedure declaration is not compatible with preceding forward declaration");
         }
 
@@ -2752,7 +2820,9 @@ Type* Parser2::FormalParameters() {
 	expect(Tok_Lpar, false, "FormalParameters");
 	if( FIRST_FPSection(la.d_type) ) {
 		FPSection();
-		while( ( ( peek(1).d_type == Tok_ident || peek(2).d_type == Tok_ident ) )  ) {
+        while( FIRST_FPSection(la.d_type) ||
+               ( peek(1).d_type == Tok_Semi && ( peek(2).d_type == Tok_ident ||peek(2).d_type == Tok_CONST ) ) )
+        {
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "FormalParameters");
 			}
@@ -2849,6 +2919,8 @@ void Parser2::module() {
     }
     Declaration* m = new Declaration();
     m->mode = Declaration::Module;
+    if( thisMod )
+        delete thisMod;
     thisMod = m;
     mdl->openScope(m);
     expect(Tok_MODULE, true, "module");
@@ -2903,7 +2975,6 @@ void Parser2::module() {
 		expect(Tok_Dot, false, "module");
 	}
     out->endModule();
-    thisMod = 0;
     mdl->closeScope();
 }
 
@@ -2922,8 +2993,6 @@ void Parser2::ImportList() {
 }
 
 void Parser2::import() {
-    error(la,"import not yet supported"); // TODO
-
     Token localName;
     if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_ColonEq )  ) {
 		expect(Tok_ident, false, "import");
@@ -2971,6 +3040,8 @@ void Parser2::import() {
     if( imp )
     {
         importDecl->link = imp->loadModule(i.path);
+        if( importDecl->link )
+            importDecl->link = importDecl->link->link;
         // TODO: instantiate if generic
     }
 }

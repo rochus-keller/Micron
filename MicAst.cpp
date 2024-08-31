@@ -17,82 +17,98 @@
 #include "MicAst.h"
 #include "MicToken.h"
 #include <limits>
+#include <QtDebug>
 using namespace Mic;
 
+Declaration AstModel::globalScope;
+Type* AstModel::types[BasicType::Max] = {0};
 
-AstModel::AstModel():universe(0),helper(0),helperId(0)
+
+AstModel::AstModel():helper(0),helperId(0)
 {
-    openScope(0);
+    openScope(&globalScope);
 
-    types[BasicType::Undefined] = addType(BasicType::Undefined,1);
-    types[BasicType::NoType] = addType(BasicType::NoType,1);
-    types[BasicType::String] = addType(BasicType::String,1);
-    types[BasicType::Nil] = addType(BasicType::Nil,1);
-    types[BasicType::Any] = addType(BasicType::Any,1);
+    if( globalScope.mode == Declaration::NoMode )
+    {
+        globalScope.mode = Declaration::Scope;
+        types[BasicType::Undefined] = newType(BasicType::Undefined,1);
+        types[BasicType::NoType] = newType(BasicType::NoType,1);
+        types[BasicType::String] = newType(BasicType::String,1);
+        types[BasicType::Nil] = newType(BasicType::Nil,1);
+        types[BasicType::Any] = newType(BasicType::Any,1);
 
-    types[BasicType::BOOLEAN] = addType("BOOLEAN", BasicType::BOOLEAN, 1 );
-    types[BasicType::CHAR] = addType("CHAR", BasicType::CHAR, 1 );
-    types[BasicType::UINT8] = addType("UINT8", BasicType::UINT8, 1 );
-    addTypeAlias("BYTE", types[BasicType::UINT8] );
-    types[BasicType::INT8] = addType("INT8", BasicType::INT8, 1 );
-    types[BasicType::INT16] = addType("INT16", BasicType::INT16, 2 );
-    types[BasicType::UINT16] = addType("UINT16", BasicType::UINT16, 2 );
-    types[BasicType::INT32] = addType("INT32", BasicType::INT32, 4 );
-    types[BasicType::UINT32] = addType("UINT32", BasicType::UINT32, 4 );
-    types[BasicType::INT64] = addType("INT64", BasicType::INT64, 8 );
-    types[BasicType::UINT64] = addType("UINT64", BasicType::UINT64, 8 );
-    types[BasicType::REAL] = addType("REAL", BasicType::REAL, 4 );
-    addTypeAlias("FLT32", types[BasicType::REAL] );
-    types[BasicType::LONGREAL] = addType("LONGREAL", BasicType::LONGREAL, 8 );
-    addTypeAlias("FLT64", types[BasicType::LONGREAL] );
-    types[BasicType::SET] = addType("SET", BasicType::SET, 4 );
-    types[BasicType::SYMBOL] = addType("SYMBOL",BasicType::SYMBOL,1);
+        types[BasicType::BOOLEAN] = addType("BOOLEAN", BasicType::BOOLEAN, 1 );
+        types[BasicType::CHAR] = addType("CHAR", BasicType::CHAR, 1 );
+        types[BasicType::UINT8] = addType("UINT8", BasicType::UINT8, 1 );
+        addTypeAlias("BYTE", types[BasicType::UINT8] );
+        types[BasicType::INT8] = addType("INT8", BasicType::INT8, 1 );
+        types[BasicType::INT16] = addType("INT16", BasicType::INT16, 2 );
+        types[BasicType::UINT16] = addType("UINT16", BasicType::UINT16, 2 );
+        types[BasicType::INT32] = addType("INT32", BasicType::INT32, 4 );
+        types[BasicType::UINT32] = addType("UINT32", BasicType::UINT32, 4 );
+        types[BasicType::INT64] = addType("INT64", BasicType::INT64, 8 );
+        types[BasicType::UINT64] = addType("UINT64", BasicType::UINT64, 8 );
+        types[BasicType::REAL] = addType("REAL", BasicType::REAL, 4 );
+        addTypeAlias("FLT32", types[BasicType::REAL] );
+        types[BasicType::LONGREAL] = addType("LONGREAL", BasicType::LONGREAL, 8 );
+        addTypeAlias("FLT64", types[BasicType::LONGREAL] );
+        types[BasicType::SET] = addType("SET", BasicType::SET, 4 );
 
-    addTypeAlias("SHORTINT", types[BasicType::INT16] ); // TODO: variable type
-    addTypeAlias("INTEGER", types[BasicType::INT32] );
-    addTypeAlias("LONGINT", types[BasicType::INT64] );
+        addTypeAlias("SHORTINT", types[BasicType::INT16] ); // TODO: variable type
+        addTypeAlias("INTEGER", types[BasicType::INT32] );
+        addTypeAlias("LONGINT", types[BasicType::INT64] );
 
-    addBuiltin("ABS", Builtin::ABS);
-    addBuiltin("CAP", Builtin::CAP);
-    addBuiltin("BITAND", Builtin::BITAND);
-    addBuiltin("BITASR", Builtin::BITASR);
-    addBuiltin("BITNOT", Builtin::BITNOT);
-    addBuiltin("BITOR", Builtin::BITOR);
-    addBuiltin("BITS", Builtin::BITS);
-    addBuiltin("BITSHL", Builtin::BITSHL);
-    addBuiltin("BITSHR", Builtin::BITSHR);
-    addBuiltin("BITXOR", Builtin::BITXOR);
-    addBuiltin("CHR", Builtin::CHR);
-    addBuiltin("DEFAULT", Builtin::DEFAULT);
-    addBuiltin("FLOOR", Builtin::FLOOR);
-    addBuiltin("FLT", Builtin::FLT);
-    addBuiltin("GETENV", Builtin::GETENV);
-    addBuiltin("LEN", Builtin::LEN);
-    addBuiltin("LONG", Builtin::LONG);
-    addBuiltin("MAX", Builtin::MAX);
-    addBuiltin("MIN", Builtin::MIN);
-    addBuiltin("ODD", Builtin::ODD);
-    addBuiltin("ORD", Builtin::ORD);
-    addBuiltin("SHORT", Builtin::SHORT);
-    addBuiltin("SIGNED", Builtin::SIGNED);
-    addBuiltin("SIZE", Builtin::SIZE);
-    addBuiltin("STRLEN", Builtin::STRLEN);
-    addBuiltin("UNSIGNED", Builtin::UNSIGNED);
-    addBuiltin("VARARG", Builtin::VARARG);
-    addBuiltin("VARARGS", Builtin::VARARGS);
-    addBuiltin("ASSERT", Builtin::ASSERT);
-    addBuiltin("DEC", Builtin::DEC);
-    addBuiltin("DISPOSE", Builtin::DISPOSE);
-    addBuiltin("EXCL", Builtin::EXCL);
-    addBuiltin("HALT", Builtin::HALT);
-    addBuiltin("INC", Builtin::INC);
-    addBuiltin("INCL", Builtin::INCL);
-    addBuiltin("NEW", Builtin::NEW);
-    addBuiltin("PCALL", Builtin::PCALL);
-    addBuiltin("PRINT", Builtin::PRINT);
-    addBuiltin("PRINTLN", Builtin::PRINTLN);
-    addBuiltin("RAISE", Builtin::RAISE);
-    addBuiltin("SETENV", Builtin::SETENV);
+        addBuiltin("ABS", Builtin::ABS);
+        addBuiltin("CAP", Builtin::CAP);
+        addBuiltin("BITAND", Builtin::BITAND);
+        addBuiltin("BITASR", Builtin::BITASR);
+        addBuiltin("BITNOT", Builtin::BITNOT);
+        addBuiltin("BITOR", Builtin::BITOR);
+        addBuiltin("BITS", Builtin::BITS);
+        addBuiltin("BITSHL", Builtin::BITSHL);
+        addBuiltin("BITSHR", Builtin::BITSHR);
+        addBuiltin("BITXOR", Builtin::BITXOR);
+        addBuiltin("CHR", Builtin::CHR);
+        addBuiltin("DEFAULT", Builtin::DEFAULT);
+        addBuiltin("FLOOR", Builtin::FLOOR);
+        addBuiltin("FLT", Builtin::FLT);
+        addBuiltin("GETENV", Builtin::GETENV);
+        addBuiltin("LEN", Builtin::LEN);
+        addBuiltin("LONG", Builtin::LONG);
+        addBuiltin("MAX", Builtin::MAX);
+        addBuiltin("MIN", Builtin::MIN);
+        addBuiltin("ODD", Builtin::ODD);
+        addBuiltin("ORD", Builtin::ORD);
+        addBuiltin("SHORT", Builtin::SHORT);
+        addBuiltin("SIGNED", Builtin::SIGNED);
+        addBuiltin("SIZE", Builtin::SIZE);
+        addBuiltin("STRLEN", Builtin::STRLEN);
+        addBuiltin("UNSIGNED", Builtin::UNSIGNED);
+        addBuiltin("VARARG", Builtin::VARARG);
+        addBuiltin("VARARGS", Builtin::VARARGS);
+        addBuiltin("ASSERT", Builtin::ASSERT);
+        addBuiltin("DEC", Builtin::DEC);
+        addBuiltin("DISPOSE", Builtin::DISPOSE);
+        addBuiltin("EXCL", Builtin::EXCL);
+        addBuiltin("HALT", Builtin::HALT);
+        addBuiltin("INC", Builtin::INC);
+        addBuiltin("INCL", Builtin::INCL);
+        addBuiltin("NEW", Builtin::NEW);
+        addBuiltin("PCALL", Builtin::PCALL);
+        addBuiltin("PRINT", Builtin::PRINT);
+        addBuiltin("PRINTLN", Builtin::PRINTLN);
+        addBuiltin("RAISE", Builtin::RAISE);
+        addBuiltin("SETENV", Builtin::SETENV);
+    }
+}
+
+AstModel::~AstModel()
+{
+    for( int i = 1; i < scopes.size(); i++ ) // start with 1, 0 is globalScope
+        delete scopes[i];
+    scopes.clear();
+    if( helper )
+        delete helper;
 }
 
 void AstModel::openScope(Declaration* scope)
@@ -116,10 +132,13 @@ Declaration* AstModel::closeScope(bool takeMembers)
     {
         res = scopes.back()->link;
         scopes.back()->link = 0;
+        delete scopes.back();
+    }else if( scopes.back()->mode == Declaration::Module )
+    {
+        Q_ASSERT(scopes.back()->next == 0);
+        scopes.back()->next = helper;
+        helper = 0;
     }
-
-    // TODO: delete topScope and successors
-
     scopes.pop_back();
     return res;
 }
@@ -166,9 +185,9 @@ void AstModel::removeDecl(Declaration* del)
 {
     Declaration* scope = scopes.back();
     Declaration** obj = &scope->link;
-    while( (*obj) != del )
+    while( (*obj) && (*obj) != del )
         obj = &((*obj)->next);
-    obj = &(del->next);
+    *obj = del->next;
     del->next = 0;
     delete del;
 }
@@ -205,7 +224,26 @@ QByteArray AstModel::getTempName()
     return Token::getSymbol("$" + QByteArray::number(++helperId));
 }
 
-Type*AstModel::addType(int form, int size)
+void AstModel::cleanupGlobals()
+{
+    if( globalScope.mode == Declaration::Scope )
+    {
+        if( globalScope.next )
+            delete globalScope.next;
+        globalScope.next = 0;
+        if( globalScope.link )
+            delete globalScope.link;
+        globalScope.link = 0;
+        globalScope.mode = Declaration::NoMode;
+        for( int i = 0; i < BasicType::Max; i++ )
+        {
+            delete types[i];
+            types[i] = 0;
+        }
+    }
+}
+
+Type*AstModel::newType(int form, int size)
 {
     Type* t = new Type();
     t->form = form;
@@ -214,9 +252,8 @@ Type*AstModel::addType(int form, int size)
 
 Type*AstModel::addType(const QByteArray& name, int form, int size)
 {
-    Type* t = addType(form, size);
-    addTypeAlias(name.toUpper(), t);
-    addTypeAlias(name.toLower(), t);
+    Type* t = newType(form, size);
+    addTypeAlias(name, t);
     return t;
 }
 
@@ -267,6 +304,15 @@ QPair<int, int> Type::getFieldCount() const
         d = d->next;
     }
     return res;
+}
+
+Type::~Type()
+{
+    // all anonymous types are resolved, therefore base is no longer owned by a type
+    //if( base )
+    //    delete base;
+    for( int i = 0; i < subs.size(); i++ )
+        delete subs[i];
 }
 
 QVariant BasicType::getMax(BasicType::Type t)
@@ -335,6 +381,25 @@ QVariant BasicType::getMin(BasicType::Type t)
     return QVariant();
 }
 
+const char* Declaration::s_mode[] = {
+    "NoMode",
+    "Scope", "Module", "TypeDecl", "Builtin", "ConstDecl", "Import", "Field", "Variant",
+    "VarDecl", "LocalDecl",
+    "Procedure", "ForwardDecl", "ParamDecl"
+};
+
+Declaration::~Declaration()
+{
+    if( next )
+        delete next;
+    if( link
+            && mode != Declaration::Import  // imports are just referenced, not owned
+            && !alias   // the original is deleted elswhere
+            )
+        delete link;
+    if( type && ownstype )
+        delete type;
+}
 
 QList<Declaration*> Declaration::getParams() const
 {

@@ -32,7 +32,7 @@ namespace Mic
 
         void addImport( const QByteArray& path, const QByteArray& name );
 
-        void addVariable( const QByteArray& typeRef, QByteArray name );
+        void addVariable( const QByteArray& typeRef, QByteArray name, bool isPublic );
         void addProcedure(const MilProcedure& method );
 
         void beginType(const QByteArray& name, bool isPublic, quint8 typeKind);

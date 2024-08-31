@@ -18,6 +18,7 @@
 */
 
 #include "MicEiGen.h"
+#include "MicMilLoader.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -68,16 +69,58 @@ public:
     QString source() const { return sourcePath; }
 };
 
-static void compile(const QStringList& files)
+static QByteArray getModuleName(const QString& file)
 {
-    int ok = 0;
-    QElapsedTimer timer;
-    timer.start();
-    foreach( const QString& file, files )
+    Mic::Lexer lex;
+    lex.setStream(file);
+    Mic::Token t = lex.nextToken();
+    while( t.isValid() && t.d_tokenType != Mic::Tok_MODULE )
+        t = lex.nextToken();
+    if( t.d_tokenType == Mic::Tok_MODULE )
     {
-        Lex2 lex;
-        lex.sourcePath = file; // to keep file name if invalid
-        lex.lex.setStream(file);
+        t = lex.nextToken();
+        if( t.d_tokenType == Mic::Tok_ident )
+            return t.d_val;
+    }
+    return QByteArray();
+}
+
+class Manager : public Mic::Importer {
+public:
+    typedef QHash<QString,Mic::Declaration*> Modules;
+
+    Manager() {}
+    ~Manager() {
+        Modules::const_iterator i;
+        for( i = modules.begin(); i != modules.end(); ++i )
+            delete i.value();
+    }
+
+    Mic::MilLoader loader;
+
+    QHash<QByteArray,QString> moduleNameToPath;
+    Modules modules;
+
+    Mic::Declaration* loadModule( const QByteArrayList& path )
+    {
+        const QByteArray name = path.join('.');
+        const QString file = moduleNameToPath.value(name);
+        if( file.isEmpty() )
+        {
+            qCritical() << "module" << name << "is not included in the files passed to the compiler";
+            return 0;
+        }else
+            return compile(file);
+    }
+
+    Mic::Declaration* compile(const QString& file)
+    {
+        Modules::const_iterator i = modules.find(file);
+        if( i != modules.end() )
+            return i.value();
+
+        //#define _GEN_OUTPUT_
+#ifdef _GEN_OUTPUT_
         QFileInfo info(file);
         QFile out(info.dir().absoluteFilePath(info.completeBaseName()+".cod"));
         if( !out.open(QIODevice::WriteOnly) )
@@ -85,26 +128,52 @@ static void compile(const QStringList& files)
             qCritical() << "cannot open file for writing:" << out.fileName();
             continue;
         }
-        Mic::EiGen ar(&out);
-        Mic::MilEmitter e(&ar);
-        Mic::AstModel mdl;
-        Mic::Parser2 p(&mdl,&lex, &e);
-        qDebug() << "**** parsing" << file.mid(root.size()+1);
         qDebug() << "**** generating" << out.fileName().mid(root.size()+1);
+        //Mic::EiGen r(&out);
+        Mic::IlAsmRenderer r(&out);
+#else
+        Mic::InMemRenderer r(&loader);
+#endif
+        Lex2 lex;
+        lex.sourcePath = file; // to keep file name if invalid
+        lex.lex.setStream(file);
+        qDebug() << "**** parsing" << file.mid(root.size()+1);
+        Mic::MilEmitter e(&r);
+        Mic::AstModel mdl;
+        Mic::Parser2 p(&mdl,&lex, &e, this);
         p.RunParser();
-        out.close();
+        Mic::Declaration* res = 0;
         if( !p.errors.isEmpty() )
         {
             foreach( const Mic::Parser2::Error& e, p.errors )
                 qCritical() << e.path.mid(root.size()+1) << e.row << e.col << e.msg;
-            // break;
         }else
         {
-            ok++;
-            qDebug() << "ok";
-
+            res = p.takeModule();
         }
+        modules[file] = res;
+        return res;
     }
+};
+
+static void compile(const QStringList& files)
+{
+    int ok = 0;
+    QElapsedTimer timer;
+    timer.start();
+    Manager mgr;
+    foreach( const QString& file, files )
+    {
+        const QByteArray name = getModuleName(file);
+        mgr.moduleNameToPath[name] = file;
+    }
+    foreach( const QString& file, files )
+    {
+        Mic::Declaration* module = mgr.compile(file);
+        if( module )
+            ok++;
+    }
+    Mic::AstModel::cleanupGlobals();
     qDebug() << "#### finished with" << ok << "files ok of total" << files.size() << "files" << "in" << timer.elapsed() << " [ms]";
 }
 

@@ -78,11 +78,13 @@ protected:
     // builtin implementations
     void PRINT(int nArgs, bool ln);
     void NEW(int nArgs);
+    void DISPOSE(int nArgs);
     void INC(int nArgs);
     void DEC(int nArgs);
     void LEN(int nArgs);
     void incdec(int nArgs, bool inc);
     void ASSERT(int nArgs);
+    void BITARITH(int op, int nArgs);
 
 private:
     AstModel* mdl;

@@ -102,9 +102,10 @@ bool MicEvaluator::binaryOp(quint8 op)
             }
             pushMilStack(lhs);
         }
-        adjustNumType(lhs.type, rhs.type);
+        adjustNumType(lhs.type, rhs.type); // TODO only possible if rhs is not yet on stack
         if( rhs.isConst() )
         {
+
             if( rhs.type->isUInt() && lhs.type->isInt() && !lhsWasUint )
                 rhs.type = smallestIntType(rhs.val);
             pushMilStack(rhs);
@@ -237,7 +238,6 @@ bool MicEvaluator::assign()
         break;
     case BasicType::Nil:
     case BasicType::String:
-    case BasicType::SYMBOL:
     case Type::Pointer:
     case Type::Proc:
         out->stind_(MilEmitter::IntPtr);
@@ -283,6 +283,8 @@ bool MicEvaluator::derefValue()
         return false;
     }
     Value v = stack.takeLast();
+    if( v.isConst() || !v.ref || v.type == 0 )
+        return false;
     Q_ASSERT(!v.isConst());
     Q_ASSERT(v.ref && v.type);
     v.ref = false;
@@ -334,9 +336,7 @@ bool MicEvaluator::derefValue()
         out->ldobj_(toDesig(v.type));
         break;
     default:
-        Q_ASSERT(false);
-        // TODO
-        break;
+        return false;
     }
 
     stack.push_back(v);
@@ -573,7 +573,7 @@ bool MicEvaluator::pushMilStack(const Value& v)
             return pushMilStack(tmp);
         }
     case Value::Const:
-        if( v.type->isSimple() || v.type->form == Type::ConstEnum || v.type->form == Type::SymEnum )
+        if( v.type->isSimple() || v.type->form == Type::ConstEnum )
         {
             switch( v.type->form )
             {
@@ -759,6 +759,10 @@ void MicEvaluator::callBuiltin(int builtin, int nArgs)
         NEW(nArgs);
         handleStack = false;
         break;
+    case Builtin::DISPOSE:
+        DISPOSE(nArgs);
+        handleStack = false;
+        break;
     case Builtin::INC:
         INC(nArgs);
         handleStack = false;
@@ -775,6 +779,20 @@ void MicEvaluator::callBuiltin(int builtin, int nArgs)
         ASSERT(nArgs);
         handleStack = false;
         break;
+    case Builtin::BITAND:
+    case Builtin::BITNOT:
+    case Builtin::BITOR:
+    case Builtin::BITXOR:
+        BITARITH(builtin,nArgs);
+        handleStack = false;
+        break;
+        /* TODO
+    case Builtin::BITASR:
+    case Builtin::BITSHL:
+    case Builtin::BITSHR:
+        BITSHIFT(builtin,nArgs);
+        break;
+        */
     default:
         err = "built-in not yet implemented";
         break;
@@ -901,6 +919,26 @@ void MicEvaluator::NEW(int nArgs)
         out->castptr_(toDesig(what.type->base));
         out->stind_(MilEmitter::IntPtr);
     }
+}
+
+void MicEvaluator::DISPOSE(int nArgs)
+{
+    if( nArgs != 1 )
+    {
+        err = "expecting one argument";
+        return;
+    }
+    Value what = stack.takeLast();
+    stack.pop_back(); // callee
+    if( what.type->form != Type::Pointer &&
+            !(what.type->base->form == Type::Record || what.type->base->form == Type::Array) )
+    {
+        err = "argument must be a pointer to record or array";
+        return;
+    }
+
+    out->call_("$MIC$free",1,1);
+
 }
 
 void MicEvaluator::INC(int nArgs)
@@ -1042,7 +1080,8 @@ void MicEvaluator::incdec(int nArgs, bool inc)
         else
             out->sub_();
         out->stind_(MilEmitter::IntPtr);
-    }
+    }else
+        err = "invalid argument types";
 }
 
 void MicEvaluator::ASSERT(int nArgs)
@@ -1086,6 +1125,35 @@ void MicEvaluator::ASSERT(int nArgs)
     res.mode = Value::Val;
     res.type = mdl->getType(BasicType::NoType);
     stack.push_back(res);
+}
+
+void MicEvaluator::BITARITH(int op, int nArgs)
+{
+    if( nArgs != 2 )
+    {
+        err = "expecting two arguments";
+        return;
+    }
+    Value rhs = stack.takeLast();
+    Value lhs = stack.takeLast();
+    stack.pop_back(); // callee
+
+    if( !lhs.type->isUInt() || !rhs.type->isUInt() )
+    {
+        err = "both operands must be unsigned integers";
+        return;
+    }
+    if( lhs.isConst() )
+    {
+        pushMilStack(lhs);
+        if( rhs.type->form == BasicType::UINT64 )
+            adjustNumType(lhs.type, rhs.type);
+    }
+    if( rhs.isConst() )
+    {
+        pushMilStack(rhs);
+    }
+
 }
 
 void MicEvaluator::notOp(Value& v)
@@ -1445,7 +1513,10 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             out->call_("$MIC$relop2",3,true);
         else
             out->call_("$MIC$relop1",3,true);
-    }else if( lhs.type->form == Type::Pointer && rhs.type->form == Type::Pointer )
+    }else if( lhs.type->form == Type::Pointer && rhs.type->form == Type::Pointer ||
+              lhs.type->form == Type::Pointer && rhs.type->form == BasicType::Nil ||
+              lhs.type->form == BasicType::Nil && rhs.type->form == Type::Pointer ||
+              lhs.type->form == BasicType::Nil && rhs.type->form == BasicType::Nil )
     {
         if( lhs.isConst() && rhs.isConst() )
         {
@@ -1514,29 +1585,6 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
         {
             emitRelOp(op,false);
         }
-    }else if( (lhs.type->form == BasicType::SYMBOL || lhs.type->form == Type::SymEnum ) &&
-              (rhs.type->form == BasicType::SYMBOL || rhs.type->form == Type::SymEnum) )
-    {
-        if( lhs.isConst() && rhs.isConst() )
-        {
-            res.mode = Value::Const;
-            // symbols are name strings at compile time and string addresses at runtime
-            switch(op)
-            {
-            case Tok_Eq:
-                res.val = lhs.val.toByteArray() == rhs.val.toByteArray();
-                break;
-            case Tok_Hash:
-                res.val = lhs.val.toByteArray() != rhs.val.toByteArray();
-                break;
-            default:
-                err = "operation not supported for given operands";
-                break;
-            }
-        }else
-        {
-            emitRelOp(op,true);
-        }
     }else if( ( lhs.type->isSet() && rhs.type->isSet() ) ||
               (lhs.type->isBoolean() && rhs.type->isBoolean()) )
     {
@@ -1559,7 +1607,9 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
         {
             emitRelOp(op,true);
         }
-    }else if( lhs.type->form == Type::Proc && rhs.type->form == Type::Proc )
+    }else if( lhs.type->form == Type::Proc && rhs.type->form == Type::Proc ||
+              lhs.type->form == Type::Proc && rhs.type->form == BasicType::Nil ||
+              lhs.type->form == BasicType::Nil && rhs.type->form == Type::Proc )
     {
         if( lhs.isConst() && rhs.isConst() )
         {
@@ -1598,26 +1648,6 @@ Value MicEvaluator::inOp(const Value& lhs, const Value& rhs)
             out->calli_("$MIC$SetIn",2,1);
         }
 
-    }else if( lhs.type->form == BasicType::SYMBOL && rhs.mode == Declaration::TypeDecl && rhs.type->form == Type::SymEnum )
-    {
-        if( lhs.isConst() && rhs.isConst() )
-        {
-            const QByteArray name = lhs.val.toByteArray();
-            bool hit = false;
-            foreach( Declaration* d, rhs.type->subs )
-            {
-                if( d->data.toByteArray() == name )
-                {
-                    hit = true;
-                    break;
-                }
-            }
-            res.mode = Value::Const;
-            res.val = hit;
-        }else
-        {
-            // TODO: call a function which knows the symbols belonging to the SymEnum type
-        }
     }else
         err = "operation not compatible with given operands";
     return res;
@@ -1727,6 +1757,9 @@ QByteArray MicEvaluator::toDesig(Declaration* d)
 
 QByteArray MicEvaluator::toDesig(Type* t)
 {
+    if( t == 0 )
+        return QByteArray();
+
     if( t->isSimple() )
     {
         switch( t->form )
@@ -1756,8 +1789,6 @@ QByteArray MicEvaluator::toDesig(Type* t)
             return "float32";
         case BasicType::LONGREAL:
             return "float64";
-        case BasicType::SYMBOL:
-            return "^char";
         default:
             return "<invalid type>";
         }
@@ -1765,7 +1796,8 @@ QByteArray MicEvaluator::toDesig(Type* t)
     {
         Q_ASSERT( t && t->decl );
         return toDesig(t->decl);
-    }
+    }else if( t->form == Type::NameRef )
+        return toDesig(t->subs.first());
     return QByteArray();
 }
 

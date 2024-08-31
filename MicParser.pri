@@ -9,7 +9,8 @@ SOURCES += \
     MicAst.cpp \
     MicMilEmitter.cpp \
     MicMilOp.cpp \
-    MicEvaluator.cpp
+    MicEvaluator.cpp \
+    $$PWD/MicMilLoader.cpp
 
 HEADERS += \
     MicLexer.h \
@@ -21,7 +22,8 @@ HEADERS += \
     MicAst.h \
     MicMilEmitter.h \
     MicMilOp.h \
-    MicEvaluator.h
+    MicEvaluator.h \
+    $$PWD/MicMilLoader.h
 
 
 

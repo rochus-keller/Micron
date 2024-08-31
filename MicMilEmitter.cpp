@@ -48,10 +48,10 @@ void MilEmitter::addImport(const QByteArray& path, const QByteArray& name)
     d_out->addImport(path, name);
 }
 
-void MilEmitter::addVariable(const QByteArray& typeRef, QByteArray name)
+void MilEmitter::addVariable(const QByteArray& typeRef, QByteArray name, bool isPublic)
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
-    d_out->addVariable(typeRef,name);
+    d_out->addVariable(typeRef,name, isPublic);
 }
 
 void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kind)
@@ -970,7 +970,7 @@ void IlAsmRenderer::addImport(const QByteArray& path, const QByteArray& name)
     out << endl;
 }
 
-void IlAsmRenderer::addVariable(const QByteArray& typeRef, QByteArray name)
+void IlAsmRenderer::addVariable(const QByteArray& typeRef, QByteArray name, bool isPublic)
 {
     out << ws() << "var " << name << ": " << typeRef << endl;
 }

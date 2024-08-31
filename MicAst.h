@@ -36,7 +36,6 @@ namespace Mic
                INT8, INT16, INT32, INT64,
                REAL, LONGREAL,
                SET,
-               SYMBOL,  // member of a SymEnum
                Max
              };
 
@@ -62,10 +61,11 @@ namespace Mic
     class Type
     {
     public:
-        enum Form { Pointer = BasicType::Max, Proc, Array, Record, ConstEnum, SymEnum };
+        enum Form { Pointer = BasicType::Max, Proc, Array, Record, ConstEnum, NameRef };
         quint8 form;
         bool deferred;
         bool anonymous;
+        bool selfref;
         quint32 len; // array length
         Type* base; // array/pointer base type, return type
         QList<Declaration*> subs; // list of record fields or enum elements, or params for proc type
@@ -87,7 +87,8 @@ namespace Mic
         Declaration* findField(const QByteArray& name) const;
         QPair<int,int> getFieldCount() const; // fixed, variant
 
-        Type():form(0),len(0),base(0),decl(0),deferred(false),anonymous(false){}
+        Type():form(0),len(0),base(0),decl(0),deferred(false),anonymous(false),selfref(false){}
+        ~Type();
     };
 
     class Declaration
@@ -97,8 +98,9 @@ namespace Mic
                     VarDecl, LocalDecl,
                     Procedure, ForwardDecl, ParamDecl,
                     Max };
-        Declaration* next; // list of all declarations in scope
-        Declaration* link; // member list or alias proc
+        static const char* s_mode[];
+        Declaration* next; // list of all declarations in outer scope
+        Declaration* link; // member list or alias proc or imported module decl
         Declaration* outer; // the owning declaration to reconstruct the qualident
         Type* type;
         QByteArray name;
@@ -109,7 +111,7 @@ namespace Mic
         uint inline_ : 1;
         uint invar : 1;
         uint extern_ : 1; // extern name (if present) is in val
-        uint alias : 1; // the original is in dsc
+        uint alias : 1; // the original is in link
         uint symbol : 1;
         uint scope : 1;
         uint ownstype : 1;
@@ -117,7 +119,8 @@ namespace Mic
         uint level : 8; // also used for built-in code and local number
         QVariant data; // value for Const and Enum, path for Import, name for Extern
         Declaration():next(0),link(0),type(0),row(0),col(0),level(0),mode(0),visi(0),ownstype(false),
-            inline_(false),invar(false),extern_(false),symbol(false),scope(false),outer(0){}
+            inline_(false),invar(false),extern_(false),symbol(false),scope(false),outer(0),alias(0){}
+        ~Declaration();
 
         QList<Declaration*> getParams() const;
         int getIndexOf(Declaration*) const;
@@ -150,6 +153,7 @@ namespace Mic
     {
     public:
         AstModel();
+        ~AstModel();
 
         void openScope(Declaration* scope);
         Declaration* closeScope(bool takeMembers = false);
@@ -162,17 +166,19 @@ namespace Mic
         QByteArray getTempName();
 
         Type* getType(quint8 basicType) const { return types[basicType]; }
+
+        static void cleanupGlobals();
     protected:
-        Type* addType(int form, int size);
+        Type* newType(int form, int size);
         Type* addType(const QByteArray& name, int form, int size);
         void addTypeAlias(const QByteArray& name, Type*);
         void addBuiltin(const QByteArray& name, Builtin::Type);
     private:
         QList<Declaration*> scopes;
-        Declaration* universe;
         Declaration* helper;
         quint32 helperId;
-        Type* types[BasicType::Max];
+        static Declaration globalScope;
+        static Type* types[BasicType::Max];
 
     };
 }

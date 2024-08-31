@@ -20,6 +20,8 @@
 #include <Micron/MicToken.h>
 #include <Micron/MicAst.h>
 #include <QList>
+#include <QHash>
+#include <QSet>
 
 namespace Mic {
     class MilEmitter;
@@ -44,6 +46,7 @@ namespace Mic {
         ~Parser2();
 
 		void RunParser();
+        Declaration* takeModule(); // get module declaration and take ownership (otherwise deleted by parser)
 		struct Error {
 		    QString msg;
 		    int row, col;
@@ -80,7 +83,6 @@ namespace Mic {
         Type* enumeration();
         typedef QList<Declaration*> DeclList;
         DeclList constEnum();
-        DeclList symbolEnum();
 		void VariableDeclaration();
         void designator(bool lvalue);
         void expression(bool lvalue = false);
@@ -143,6 +145,7 @@ namespace Mic {
         void invalid(const char* what);
         bool expect(int tt, bool pkw, const char* where);
         void error( const Token&, const QString& msg);
+        void error( int row, int col, const QString& msg );
         Declaration* findDecl(const Token& id );
         bool assigCompat(Type* lhs, Type* rhs) const;
         bool assigCompat(Type* lhs, Declaration* rhs) const;
@@ -168,6 +171,9 @@ namespace Mic {
         typedef QList<QPair<Token,Value> > Args;
         void openArrayError(const Token&, Type*);
         void prepareParam(const DeclList& formals, const Args& actuals);
+        static Type* deref(Type*);
+        void resolveAndCheckType(Declaration* d);
+        Type* resolveAndCheckType(Type*, bool selfRefBroken);
 
     private:
         AstModel* mdl;
@@ -177,7 +183,7 @@ namespace Mic {
 		Token cur;
 		Token la;
         Scanner2* scanner;
-        Declaration* thisMod;
+        Declaration* thisMod, *thisDecl;
         QList<QPair<Type*,Token> > deferred;
         QList<Type*> componentTypeStack;
         QList<RowCol> loopStack;
@@ -194,6 +200,7 @@ namespace Mic {
         Labels labels;
         typedef QList<QPair<Depth,Token> > Gotos;
         Gotos gotos;
+        QSet<Type*> deferDeleteNamedType;
 	};
 }
 

@@ -81,7 +81,7 @@ namespace Mic
 
         virtual void addImport( const QByteArray& path, const QByteArray& name ) {}
 
-        virtual void addVariable( const QByteArray& typeRef, QByteArray name ) {}
+        virtual void addVariable( const QByteArray& typeRef, QByteArray name,  bool isPublic ) {}
         virtual void addProcedure(const MilProcedure& method ) {}
 
         virtual void beginType(const QByteArray& name, bool isPublic, quint8 typeKind) {}
@@ -99,23 +99,27 @@ namespace Mic
     public:
         MilEmitter(MilRenderer*);
 
+        // TODO: we have to mark symbols as public or private, otherwise we cannot derive the contents of the sym file
 
         void beginModule( const QByteArray& moduleName, const QString& sourceFile, const MilMetaParams& = MilMetaParams() );
         void endModule();
 
         void addImport( const QByteArray& path, const QByteArray& name = QByteArray() );
 
-        void addVariable( const QByteArray& typeRef, QByteArray name );
+        void addVariable( const QByteArray& typeRef, QByteArray name, bool isPublic = true );
 
         void beginProc(const QByteArray& procName, bool isPublic = true, quint8 kind = MilProcedure::Normal );
         void endProc();
 
         enum TypeKind { Invalid, Struct, Union, ProcType, Alias, Pointer, Array, MaxType };
-        void beginType(const QByteArray& name, bool isPublic = true, quint8 typeKind = Struct ); // Struct, Union, ProcType
+        void beginType(const QByteArray& name, bool isPublic = true, quint8 typeKind = Struct );
+            // use for Struct, Union, ProcType
             // supports addField, addArgument, setReturnType, setVararg depending on typeKind
         void endType();
+
         void addType( const QByteArray& name, bool isPublic, const QByteArray& baseType,
-                      quint8 typeKind = Alias, quint32 len = 0); // Alias, Pointer, Array
+                      quint8 typeKind = Alias, quint32 len = 0);
+            // use for Alias, Pointer, Array
 
         void addField(const QByteArray& fieldName, // on top level or in struct/union
                        const QByteArray& typeRef, bool isPublic = true);
@@ -218,7 +222,7 @@ namespace Mic
 
         virtual void addImport( const QByteArray& path, const QByteArray& name );
 
-        virtual void addVariable( const QByteArray& typeRef, QByteArray name );
+        virtual void addVariable( const QByteArray& typeRef, QByteArray name,  bool isPublic );
         virtual void addProcedure(const MilProcedure& method );
 
         virtual void beginType(const QByteArray& className, bool isPublic, quint8 classKind);
