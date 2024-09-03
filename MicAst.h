@@ -116,9 +116,9 @@ namespace Mic
         uint scope : 1;
         uint ownstype : 1;
         uint mode : 5;
-        uint level : 8; // also used for built-in code and local number
+        uint id : 16; // used for built-in code and local/param number
         QVariant data; // value for Const and Enum, path for Import, name for Extern
-        Declaration():next(0),link(0),type(0),row(0),col(0),level(0),mode(0),visi(0),ownstype(false),
+        Declaration():next(0),link(0),type(0),row(0),col(0),id(0),mode(0),visi(0),ownstype(false),
             inline_(false),invar(false),extern_(false),symbol(false),scope(false),outer(0),alias(0){}
         ~Declaration();
 
@@ -127,9 +127,61 @@ namespace Mic
         bool isLvalue() const { return mode == VarDecl || mode == LocalDecl || mode == ParamDecl; }
         bool isPublic() const { return visi >= ReadOnly; }
     };
+    typedef QList<Declaration*> DeclList;
+
+    class Expression {
+    public:
+        enum Kind {
+            Invalid,
+            Plus, Minus, Not, // Unary
+            Eq, Neq, Lt, Leq, Gt, Geq, In, // Relation
+            Add, Sub, Or, // AddOp
+            Mul, Fdiv, Div, Mod, And, // MulOp
+            Addr, // @, requires a ref to type and converts it to a pointer value to type
+            Deref, // ^, requires a pointer value (not ref) and converts it to a ref of type.base
+            LocalVar, Param, Builtin, // val is index of local or param or builtin
+            ModuleVar, ProcDecl, ConstDecl, TypeDecl, // val is declaration
+            Select, // f.g, val is field declaration
+            Index, // a[i]
+            Cast, AutoCast,
+            Call,
+            Literal, Set, Range,
+            MAX
+        };
+#ifdef _DEBUG
+        Kind kind;
+#else
+        quint8 kind;
+#endif
+        bool byVal; // option for LocalVar, Param, ModuleVar, Select, Index
+        quint8 visi;
+        RowCol pos;
+        Type* type;
+        QVariant val; // set elements and call args are ExpList embedded in val
+        Expression* lhs; // for unary and binary ops
+        Expression* rhs; // for binary ops
+        bool isConst() const;
+        bool isLiteral() const;
+        QVariant getLiteralValue() const;
+        DeclList getFormals() const;
+        bool isLvalue() const; // true if result of expression is usually a ref to type; can be changed with byVal
+        void setByVal();
+        static Expression* createFromToken(quint16,const RowCol&);
+        static Expression* create(Kind k = Invalid, const RowCol& rc = RowCol());
+        static void deleteAllExpressions();
+        static void killArena();
+    private:
+        struct Arena;
+        static Arena* arena;
+        static quint32 used;
+        Expression(Kind k = Invalid, const RowCol& rc = RowCol()):kind(k),type(0),lhs(0),rhs(0),
+            pos(rc),byVal(false),visi(0){}
+        ~Expression() {}
+    };
+    typedef QList<Expression*> ExpList;
 
     struct Value {
-        enum Mode { Val = Declaration::Max, Const };
+        enum Mode { None, Val, Const, Builtin, Procedure, VarDecl, LocalDecl, ParamDecl };
         quint8 mode;
         quint8 visi;
         bool ref; // the value is a reference to the type
@@ -137,12 +189,13 @@ namespace Mic
         QVariant val;
 
         Value():mode(0),type(0),ref(false),visi(Declaration::Private){}
+        Value(Type* t, const QVariant& v, Mode m):type(t),val(v),mode(m){}
 
-        bool isConst() const { return mode == Declaration::ConstDecl || mode == Const; }
+        bool isConst() const { return mode == Const; }
         bool isLvalue() const { return mode == Declaration::VarDecl || mode == Declaration::LocalDecl ||
                     mode == Declaration::ParamDecl; }
         bool isCallable() const;
-   };
+    };
 
     struct Import {
         QByteArrayList path;
@@ -185,5 +238,6 @@ namespace Mic
 
 Q_DECLARE_METATYPE(Mic::Import)
 Q_DECLARE_METATYPE(Mic::Declaration*)
+Q_DECLARE_METATYPE(Mic::ExpList)
 
 #endif // MICAST_H

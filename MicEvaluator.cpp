@@ -16,11 +16,23 @@
 
 #include "MicEvaluator.h"
 #include "MicMilEmitter.h"
+#include "MicBuiltins.h"
 #include "MicToken.h"
 #include <bitset>
 using namespace Mic;
 
-bool MicEvaluator::unaryOp(quint8 op)
+bool Evaluator::evaluate(Expression* e, bool assureOnMilStack)
+{
+    err.clear();
+    if( e == 0 )
+        return false;
+    recursiveRun(e);
+    if(assureOnMilStack)
+        assureTopOnMilStack();
+    return err.isEmpty();
+}
+
+bool Evaluator::unaryOp(quint8 op)
 {
     err.clear();
     if( stack.isEmpty() )
@@ -31,25 +43,24 @@ bool MicEvaluator::unaryOp(quint8 op)
     Value& v = stack.back();
     switch( op )
     {
-    case Tok_Tilde:
-    case Tok_NOT:
+    case Expression::Not:
         notOp(v);
         break;
-    case Tok_Plus:
+    case Expression::Plus:
         unaryPlusOp(v);
         break;
-    case Tok_Minus:
+    case Expression::Minus:
         unaryMinusOp(v);
         break;
     default:
         Q_ASSERT(false);
-        // NOTE: Tok_At is directly handled in the parser
+        // NOTE: @ is directly handled in the parser
         break;
     }
     return err.isEmpty();
 }
 
-Type*MicEvaluator::smallestUIntType(const QVariant& v) const
+Type*Evaluator::smallestUIntType(const QVariant& v) const
 {
     const quint64 u = v.toULongLong();
     if( u <= BasicType::getMax(BasicType::UINT8).toULongLong() )
@@ -62,7 +73,7 @@ Type*MicEvaluator::smallestUIntType(const QVariant& v) const
         return mdl->getType(BasicType::UINT64);
 }
 
-Type*MicEvaluator::smallestIntType(const QVariant& v) const
+Type*Evaluator::smallestIntType(const QVariant& v) const
 {
     const qint64 i = v.toLongLong();
     if( i >= BasicType::getMin(BasicType::INT8).toLongLong() && i <= BasicType::getMax(BasicType::INT8).toLongLong() )
@@ -75,7 +86,7 @@ Type*MicEvaluator::smallestIntType(const QVariant& v) const
         return mdl->getType(BasicType::INT64);
 }
 
-bool MicEvaluator::binaryOp(quint8 op)
+bool Evaluator::binaryOp(quint8 op)
 {
     err.clear();
     if( stack.size() < 2 )
@@ -88,65 +99,45 @@ bool MicEvaluator::binaryOp(quint8 op)
 
     if( !(lhs.isConst() && rhs.isConst()) )
     {
-        // make sure the lhs const is immediately pushed
-        // and converted to the right value
-        bool lhsWasUint = false;
         if( lhs.isConst() )
-        {
-            if( lhs.type->isUInt() && rhs.type->isInt() )
-            {
-                // If one of the operands is an unsigned integer constant and the other operand is of type integer,
-                // the unsigned integer constant is converted to the smallest integer type which includes the constant value.
-                lhs.type = smallestIntType(lhs.val);
-                lhsWasUint = true;
-            }
             pushMilStack(lhs);
-        }
-        adjustNumType(lhs.type, rhs.type); // TODO only possible if rhs is not yet on stack
         if( rhs.isConst() )
-        {
-
-            if( rhs.type->isUInt() && lhs.type->isInt() && !lhsWasUint )
-                rhs.type = smallestIntType(rhs.val);
             pushMilStack(rhs);
-        }
-        adjustNumType(rhs.type, lhs.type);
     }
 
     switch( op )
     {
     // Arith
-    case Tok_Star:
-    case Tok_Slash:
-    case Tok_DIV:
-    case Tok_MOD:
-    case Tok_Plus:
-    case Tok_Minus:
+    case Expression::Mul:
+    case Expression::Fdiv:
+    case Expression::Div:
+    case Expression::Mod:
+    case Expression::Add:
+    case Expression::Sub:
         stack.push_back(arithOp(op,lhs,rhs));
         break;
     // Logic
-    case Tok_Amp:
-    case Tok_AND:
-    case Tok_OR:
+    case Expression::And:
+    case Expression::Or:
         stack.push_back(logicOp(op,lhs,rhs));
         break;
     // Relation
-    case Tok_Eq:
-    case Tok_Hash:
-    case Tok_Lt:
-    case Tok_Leq:
-    case Tok_Gt:
-    case Tok_Geq:
+    case Expression::Eq:
+    case Expression::Neq:
+    case Expression::Lt:
+    case Expression::Leq:
+    case Expression::Gt:
+    case Expression::Geq:
         stack.push_back(relationOp(op, lhs,rhs));
        break;
-    case Tok_IN:
+    case Expression::In:
         stack.push_back(inOp(lhs,rhs));
         break;
     }
     return err.isEmpty();
 }
 
-bool MicEvaluator::prepareRhs(Type* lhs)
+bool Evaluator::prepareRhs(Type* lhs)
 {
     err.clear();
     if( stack.size() < 1 )
@@ -167,7 +158,7 @@ bool MicEvaluator::prepareRhs(Type* lhs)
               rhs.type->form == BasicType::String )
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
     else if( lhs && lhs->form == Type::Proc &&
-             rhs.mode == Declaration::Procedure )
+             rhs.mode == Value::Procedure )
         out->ldproc_(toDesig(rhs.val.value<Declaration*>()));
     else
         assureTopOnMilStack();
@@ -175,7 +166,7 @@ bool MicEvaluator::prepareRhs(Type* lhs)
     return true;
 }
 
-bool MicEvaluator::assign()
+bool Evaluator::assign()
 {
     err.clear();
     if( stack.size() < 2 )
@@ -253,7 +244,7 @@ bool MicEvaluator::assign()
     return err.isEmpty();
 }
 
-bool MicEvaluator::derefPointer()
+bool Evaluator::derefPointer()
 {
     err.clear();
     if( stack.isEmpty() )
@@ -261,20 +252,20 @@ bool MicEvaluator::derefPointer()
         err = "expecting a value on the stack";
         return false;
     }
+    assureTopIsValue();
     Value v = stack.takeLast();
 
     Q_ASSERT( v.type && v.type->form == Type::Pointer && !v.ref );
 
     v.type = v.type->base;
     v.ref = true;
-    //v.mode = Value::Val;
 
     stack.push_back(v);
 
     return err.isEmpty();
 }
 
-bool MicEvaluator::derefValue()
+bool Evaluator::derefValue()
 {
     err.clear();
     if( stack.isEmpty() )
@@ -343,29 +334,41 @@ bool MicEvaluator::derefValue()
     return err.isEmpty();
 }
 
-bool MicEvaluator::desigField()
+void Evaluator::assureTopIsValue()
+{
+    if( stack.isEmpty() )
+        return;
+    Value& v = stack.back();
+    if( v.ref )
+    {
+        derefValue();
+        v.ref = false;
+    }
+}
+
+bool Evaluator::desigField(Declaration* field, bool byVal)
 {
     err.clear();
-    if( stack.size() < 2 )
+    if( stack.size() < 1 )
     {
-        err = "expecting two values on the stack";
+        err = "expecting a value on the stack";
         return false;
     }
-    Value rhs = stack.takeLast(); // field
     Value lhs = stack.takeLast(); // record reference
 
     // TODO: desig const record
 
     Q_ASSERT(lhs.ref && lhs.type && lhs.type->form == Type::Record);
-    Q_ASSERT(rhs.mode == Declaration::Field);
 
-    Declaration* field = rhs.val.value<Declaration*>();
     Q_ASSERT(field);
     const QByteArray desig = toDesig(lhs.type) + "." + field->name;
-    out->ldflda_(desig);
+    if( byVal )
+        out->ldfld_(desig);
+    else
+        out->ldflda_(desig);
 
     Value res;
-    res.ref = true;
+    res.ref = !byVal;
     res.type = field->type;
     res.visi = 0;
     res.mode = Value::Val;
@@ -374,7 +377,7 @@ bool MicEvaluator::desigField()
     return err.isEmpty();
 }
 
-bool MicEvaluator::desigVar()
+bool Evaluator::desigVar(bool byVal)
 {
     err.clear();
     if( stack.isEmpty() )
@@ -383,30 +386,45 @@ bool MicEvaluator::desigVar()
         return false;
     }
     Value v = stack.takeLast();
-    Q_ASSERT( !v.ref );
 
-    switch( v.mode )
-    {
-    case Declaration::VarDecl:
-        out->ldvara_(v.val.toByteArray());
-        break;
-    case Declaration::LocalDecl:
-        out->ldloca_(v.val.toInt());
-        break;
-    case Declaration::ParamDecl:
-        out->ldarga_(v.val.toInt());
-        break;
-    default:
-        Q_ASSERT(false);
-    }
+    if( byVal )
+        switch( v.mode )
+        {
+        case Value::VarDecl:
+            out->ldvar_(v.val.toByteArray());
+            break;
+        case Value::LocalDecl:
+            out->ldloc_(v.val.toInt());
+            break;
+        case Value::ParamDecl:
+            out->ldarg_(v.val.toInt());
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+    else
+        switch( v.mode )
+        {
+        case Value::VarDecl:
+            out->ldvara_(v.val.toByteArray());
+            break;
+        case Value::LocalDecl:
+            out->ldloca_(v.val.toInt());
+            break;
+        case Value::ParamDecl:
+            out->ldarga_(v.val.toInt());
+            break;
+        default:
+            Q_ASSERT(false);
+        }
 
-    v.ref = true;
+    v.ref = !byVal;
     stack.push_back(v);
 
     return err.isEmpty();
 }
 
-bool MicEvaluator::desigIndex()
+bool Evaluator::desigIndex(bool byVal)
 {
     err.clear();
 
@@ -416,13 +434,24 @@ bool MicEvaluator::desigIndex()
     Q_ASSERT(lhs.ref && lhs.type && lhs.type->form == Type::Array);
 
     if( rhs.isConst() )
+    {
+        const qint64 idx = rhs.val.toLongLong();
+        if( idx < 0  || rhs.type->len && rhs.type->len <= idx )
+        {
+            err = "index out of range";
+            return false;
+        }
         pushMilStack(rhs);
+    }
 
     const QByteArray elemType = toDesig(lhs.type->base);
-    out->ldelema_(elemType);
+    if( byVal )
+        out->ldelem_(elemType);
+    else
+        out->ldelema_(elemType);
 
     Value res;
-    res.ref = true;
+    res.ref = !byVal;
     res.type = lhs.type->base;
     res.visi = 0;
     res.mode = Value::Val;
@@ -431,7 +460,7 @@ bool MicEvaluator::desigIndex()
     return err.isEmpty();
 }
 
-bool MicEvaluator::call(int nArgs)
+bool Evaluator::call(int nArgs)
 {
     err.clear();
     if( stack.size() < nArgs + 1 )
@@ -444,11 +473,14 @@ bool MicEvaluator::call(int nArgs)
     Type* ret = 0;
     switch( callee.mode )
     {
-    case Declaration::Builtin:
-        callBuiltin(callee.val.toInt(),nArgs);
-        return err.isEmpty();
+    case Value::Builtin:
+        {
+            Builtins bi(this);
+            bi.callBuiltin(callee.val.toInt(),nArgs);
+            return err.isEmpty();
+        }
 
-    case Declaration::Procedure:
+    case Value::Procedure:
         {
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
@@ -456,11 +488,9 @@ bool MicEvaluator::call(int nArgs)
             out->call_(toDesig(proc),nArgs, ret != 0); // TODO: desig in imported module
         }
         break;
-    case Declaration::Field:
-    case Declaration::Variant:
-    case Declaration::VarDecl:
-    case Declaration::LocalDecl:
-    case Declaration::ParamDecl:
+    case Value::VarDecl:
+    case Value::LocalDecl:
+    case Value::ParamDecl:
     case Value::Val:
         ret = callee.type->base;
         if( callee.type->form == Type::Proc )
@@ -489,44 +519,83 @@ bool MicEvaluator::call(int nArgs)
     return err.isEmpty();
 }
 
-bool MicEvaluator::cast()
+bool Evaluator::castPtr(Type* to)
 {
     err.clear();
-    if( stack.size() < 2 )
-    {
-        err = "expecting two values on the stack";
-        return false;
-    }
-    Value rhs = stack.takeLast(); // new type
-    Value lhs = stack.takeLast(); // object
-    // TODO
-    out->castptr_(toDesig(rhs.type));
-    // TODO restrict to pointers, add to MIL
-    lhs.type = rhs.type;
-    stack.push_back(lhs);
-    return err.isEmpty();
-}
-
-bool MicEvaluator::push(const Value& v)
-{
-    stack.push_back(v);
-}
-
-bool MicEvaluator::dup()
-{
-    err.clear();
-    if( stack.isEmpty() )
+    if( stack.size() < 1 )
     {
         err = "expecting a value on the stack";
         return false;
     }
-    Value v = stack.back();
-    stack.push_back(v);
-    out->dup_();
+    Value lhs = stack.takeLast(); // object
+    // TODO
+    Q_ASSERT(to && to->form == Type::Pointer);
+    out->castptr_(toDesig(to->base));
+    // TODO restrict to pointers, add to MIL
+    lhs.type = to;
+    stack.push_back(lhs);
     return err.isEmpty();
 }
 
-Value MicEvaluator::pop()
+bool Evaluator::castNum(Type* to)
+{
+    Q_ASSERT( to && to->isNumber() );
+    err.clear();
+    if( stack.size() < 1 )
+    {
+        err = "expecting a value on the stack";
+        return false;
+    }
+    if( stack.back().isConst() )
+        stack.back().type = to;
+    else
+    {
+        MilEmitter::ToType tt;
+        switch(to->form)
+        {
+        case BasicType::BOOLEAN:
+        case BasicType::CHAR:
+        case BasicType::UINT8:
+            tt = MilEmitter::ToU1;
+            break;
+        case BasicType::UINT16:
+            tt = MilEmitter::ToU2;
+            break;
+        case BasicType::UINT32:
+        case BasicType::SET:
+            tt = MilEmitter::ToU4;
+            break;
+        case BasicType::UINT64:
+            tt = MilEmitter::ToU8;
+            break;
+        case BasicType::INT8:
+            tt = MilEmitter::ToI1;
+            break;
+        case BasicType::INT16:
+            tt = MilEmitter::ToI2;
+            break;
+        case BasicType::INT32:
+            tt = MilEmitter::ToI4;
+            break;
+        case BasicType::INT64:
+            tt = MilEmitter::ToI8;
+            break;
+        case BasicType::REAL:
+            tt = MilEmitter::ToR4;
+            break;
+        case BasicType::LONGREAL:
+            tt = MilEmitter::ToR8;
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+
+        out->conv_(tt);
+    }
+    return err.isEmpty();
+}
+
+Value Evaluator::pop()
 {
     Value res;
     if( !stack.isEmpty() )
@@ -534,7 +603,7 @@ Value MicEvaluator::pop()
     return res;
 }
 
-Value MicEvaluator::top()
+Value Evaluator::top()
 {
     Value res;
     if( !stack.isEmpty() )
@@ -542,7 +611,7 @@ Value MicEvaluator::top()
     return res;
 }
 
-void MicEvaluator::assureTopOnMilStack(bool pop)
+void Evaluator::assureTopOnMilStack(bool pop)
 {
     if( top().isConst() )
         pushMilStack(top());
@@ -560,18 +629,11 @@ static inline bool isAllPrintable(const QString& str)
     return true;
 }
 
-bool MicEvaluator::pushMilStack(const Value& v)
+bool Evaluator::pushMilStack(const Value& v)
 {
     err.clear();
     switch( v.mode )
     {
-    case Declaration::ConstDecl:
-        {
-            Value tmp = v;
-            tmp.mode = Value::Const;
-            tmp.val = v.val.value<Declaration*>()->data;
-            return pushMilStack(tmp);
-        }
     case Value::Const:
         if( v.type->isSimple() || v.type->form == Type::ConstEnum )
         {
@@ -633,13 +695,13 @@ bool MicEvaluator::pushMilStack(const Value& v)
             out->ldc_obj(obj);
         }
         break;
-    case Declaration::VarDecl:
-    case Declaration::LocalDecl:
+    case Value::VarDecl:
+    case Value::LocalDecl:
         {
             // TODO
         }
         break;
-    case Declaration::ParamDecl:
+    case Value::ParamDecl:
         {
             // TODO
         }
@@ -651,29 +713,29 @@ bool MicEvaluator::pushMilStack(const Value& v)
     return true;
 }
 
-void MicEvaluator::emitRelOp(quint8 op, bool unsig)
+void Evaluator::emitRelOp(quint8 op, bool unsig)
 {
     switch(op)
     {
-    case Tok_Eq:
+    case Expression::Eq:
         out->ceq_();
         break;
-    case Tok_Hash:
+    case Expression::Neq:
         out->ceq_();
         out->not_();
         break;
-    case Tok_Geq: // not lt
+    case Expression::Geq: // not lt
         out->clt_(unsig);
         out->not_();
         break;
-    case Tok_Gt:
+    case Expression::Gt:
         out->cgt_(unsig);
         break;
-    case Tok_Leq: // not gt
+    case Expression::Leq: // not gt
         out->cgt_(unsig);
         out->not_();
         break;
-    case Tok_Lt:
+    case Expression::Lt:
         out->clt_(unsig);
         break;
     default:
@@ -682,17 +744,17 @@ void MicEvaluator::emitRelOp(quint8 op, bool unsig)
     }
 }
 
-void MicEvaluator::emitArithOp(quint8 op, bool unsig, bool i64)
+void Evaluator::emitArithOp(quint8 op, bool unsig, bool i64)
 {
     switch(op)
     {
-    case Tok_Star:
+    case Expression::Mul:
         out->mul_();
         break;
-    case Tok_Slash:
+    case Expression::Fdiv:
         out->div_();
         break;
-    case Tok_DIV:
+    case Expression::Div:
         if( unsig )
             out->div_(unsig);
         else
@@ -703,7 +765,7 @@ void MicEvaluator::emitArithOp(quint8 op, bool unsig, bool i64)
                 out->call_("$MIC$Div32",2,1);
         }
         break;
-    case Tok_MOD:
+    case Expression::Mod:
         if( unsig )
             out->rem_(unsig);
         else
@@ -714,20 +776,19 @@ void MicEvaluator::emitArithOp(quint8 op, bool unsig, bool i64)
                 out->call_("$MIC$Mod32",2,1);
         }
         break;
-    case Tok_Plus:
+    case Expression::Add:
         out->add_();
         break;
-    case Tok_Minus:
+    case Expression::Sub:
         out->sub_();
         break;
     default:
-        err = "operator not supported for integer operands";
-        break;
+        Q_ASSERT(false);
     }
 
 }
 
-void MicEvaluator::adjustNumType(Type* me, Type* other)
+void Evaluator::adjustNumType(Type* me, Type* other)
 {
     if( me->isNumber() && other->isNumber() )
     {
@@ -743,432 +804,16 @@ void MicEvaluator::adjustNumType(Type* me, Type* other)
     }
 }
 
-void MicEvaluator::callBuiltin(int builtin, int nArgs)
+void Evaluator::notOp(Value& v)
 {
-    Value ret;
-    ret.mode = Value::Val;
-    ret.type = mdl->getType(BasicType::NoType);
-    bool handleStack = true;
-    switch( builtin )
-    {
-    case Builtin::PRINT:
-    case Builtin::PRINTLN:
-        PRINT(nArgs,builtin == Builtin::PRINTLN);
-        break;
-    case Builtin::NEW:
-        NEW(nArgs);
-        handleStack = false;
-        break;
-    case Builtin::DISPOSE:
-        DISPOSE(nArgs);
-        handleStack = false;
-        break;
-    case Builtin::INC:
-        INC(nArgs);
-        handleStack = false;
-        break;
-    case Builtin::DEC:
-        DEC(nArgs);
-        handleStack = false;
-        break;
-    case Builtin::LEN:
-        LEN(nArgs);
-        handleStack = false;
-        break;
-    case Builtin::ASSERT:
-        ASSERT(nArgs);
-        handleStack = false;
-        break;
-    case Builtin::BITAND:
-    case Builtin::BITNOT:
-    case Builtin::BITOR:
-    case Builtin::BITXOR:
-        BITARITH(builtin,nArgs);
-        handleStack = false;
-        break;
-        /* TODO
-    case Builtin::BITASR:
-    case Builtin::BITSHL:
-    case Builtin::BITSHR:
-        BITSHIFT(builtin,nArgs);
-        break;
-        */
-    default:
-        err = "built-in not yet implemented";
-        break;
-    }
-
-    if( handleStack )
-    {
-        for( int i = 0; i < nArgs; i++ )
-            stack.pop_back();
-        stack.pop_back(); // callee
-        stack.push_back(ret);
-    }
-}
-
-int MicEvaluator::addIncDecTmp()
-{
-    bool doublette;
-    Declaration* decl = mdl->addDecl(Token::getSymbol("$incdec"),&doublette);
-    if( !doublette )
-    {
-        decl->mode = Declaration::LocalDecl;
-        decl->type = mdl->getType(BasicType::INT32);
-        decl->outer = mdl->getTopScope();
-        decl->level = out->addLocal(toDesig(decl->type),decl->name);
-    }
-    return decl->level;
-}
-
-void MicEvaluator::PRINT(int nArgs, bool ln)
-{
-    assureTopOnMilStack();
-    if( nArgs != 1 && !(stack.back().type->isSimple() || stack.back().type->isText() ))
-        err = "expecting one argument of basic or char array type";
-    else if( stack.back().type->form == Type::ConstEnum )
-    {
-        out->conv_(MilEmitter::ToI8);
-        out->call_("$MIC$printI8",1,false);
-    }else if( stack.back().type->isInt() )
-    {
-        if( stack.back().type->form != BasicType::INT64 )
-            out->conv_(MilEmitter::ToI8);
-        out->call_("$MIC$printI8",1,false);
-    }else if( stack.back().type->isUInt() )
-    {
-        if( stack.back().type->form != BasicType::UINT64 )
-            out->conv_(MilEmitter::ToU8);
-        out->call_("$MIC$printU8",1,false);
-    }else if( stack.back().type->isReal() )
-    {
-        if( stack.back().type->form != BasicType::LONGREAL )
-            out->conv_(MilEmitter::ToR8);
-        out->call_("$MIC$printF8",1,false);
-    }else if( stack.back().type->isText() )
-    {
-        if( stack.back().type->form != BasicType::CHAR )
-            out->call_("$MIC$printStr",1,false);
-        else
-            out->call_("$MIC$printCh",1,false);
-    }else if( stack.back().type->isBoolean() )
-        out->call_("$MIC$printBool",1,false);
-    else if( stack.back().type->isSet() )
-        out->call_("$MIC$printSet",1,false);
+    Q_ASSERT( v.type->isBoolean() );
+    if( v.isConst() )
+        v.val = !v.val.toBool();
     else
-        err = "given type not supported with PRINT or PRINTLN";
-    if( ln )
-    {
-        out->ldc_i4(0xa); // LF
-        out->call_("$MIC$printCh",1,false);
-    }
+        out->not_();
 }
 
-void MicEvaluator::NEW(int nArgs)
-{
-    if( nArgs == 0 || nArgs > 2 )
-    {
-        err = "expecting one or two arguments";
-        return;
-    }
-    Value len;
-    if( nArgs == 2 )
-        len = stack.takeLast();
-    Value what = stack.takeLast();
-    stack.pop_back(); // callee
-    if( what.type->form != Type::Pointer &&
-            !(what.type->base->form == Type::Record || what.type->base->form == Type::Array) )
-    {
-        err = "first argument must be a pointer to record or array";
-        return;
-    }
-    if( !what.ref )
-    {
-        err = "cannot write to first argument";
-        return;
-    }
-    if( what.type->base->form == Type::Record )
-    {
-        out->sizeof_(toDesig(what.type->base));
-        out->call_("$MIC$alloc32",1,1);
-        out->castptr_(toDesig(what.type->base));
-        out->stind_(MilEmitter::IntPtr);
-    }else if( what.type->base->len > 0 ) // fixed size array
-    {
-        if( nArgs > 1 )
-        {
-            err = "cannot dynamically set array length for non-open array";
-            return;
-        }
-        out->sizeof_(toDesig(what.type->base->base));
-        out->ldc_i4(what.type->base->len);
-        out->mul_();
-        out->call_("$MIC$alloc32",1,1);
-        out->castptr_(toDesig(what.type->base));
-        out->stind_(MilEmitter::IntPtr);
-    }else // open array
-    {
-        if( nArgs != 2 )
-        {
-            err = "expecting two arguments, the second as the explicit length";
-            return;
-        }
-        out->sizeof_(toDesig(what.type->base->base));
-        out->mul_();
-        out->call_("$MIC$alloc32",1,1);
-        out->castptr_(toDesig(what.type->base));
-        out->stind_(MilEmitter::IntPtr);
-    }
-}
-
-void MicEvaluator::DISPOSE(int nArgs)
-{
-    if( nArgs != 1 )
-    {
-        err = "expecting one argument";
-        return;
-    }
-    Value what = stack.takeLast();
-    stack.pop_back(); // callee
-    if( what.type->form != Type::Pointer &&
-            !(what.type->base->form == Type::Record || what.type->base->form == Type::Array) )
-    {
-        err = "argument must be a pointer to record or array";
-        return;
-    }
-
-    out->call_("$MIC$free",1,1);
-
-}
-
-void MicEvaluator::INC(int nArgs)
-{
-    incdec(nArgs,true);
-}
-
-void MicEvaluator::DEC(int nArgs)
-{
-    incdec(nArgs,false);
-}
-
-void MicEvaluator::LEN(int nArgs)
-{
-    if( nArgs != 1 )
-    {
-        err = "expecting one argument";
-        return;
-    }
-    Value what = stack.takeLast();
-    stack.pop_back(); // callee
-    if( !what.isConst() )
-        out->pop_();
-    Type* arr = what.type;
-    if( arr->form == Type::Pointer )
-        arr = arr->base;
-    if( arr->form != Type::Array || arr->len == 0 )
-    {
-        err = "function only applicable to non-open arrays";
-        return;
-    }
-    //out->ldc_i4(arr->len);
-    Value res;
-    res.mode = Value::Const;
-    res.type = mdl->getType(BasicType::UINT32);
-    res.val = arr->len;
-    stack.push_back(res);
-}
-
-void MicEvaluator::incdec(int nArgs, bool inc)
-{
-    if( nArgs == 0 || nArgs > 2 )
-    {
-        err = "expecting one or two arguments";
-        return;
-    }
-    Value step;
-    int tmp = -1;
-    if( nArgs == 2 )
-    {
-        step = stack.takeLast();
-        if( !step.isConst() )
-        {
-            tmp = addIncDecTmp();
-            out->stloc_(tmp); // store second argument to temporary, remove it from stack
-        }
-    }
-    Value what = stack.takeLast();
-    stack.pop_back(); // callee
-
-    if( !what.isLvalue() || !what.ref )
-    {
-        err = "cannot write to first argument";
-        return;
-    }
-
-    if( what.type->isInteger() )
-    {
-        if( what.type->form == BasicType::UINT64 || what.type->form == BasicType::INT64 )
-        {
-            out->dup_();
-            out->ldind_(what.type->form == BasicType::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
-            if( nArgs == 2 )
-            {
-                if( step.isConst() )
-                    out->ldc_i8(step.val.toInt());
-                else
-                {
-                    out->ldloc_(tmp);
-                    out->conv_(MilEmitter::ToI8);
-                }
-            }else
-                out->ldc_i8(1);
-            if( inc )
-                out->add_();
-            else
-                out->sub_();
-            out->stind_(what.type->form == BasicType::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
-        }else
-        {
-            out->dup_();
-            out->ldind_(what.type->isUInt() ? MilEmitter::U4 : MilEmitter::I4);
-            if( nArgs == 2 )
-            {
-                if( step.isConst() )
-                    out->ldc_i4(step.val.toInt());
-                else
-                    out->ldloc_(tmp);
-            }else
-                out->ldc_i4(1);
-            if( inc )
-                out->add_();
-            else
-                out->sub_();
-            out->stind_(what.type->isUInt() ? MilEmitter::U4 : MilEmitter::I4);
-        }
-    }else if( what.type->form == Type::ConstEnum )
-    {
-        if( nArgs == 2 )
-        {
-            err = "second argument not supported for const enumerations";
-            return;
-        }
-        out->dup_();
-        out->ldind_(MilEmitter::I4);
-        out->ldc_i4(1);
-        if( inc )
-            out->add_();
-        else
-            out->sub_();
-        out->stind_(MilEmitter::I4);
-        // TODO: check overflow and halt?
-        // TODO: do we expect more enums than fit in I4?
-    }else if( what.type->form == Type::Pointer )
-    {
-        out->dup_();
-        out->ldind_(MilEmitter::IntPtr);
-        out->sizeof_(toDesig(what.type->base));
-        if( nArgs == 2 )
-        {
-            if( step.isConst() )
-                out->ldc_i4(step.val.toInt());
-            else
-                out->ldloc_(tmp);
-            out->mul_();
-        }
-        if( inc )
-            out->add_();
-        else
-            out->sub_();
-        out->stind_(MilEmitter::IntPtr);
-    }else
-        err = "invalid argument types";
-}
-
-void MicEvaluator::ASSERT(int nArgs)
-{
-    if( nArgs != 3 )
-    {
-        err = "expecting three arguments";
-        return;
-    }
-    Value file = stack.takeLast();
-    Value line = stack.takeLast();
-    Value cond = stack.takeLast();
-    stack.pop_back(); // callee
-
-    if( cond.isConst() )
-        pushMilStack(cond);
-    if( line.isConst() )
-        pushMilStack(line);
-    if( file.isConst() )
-        pushMilStack(file);
-
-    if( cond.type->form != BasicType::BOOLEAN )
-    {
-        err = "expecting boolean first argument";
-        return;
-    }
-    if( !line.type->isInteger() )
-    {
-        err = "expecting integer second argument";
-        return;
-    }
-    if( !file.type->isText() )
-    {
-        err = "expecting string thirs argument";
-        return;
-    }
-
-    out->call_("$MIC$assert",3);
-
-    Value res;
-    res.mode = Value::Val;
-    res.type = mdl->getType(BasicType::NoType);
-    stack.push_back(res);
-}
-
-void MicEvaluator::BITARITH(int op, int nArgs)
-{
-    if( nArgs != 2 )
-    {
-        err = "expecting two arguments";
-        return;
-    }
-    Value rhs = stack.takeLast();
-    Value lhs = stack.takeLast();
-    stack.pop_back(); // callee
-
-    if( !lhs.type->isUInt() || !rhs.type->isUInt() )
-    {
-        err = "both operands must be unsigned integers";
-        return;
-    }
-    if( lhs.isConst() )
-    {
-        pushMilStack(lhs);
-        if( rhs.type->form == BasicType::UINT64 )
-            adjustNumType(lhs.type, rhs.type);
-    }
-    if( rhs.isConst() )
-    {
-        pushMilStack(rhs);
-    }
-
-}
-
-void MicEvaluator::notOp(Value& v)
-{
-    if( v.type->isBoolean() )
-    {
-        if( v.isConst() )
-            v.val = !v.val.toBool();
-        else
-            out->not_();
-    }else
-        err = "unary '~' or 'NOT' not applicable to this type";
-}
-
-Value MicEvaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs)
+Value Evaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs)
 {
     Value res;
     if( lhs.type->isBoolean() && rhs.type->isBoolean() )
@@ -1177,7 +822,7 @@ Value MicEvaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs)
         {
             res.mode = lhs.mode;
             res.type = lhs.type;
-            if( op == Tok_AND || op == Tok_Amp)
+            if( op == Expression::And )
                 res.val = lhs.val.toBool() && rhs.val.toBool();
             else
                 res.val = lhs.val.toBool() || rhs.val.toBool();
@@ -1186,13 +831,13 @@ Value MicEvaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs)
             res.mode = Value::Val;
             res.type = lhs.type;
             // order is irrelevant for logic ops
-            if( op == Tok_AND || op == Tok_Amp)
+            if( op == Expression::And)
                 out->and_();
             else
                 out->or_();
         }
     }else
-        err = "operation expects boolean operands";
+        Q_ASSERT(false);
     return res;
 }
 
@@ -1204,7 +849,7 @@ static inline Type* maxType(Type* lhs, Type* rhs)
         return rhs;
 }
 
-Value MicEvaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
+Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
 {
     Value res;
     res.mode = Value::Val;
@@ -1222,23 +867,23 @@ Value MicEvaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 const qint64 b = rhs.val.toLongLong();
                 switch(op)
                 {
-                case Tok_Star:
+                case Expression::Mul:
                     res.val = a * b;
                     break;
-                case Tok_DIV:
+                case Expression::Div:
                     res.val = (qint64)(a < 0 ? (a - b + 1) / b : a / b);
                     break;
-                case Tok_MOD:
+                case Expression::Mod:
                     res.val = a < 0 ? (b - 1) + ((a - b + 1)) % b : a % b;
                     break;
-                case Tok_Plus:
+                case Expression::Add:
                     res.val = a + b;
                     break;
-                case Tok_Minus:
+                case Expression::Sub:
                     res.val = a - b;
                     break;
                 default:
-                    err = "operator not supported for integer operands";
+                    Q_ASSERT(false);
                     break;
                 }
             }else
@@ -1254,23 +899,23 @@ Value MicEvaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 const quint64 b = rhs.val.toULongLong();
                 switch(op)
                 {
-                case Tok_Star:
+                case Expression::Mul:
                     res.val = (quint64)(a * b);
                     break;
-                case Tok_DIV:
+                case Expression::Div:
                     res.val = (quint64)(a / b);
                     break;
-                case Tok_MOD:
+                case Expression::Mod:
                     res.val = (quint64)(a % b);
                     break;
-                case Tok_Plus:
+                case Expression::Add:
                     res.val = (quint64)(a + b);
                     break;
-                case Tok_Minus:
+                case Expression::Sub:
                     res.val = (quint64)(a - b);
                     break;
                 default:
-                    err = "operator not supported for integer operands";
+                    Q_ASSERT(false);
                     break;
                 }
             }else
@@ -1284,20 +929,20 @@ Value MicEvaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 res.mode = Value::Const;
                 switch(op)
                 {
-                case Tok_Star:
+                case Expression::Mul:
                     res.val = lhs.val.toDouble() * rhs.val.toDouble();
                     break;
-                case Tok_Slash:
+                case Expression::Fdiv:
                     res.val = lhs.val.toDouble() / rhs.val.toDouble();
                     break;
-                case Tok_Plus:
+                case Expression::Add:
                     res.val = lhs.val.toDouble() + rhs.val.toDouble();
                     break;
-                case Tok_Minus:
+                case Expression::Sub:
                     res.val = lhs.val.toDouble() - rhs.val.toDouble();
                     break;
                 default:
-                    err = "operator not supported for real operands";
+                    Q_ASSERT(false);
                     break;
                 }
             }else
@@ -1305,7 +950,7 @@ Value MicEvaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 emitArithOp(op);
             }
         }else
-            err = "operands are not of the same type";
+            Q_ASSERT(false);
     }else if( lhs.type->isSet() && rhs.type->isSet() )
     {
         // + - * /
@@ -1314,41 +959,41 @@ Value MicEvaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
             res.mode = Value::Const;
             switch(op)
             {
-            case Tok_Star:
+            case Expression::Mul:
                 res.val = lhs.val.toUInt() & rhs.val.toUInt();
                 break;
-            case Tok_Slash:
+            case Expression::Fdiv:
                 res.val = ~(lhs.val.toUInt() & rhs.val.toUInt()) & (lhs.val.toUInt() | rhs.val.toUInt());
                 break;
-            case Tok_Plus:
+            case Expression::Add:
                 res.val = lhs.val.toUInt() | rhs.val.toUInt();
                 break;
-            case Tok_Minus:
+            case Expression::Sub:
                 res.val = lhs.val.toUInt() & ~rhs.val.toUInt();
                 break;
             default:
-                err = "operator not supported for set operands";
+                Q_ASSERT(false);
                 break;
             }
         }else
         {
             switch(op)
             {
-            case Tok_Star:
+            case Expression::Mul:
                 out->and_();
                 break;
-            case Tok_Slash:
+            case Expression::Fdiv:
                 out->call_("$MIC$SetDiv",2,1);
                 break;
-            case Tok_Plus:
+            case Expression::Add:
                 out->or_();
                 break;
-            case Tok_Minus:
+            case Expression::Sub:
                 out->not_();
                 out->and_();
                 break;
             default:
-                err = "operator not supported for set operands";
+                Q_ASSERT(false);
                 break;
             }
         }
@@ -1357,20 +1002,16 @@ Value MicEvaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
     {
         // + only
         res.type = mdl->getType(BasicType::String);
-        if( op != Tok_Plus )
-            err = "only the '+' operator can be applied to string and char literals";
-        else if( lhs.isConst() && rhs.isConst() )
-        {
-            res.val = lhs.val.toByteArray() + rhs.val.toByteArray();
-        }else
-            err = "operation is only available for string and char literals";
+        Q_ASSERT( op == Expression::Add );
+        Q_ASSERT( lhs.isConst() && rhs.isConst() );
+        res.val = lhs.val.toByteArray() + rhs.val.toByteArray();
     }else
-        err = "operands not compatible with operator";
+        Q_ASSERT(false);
 
     return res;
 }
 
-Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
+Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
 {
     Value res;
     res.mode = Value::Val;
@@ -1385,22 +1026,22 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                 res.mode = Value::Const;
                 switch(op)
                 {
-                case Tok_Geq:
+                case Expression::Geq:
                     res.val = lhs.val.toLongLong() >= rhs.val.toLongLong();
                     break;
-                case Tok_Gt:
+                case Expression::Gt:
                     res.val = lhs.val.toLongLong() > rhs.val.toLongLong();
                     break;
-                case Tok_Eq:
+                case Expression::Eq:
                     res.val = lhs.val.toLongLong() == rhs.val.toLongLong();
                     break;
-                case Tok_Leq:
+                case Expression::Leq:
                     res.val = lhs.val.toLongLong() <= rhs.val.toLongLong();
                     break;
-                case Tok_Hash:
+                case Expression::Neq:
                     res.val = lhs.val.toLongLong() != rhs.val.toLongLong();
                     break;
-                case Tok_Lt:
+                case Expression::Lt:
                     res.val = lhs.val.toLongLong() < rhs.val.toLongLong();
                     break;
                 default:
@@ -1418,22 +1059,22 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                 res.mode = Value::Const;
                 switch(op)
                 {
-                case Tok_Geq:
+                case Expression::Geq:
                     res.val = lhs.val.toULongLong() >= rhs.val.toULongLong();
                     break;
-                case Tok_Gt:
+                case Expression::Gt:
                     res.val = lhs.val.toULongLong() > rhs.val.toULongLong();
                     break;
-                case Tok_Eq:
+                case Expression::Eq:
                     res.val = lhs.val.toULongLong() == rhs.val.toULongLong();
                     break;
-                case Tok_Leq:
+                case Expression::Leq:
                     res.val = lhs.val.toULongLong() <= rhs.val.toULongLong();
                     break;
-                case Tok_Hash:
+                case Expression::Neq:
                     res.val = lhs.val.toULongLong() != rhs.val.toULongLong();
                     break;
-                case Tok_Lt:
+                case Expression::Lt:
                     res.val = lhs.val.toULongLong() < rhs.val.toULongLong();
                     break;
                 default:
@@ -1451,22 +1092,22 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                 res.mode = Value::Const;
                 switch(op)
                 {
-                case Tok_Geq:
+                case Expression::Geq:
                     res.val = lhs.val.toDouble() >= rhs.val.toDouble();
                     break;
-                case Tok_Gt:
+                case Expression::Gt:
                     res.val = lhs.val.toDouble() > rhs.val.toDouble();
                     break;
-                case Tok_Eq:
+                case Expression::Eq:
                     res.val = lhs.val.toDouble() == rhs.val.toDouble();
                     break;
-                case Tok_Leq:
+                case Expression::Leq:
                     res.val = lhs.val.toDouble() <= rhs.val.toDouble();
                     break;
-                case Tok_Hash:
+                case Expression::Neq:
                     res.val = lhs.val.toDouble() != rhs.val.toDouble();
                     break;
-                case Tok_Lt:
+                case Expression::Lt:
                     res.val = lhs.val.toDouble() < rhs.val.toDouble();
                     break;
                 default:
@@ -1478,27 +1119,27 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                 emitRelOp(op,false);
             }
         }else
-            err = "operands are not of the same type";
+            Q_ASSERT(false);
     }else if( lhs.type->isText() && rhs.type->isText() )
     {
         switch(op)
         {
-        case Tok_Geq:
+        case Expression::Geq:
             out->ldc_i4(6);
             break;
-        case Tok_Gt:
+        case Expression::Gt:
             out->ldc_i4(5);
             break;
-        case Tok_Eq:
+        case Expression::Eq:
             out->ldc_i4(1);
             break;
-        case Tok_Leq:
+        case Expression::Leq:
             out->ldc_i4(4);
             break;
-        case Tok_Hash:
+        case Expression::Neq:
             out->ldc_i4(2);
             break;
-        case Tok_Lt:
+        case Expression::Lt:
             out->ldc_i4(3);
             break;
         default:
@@ -1524,22 +1165,22 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             res.mode = Value::Const;
             switch(op)
             {
-            case Tok_Geq:
+            case Expression::Geq:
                 res.val = lhs.val.toULongLong() >= rhs.val.toULongLong();
                 break;
-            case Tok_Gt:
+            case Expression::Gt:
                 res.val = lhs.val.toULongLong() > rhs.val.toULongLong();
                 break;
-            case Tok_Eq:
+            case Expression::Eq:
                 res.val = lhs.val.toULongLong() == rhs.val.toULongLong();
                 break;
-            case Tok_Leq:
+            case Expression::Leq:
                 res.val = lhs.val.toULongLong() <= rhs.val.toULongLong();
                 break;
-            case Tok_Hash:
+            case Expression::Neq:
                 res.val = lhs.val.toULongLong() != rhs.val.toULongLong();
                 break;
-            case Tok_Lt:
+            case Expression::Lt:
                 res.val = lhs.val.toULongLong() < rhs.val.toULongLong();
                 break;
             default:
@@ -1552,29 +1193,28 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
         }
     }else if( lhs.type->form == Type::ConstEnum  && rhs.type->form == Type::ConstEnum )
     {
-        if( lhs.type != rhs.type )
-            err = "cannot compare the elements of different enumeration types";
+        Q_ASSERT( lhs.type == rhs.type );
         if( lhs.isConst() && rhs.isConst() )
         {
             res.mode = Value::Const;
             switch(op)
             {
-            case Tok_Geq:
+            case Expression::Geq:
                 res.val = lhs.val.toLongLong() >= rhs.val.toLongLong();
                 break;
-            case Tok_Gt:
+            case Expression::Gt:
                 res.val = lhs.val.toLongLong() > rhs.val.toLongLong();
                 break;
-            case Tok_Eq:
+            case Expression::Eq:
                 res.val = lhs.val.toLongLong() == rhs.val.toLongLong();
                 break;
-            case Tok_Leq:
+            case Expression::Leq:
                 res.val = lhs.val.toLongLong() <= rhs.val.toLongLong();
                 break;
-            case Tok_Hash:
+            case Expression::Neq:
                 res.val = lhs.val.toLongLong() != rhs.val.toLongLong();
                 break;
-            case Tok_Lt:
+            case Expression::Lt:
                 res.val = lhs.val.toLongLong() < rhs.val.toLongLong();
                 break;
             default:
@@ -1593,15 +1233,14 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             res.mode = Value::Const;
             switch(op)
             {
-            case Tok_Eq:
+            case Expression::Eq:
                 res.val = lhs.val.toUInt() == rhs.val.toUInt();
                 break;
-            case Tok_Hash:
+            case Expression::Neq:
                 res.val = lhs.val.toUInt() != rhs.val.toUInt();
                 break;
             default:
-                err = "operation not supported for given operands";
-                break;
+                Q_ASSERT(false);
             }
         }else
         {
@@ -1619,12 +1258,12 @@ Value MicEvaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             emitRelOp(op,true);
         }
     }else
-        err = "operands not compatible with operator";
+        Q_ASSERT(false);
 
     return res;
 }
 
-Value MicEvaluator::inOp(const Value& lhs, const Value& rhs)
+Value Evaluator::inOp(const Value& lhs, const Value& rhs)
 {
     Value res;
     res.mode = Value::Val;
@@ -1653,28 +1292,12 @@ Value MicEvaluator::inOp(const Value& lhs, const Value& rhs)
     return res;
 }
 
-void MicEvaluator::unaryMinusOp(Value& v)
+void Evaluator::unaryMinusOp(Value& v)
 {
     if( v.type->isNumber() )
     {
         if( v.type->isUInt() )
         {
-            switch(v.type->form)
-            {
-            case BasicType::UINT8:
-                v.type = mdl->getType(BasicType::INT16);
-                break;
-            case BasicType::UINT16:
-                v.type = mdl->getType(BasicType::INT32);
-                break;
-            case BasicType::UINT32:
-                v.type = mdl->getType(BasicType::INT64);
-                break;
-            case BasicType::UINT64:
-                err = "unary operator is not applicable to operands of UINT64 type";
-                return;
-            }
-
             if( v.isConst() )
                 v.val = -v.val.toLongLong();
             else
@@ -1706,35 +1329,15 @@ void MicEvaluator::unaryMinusOp(Value& v)
         else
             out->not_();
     }else
-        err = "unary '-' not applicable to this type";
+        Q_ASSERT(false);
 }
 
-void MicEvaluator::unaryPlusOp(Value& v)
+void Evaluator::unaryPlusOp(Value& v)
 {
-    if( !v.type->isNumber() )
-        err = "unary '+' not applicable to this type";
-    if( v.type->isUInt() )
-    {
-        switch(v.type->form)
-        {
-        case BasicType::UINT8:
-            v.type = mdl->getType(BasicType::INT16);
-            break;
-        case BasicType::UINT16:
-            v.type = mdl->getType(BasicType::INT32);
-            break;
-        case BasicType::UINT32:
-            v.type = mdl->getType(BasicType::INT64);
-            break;
-        case BasicType::UINT64:
-            err = "unary operator is not applicable to operands of UINT64 type";
-            break;
-        }
-    }
-    // no code is generated for this
+    // NOP
 }
 
-QByteArray MicEvaluator::toDesig(Declaration* d)
+QByteArray Evaluator::toDesig(Declaration* d)
 {
     QByteArrayList path;
     bool isImported = false;
@@ -1755,7 +1358,7 @@ QByteArray MicEvaluator::toDesig(Declaration* d)
         return path.join('$');
 }
 
-QByteArray MicEvaluator::toDesig(Type* t)
+QByteArray Evaluator::toDesig(Type* t)
 {
     if( t == 0 )
         return QByteArray();
@@ -1801,11 +1404,126 @@ QByteArray MicEvaluator::toDesig(Type* t)
     return QByteArray();
 }
 
-QByteArray MicEvaluator::dequote(const QByteArray& str)
+QByteArray Evaluator::dequote(const QByteArray& str)
 {
     if( str.startsWith('\'') && str.endsWith('\'') ||
             str.startsWith('"') && str.endsWith('"') )
         return str.mid(1,str.size()-2);
     else
         return str;
+}
+
+void Evaluator::recursiveRun(Expression* e)
+{
+    switch( e->kind )
+    {
+    case Expression::Plus:
+    case Expression::Minus:
+    case Expression::Not: // Unary
+        recursiveRun(e->lhs);
+        unaryOp(e->kind);
+        break;
+    case Expression::Eq:
+    case Expression::Neq:
+    case Expression::Lt:
+    case Expression::Leq:
+    case Expression::Gt:
+    case Expression::Geq:
+    case Expression::In: // Relation
+    case Expression::Add:
+    case Expression::Sub:
+    case Expression::Or: // AddOp
+    case Expression::Mul:
+    case Expression::Fdiv:
+    case Expression::Div:
+    case Expression::Mod:
+    case Expression::And: // MulOp
+        recursiveRun(e->lhs);
+        recursiveRun(e->rhs);
+        binaryOp(e->kind);
+        break;
+    case Expression::Select:
+        recursiveRun(e->lhs);
+        desigField(e->val.value<Declaration*>(), e->byVal);
+        break;
+    case Expression::Index:
+        recursiveRun(e->lhs);
+        recursiveRun(e->rhs);
+        desigIndex(e->byVal);
+        break;
+    case Expression::Cast:
+        recursiveRun(e->lhs);
+        castPtr(e->type);
+        break;
+    case Expression::AutoCast:
+        recursiveRun(e->lhs);
+        castNum(e->type);
+        break;
+    case Expression::Deref:
+        recursiveRun(e->lhs);
+        derefPointer();
+        // TODO: derefValue?
+        break;
+    case Expression::Addr:
+        recursiveRun(e->lhs);
+        stack.back().type = e->type; // NOP otherwise
+        break;
+    case Expression::Literal:
+        stack.push_back(Value(e->type,e->val,Value::Const));
+        break;
+    case Expression::LocalVar:
+        stack.push_back(Value(e->type,e->val,Value::LocalDecl));
+        desigVar(e->byVal);
+        break;
+    case Expression::Param:
+        stack.push_back(Value(e->type,e->val,Value::ParamDecl));
+        desigVar(e->byVal);
+        break;
+    case Expression::ModuleVar:
+        stack.push_back(Value(e->type,e->val,Value::VarDecl));
+        desigVar(e->byVal);
+        break;
+    case Expression::ProcDecl:
+        stack.push_back(Value(e->type,e->val,Value::Procedure));
+        break;
+    case Expression::Builtin:
+        stack.push_back(Value(e->type,e->val,Value::Builtin));
+        break;
+    case Expression::ConstDecl:
+        {
+            Value tmp;
+            tmp.mode = Value::Const;
+            tmp.val = e->val.value<Declaration*>()->data;
+            tmp.type = e->type;
+            stack.push_back(tmp);
+        }
+        break;
+    case Expression::Call:
+        {
+            recursiveRun(e->lhs);
+            ExpList args = e->val.value<ExpList>();
+            const DeclList formals = e->lhs->getFormals();
+            for(int i = 0; i < args.size(); i++ )
+            {
+                recursiveRun(args[i]);
+                assureTopOnMilStack();
+                if( i < formals.size() )
+                    prepareRhs(formals[i]->type);
+            }
+            call(args.size());
+        }
+        break;
+
+    case Expression::Range:
+        // TODO
+        break;
+    case Expression::Set:
+        // TODO
+        break;
+
+    case Expression::Invalid:
+    case Expression::TypeDecl:
+        Q_ASSERT(false);
+        break;
+    }
 }

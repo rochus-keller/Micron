@@ -119,14 +119,14 @@ public:
         if( i != modules.end() )
             return i.value();
 
-        //#define _GEN_OUTPUT_
+//#define _GEN_OUTPUT_
 #ifdef _GEN_OUTPUT_
         QFileInfo info(file);
         QFile out(info.dir().absoluteFilePath(info.completeBaseName()+".cod"));
         if( !out.open(QIODevice::WriteOnly) )
         {
             qCritical() << "cannot open file for writing:" << out.fileName();
-            continue;
+            return 0;
         }
         qDebug() << "**** generating" << out.fileName().mid(root.size()+1);
         //Mic::EiGen r(&out);

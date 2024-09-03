@@ -23,31 +23,16 @@ namespace Mic
 {
 class MilEmitter;
 
-class MicEvaluator
+class Evaluator
 {
 public:
-    MicEvaluator(AstModel* m, MilEmitter* out):mdl(m),out(out) {}
+    Evaluator(AstModel* m, MilEmitter* out):mdl(m),out(out) {}
 
-    // expression:
-    bool unaryOp(quint8 op); // Tok_Tilde, Tok_NOT, Tok_Plus, Tok_Minus, Tok_At
-    bool binaryOp(quint8 op); // push lhs first
+    bool evaluate(Expression*, bool assureOnMilStack = false);
 
     bool prepareRhs(Type* lhs);
     bool assign(); // move rhs (top) to lhs (top-1)
 
-    // designator:
-    bool derefPointer(); // unary op
-    bool derefValue(); // unary op
-    bool desigField(); // binary op
-    bool desigVar(); // unary op
-    bool desigIndex(); // binary op
-    bool call(int nArgs); // n-ary op, callee top on stack
-    bool cast(); // binary op
-
-    void assureTopOnMilStack(bool pop = false); // send current top const to mil stack
-    bool dup();
-
-    bool push(const Value&);
     Value pop();
     Value top();
 
@@ -61,6 +46,24 @@ public:
     static QByteArray dequote(const QByteArray& str);
 
 protected:
+    void recursiveRun(Expression*);
+
+    // expression:
+    bool unaryOp(quint8 op); // Tok_Tilde, Tok_NOT, Tok_Plus, Tok_Minus, Tok_At
+    bool binaryOp(quint8 op); // push lhs first
+    void assureTopOnMilStack(bool pop = false); // send current top const to mil stack
+
+    // designator:
+    bool derefPointer(); // unary op
+    bool desigField(Declaration* field, bool byVal); // binary op
+    bool desigIndex(bool byVal); // binary op
+    bool call(int nArgs); // n-ary op, callee top on stack
+    bool castPtr(Type* to); // unary op
+    bool castNum(Type* to); // unary op
+    bool desigVar(bool byVal); // unary op
+    bool derefValue(); // unary op
+    void assureTopIsValue();
+
     void notOp(Value&);
     Value logicOp(quint8 op, const Value& lhs, const Value& rhs);
     Value arithOp(quint8 op, const Value& lhs, const Value& rhs);
@@ -72,25 +75,14 @@ protected:
     void emitRelOp(quint8 op, bool unsig);
     void emitArithOp(quint8 op, bool unsig = false, bool i64 = false);
     void adjustNumType(Type* me, Type* other);
-    void callBuiltin(int builtin, int nArgs);
-    int addIncDecTmp();
 
-    // builtin implementations
-    void PRINT(int nArgs, bool ln);
-    void NEW(int nArgs);
-    void DISPOSE(int nArgs);
-    void INC(int nArgs);
-    void DEC(int nArgs);
-    void LEN(int nArgs);
-    void incdec(int nArgs, bool inc);
-    void ASSERT(int nArgs);
-    void BITARITH(int op, int nArgs);
 
 private:
     AstModel* mdl;
     MilEmitter* out;
     QString err;
     QList<Value> stack;
+    friend class Builtins;
 };
 }
 

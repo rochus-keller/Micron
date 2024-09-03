@@ -25,7 +25,7 @@
 
 namespace Mic {
     class MilEmitter;
-    class MicEvaluator;
+    class Evaluator;
 
     class Scanner2 {
 	public:
@@ -55,7 +55,7 @@ namespace Mic {
 		};
 		QList<Error> errors;
 	protected:
-        void number(Value& v);
+        Expression* number();
 
         typedef QPair<QByteArray,QByteArray> Quali;
         Quali qualident();
@@ -66,7 +66,7 @@ namespace Mic {
         };
         IdentDef identdef();
 		void ConstDeclaration();
-        void ConstExpression();
+        Expression* ConstExpression();
 		void TypeDeclaration();
         Type* type(bool deanonymize = true);
         Type* NamedType(Quali* = 0);
@@ -81,24 +81,23 @@ namespace Mic {
         IdentDefList IdentList();
         Type* PointerType();
         Type* enumeration();
-        typedef QList<Declaration*> DeclList;
         DeclList constEnum();
 		void VariableDeclaration();
-        void designator(bool lvalue);
-        void expression(bool lvalue = false);
+        Expression* designator(bool lvalue);
+        Expression* expression(bool lvalue = false);
         quint8 relation();
-        void SimpleExpression(bool lvalue = false);
+        Expression* SimpleExpression(bool lvalue = false);
         quint8 AddOperator();
-        void term(bool lvalue = false);
+        Expression* term(bool lvalue = false);
         quint8 MulOperator();
-        void literal();
-        void constructor();
+        Expression* literal();
+        Expression* constructor();
         enum { FirstComponent, Named, Anonymous };
         void component(Type* constrType, Value& v, quint8& state, DeclList&);
-        void factor(bool lvalue = false);
-        void variableOrFunctionCall(bool lvalue = false);
-        void set();
-		void element();
+        Expression* factor(bool lvalue = false);
+        Expression* variableOrFunctionCall(bool lvalue = false);
+        Expression* set();
+        Expression* element();
 		void statement();
         void assignmentOrProcedureCall();
 		void StatementSequence();
@@ -149,14 +148,14 @@ namespace Mic {
         Declaration* findDecl(const Token& id );
         bool assigCompat(Type* lhs, Type* rhs) const;
         bool assigCompat(Type* lhs, Declaration* rhs) const;
-        bool assigCompat(Type* lhs, const Value& rhs) const;
-        bool paramCompat(Declaration* lhs, const Value& rhs) const;
+        bool assigCompat(Type* lhs, const Expression* rhs) const;
+        bool paramCompat(Declaration* lhs, const Expression* rhs) const;
         bool matchFormals(const QList<Declaration*>& a, const QList<Declaration*>& b) const;
         bool matchResultType(Type* lhs, Type* rhs) const;
         bool sameType(Type* lhs, Type* rhs) const;
         bool equalTypes(Type* lhs, Type* rhs) const;
         void ForwardDeclaration();
-        void maybeQualident(Value& v );
+        Expression* maybeQualident();
         Declaration* resolveQualident(Quali* = 0, bool allowUnresovedLocal = false);
         void ProcAlias();
         static DeclList toList(Declaration*);
@@ -164,21 +163,24 @@ namespace Mic {
         Declaration* addDecl(const IdentDef& id, quint8 mode, bool* doublette = 0);
         void resolveDeferreds();
         static QByteArray toDesig(const Quali&);
-        void toValue(Value& v, Declaration* d );
+        Expression* toExpr(Declaration* d, const RowCol&);
         void emitType(Type*, const Quali& = Quali());
         Declaration* addHelper(Type*);
         Declaration* addTemp(Type*);
         typedef QList<QPair<Token,Value> > Args;
         void openArrayError(const Token&, Type*);
-        void prepareParam(const DeclList& formals, const Args& actuals);
+        void prepareParam(const DeclList& formals, const ExpList& actuals);
         static Type* deref(Type*);
         void resolveAndCheckType(Declaration* d);
         Type* resolveAndCheckType(Type*, bool selfRefBroken);
+        void checkArithOp(Expression*);
+        void checkUnaryOp(Expression*);
+        void checkRelOp(Expression*);
 
     private:
         AstModel* mdl;
         MilEmitter* out;
-        MicEvaluator* ev;
+        Evaluator* ev;
         Importer* imp;
 		Token cur;
 		Token la;

@@ -274,11 +274,11 @@ void AstModel::addBuiltin(const QByteArray& name, Builtin::Type t)
     Declaration* d = addDecl(Token::getSymbol(name.toUpper()));
     d->mode = Declaration::Builtin;
     d->type = types[BasicType::NoType];
-    d->level = t;
+    d->id = t;
     d = addDecl(Token::getSymbol(name.toLower()));
     d->mode = Declaration::Builtin;
     d->type = types[BasicType::NoType];
-    d->level = t;
+    d->id = t;
 }
 
 Declaration*Type::findField(const QByteArray& name) const
@@ -311,8 +311,9 @@ Type::~Type()
     // all anonymous types are resolved, therefore base is no longer owned by a type
     //if( base )
     //    delete base;
-    for( int i = 0; i < subs.size(); i++ )
-        delete subs[i];
+    if( form != ConstEnum )
+        for( int i = 0; i < subs.size(); i++ )
+            delete subs[i];
 }
 
 QVariant BasicType::getMax(BasicType::Type t)
@@ -447,4 +448,177 @@ bool Value::isCallable() const
     default:
         return false;
     }
+}
+
+bool Expression::isConst() const
+{
+    switch(kind)
+    {
+    case Addr:
+    case Deref:
+    case LocalVar:
+    case ModuleVar:
+    case Param:
+        return false;
+    case ConstDecl:
+    case Literal:
+        return true;
+    }
+
+    if( kind == Call )
+    {
+        if( lhs->kind == ProcDecl )
+        {
+            Declaration* d = lhs->val.value<Declaration*>();
+            if( !d->invar )
+                return false;
+        }else if( lhs->kind == Builtin )
+        {
+            // TODO
+        }else
+            return false;
+
+        ExpList args = val.value<ExpList>();
+
+        for( int i = 0; i < args.size(); i++ )
+            if( !args[i]->isConst() )
+                return false;
+        return true;
+    }
+
+    if( lhs && !lhs->isConst() )
+        return false;
+    if( rhs && !rhs->isConst() )
+        return false;
+    return true;
+}
+
+bool Expression::isLiteral() const
+{
+    return kind == Literal || kind == ConstDecl;
+}
+
+QVariant Expression::getLiteralValue() const
+{
+    if( kind == Literal )
+        return val;
+    else if( kind == ConstDecl )
+        return val.value<Declaration*>()->data;
+    else
+        return QVariant();
+}
+
+DeclList Expression::getFormals() const
+{
+    if( kind == ProcDecl )
+        return val.value<Declaration*>()->getParams();
+    else if( type->form == Type::Proc )
+        return type->subs;
+    else
+        return DeclList();
+}
+
+bool Expression::isLvalue() const
+{
+    // no, we need this function as a barrier for byVal propagation
+    //if( byVal )
+    //    return false;
+    return kind == LocalVar || kind == Param || kind == ModuleVar ||
+            kind == Select || kind == Index || kind == Deref;
+}
+
+void Expression::setByVal()
+{
+    // go back the desig leaving a ref to type on the stack and mark it to leave a value instead
+    Expression* cur = this;
+    while( cur && !cur->isLvalue() )
+        cur = cur->lhs;
+    if( cur )
+        cur->byVal = true;
+}
+
+Expression*Expression::createFromToken(quint16 tt, const RowCol& rc)
+{
+    Kind k = Invalid;
+    if( tt == Tok_Eq ) {
+        k = Eq;
+    } else if( tt == Tok_Hash ) {
+        k = Neq;
+    } else if( tt == Tok_Lt ) {
+        k = Lt;
+    } else if( tt == Tok_Leq ) {
+        k = Leq;
+    } else if( tt == Tok_Gt ) {
+        k = Gt;
+    } else if( tt == Tok_Geq ) {
+        k = Geq;
+    } else if( tt == Tok_IN ) {
+        k = In;
+    }	else if( tt == Tok_Plus ) {
+        k = Add;
+    } else if( tt == Tok_Minus ) {
+        k = Sub;
+    } else if( tt == Tok_OR ) {
+        k = Or;
+    } else if( tt == Tok_Star ) {
+        k = Mul;
+    } else if( tt == Tok_Slash ) {
+        k = Fdiv;
+    } else if( tt == Tok_DIV ) {
+        k = Div;
+    } else if( tt == Tok_MOD ) {
+        k = Mod;
+    } else if( tt == Tok_Amp ) {
+        k = And;
+    } else if( tt == Tok_AND ) {
+        k = And;
+    }
+    return create(k,rc);
+}
+
+struct Expression::Arena {
+    enum { len = 100 };
+    Expression arena[len];
+    Arena* next;
+    Arena():next(0){}
+    ~Arena() { if( next ) delete next; }
+};
+
+Expression::Arena* Expression::arena = 0;
+quint32 Expression::used = 0;
+
+Expression* Expression::create(Expression::Kind k, const RowCol& rc)
+{
+    Arena** cur = &arena;
+
+    quint32 aidx = used;
+    Expression* res = 0;
+    while( true )
+    {
+        if( *cur == 0 )
+            *cur = new Arena();
+        if( aidx < Arena::len )
+        {
+            res = &(*cur)->arena[aidx];
+            break;
+        }
+        aidx -= Arena::len;
+        cur = &(*cur)->next;
+    }
+    used++;
+    // use this instead of placement new because already initialized and destructor not called otherwise
+    *res = Expression(k,rc);
+    return res;
+}
+
+void Expression::deleteAllExpressions()
+{
+    used = 0;
+}
+
+void Expression::killArena()
+{
+    if( arena )
+        delete arena;
+    arena = 0;
 }
