@@ -64,6 +64,22 @@ static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* m
     *ret = args[0]->type;
 }
 
+static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl)
+{
+    expectingNArgs(args,2);
+    if( !args[0]->type->isUInt() )
+        throw QString("expecing unsigned first argument");
+    if( !args[1]->type->isUInt() )
+        throw QString("expecing unsigned second argument");
+
+    if( args[0]->type->form < BasicType::UINT32 )
+        args[0] = createAutoCast(args[0], mdl->getType(BasicType::UINT32) );
+    if( args[1]->type->form < BasicType::UINT32 )
+        args[1] = createAutoCast(args[1], mdl->getType(BasicType::UINT32) );
+
+    *ret = args[0]->type;
+}
+
 QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl)
 {
     Q_ASSERT(ret);
@@ -75,73 +91,105 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     {
     switch(builtin)
     {
+    // functions:
     case Builtin::ABS:
+        expectingNArgs(args,1);
+        if( !args.first()->type->isNumber() )
+            throw QString("expecting numeric argument");
+        *ret = args.first()->type;
         break;
     case Builtin::CAP:
+        expectingNArgs(args,1);
         break;
     case Builtin::BITAND:
         checkBitArith(builtin, args, ret, mdl);
         break;
     case Builtin::BITASR:
-        expectingNArgs(args,2);
+        checkBitShift(builtin, args, ret, mdl);
         break;
     case Builtin::BITNOT:
         expectingNArgs(args,1);
+        if( !args.first()->type->isUInt() )
+            throw QString("expecting unsigned integer");
+        if( args.first()->type->form < BasicType::UINT32 )
+            args[0] = createAutoCast(args[0], mdl->getType(BasicType::UINT32) );
+        *ret = args[0]->type;
         break;
     case Builtin::BITOR:
         checkBitArith(builtin, args, ret, mdl);
         break;
     case Builtin::BITS:
+        expectingNArgs(args,1);
         break;
     case Builtin::BITSHL:
-        expectingNArgs(args,2);
+        checkBitShift(builtin, args, ret, mdl);
         break;
     case Builtin::BITSHR:
-        expectingNArgs(args,2);
+        checkBitShift(builtin, args, ret, mdl);
         break;
     case Builtin::BITXOR:
         checkBitArith(builtin, args, ret, mdl);
         break;
     case Builtin::CAST:
+        expectingNArgs(args,2);
         break;
     case Builtin::CHR:
+        expectingNArgs(args,1);
         break;
     case Builtin::DEFAULT:
-        break;
+        expectingNArgs(args,1);
+       break;
     case Builtin::FLOOR:
+        expectingNArgs(args,1);
         break;
     case Builtin::FLT:
+        expectingNArgs(args,1);
         break;
     case Builtin::GETENV:
+        expectingNArgs(args,2);
         break;
     case Builtin::LEN:
         expectingNArgs(args,1);
         *ret = mdl->getType(BasicType::UINT32);
         break;
     case Builtin::LONG:
+        expectingNArgs(args,1);
         break;
     case Builtin::MAX:
+        expectingNMArgs(args,1,2);
         break;
     case Builtin::MIN:
+        expectingNMArgs(args,1,2);
         break;
     case Builtin::ODD:
+        expectingNArgs(args,1);
         break;
     case Builtin::ORD:
+        expectingNArgs(args,1);
         break;
     case Builtin::SHORT:
+        expectingNArgs(args,1);
         break;
     case Builtin::SIGNED:
+        expectingNArgs(args,1);
         break;
     case Builtin::SIZE:
+        expectingNArgs(args,1);
         break;
     case Builtin::STRLEN:
+        expectingNArgs(args,1);
         break;
     case Builtin::UNSIGNED:
+        expectingNArgs(args,1);
         break;
     case Builtin::VARARG:
+        expectingNMArgs(args,2,3);
         break;
     case Builtin::VARARGS:
+        expectingNArgs(args,0);
         break;
+
+    // procedures:
     case Builtin::ASSERT:
         expectingNArgs(args,1);
         break;
@@ -152,13 +200,16 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,1);
         break;
     case Builtin::EXCL:
+        expectingNArgs(args,2);
         break;
     case Builtin::HALT:
+        expectingNArgs(args,1);
         break;
     case Builtin::INC:
         expectingNMArgs(args,1,2);
         break;
     case Builtin::INCL:
+        expectingNArgs(args,2);
         break;
     case Builtin::NEW:
         expectingNMArgs(args,1,2);
@@ -166,12 +217,16 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::PCALL:
         break;
     case Builtin::PRINT:
+        expectingNArgs(args,1);
         break;
     case Builtin::PRINTLN:
-        break;
+        expectingNArgs(args,1);
+       break;
     case Builtin::RAISE:
+        expectingNArgs(args,1);
         break;
     case Builtin::SETENV:
+        expectingNArgs(args,2);
         break;
     }
     }catch( const QString& err )
@@ -189,6 +244,9 @@ bool Builtins::requiresLvalue(quint8 builtin, quint8 arg)
     case Builtin::NEW:
     case Builtin::INC:
     case Builtin::DEC:
+    case Builtin::EXCL:
+    case Builtin::INCL:
+    case Builtin::PCALL:
         if( arg == 0 )
             return true;
         break;

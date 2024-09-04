@@ -44,6 +44,7 @@ void InMemRenderer::beginModule(const QByteArray& moduleName, const QString& sou
 {
     loader->modules.append(MilModule());
     module = &loader->modules.back();
+    module->name = moduleName;
 }
 
 void InMemRenderer::endModule()
@@ -124,4 +125,66 @@ void InMemRenderer::addField(const QByteArray& fieldName, const QByteArray& type
     f.type = typeRef;
     f.isPublic = isPublic;
     type->fields.append(f);
+}
+
+static void render_(const MilType* t, MilRenderer* r)
+{
+    switch( t->kind )
+    {
+    case MilEmitter::Struct:
+    case MilEmitter::Union:
+    case MilEmitter::ProcType:
+        r->beginType(t->name,t->isPublic,t->kind);
+        foreach( const MilVariable& v, t->fields )
+            r->addField(v.name,v.type,v.isPublic);
+        r->endType();
+        break;
+    case MilEmitter::Alias:
+    case MilEmitter::Pointer:
+    case MilEmitter::Array:
+        r->addType(t->name,t->isPublic,t->base,t->kind,t->len);
+        break;
+    }
+}
+
+static void render_(const MilVariable* v, MilRenderer* r)
+{
+    r->addVariable(v->type,v->name, v->isPublic);
+}
+
+static void render_(const MilProcedure* p, MilRenderer* r)
+{
+    r->addProcedure(*p);
+}
+
+static void render_(const MilImport* i, MilRenderer* r)
+{
+    r->addImport(i->path,i->name);
+}
+
+bool MilModule::render(MilRenderer* r) const
+{
+    Q_ASSERT(r);
+    MilEmitter e(r);
+
+    r->beginModule(name,"", Mic::MilMetaParams());
+    foreach( const Order& i, order )
+    {
+        switch(i.first)
+        {
+        case Type:
+            render_(&types[i.second],r);
+            break;
+        case Variable:
+            render_(&vars[i.second],r);
+            break;
+        case Proc:
+            render_(&procs[i.second],r);
+            break;
+        case Import:
+            render_(&imports[i.second],r);
+            break;
+        }
+    }
+    r->endModule();
 }

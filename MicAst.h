@@ -28,8 +28,9 @@ namespace Mic
     struct BasicType
     {
         enum Type {
-               Undefined, NoType,
-               Nil, Any, String,
+               Undefined,
+               NoType, Any,
+               Nil, String,
                BOOLEAN,
                CHAR,
                UINT8, UINT16, UINT32, UINT64,
@@ -78,7 +79,7 @@ namespace Mic
         bool isInteger() const { return form >= BasicType::UINT8 && form <= BasicType::INT64; }
         bool isSet() const { return form == BasicType::SET; }
         bool isBoolean() const { return form == BasicType::BOOLEAN; }
-        bool isSimple() const { return form >= BasicType::String && form < BasicType::Max; }
+        bool isSimple() const { return form >= BasicType::Nil && form < BasicType::Max; }
         bool isText() const { return form == BasicType::String || form == BasicType::CHAR ||
                     ( form == Array && base && base->form == BasicType::CHAR ) ||
                     ( form == Pointer && base && base->form == Array && base->base->form == BasicType::CHAR ); }

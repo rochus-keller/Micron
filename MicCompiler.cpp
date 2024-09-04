@@ -119,7 +119,7 @@ public:
         if( i != modules.end() )
             return i.value();
 
-//#define _GEN_OUTPUT_
+#define _GEN_OUTPUT_
 #ifdef _GEN_OUTPUT_
         QFileInfo info(file);
         QFile out(info.dir().absoluteFilePath(info.completeBaseName()+".cod"));
@@ -173,6 +173,15 @@ static void compile(const QStringList& files)
         if( module )
             ok++;
     }
+    foreach( const Mic::MilModule& m, mgr.loader.getModules() )
+    {
+        QFile out;
+        out.open(stdout, QIODevice::WriteOnly);
+        Mic::IlAsmRenderer r(&out);
+        m.render(&r);
+    }
+
+    Mic::Expression::killArena();
     Mic::AstModel::cleanupGlobals();
     qDebug() << "#### finished with" << ok << "files ok of total" << files.size() << "files" << "in" << timer.elapsed() << " [ms]";
 }

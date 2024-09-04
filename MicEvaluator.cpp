@@ -1506,9 +1506,10 @@ void Evaluator::recursiveRun(Expression* e)
             for(int i = 0; i < args.size(); i++ )
             {
                 recursiveRun(args[i]);
-                assureTopOnMilStack();
                 if( i < formals.size() )
                     prepareRhs(formals[i]->type);
+                else
+                    assureTopOnMilStack();
             }
             call(args.size());
         }

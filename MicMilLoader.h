@@ -55,11 +55,14 @@ struct MilModule
 
     enum What { Type, Variable, Proc, Import };
     QHash<QByteArray,QPair<What,quint32> >  symbols;
-    QList<QPair<What,quint32> > order;
+    typedef QPair<What,quint32> Order;
+    QList<Order> order;
     QList<MilType> types;
     QList<MilProcedure> procs;
     QList<MilImport> imports;
     QList<MilVariable> vars;
+
+    bool render(MilRenderer*) const;
 };
 
 class MilLoader
@@ -68,6 +71,7 @@ public:
     MilLoader();
 
     const MilModule* getModule(const QByteArray& name) const;
+    const QList<MilModule>& getModules() const { return modules; }
 private:
     friend class InMemRenderer;
     QList<MilModule> modules;
