@@ -101,9 +101,10 @@ public:
     QHash<QByteArray,QString> moduleNameToPath;
     Modules modules;
 
-    Mic::Declaration* loadModule( const QByteArrayList& path )
+    Mic::Declaration* loadModule( const Mic::Import& imp )
     {
-        const QByteArray name = path.join('.');
+        // TODO: load and instantiate generic modules
+        const QByteArray name = imp.path.join('.');
         const QString file = moduleNameToPath.value(name);
         if( file.isEmpty() )
         {
@@ -119,7 +120,7 @@ public:
         if( i != modules.end() )
             return i.value();
 
-#define _GEN_OUTPUT_
+//#define _GEN_OUTPUT_
 #ifdef _GEN_OUTPUT_
         QFileInfo info(file);
         QFile out(info.dir().absoluteFilePath(info.completeBaseName()+".cod"));
@@ -179,6 +180,7 @@ static void compile(const QStringList& files)
         out.open(stdout, QIODevice::WriteOnly);
         Mic::IlAsmRenderer r(&out);
         m.render(&r);
+        out.putChar('\n');
     }
 
     Mic::Expression::killArena();

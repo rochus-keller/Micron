@@ -69,19 +69,20 @@ namespace Mic
 
     struct MilMetaParam {
         QByteArray name;
-        Qualident type;
+        QByteArray type; // isConst if type is empty
     };
     typedef QList<MilMetaParam> MilMetaParams;
 
     class MilRenderer
     {
     public:
-        virtual void beginModule( const QByteArray& moduleName, const QString& sourceFile, const MilMetaParams& ) {}
+        virtual void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& ) {}
         virtual void endModule() {}
 
         virtual void addImport( const QByteArray& path, const QByteArray& name ) {}
 
         virtual void addVariable( const QByteArray& typeRef, QByteArray name,  bool isPublic ) {}
+        virtual void addConst(const QByteArray& typeRef, const QByteArray& name, const QVariant& val ) {}
         virtual void addProcedure(const MilProcedure& method ) {}
 
         virtual void beginType(const QByteArray& name, bool isPublic, quint8 typeKind) {}
@@ -99,8 +100,6 @@ namespace Mic
     public:
         MilEmitter(MilRenderer*);
 
-        // TODO: we have to mark symbols as public or private, otherwise we cannot derive the contents of the sym file
-
         void beginModule( const QByteArray& moduleName, const QString& sourceFile, const MilMetaParams& = MilMetaParams() );
         void endModule();
 
@@ -108,10 +107,12 @@ namespace Mic
 
         void addVariable( const QByteArray& typeRef, QByteArray name, bool isPublic = true );
 
+        void addConst(const QByteArray& typeRef, const QByteArray& name, const QVariant& val ); // always public
+
         void beginProc(const QByteArray& procName, bool isPublic = true, quint8 kind = MilProcedure::Normal );
         void endProc();
 
-        enum TypeKind { Invalid, Struct, Union, ProcType, Alias, Pointer, Array, MaxType };
+        enum TypeKind { Invalid, Struct, Union, ProcType, Alias, Pointer, Array, Generic, MaxType };
         void beginType(const QByteArray& name, bool isPublic = true, quint8 typeKind = Struct );
             // use for Struct, Union, ProcType
             // supports addField, addArgument, setReturnType, setVararg depending on typeKind
@@ -217,12 +218,13 @@ namespace Mic
     public:
         IlAsmRenderer(QIODevice*);
 
-        virtual void beginModule(const QByteArray& moduleName,const QString& sourceFile, const MilMetaParams& mp );
+        virtual void beginModule(const QByteArray& moduleName,const QString& sourceFile, const QByteArrayList& mp );
         virtual void endModule();
 
         virtual void addImport( const QByteArray& path, const QByteArray& name );
 
         virtual void addVariable( const QByteArray& typeRef, QByteArray name,  bool isPublic );
+        virtual void addConst(const QByteArray& typeRef, const QByteArray& name, const QVariant& val );
         virtual void addProcedure(const MilProcedure& method );
 
         virtual void beginType(const QByteArray& className, bool isPublic, quint8 classKind);

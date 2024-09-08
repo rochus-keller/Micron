@@ -62,7 +62,7 @@ namespace Mic
     class Type
     {
     public:
-        enum Form { Pointer = BasicType::Max, Proc, Array, Record, ConstEnum, NameRef };
+        enum Form { Pointer = BasicType::Max, Proc, Array, Record, ConstEnum, NameRef, GenericType };
         quint8 form;
         bool deferred;
         bool anonymous;
@@ -182,7 +182,7 @@ namespace Mic
     typedef QList<Expression*> ExpList;
 
     struct Value {
-        enum Mode { None, Val, Const, Builtin, Procedure, VarDecl, LocalDecl, ParamDecl };
+        enum Mode { None, Val, Const, Builtin, Procedure, VarDecl, LocalDecl, ParamDecl, TypeDecl };
         quint8 mode;
         quint8 visi;
         bool ref; // the value is a reference to the type

@@ -35,7 +35,7 @@ AstModel::AstModel():helper(0),helperId(0)
         types[BasicType::NoType] = newType(BasicType::NoType,1);
         types[BasicType::String] = newType(BasicType::String,1);
         types[BasicType::Nil] = newType(BasicType::Nil,1);
-        types[BasicType::Any] = newType(BasicType::Any,1);
+        types[BasicType::Any] = addType("ANY", BasicType::Any,1);
 
         types[BasicType::BOOLEAN] = addType("BOOLEAN", BasicType::BOOLEAN, 1 );
         types[BasicType::CHAR] = addType("CHAR", BasicType::CHAR, 1 );

@@ -37,7 +37,7 @@ namespace Mic {
 
     class Importer {
     public:
-        virtual Declaration* loadModule( const QByteArrayList& path ) = 0;
+        virtual Declaration* loadModule( const Import& imp ) = 0;
     };
 
     class Parser2 {
@@ -131,7 +131,7 @@ namespace Mic {
 
         struct MetaParam {
             QByteArray name;
-            Quali type;
+            QByteArray type; // isConst, if type is empty
         };
         typedef QList<MetaParam> MetaParamList;
         static bool isUnique(const MetaParamList&, const MetaParam&);
@@ -169,8 +169,8 @@ namespace Mic {
         Declaration* addTemp(Type*);
         typedef QList<QPair<Token,Value> > Args;
         void openArrayError(const Token&, Type*);
+        void invalidTypeError(const Token&, Type*);
         void prepareParam(const DeclList& formals, const ExpList& actuals);
-        static Type* deref(Type*);
         void resolveAndCheckType(Declaration* d);
         Type* resolveAndCheckType(Type*, bool selfRefBroken);
         void checkArithOp(Expression*);

@@ -19,6 +19,7 @@
 #include "MicBuiltins.h"
 #include "MicToken.h"
 #include <bitset>
+#include <QtDebug>
 using namespace Mic;
 
 bool Evaluator::evaluate(Expression* e, bool assureOnMilStack)
@@ -148,6 +149,12 @@ bool Evaluator::prepareRhs(Type* lhs)
 
     const Value& rhs = stack.back();
 
+    if( rhs.mode == Value::TypeDecl )
+    {
+        err = "a type declaration cannot be used as a value";
+        return false;
+    }
+
     // make sure also a string literal is put on the stack by value
     if( lhs && lhs->form == Type::Array && lhs->base->form == BasicType::CHAR &&
             rhs.type->form == BasicType::String )
@@ -175,7 +182,8 @@ bool Evaluator::assign()
         return false;
     }
 
-    prepareRhs( stack[stack.size()-2].type );
+    if( !prepareRhs( stack[stack.size()-2].type ) )
+        return false;
 
     Value rhs = stack.takeLast();
     Value lhs = stack.takeLast();
@@ -235,6 +243,7 @@ bool Evaluator::assign()
         break;
     case Type::Record:
     case Type::Array:
+    case Type::GenericType:
         out->stobj_(toDesig(lhs.type));
         break;
     default:
@@ -320,10 +329,8 @@ bool Evaluator::derefValue()
         out->ldind_(MilEmitter::IntPtr);
         break;
     case Type::Record:
-        out->ldobj_(toDesig(v.type));
-        break;
     case Type::Array:
-        // error was already reported: Q_ASSERT( v.type->len );
+    case Type::GenericType:
         out->ldobj_(toDesig(v.type));
         break;
     default:
@@ -469,7 +476,7 @@ bool Evaluator::call(int nArgs)
         return false;
     }
 
-    const Value& callee = stack[stack.size()-nArgs-1];
+    const Value callee = stack.takeLast();
     Type* ret = 0;
     switch( callee.mode )
     {
@@ -506,7 +513,6 @@ bool Evaluator::call(int nArgs)
 
     for( int i = 0; i < nArgs; i++ )
         stack.pop_back();
-    stack.pop_back(); // callee
 
     Value tmp;
     tmp.mode = Value::Val;
@@ -1498,9 +1504,11 @@ void Evaluator::recursiveRun(Expression* e)
             stack.push_back(tmp);
         }
         break;
+    case Expression::TypeDecl:
+        stack.push_back(Value(e->type,e->val,Value::TypeDecl)); // for import meta actuals or cast(type,v)
+        break;
     case Expression::Call:
         {
-            recursiveRun(e->lhs);
             ExpList args = e->val.value<ExpList>();
             const DeclList formals = e->lhs->getFormals();
             for(int i = 0; i < args.size(); i++ )
@@ -1509,8 +1517,9 @@ void Evaluator::recursiveRun(Expression* e)
                 if( i < formals.size() )
                     prepareRhs(formals[i]->type);
                 else
-                    assureTopOnMilStack();
+                    assureTopOnMilStack(); // effects builtin args and variable args
             }
+            recursiveRun(e->lhs);
             call(args.size());
         }
         break;
@@ -1523,7 +1532,6 @@ void Evaluator::recursiveRun(Expression* e)
         break;
 
     case Expression::Invalid:
-    case Expression::TypeDecl:
         Q_ASSERT(false);
         break;
     }

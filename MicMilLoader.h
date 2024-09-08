@@ -53,6 +53,9 @@ struct MilModule
 {
     QByteArray name;
 
+    QByteArrayList metaParams; // just names, pointing to const or type decls
+    // TODO: optional metaActuals
+
     enum What { Type, Variable, Proc, Import };
     QHash<QByteArray,QPair<What,quint32> >  symbols;
     typedef QPair<What,quint32> Order;
@@ -82,7 +85,7 @@ class InMemRenderer : public Mic::MilRenderer
 public:
     InMemRenderer(MilLoader*);
 
-    void beginModule( const QByteArray& moduleName, const QString& sourceFile, const Mic::MilMetaParams& );
+    void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& );
     void endModule();
 
     void addImport( const QByteArray& path, const QByteArray& name );

@@ -44,7 +44,8 @@ protected:
     void LEN(int nArgs);
     void incdec(int nArgs, bool inc);
     void ASSERT(int nArgs);
-    void BITARITH(int op, int nArgs);
+    void bitarith(int op, int nArgs);
+    void bitnot(int nArgs);
 
 private:
     Evaluator* ev;

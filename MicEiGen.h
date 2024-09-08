@@ -27,7 +27,7 @@ namespace Mic
         EiGen(QIODevice* out);
         ~EiGen();
 
-        void beginModule( const QByteArray& moduleName, const QString& sourceFile, const MilMetaParams& );
+        void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& );
         void endModule();
 
         void addImport( const QByteArray& path, const QByteArray& name );

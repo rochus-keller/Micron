@@ -744,7 +744,10 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs) const
 
 bool Parser2::assigCompat(Type* lhs, const Expression* rhs) const
 {
-    if( lhs == 0 )
+    if( lhs == 0 || rhs == 0 )
+        return false;
+
+    if( rhs->kind == Expression::TypeDecl )
         return false;
 
     // Tv is a signed integer and e is an unsigned integer constant, and Tv includes the
@@ -775,6 +778,9 @@ bool Parser2::paramCompat(Declaration* lhs, const Expression* rhs) const
             lhs->type->base->form == Type::Array && lhs->type->base->base->form == BasicType::CHAR &&
             lhs->type->base->len == 0 && rhs->type->form == BasicType::String )
         return true;
+
+    if( rhs->kind == Expression::TypeDecl )
+        return false;
 
     // Tf and Ta are equal types, or Ta is assignment compatible with Tf
     return equalTypes(lhs->type,rhs->type) || assigCompat(lhs->type,rhs);
@@ -1058,7 +1064,7 @@ Type* Parser2::type(bool deanonymize) {
         res = enumeration();
 	} else
 		invalid("type");
-    if( isNewType && deanonymize )
+    if( res->form != BasicType::Undefined && isNewType && deanonymize )
         addHelper(res);
     return res;
 }
@@ -1125,6 +1131,7 @@ Type* Parser2::ArrayType() {
         error(tok,"VLA not yet supported"); // TODO
 
     openArrayError(tok2,etype);
+    invalidTypeError(tok2,etype);
     Type* arr = new Type();
     arr->form = Type::Array;
     arr->len = len;
@@ -1207,6 +1214,7 @@ void Parser2::VariantPart() {
         const Token tok = la;
         Type* t = type();
         openArrayError(tok,t);
+        invalidTypeError(tok,t);
         Declaration* d = addDecl(id,Declaration::Variant);
         d->inline_ = isInl;
         d->type = t;
@@ -1233,6 +1241,7 @@ void Parser2::FieldList() {
         const Token tok = la;
         Type* t = type();
         openArrayError(tok,t);
+        invalidTypeError(tok,t);
         for(int i = 0; i < l.size(); i++ )
         {
             Declaration* d = addDecl(l[i],Declaration::Field);
@@ -1245,6 +1254,7 @@ void Parser2::FieldList() {
         const Token tok = la;
         Type* t = type();
         openArrayError(tok,t);
+        invalidTypeError(tok,t);
         Declaration* d = addDecl(id,Declaration::Field);
         d->inline_ = true;
         d->type = t;
@@ -1359,6 +1369,7 @@ void Parser2::VariableDeclaration() {
     if( t == 0 )
         return;
     openArrayError(tok,t);
+    invalidTypeError(tok,t);
     Declaration* outer = mdl->getTopScope();
     foreach( const IdentDef& id, ids )
     {
@@ -1504,6 +1515,12 @@ void Parser2::openArrayError(const Token& tok, Type* t)
         error(tok,"open array cannot be used here");
 }
 
+void Parser2::invalidTypeError(const Token& tok, Type* t)
+{
+    if( t && t->form == BasicType::Any )
+        error(tok,"this type cannot be used here");
+}
+
 void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
 {
     if( actuals.size() > formals.size() )
@@ -1514,16 +1531,6 @@ void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
         // TEST paramCompat(formal,actual);
         error(actual->pos.d_row, actual->pos.d_col, "actual argument not compatible with formal parameter");
     }
-}
-
-Type*Parser2::deref(Type* t)
-{
-    if( t == 0 )
-        return 0;
-    if( t->form == Type::NameRef )
-        return deref(t->base);
-    else
-        return t;
 }
 
 void Parser2::resolveAndCheckType(Declaration* d)
@@ -1619,7 +1626,7 @@ static void castUintToInt(Expression* e, Expression* other, Evaluator* ev)
 
 void Parser2::checkArithOp(Expression* e)
 {
-    if( e->lhs->type == 0 || e->rhs->type == 0 )
+    if( e->lhs == 0 || e->lhs->type == 0 || e->rhs == 0 || e->rhs->type == 0 )
         return; // already reported?
     if( e->lhs->type->isNumber() && e->rhs->type->isNumber() )
     {
@@ -1783,7 +1790,7 @@ static bool renderLvalue( Expression* proc, int arg )
     return Builtins::requiresLvalue(proc->val.toInt(), arg);
 }
 
-// designator results in an lvalue if possible
+// designator results in an lvalue if possible, unless needsLvalue is false
 Expression* Parser2::designator(bool needsLvalue) {
     // original: qualident();
 
@@ -1880,6 +1887,8 @@ Expression* Parser2::designator(bool needsLvalue) {
             const Token lpar = cur;
             Expression* proc = res;
 
+            proc->setByVal(); // we need the value of the procedure type variable, if any
+
             const DeclList formals = proc->getFormals();
             ExpList args;
             bool isTypeCast = false;
@@ -1887,6 +1896,8 @@ Expression* Parser2::designator(bool needsLvalue) {
                 // inlined ExpList
                 tok = la;
                 Expression* arg = expression(renderLvalue(proc,args.size()));
+                if( arg == 0 )
+                    return 0;
                 args.append(arg);
                 isTypeCast = arg->kind == Expression::TypeDecl;
                 if( !isTypeCast && proc->kind != Expression::Builtin )
@@ -1896,6 +1907,8 @@ Expression* Parser2::designator(bool needsLvalue) {
                         expect(Tok_Comma, false, "ExpList");
                     tok = la;
                     Expression* arg = expression(renderLvalue(proc,args.size()));
+                    if( arg == 0 )
+                        return 0;
                     args.append(arg);
                     if( !isTypeCast && proc->kind != Expression::Builtin )
                         prepareParam(formals,args);
@@ -2453,7 +2466,7 @@ void Parser2::component(Type* constrType, Value& v, quint8& state,  DeclList& dl
 }
 
 Expression* Parser2::factor(bool lvalue) {
-    Expression* res;
+    Expression* res = 0;
 	if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Lbrace )  ) {
         res = constructor();
 	} else if( FIRST_literal(la.d_type) ) {
@@ -2575,8 +2588,8 @@ void Parser2::assignmentOrProcedureCall() {
         // TODO: avoid assigning to structured return values of functions on left side
         if( !assigCompat( lhs->type, rhs ) )
             error(tok, "right side is not assignment compatible with left side");
-        else
-            ev->assign();
+        else if( !ev->assign() )
+            error(tok, ev->getErr() );
         Expression::deleteAllExpressions();
     }
     Expression::deleteAllExpressions();
@@ -3095,7 +3108,8 @@ void Parser2::ReturnStatement() {
         ev->evaluate(e); // value is pushed on stack by prepareRhs
         if( !assigCompat( mdl->getTopScope()->type, e ) )
             error(tok,"expression is not compatible with the return type");
-        ev->prepareRhs(mdl->getTopScope()->type);
+        if( !ev->prepareRhs(mdl->getTopScope()->type) )
+            error(tok, ev->getErr());
         out->ret_();
         Expression::deleteAllExpressions();
     }else if( mdl->getTopScope()->type != 0 && mdl->getTopScope()->type->form != BasicType::NoType )
@@ -3194,6 +3208,7 @@ Type* Parser2::FormalType() {
     const Token tok = la;
     Type* t = type();
     openArrayError(tok,t);
+    invalidTypeError(tok,t);
     return t;
 }
 
@@ -3329,10 +3344,10 @@ void Parser2::import() {
 
     if( imp )
     {
-        importDecl->link = imp->loadModule(i.path);
+        importDecl->link = imp->loadModule(i);
         if( importDecl->link )
+            // loadModule returns the module decl; we just need the list of module elements:
             importDecl->link = importDecl->link->link;
-        // TODO: instantiate if generic
     }
 }
 
@@ -3382,7 +3397,7 @@ Parser2::MetaParamList Parser2::MetaSection() {
         {
             MetaParam mp;
             mp.name = name.d_val;
-            mp.type = q;
+            mp.type = toDesig(q);
             res << mp;
             Declaration* d = addDecl(name, 0, Declaration::ConstDecl);
             d->type = type;
@@ -3407,7 +3422,9 @@ Parser2::MetaParamList Parser2::MetaSection() {
             mp.name = name.d_val;
             res << mp;
             Declaration* d = addDecl(name,0,Declaration::TypeDecl);
-            d->type = mdl->getType(BasicType::Undefined);
+            d->type = new Type();
+            d->type->form = Type::GenericType;
+            d->ownstype = true;
         }
     } else
         invalid("MetaSection");

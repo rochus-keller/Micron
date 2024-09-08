@@ -259,28 +259,77 @@ Builtins::Builtins(Evaluator* ev):ev(ev)
     Q_ASSERT(ev);
 }
 
-void Builtins::BITARITH(int op, int nArgs)
+void Builtins::bitarith(int op, int nArgs)
 {
+    Q_ASSERT(ev->stack.size() >= 3);
     Value rhs = ev->stack.takeLast();
     Value lhs = ev->stack.takeLast();
-    ev->stack.pop_back(); // callee
 
-    if( !lhs.type->isUInt() || !rhs.type->isUInt() )
-    {
-        ev->err = "both operands must be unsigned integers";
-        return;
-    }
-    if( lhs.isConst() )
-    {
-        ev->pushMilStack(lhs);
-        if( rhs.type->form == BasicType::UINT64 )
-            ev->adjustNumType(lhs.type, rhs.type);
-    }
-    if( rhs.isConst() )
-    {
-        ev->pushMilStack(rhs);
-    }
+    Q_ASSERT( lhs.type == rhs.type );
 
+    Value res = lhs;
+    if( lhs.isConst() && rhs.isConst() )
+    {
+        switch(op)
+        {
+        case Builtin::BITAND:
+            res.val = lhs.val.toULongLong() & rhs.val.toULongLong();
+            break;
+        case Builtin::BITOR:
+            res.val = lhs.val.toULongLong() | rhs.val.toULongLong();
+            break;
+        case Builtin::BITXOR:
+            if( lhs.type->form = BasicType::UINT32 )
+                res.val = lhs.val.toUInt() ^ rhs.val.toUInt();
+            else
+                res.val = lhs.val.toULongLong() ^ rhs.val.toULongLong();
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+    }else
+    {
+        if( lhs.isConst() )
+            ev->pushMilStack(lhs);
+        if( rhs.isConst() )
+            ev->pushMilStack(rhs);
+
+        switch(op)
+        {
+        case Builtin::BITAND:
+            ev->out->and_();
+            break;
+        case Builtin::BITOR:
+            ev->out->or_();
+            break;
+        case Builtin::BITXOR:
+            ev->out->xor_();
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+        res.mode = Value::Val;
+    }
+    ev->stack.push_back(res);
+}
+
+void Builtins::bitnot(int nArgs)
+{
+    Q_ASSERT(ev->stack.size() >= 2);
+    Value v = ev->stack.takeLast();
+
+    if( v.isConst() )
+    {
+        if( v.type->form == BasicType::UINT32 )
+            v.val = ~v.val.toUInt();
+        else
+            v.val = ~v.val.toULongLong();
+    }else
+    {
+        ev->out->not_();
+        v.mode = Value::Val;
+    }
+    ev->stack.push_back(v);
 }
 
 void Builtins::ASSERT(int nArgs)
@@ -288,7 +337,6 @@ void Builtins::ASSERT(int nArgs)
     Value file = ev->stack.takeLast();
     Value line = ev->stack.takeLast();
     Value cond = ev->stack.takeLast();
-    ev->stack.pop_back(); // callee
 
     if( cond.isConst() )
         ev->pushMilStack(cond);
@@ -340,7 +388,6 @@ void Builtins::incdec(int nArgs, bool inc)
         }
     }
     Value what = ev->stack.takeLast();
-    ev->stack.pop_back(); // callee
 
     if( !what.isLvalue() || !what.ref )
     {
@@ -440,7 +487,6 @@ void Builtins::DEC(int nArgs)
 void Builtins::LEN(int nArgs)
 {
     Value what = ev->stack.takeLast();
-    ev->stack.pop_back(); // callee
     if( !what.isConst() )
         ev->out->pop_();
     Type* arr = what.type;
@@ -461,7 +507,6 @@ void Builtins::LEN(int nArgs)
 
 void Builtins::PRINT(int nArgs, bool ln)
 {
-    ev->assureTopOnMilStack();
     if( nArgs != 1 && !(ev->stack.back().type->isSimple() || ev->stack.back().type->isText() ))
         ev->err = "expecting one argument of basic or char array type";
     else if( ev->stack.back().type->form == Type::ConstEnum )
@@ -514,7 +559,6 @@ void Builtins::NEW(int nArgs)
     if( nArgs == 2 )
         len = ev->stack.takeLast();
     Value what = ev->stack.takeLast();
-    ev->stack.pop_back(); // callee
     if( what.type->form != Type::Pointer &&
             !(what.type->base->form == Type::Record || what.type->base->form == Type::Array) )
     {
@@ -563,7 +607,6 @@ void Builtins::NEW(int nArgs)
 void Builtins::DISPOSE(int nArgs)
 {
     Value what = ev->stack.takeLast();
-    ev->stack.pop_back(); // callee
     if( what.type->form != Type::Pointer &&
             !(what.type->base->form == Type::Record || what.type->base->form == Type::Array) )
     {
@@ -615,7 +658,7 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs)
     case Builtin::BITNOT:
     case Builtin::BITOR:
     case Builtin::BITXOR:
-        BITARITH(builtin,nArgs);
+        bitarith(builtin,nArgs);
         handleStack = false;
         break;
         /* TODO
@@ -634,7 +677,6 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs)
     {
         for( int i = 0; i < nArgs; i++ )
             ev->stack.pop_back();
-        ev->stack.pop_back(); // callee
         ev->stack.push_back(ret);
     }
 }

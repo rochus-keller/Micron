@@ -40,11 +40,12 @@ InMemRenderer::InMemRenderer(MilLoader* loader):loader(loader), module(0), type(
     Q_ASSERT( loader );
 }
 
-void InMemRenderer::beginModule(const QByteArray& moduleName, const QString& sourceFile, const Mic::MilMetaParams&)
+void InMemRenderer::beginModule(const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& mp)
 {
     loader->modules.append(MilModule());
     module = &loader->modules.back();
     module->name = moduleName;
+    module->metaParams = mp;
 }
 
 void InMemRenderer::endModule()
@@ -167,7 +168,7 @@ bool MilModule::render(MilRenderer* r) const
     Q_ASSERT(r);
     MilEmitter e(r);
 
-    r->beginModule(name,"", Mic::MilMetaParams());
+    r->beginModule(name,"", metaParams);
     foreach( const Order& i, order )
     {
         switch(i.first)

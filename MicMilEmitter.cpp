@@ -33,7 +33,17 @@ void MilEmitter::beginModule(const QByteArray& moduleName, const QString& source
 {
     Q_ASSERT( !moduleName.isEmpty() );
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
-    d_out->beginModule(moduleName,sourceFile, mp);
+    QByteArrayList names;
+    foreach( const MilMetaParam& m, mp )
+        names << m.name;
+    d_out->beginModule(moduleName,sourceFile, names);
+    foreach( const MilMetaParam& m, mp )
+    {
+        if( m.type.isEmpty() )
+            d_out->addType(m.name,false,"",Generic,0);
+        else
+            d_out->addConst(m.type,m.name,QVariant());
+    }
 }
 
 void MilEmitter::endModule()
@@ -52,6 +62,12 @@ void MilEmitter::addVariable(const QByteArray& typeRef, QByteArray name, bool is
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
     d_out->addVariable(typeRef,name, isPublic);
+}
+
+void MilEmitter::addConst(const QByteArray& typeRef, const QByteArray& name, const QVariant& val)
+{
+    Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
+    d_out->addConst(typeRef, name, val);
 }
 
 void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kind)
@@ -128,7 +144,8 @@ quint32 MilEmitter::addLocal(const QByteArray& typeRef, QByteArray name)
 quint32 MilEmitter::addArgument(const QByteArray& typeRef, QByteArray name)
 {
     Q_ASSERT( !d_proc.isEmpty() || d_typeKind == ProcType );
-    Q_ASSERT( !typeRef.isEmpty() );
+    if( typeRef.isEmpty() )
+        return 0; // error reported elsewhere
     d_proc.back().d_args.append(qMakePair(typeRef,name));
     return 0;
 }
@@ -923,7 +940,7 @@ IlAsmRenderer::IlAsmRenderer(QIODevice* dev):level(0),sourceRendered(false),stat
     out.setDevice(dev);
 }
 
-void IlAsmRenderer::beginModule(const QByteArray& moduleName, const QString& sourceFile, const MilMetaParams& mp)
+void IlAsmRenderer::beginModule(const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& mp)
 {
     source = sourceFile;
     d_moduleName = moduleName;
@@ -939,11 +956,11 @@ void IlAsmRenderer::beginModule(const QByteArray& moduleName, const QString& sou
         {
             if( i != 0 )
                 out << "; ";
-            if( !mp[i].type.second.isEmpty() )
-                out << "const ";
-            out << mp[i].name;
-            if( !mp[i].type.second.isEmpty() )
-                out << ": " << mp[i].type.second;
+            //if( !mp[i].type.isEmpty() )
+            //    out << "const ";
+            out << mp[i];
+            //if( !mp[i].type.isEmpty() )
+            //    out << ": " << mp[i].type;
         }
         out << ")";
     }
@@ -1250,4 +1267,24 @@ void IlAsmRenderer::render(const MilProcedure& m)
     out << ws() << "end " << m.d_name << endl;
 
     state = old;
+}
+
+void IlAsmRenderer::addConst(const QByteArray& typeRef, const QByteArray& name, const QVariant& val)
+{
+    out << ws() << "const " << name;
+    if( !typeRef.isEmpty() )
+        out << " : " << typeRef;
+    if( !val.isNull() )
+    {
+        out << " = ";
+        if( val.canConvert<MilObject>())
+        {
+            const MilObject obj = val.value<MilObject>();
+            if( obj.data.type() != QVariant::ByteArray )
+                out << obj.typeRef;
+            renderComponents(out,obj.data);
+        }else
+            renderComponents(out, val );
+        out << endl;
+    }
 }
