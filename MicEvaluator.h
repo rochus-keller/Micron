@@ -41,8 +41,8 @@ public:
 
     const QString& getErr() const { return err; }
 
-    static QByteArray toDesig(Declaration*);
-    static QByteArray toDesig(Type*);
+    QByteArray toDesig(Declaration*);
+    QByteArray toDesig(Type*);
     static QByteArray dequote(const QByteArray& str);
 
 protected:

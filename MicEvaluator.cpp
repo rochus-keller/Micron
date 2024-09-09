@@ -243,7 +243,7 @@ bool Evaluator::assign()
         break;
     case Type::Record:
     case Type::Array:
-    case Type::GenericType:
+    case Type::Generic:
         out->stobj_(toDesig(lhs.type));
         break;
     default:
@@ -330,7 +330,7 @@ bool Evaluator::derefValue()
         break;
     case Type::Record:
     case Type::Array:
-    case Type::GenericType:
+    case Type::Generic:
         out->ldobj_(toDesig(v.type));
         break;
     default:
@@ -476,7 +476,10 @@ bool Evaluator::call(int nArgs)
         return false;
     }
 
-    const Value callee = stack.takeLast();
+    Value callee = stack.takeLast();
+    if( callee.type == 0 )
+        callee.type = mdl->getType(BasicType::NoType);
+
     Type* ret = 0;
     switch( callee.mode )
     {

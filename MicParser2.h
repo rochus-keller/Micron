@@ -45,7 +45,7 @@ namespace Mic {
         Parser2(AstModel* m, Scanner2* s, MilEmitter* out, Importer* = 0);
         ~Parser2();
 
-		void RunParser();
+        void RunParser(const MetaActualList& = MetaActualList());
         Declaration* takeModule(); // get module declaration and take ownership (otherwise deleted by parser)
 		struct Error {
 		    QString msg;
@@ -54,7 +54,9 @@ namespace Mic {
 		    Error( const QString& m, int r, int c, const QString& p):msg(m),row(r),col(c),path(p){}
 		};
 		QList<Error> errors;
-	protected:
+
+        bool assigCompat(Type* lhs, Type* rhs) const;
+    protected:
         Expression* number();
 
         typedef QPair<QByteArray,QByteArray> Quali;
@@ -129,14 +131,9 @@ namespace Mic {
 		void ImportList();
 		void import();
 
-        struct MetaParam {
-            QByteArray name;
-            QByteArray type; // isConst, if type is empty
-        };
-        typedef QList<MetaParam> MetaParamList;
-        static bool isUnique(const MetaParamList&, const MetaParam&);
+        static bool isUnique(const MetaParamList&, const Declaration*);
         MetaParamList MetaParams();
-        MetaParamList MetaSection();
+        Declaration* MetaSection(bool& isType);
 
     protected:
         void next();
@@ -146,7 +143,6 @@ namespace Mic {
         void error( const Token&, const QString& msg);
         void error( int row, int col, const QString& msg );
         Declaration* findDecl(const Token& id );
-        bool assigCompat(Type* lhs, Type* rhs) const;
         bool assigCompat(Type* lhs, Declaration* rhs) const;
         bool assigCompat(Type* lhs, const Expression* rhs) const;
         bool paramCompat(Declaration* lhs, const Expression* rhs) const;
@@ -203,6 +199,7 @@ namespace Mic {
         typedef QList<QPair<Depth,Token> > Gotos;
         Gotos gotos;
         QSet<Type*> deferDeleteNamedType;
+        MetaActualList metaActuals;
 	};
 }
 

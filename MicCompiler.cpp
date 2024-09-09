@@ -34,6 +34,7 @@
 #include <MilParser.h>
 #include <MilToken.h>
 #include <QBuffer>
+#include <QCommandLineParser>
 
 QStringList collectFiles( const QDir& dir, const QStringList& suffix )
 {
@@ -50,8 +51,6 @@ QStringList collectFiles( const QDir& dir, const QStringList& suffix )
     }
     return res;
 }
-
-static QString root;
 
 class Lex2 : public Mic::Scanner2
 {
@@ -85,6 +84,7 @@ static QByteArray getModuleName(const QString& file)
     return QByteArray();
 }
 
+#if 0
 class Manager : public Mic::Importer {
 public:
     typedef QHash<QString,Mic::Declaration*> Modules;
@@ -187,23 +187,203 @@ static void compile(const QStringList& files)
     Mic::AstModel::cleanupGlobals();
     qDebug() << "#### finished with" << ok << "files ok of total" << files.size() << "files" << "in" << timer.elapsed() << " [ms]";
 }
+#else
+
+struct ModuleSlot
+{
+    Mic::Import imp;
+    QString file;
+    Mic::Declaration* decl;
+    ModuleSlot():decl(0) {}
+    ModuleSlot( const Mic::Import& i, const QString& f, Mic::Declaration* d):imp(i),file(f),decl(d){}
+};
+
+static bool operator==(const Mic::Import& lhs, const Mic::Import& rhs)
+{
+    if( lhs.path != rhs.path )
+        return false;
+    if( lhs.metaActuals.size() != rhs.metaActuals.size() )
+        return false;
+    for( int i = 0; i < lhs.metaActuals.size(); i++ )
+    {
+        if( lhs.metaActuals[i].mode != rhs.metaActuals[i].mode )
+            return false;
+        if( lhs.metaActuals[i].type != rhs.metaActuals[i].type )
+            return false;
+        if( lhs.metaActuals[i].val != rhs.metaActuals[i].val )
+            return false;
+   }
+    return true;
+}
+
+class Manager : public Mic::Importer {
+public:
+    typedef QList<ModuleSlot> Modules;
+    Modules modules;
+    QList<QDir> searchPath;
+    QString rootPath;
+
+    Manager() {}
+    ~Manager() {
+        Modules::const_iterator i;
+        for( i = modules.begin(); i != modules.end(); ++i )
+            delete (*i).decl;
+    }
+
+    Mic::MilLoader loader;
+
+    ModuleSlot* find(const Mic::Import& imp)
+    {
+        for(int i = 0; i < modules.size(); i++ )
+        {
+            if( modules[i].imp == imp )
+                return &modules[i];
+        }
+        return 0;
+    }
+
+    Mic::Declaration* loadModule( const Mic::Import& imp )
+    {
+        return compile(imp);
+    }
+
+    QString toFile(const Mic::Import& imp)
+    {
+        const QString path = imp.path.join('/') + ".mic";
+        foreach( const QDir& dir, searchPath )
+        {
+            const QString tmp = dir.absoluteFilePath(path);
+            if( QFile::exists(tmp) )
+                return tmp;
+        }
+        if( !modules.isEmpty() )
+        {
+            // if the file is not in the search path, look in the directory of the caller assuming
+            // that the required module path is relative to the including moduled
+            QFileInfo info( modules.back().file );
+            const QString tmp = info.absoluteDir().absoluteFilePath(path);
+            if( QFile::exists(tmp) )
+                return tmp;
+        }
+        return QString();
+    }
+
+    Mic::Declaration* compile(const Mic::Import& imp)
+    {
+        ModuleSlot* ms = find(imp);
+        if( ms != 0 )
+            return ms->decl;
+
+        QString file = toFile(imp);
+        if( file.isEmpty() )
+        {
+            qCritical() <<  "cannot find source file of module" << imp.path.join('.');
+            modules.append(ModuleSlot(imp,QString(),0));
+            return 0;
+        }
+
+        // immediately add it so that circular module refs lead to an error
+        modules.append(ModuleSlot(imp,file,0));
+        ms = &modules.back();
+
+//#define _GEN_OUTPUT_
+#ifdef _GEN_OUTPUT_
+        QFileInfo info(file);
+        QFile out(info.dir().absoluteFilePath(info.completeBaseName()+".cod"));
+        if( !out.open(QIODevice::WriteOnly) )
+        {
+            qCritical() << "cannot open file for writing:" << out.fileName();
+            return 0;
+        }
+        qDebug() << "**** generating" << out.fileName().mid(root.size()+1);
+        //Mic::EiGen r(&out);
+        Mic::IlAsmRenderer r(&out);
+#else
+        Mic::InMemRenderer r(&loader);
+#endif
+        Lex2 lex;
+        lex.sourcePath = file; // to keep file name if invalid
+        lex.lex.setStream(file);
+        qDebug() << "**** parsing" << QFileInfo(file).fileName();
+        Mic::MilEmitter e(&r);
+        Mic::AstModel mdl;
+        Mic::Parser2 p(&mdl,&lex, &e, this);
+        p.RunParser(imp.metaActuals);
+        Mic::Declaration* res = 0;
+        if( !p.errors.isEmpty() )
+        {
+            foreach( const Mic::Parser2::Error& e, p.errors )
+                qCritical() << QFileInfo(e.path).fileName() << e.row << e.col << e.msg;
+        }else
+        {
+            res = p.takeModule();
+        }
+        ms->decl = res;
+        return res;
+    }
+};
+#endif
+
+static void compile(const QStringList& files, const QStringList& searchPaths)
+{
+    int ok = 0;
+    int all = 0;
+    QElapsedTimer timer;
+    timer.start();
+    foreach( const QString& file, files )
+    {
+        Manager mgr;
+        QFileInfo info(file);
+        mgr.rootPath = info.absolutePath();
+        mgr.searchPath.append(info.absoluteDir());
+        for( int i = 0; i < searchPaths.size(); i++ )
+        {
+            const QString path = searchPaths[i];
+            mgr.searchPath.append(path);
+        }
+
+        Mic::Import imp;
+        imp.path.append(info.baseName().toUtf8());
+        mgr.compile(imp);
+#if 1
+        foreach( const Mic::MilModule& m, mgr.loader.getModules() )
+        {
+            QFile out;
+            out.open(stdout, QIODevice::WriteOnly);
+            Mic::IlAsmRenderer r(&out);
+            m.render(&r);
+            out.putChar('\n');
+        }
+#endif
+        all += mgr.modules.size();
+        foreach( const ModuleSlot& m, mgr.modules )
+            ok += m.decl ? 1 : 0;
+    }
+    Mic::Expression::killArena();
+    Mic::AstModel::cleanupGlobals();
+    qDebug() << "#### finished with" << ok << "files ok of total" << all << "files" << "in" << timer.elapsed() << " [ms]";
+}
+
 
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-    if( a.arguments().size() <= 1 )
-        return -1;
+    QCommandLineParser cp;
+    cp.setApplicationDescription("Micron compiler");
+    cp.addHelpOption();
+    cp.addVersionOption();
+    cp.addPositionalArgument("main", "the main module of the application");
+    QCommandLineOption sp("I", "add a path where to look for modules", "path");
+    cp.addOption(sp);
 
-    QStringList files;
-    QFileInfo info(a.arguments()[1]);
-    if( info.isDir() )
-    {
-        files = collectFiles(info.filePath(), QStringList() << "*.mon" << "*.mic");
-        root = info.filePath();
-    }else
-        files.append(info.filePath());
-    compile(files);
+    cp.process(a);
+    const QStringList args = cp.positionalArguments();
+    if( args.isEmpty() )
+        return -1;
+    const QStringList searchPaths = cp.values(sp);
+
+    compile(QStringList() << args[0], searchPaths);
 
     return 0;
 }

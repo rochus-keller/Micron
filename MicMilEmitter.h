@@ -69,7 +69,10 @@ namespace Mic
 
     struct MilMetaParam {
         QByteArray name;
-        QByteArray type; // isConst if type is empty
+        QByteArray type;
+        bool isConst;
+        bool isGeneric;
+        MilMetaParam():isConst(false),isGeneric(false){}
     };
     typedef QList<MilMetaParam> MilMetaParams;
 

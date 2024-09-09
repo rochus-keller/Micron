@@ -62,7 +62,7 @@ namespace Mic
     class Type
     {
     public:
-        enum Form { Pointer = BasicType::Max, Proc, Array, Record, ConstEnum, NameRef, GenericType };
+        enum Form { Pointer = BasicType::Max, Proc, Array, Record, ConstEnum, NameRef, Generic };
         quint8 form;
         bool deferred;
         bool anonymous;
@@ -113,14 +113,14 @@ namespace Mic
         uint invar : 1;
         uint extern_ : 1; // extern name (if present) is in val
         uint alias : 1; // the original is in link
-        uint symbol : 1;
+        uint meta : 1;
         uint scope : 1;
         uint ownstype : 1;
         uint mode : 5;
         uint id : 16; // used for built-in code and local/param number
         QVariant data; // value for Const and Enum, path for Import, name for Extern
         Declaration():next(0),link(0),type(0),row(0),col(0),id(0),mode(0),visi(0),ownstype(false),
-            inline_(false),invar(false),extern_(false),symbol(false),scope(false),outer(0),alias(0){}
+            inline_(false),invar(false),extern_(false),meta(false),scope(false),outer(0),alias(0){}
         ~Declaration();
 
         QList<Declaration*> getParams() const;
@@ -197,10 +197,18 @@ namespace Mic
                     mode == Declaration::ParamDecl; }
         bool isCallable() const;
     };
+    typedef QList<Value> MetaActualList;
 
     struct Import {
         QByteArrayList path;
-        QList<Value> metaActuals;
+        MetaActualList metaActuals;
+    };
+
+    typedef QList<Declaration*> MetaParamList;
+
+    struct ModuleData {
+        QByteArrayList path;
+        MetaParamList metaParams;
     };
 
     class AstModel
@@ -240,5 +248,7 @@ namespace Mic
 Q_DECLARE_METATYPE(Mic::Import)
 Q_DECLARE_METATYPE(Mic::Declaration*)
 Q_DECLARE_METATYPE(Mic::ExpList)
+Q_DECLARE_METATYPE(Mic::ModuleData)
+
 
 #endif // MICAST_H

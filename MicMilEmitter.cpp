@@ -34,15 +34,24 @@ void MilEmitter::beginModule(const QByteArray& moduleName, const QString& source
     Q_ASSERT( !moduleName.isEmpty() );
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
     QByteArrayList names;
+    bool fullyInstantiated = true;
     foreach( const MilMetaParam& m, mp )
+    {
+        if( m.isGeneric )
+            fullyInstantiated = false;
         names << m.name;
+    }
+    if( fullyInstantiated )
+        names.clear();
     d_out->beginModule(moduleName,sourceFile, names);
     foreach( const MilMetaParam& m, mp )
     {
-        if( m.type.isEmpty() )
-            d_out->addType(m.name,false,"",Generic,0);
+        if( !m.isGeneric )
+            continue; // otherwise the client directly calls addType/beginType or addConst
+        if( m.isConst )
+            d_out->addConst("",m.name,QVariant());
         else
-            d_out->addConst(m.type,m.name,QVariant());
+            d_out->addType(m.name,false,"",Generic,0);
     }
 }
 

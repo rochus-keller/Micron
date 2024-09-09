@@ -602,9 +602,10 @@ Parser2::~Parser2()
     delete ev;
 }
 
-void Parser2::RunParser() {
+void Parser2::RunParser(const MetaActualList& ma) {
 	errors.clear();
 	next();
+    metaActuals = ma;
     module();
 }
 
@@ -1015,6 +1016,8 @@ void Parser2::ConstDeclaration() {
 Expression* Parser2::ConstExpression() {
     const Token tok = la;
     Expression* res = expression();
+    if( res == 0 )
+        return 0;
     if( !res->isConst() )
         error(tok, QString("expression is not constant"));
     return res;
@@ -1035,7 +1038,7 @@ void Parser2::TypeDeclaration() {
     }else
         t = type(false);
     // No, it is allowed here: openArrayError(tok,t);
-    if( t->decl == 0 )
+    if( t && t->decl == 0 )
     {
         t->decl = d;
         d->ownstype = true;
@@ -1064,7 +1067,7 @@ Type* Parser2::type(bool deanonymize) {
         res = enumeration();
 	} else
 		invalid("type");
-    if( res->form != BasicType::Undefined && isNewType && deanonymize )
+    if( res && res->form != BasicType::Undefined && isNewType && deanonymize )
         addHelper(res);
     return res;
 }
@@ -1396,7 +1399,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
         break;
     case Declaration::Procedure:
         k = Expression::ProcDecl;
-        val = QVariant::fromValue(d);
+        val = QVariant::fromValue(d->alias ? d->link : d);
         break;
     case Declaration::ConstDecl:
         k = Expression::ConstDecl;
@@ -1404,7 +1407,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
         break;
     case Declaration::VarDecl:
         k = Expression::ModuleVar;
-        val = Evaluator::toDesig(d);
+        val = ev->toDesig(d);
         break;
     case Declaration::LocalDecl:
     case Declaration::ParamDecl:
@@ -1415,7 +1418,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
         break;
     case Declaration::TypeDecl:
         k = Expression::TypeDecl;
-        val = Evaluator::toDesig(d);
+        val = ev->toDesig(d);
         break;
     default:
         error(rc.d_row, rc.d_col, "invalid designator");
@@ -1430,10 +1433,12 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
 
 void Parser2::emitType(Type* t, const Quali& q)
 {
+    if( t == 0 || t->decl == 0 )
+        return;
     Q_ASSERT( t && t->decl );
     if( !q.second.isEmpty() )
     {
-       out->addType(Evaluator::toDesig(t),t->decl->isPublic(),toDesig(q), MilEmitter::Alias);
+       out->addType(ev->toDesig(t),t->decl->isPublic(),toDesig(q), MilEmitter::Alias);
     }else if( t->form == Type::Record || t->form == Type::Proc )
     {
         if( t->form == Type::Record )
@@ -1448,17 +1453,17 @@ void Parser2::emitType(Type* t, const Quali& q)
                     hasVariant = true;
             }
 
-            out->beginType(Evaluator::toDesig(t),t->decl->isPublic(), !hasFixed ? MilEmitter::Union : MilEmitter::Struct );
+            out->beginType(ev->toDesig(t),t->decl->isPublic(), !hasFixed ? MilEmitter::Union : MilEmitter::Struct );
             // TODO: record can have fixed and variable part which go to separate struct and union or embedded union
             foreach( Declaration* field, t->subs )
-                out->addField(field->name,Evaluator::toDesig(field->type),field->isPublic());
+                out->addField(field->name,ev->toDesig(field->type),field->isPublic());
         }else
         {
-            out->beginType(Evaluator::toDesig(t),t->decl->isPublic(), MilEmitter::ProcType );
+            out->beginType(ev->toDesig(t),t->decl->isPublic(), MilEmitter::ProcType );
             foreach( Declaration* param, t->subs )
-                out->addArgument(Evaluator::toDesig(param->type), param->name);
+                out->addArgument(ev->toDesig(param->type), param->name);
             if( t->base && t->base->form != BasicType::NoType )
-                out->setReturnType(Evaluator::toDesig(t->base));
+                out->setReturnType(ev->toDesig(t->base));
         }
         out->endType();
     }else if( t->form == Type::Pointer || t->form == Type::Array )
@@ -1475,12 +1480,12 @@ void Parser2::emitType(Type* t, const Quali& q)
                 }
             }
         }else
-            base = t && t->base ? Evaluator::toDesig(t->base) : QByteArray();
-        out->addType(Evaluator::toDesig(t),t->decl->isPublic(),base,
+            base = t && t->base ? ev->toDesig(t->base) : QByteArray();
+        out->addType(ev->toDesig(t),t->decl->isPublic(),base,
                      t->form == Type::Pointer ? MilEmitter::Pointer : MilEmitter::Array, t->len );
     }else if( t->form == Type::ConstEnum )
     {
-        out->addType(Evaluator::toDesig(t),t->decl->isPublic(),"int32", MilEmitter::Alias);
+        out->addType(ev->toDesig(t),t->decl->isPublic(),"int32", MilEmitter::Alias);
     }else
         Q_ASSERT(false);
 }
@@ -1528,7 +1533,7 @@ void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
     Declaration* formal = formals[actuals.size()-1];
     Expression* actual = actuals.last();
     if( !paramCompat(formal,actual) ) {
-        // TEST paramCompat(formal,actual);
+        paramCompat(formal,actual);
         error(actual->pos.d_row, actual->pos.d_col, "actual argument not compatible with formal parameter");
     }
 }
@@ -1926,7 +1931,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 const QString err = Builtins::checkArgs(proc->val.toInt(), args, &retType, mdl);
                 if( !err.isEmpty() )
                     error(lpar,err);
-            }else
+            }else if( proc->type )
                 retType = proc->type->base;
 
 
@@ -2017,7 +2022,8 @@ Expression* Parser2::maybeQualident()
             }
         }
         Expression* res = toExpr(d, tok.toRowCol());
-        res->visi = visi;
+        if( res )
+            res->visi = visi;
         return res;
     }else
     {
@@ -2969,14 +2975,14 @@ void Parser2::ProcedureDeclaration() {
             }
             expect(Tok_EXTERN, true, "ProcedureDeclaration");
             procDecl->extern_ = true;
-            out->beginProc(Evaluator::toDesig(procDecl),mdl->getTopScope()->mode == Declaration::Module &&
+            out->beginProc(ev->toDesig(procDecl),mdl->getTopScope()->mode == Declaration::Module &&
                            id.visi > 0, MilProcedure::Extern);
 
             const QList<Declaration*> params = procDecl->getParams();
             foreach( Declaration* p, params )
                 out->addArgument(ev->toDesig(p->type),p->name);
             if( procDecl->type && procDecl->type->form != BasicType::NoType )
-                out->setReturnType(Evaluator::toDesig(procDecl->type));
+                out->setReturnType(ev->toDesig(procDecl->type));
 
             if( la.d_type == Tok_ident ) {
                 expect(Tok_ident, false, "ProcedureDeclaration");
@@ -3001,14 +3007,14 @@ void Parser2::ProcedureDeclaration() {
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "ProcedureDeclaration");
 			}
-            out->beginProc(Evaluator::toDesig(procDecl),mdl->getTopScope()->mode == Declaration::Module &&
+            out->beginProc(ev->toDesig(procDecl),mdl->getTopScope()->mode == Declaration::Module &&
                            id.visi > 0, kind);
 
             const QList<Declaration*> params = procDecl->getParams();
             foreach( Declaration* p, params )
                 out->addArgument(ev->toDesig(p->type),p->name);
             if( procDecl->type && procDecl->type->form != BasicType::NoType )
-                out->setReturnType(Evaluator::toDesig(procDecl->type));
+                out->setReturnType(ev->toDesig(procDecl->type));
 
             // inlined ProcedureBody();
             DeclarationSequence();
@@ -3226,29 +3232,95 @@ void Parser2::module() {
         delete thisMod;
     thisMod = m;
     mdl->openScope(m);
+
     expect(Tok_MODULE, true, "module");
 	expect(Tok_ident, false, "module");
     const QByteArray name = cur.d_val;
     m->name = name;
-    QByteArrayList path = scanner->path();
-    path += name;
-    m->data = QVariant::fromValue(path);
+
+    ModuleData md;
+    md.path = scanner->path();;
+    md.path += name;
+
     const QString source = cur.d_sourcePath;
     MilMetaParams mps;
     if( FIRST_MetaParams(la.d_type) ) {
         MetaParamList mp = MetaParams();
-        for( int i = 0; i < mp.size(); i++ )
+        md.metaParams = mp;
+
+        if( !metaActuals.isEmpty() )
         {
-            MilMetaParam m;
-            m.name = mp[i].name;
-            m.type = mp[i].type;
-            mps << m;
+            if( metaActuals.size() != mp.size() )
+                error(cur,"number of actual doesn't meet numer of formal meta parameters");
+            else
+                for( int i = 0; i < mp.size(); i++ )
+                {
+                    MilMetaParam m;
+                    m.name = mp[i]->name;
+                    if( metaActuals[i].isConst() && mp[i]->mode != Declaration::ConstDecl ||
+                            !metaActuals[i].isConst() && mp[i]->mode == Declaration::ConstDecl )
+                        error(cur,QString("formal and actual meta parameter %1 not compatible").arg(i+1));
+                    if( metaActuals[i].type->form == Type::Generic )
+                    {
+                        m.isGeneric = true;
+                        m.isConst = mp[i]->mode == Declaration::ConstDecl;
+                    }else
+                    {
+                        m.type = ev->toDesig(mp[i]->type);
+                        delete mp[i]->type;
+                        mp[i]->ownstype = false;
+                        if( mp[i]->mode == Declaration::TypeDecl )
+                        {
+                            mp[i]->type = metaActuals[i].type;
+                        }else if( mp[i]->mode == Declaration::ConstDecl )
+                        {
+                            mp[i]->type = metaActuals[i].type;
+                            mp[i]->data = metaActuals[i].val;
+                            m.isConst = true;
+                            // TODO: check declaration type as soon as corresponding CONST appears
+                        }
+                    }
+                    mps << m;
+                }
+        }else
+        {
+            for( int i = 0; i < mp.size(); i++ )
+            {
+                MilMetaParam m;
+                m.name = mp[i]->name;
+                m.isGeneric = true;
+                m.isConst = mp[i]->mode == Declaration::ConstDecl;
+                mps << m;
+            }
         }
-	}
-	if( la.d_type == Tok_Semi ) {
+    }else if( !metaActuals.isEmpty() )
+        error(cur,"cannot instantiate a non generic module");
+
+    m->data = QVariant::fromValue(md);
+
+    if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
 	}
-    out->beginModule(name,source,mps);
+    out->beginModule(name,source,mps); // TODO: name extension for instantiated generic modules
+
+    // call "out" here for all non-generic type and const
+    for( int i = 0; i < metaActuals.size(); i++ )
+    {
+        const Value& ma = metaActuals[i];
+        if( ma.type->form == Type::Generic )
+            continue;
+        if( ma.mode == Value::Const )
+        {
+            if( i < md.metaParams.size() )
+                out->addConst(ev->toDesig(ma.type), md.metaParams[i]->name, ma.val );
+        }else if( ma.type->isSimple() )
+        {
+            if( i < md.metaParams.size() )
+                out->addType(md.metaParams[i]->name,false,ev->toDesig(ma.type),MilEmitter::Alias);
+        }else
+            emitType(ma.type);  // TODO: this doesn't look right; what name should we use?
+    }
+
 	while( FIRST_ImportList(la.d_type) || FIRST_DeclarationSequence(la.d_type) ) {
 		if( FIRST_ImportList(la.d_type) ) {
 			ImportList();
@@ -3351,83 +3423,50 @@ void Parser2::import() {
     }
 }
 
-bool Parser2::isUnique( const MetaParamList& l, const MetaParam& m)
+bool Parser2::isUnique( const MetaParamList& l, const Declaration* m)
 {
-    foreach( const MetaParam& tmp, l )
+    foreach( const Declaration* tmp, l )
     {
-        if( tmp.name.constData() == m.name.constData() )
+        if( tmp->name.constData() == m->name.constData() )
             return false;
     }
     return true;
 }
 
-Parser2::MetaParamList Parser2::MetaParams() {
+MetaParamList Parser2::MetaParams() {
 	expect(Tok_Lpar, false, "MetaParams");
     MetaParamList res;
-    res << MetaSection();
-	while( la.d_type == Tok_Semi || FIRST_MetaSection(la.d_type) ) {
-		if( la.d_type == Tok_Semi ) {
-			expect(Tok_Semi, false, "MetaParams");
+    bool isType = true;
+    res << MetaSection(isType);
+    while( la.d_type == Tok_Comma || FIRST_MetaSection(la.d_type) ) {
+        if( la.d_type == Tok_Comma ) {
+            expect(Tok_Comma, false, "MetaParams");
 		}
-        MetaParamList mp = MetaSection();
-        res << mp;
+        res << MetaSection(isType);
 	}
 	expect(Tok_Rpar, false, "MetaParams");
     return res;
 }
 
-Parser2::MetaParamList Parser2::MetaSection() {
-    MetaParamList res;
-    if( la.d_type == Tok_CONST ) {
+Declaration* Parser2::MetaSection(bool& isType) {
+    if( la.d_type == Tok_CONST )
+    {
         expect(Tok_CONST, true, "MetaSection");
-        expect(Tok_ident, false, "MetaSection");
-        TokenList names;
-        names << cur;
-        while( ( ( peek(1).d_type == Tok_Comma || peek(1).d_type == Tok_ident ) && peek(2).d_type == Tok_ident )  ) {
-            if( la.d_type == Tok_Comma ) {
-                expect(Tok_Comma, false, "MetaSection");
-            }
-            expect(Tok_ident, false, "MetaSection");
-            names << cur;
-        }
-        expect(Tok_Colon, false, "MetaSection");
-        Quali q;
-        Type* type = NamedType(&q);
-        foreach( const Token& name, names )
-        {
-            MetaParam mp;
-            mp.name = name.d_val;
-            mp.type = toDesig(q);
-            res << mp;
-            Declaration* d = addDecl(name, 0, Declaration::ConstDecl);
-            d->type = type;
-        }
-    } else if( la.d_type == Tok_TYPE || la.d_type == Tok_ident ) {
-        if( la.d_type == Tok_TYPE ) {
-            expect(Tok_TYPE, true, "MetaSection");
-        }
-        expect(Tok_ident, false, "MetaSection");
-        TokenList names;
-        names << cur;
-        while( ( ( peek(1).d_type == Tok_Comma || peek(1).d_type == Tok_ident ) && peek(2).d_type == Tok_ident )  ) {
-            if( la.d_type == Tok_Comma ) {
-                expect(Tok_Comma, false, "MetaSection");
-            }
-            expect(Tok_ident, false, "MetaSection");
-            names << cur;
-        }
-        foreach( const Token& name, names )
-        {
-            MetaParam mp;
-            mp.name = name.d_val;
-            res << mp;
-            Declaration* d = addDecl(name,0,Declaration::TypeDecl);
-            d->type = new Type();
-            d->type->form = Type::GenericType;
-            d->ownstype = true;
-        }
-    } else
-        invalid("MetaSection");
-    return res;
+        isType = false;
+    }else if( la.d_type == Tok_TYPE )
+    {
+        expect(Tok_TYPE, true, "MetaSection");
+        isType = true;
+    }
+
+    expect(Tok_ident, false, "MetaSection");
+
+    Declaration* decl = addDecl(cur, 0, isType ? Declaration::TypeDecl : Declaration::ConstDecl);
+    decl->meta = true;
+    decl->type = new Type();
+    decl->type->form = Type::Generic;
+    decl->ownstype = true;
+
+    return decl;
 }
 

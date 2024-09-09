@@ -404,7 +404,7 @@ Declaration::~Declaration()
 
 QList<Declaration*> Declaration::getParams() const
 {
-    Declaration* d = link;
+    Declaration* d = alias ? link->link : link;
     QList<Declaration*> res;
     while( d && d->mode == Declaration::ParamDecl )
     {
@@ -512,7 +512,7 @@ DeclList Expression::getFormals() const
 {
     if( kind == ProcDecl )
         return val.value<Declaration*>()->getParams();
-    else if( type->form == Type::Proc )
+    else if( type && type->form == Type::Proc )
         return type->subs;
     else
         return DeclList();
