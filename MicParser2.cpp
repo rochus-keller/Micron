@@ -1533,7 +1533,7 @@ void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
     Declaration* formal = formals[actuals.size()-1];
     Expression* actual = actuals.last();
     if( !paramCompat(formal,actual) ) {
-        paramCompat(formal,actual);
+        // TEST paramCompat(formal,actual);
         error(actual->pos.d_row, actual->pos.d_col, "actual argument not compatible with formal parameter");
     }
 }
@@ -2585,6 +2585,8 @@ void Parser2::statement() {
 
 void Parser2::assignmentOrProcedureCall() {
     Expression* lhs = designator(true);
+    if( lhs == 0 )
+        return;
     ev->evaluate(lhs);
 	if( la.d_type == Tok_ColonEq ) {
         const Token tok = la;
@@ -2944,9 +2946,12 @@ void Parser2::ProcedureDeclaration() {
         if( !id.isValid() )
             return; // invalid syntax
 
-        Declaration* forward = mdl->findDecl(id.name.d_val);
+        Declaration* forward = mdl->findDecl(id.name.d_val,false);
         if( forward && forward->mode != Declaration::ForwardDecl )
+        {
             error(id.name, QString("procedure name is not unique: %1").arg(id.name.d_val.constData()) );
+            return;
+        }
         if( forward )
             forward->name.clear(); // so it doesn't intervene name lookup
 
@@ -3235,12 +3240,12 @@ void Parser2::module() {
 
     expect(Tok_MODULE, true, "module");
 	expect(Tok_ident, false, "module");
-    const QByteArray name = cur.d_val;
-    m->name = name;
+    m->name = cur.d_val;
 
     ModuleData md;
     md.path = scanner->path();;
-    md.path += name;
+    md.path += cur.d_val;
+    md.metaActuals = metaActuals;
 
     const QString source = cur.d_sourcePath;
     MilMetaParams mps;
@@ -3282,6 +3287,14 @@ void Parser2::module() {
                     }
                     mps << m;
                 }
+            if( imp )
+            {
+                Import i;
+                i.metaActuals = metaActuals;
+                i.path = md.path;
+                md.suffix = imp->moduleSuffix(i);
+                m->name += md.suffix;
+            }
         }else
         {
             for( int i = 0; i < mp.size(); i++ )
@@ -3301,7 +3314,7 @@ void Parser2::module() {
     if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
 	}
-    out->beginModule(name,source,mps); // TODO: name extension for instantiated generic modules
+    out->beginModule(m->name,source,mps); // TODO: name extension for instantiated generic modules
 
     // call "out" here for all non-generic type and const
     for( int i = 0; i < metaActuals.size(); i++ )

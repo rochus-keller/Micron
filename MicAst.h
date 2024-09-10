@@ -29,8 +29,10 @@ namespace Mic
     {
         enum Type {
                Undefined,
-               NoType, Any,
-               Nil, String,
+               NoType,
+               String,
+               Any,
+               Nil,
                BOOLEAN,
                CHAR,
                UINT8, UINT16, UINT32, UINT64,
@@ -79,7 +81,7 @@ namespace Mic
         bool isInteger() const { return form >= BasicType::UINT8 && form <= BasicType::INT64; }
         bool isSet() const { return form == BasicType::SET; }
         bool isBoolean() const { return form == BasicType::BOOLEAN; }
-        bool isSimple() const { return form >= BasicType::Nil && form < BasicType::Max; }
+        bool isSimple() const { return form >= BasicType::String && form < BasicType::Max; }
         bool isText() const { return form == BasicType::String || form == BasicType::CHAR ||
                     ( form == Array && base && base->form == BasicType::CHAR ) ||
                     ( form == Pointer && base && base->form == Array && base->base->form == BasicType::CHAR ); }
@@ -209,6 +211,8 @@ namespace Mic
     struct ModuleData {
         QByteArrayList path;
         MetaParamList metaParams;
+        MetaActualList metaActuals;
+        QByteArray suffix;
     };
 
     class AstModel
@@ -222,10 +226,11 @@ namespace Mic
         Declaration* addDecl(const QByteArray&, bool* doublette = 0 );
         Declaration* addHelper();
         void removeDecl(Declaration*);
-        Declaration* findDecl(const QByteArray&) const;
+        Declaration* findDecl(const QByteArray&, bool recursive = true) const;
         Declaration* findDecl(Declaration* import, const QByteArray&) const;
         Declaration* getTopScope() const { return scopes.back(); }
         QByteArray getTempName();
+        Declaration* getTopModule() const;
 
         Type* getType(quint8 basicType) const { return types[basicType]; }
 

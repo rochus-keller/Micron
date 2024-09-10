@@ -242,33 +242,12 @@ public:
         return 0;
     }
 
+    QByteArray moduleSuffix( const Mic::Import& imp )
+    {
+        return "$" + QByteArray::number(modules.size());
+    }
+
     Mic::Declaration* loadModule( const Mic::Import& imp )
-    {
-        return compile(imp);
-    }
-
-    QString toFile(const Mic::Import& imp)
-    {
-        const QString path = imp.path.join('/') + ".mic";
-        foreach( const QDir& dir, searchPath )
-        {
-            const QString tmp = dir.absoluteFilePath(path);
-            if( QFile::exists(tmp) )
-                return tmp;
-        }
-        if( !modules.isEmpty() )
-        {
-            // if the file is not in the search path, look in the directory of the caller assuming
-            // that the required module path is relative to the including moduled
-            QFileInfo info( modules.back().file );
-            const QString tmp = info.absoluteDir().absoluteFilePath(path);
-            if( QFile::exists(tmp) )
-                return tmp;
-        }
-        return QString();
-    }
-
-    Mic::Declaration* compile(const Mic::Import& imp)
     {
         ModuleSlot* ms = find(imp);
         if( ms != 0 )
@@ -318,8 +297,31 @@ public:
         {
             res = p.takeModule();
         }
+        // TODO: uniquely extend the name of generic module instantiations
+
         ms->decl = res;
         return res;
+    }
+
+    QString toFile(const Mic::Import& imp)
+    {
+        const QString path = imp.path.join('/') + ".mic";
+        foreach( const QDir& dir, searchPath )
+        {
+            const QString tmp = dir.absoluteFilePath(path);
+            if( QFile::exists(tmp) )
+                return tmp;
+        }
+        if( !modules.isEmpty() )
+        {
+            // if the file is not in the search path, look in the directory of the caller assuming
+            // that the required module path is relative to the including moduled
+            QFileInfo info( modules.back().file );
+            const QString tmp = info.absoluteDir().absoluteFilePath(path);
+            if( QFile::exists(tmp) )
+                return tmp;
+        }
+        return QString();
     }
 };
 #endif
@@ -344,7 +346,7 @@ static void compile(const QStringList& files, const QStringList& searchPaths)
 
         Mic::Import imp;
         imp.path.append(info.baseName().toUtf8());
-        mgr.compile(imp);
+        mgr.loadModule(imp);
 #if 1
         foreach( const Mic::MilModule& m, mgr.loader.getModules() )
         {

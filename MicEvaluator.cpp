@@ -438,6 +438,8 @@ bool Evaluator::desigIndex(bool byVal)
     Value rhs = stack.takeLast(); // index
     Value lhs = stack.takeLast(); // array reference
 
+    if( !lhs.ref || lhs.type == 0 || lhs.type->form != Type::Array)
+        return false;
     Q_ASSERT(lhs.ref && lhs.type && lhs.type->form == Type::Array);
 
     if( rhs.isConst() )
@@ -1267,7 +1269,8 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             emitRelOp(op,true);
         }
     }else
-        Q_ASSERT(false);
+        return res;
+        //Q_ASSERT(false);
 
     return res;
 }
@@ -1348,23 +1351,30 @@ void Evaluator::unaryPlusOp(Value& v)
 
 QByteArray Evaluator::toDesig(Declaration* d)
 {
-    QByteArrayList path;
-    bool isImported = false;
+    QByteArray desig;
+    Declaration* last = 0;
     while( d && d->mode != Declaration::Module )
     {
-        path.push_front(d->name);
-        if( d->mode == Declaration::VarDecl ||
-                d->mode == Declaration::LocalDecl ||
+        if( !desig.isEmpty() )
+            desig += (last && last->mode == Declaration::Field) ? "." : "$"  + d->name;
+        if( d->mode == Declaration::LocalDecl ||
                 d->mode == Declaration::ParamDecl )
-            break;
-        if( d->mode == Declaration::Import )
-            isImported = true;
+            return d->name; // locals and params have no desig
+        if( d->outer == 0 && last == 0 )
+            return toDesig(d->type); // this is a built-in type
+        desig += d->name;
+        last = d;
         d = d->outer;
     }
-    if( isImported )
-        return path.join('.'); // here the imported names cannot include '$' because only top-level declarations
-    else
-        return path.join('$');
+
+    Q_ASSERT( d && d->mode == Declaration::Module );
+    if( d == mdl->getTopModule() )
+        return desig; // local symbol
+    // else imported symbol
+    ModuleData md = d->data.value<ModuleData>();
+    desig = md.path.join('/') + md.suffix + "!" + desig;
+
+    return desig;
 }
 
 QByteArray Evaluator::toDesig(Type* t)
@@ -1376,6 +1386,10 @@ QByteArray Evaluator::toDesig(Type* t)
     {
         switch( t->form )
         {
+        case BasicType::Any:
+            return "any";
+        case BasicType::Nil:
+            return "nil";
         case BasicType::BOOLEAN:
             return "bool";
         case BasicType::CHAR:
@@ -1424,6 +1438,9 @@ QByteArray Evaluator::dequote(const QByteArray& str)
 
 void Evaluator::recursiveRun(Expression* e)
 {
+    if( e == 0 )
+        return;
+
     switch( e->kind )
     {
     case Expression::Plus:

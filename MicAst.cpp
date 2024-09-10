@@ -177,7 +177,7 @@ Declaration*AstModel::addHelper()
     decl->next = helper;
     helper = decl;
     decl->name = "$" + QByteArray::number(++helperId);
-    decl->outer = 0;
+    decl->outer = getTopModule();
     return decl;
 }
 
@@ -192,7 +192,7 @@ void AstModel::removeDecl(Declaration* del)
     delete del;
 }
 
-Declaration*AstModel::findDecl(const QByteArray& id) const
+Declaration*AstModel::findDecl(const QByteArray& id, bool recursive) const
 {
     for( int i = scopes.size() - 1; i >= 0; i-- )
     {
@@ -204,6 +204,8 @@ Declaration*AstModel::findDecl(const QByteArray& id) const
             else
                 cur = cur->next;
         }
+        if( !recursive )
+            return 0;
     }
     return 0;
 }
@@ -222,6 +224,14 @@ Declaration*AstModel::findDecl(Declaration* import, const QByteArray& id) const
 QByteArray AstModel::getTempName()
 {
     return Token::getSymbol("$" + QByteArray::number(++helperId));
+}
+
+Declaration*AstModel::getTopModule() const
+{
+    for( int i = 0; i < scopes.size(); i++ )
+        if( scopes[i]->mode == Declaration::Module )
+            return scopes[i];
+    return 0;
 }
 
 void AstModel::cleanupGlobals()

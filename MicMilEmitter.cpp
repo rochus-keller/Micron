@@ -22,6 +22,7 @@
 #include "MicMilOp.h"
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QtDebug>
 using namespace Mic;
 
 MilEmitter::MilEmitter(MilRenderer* r):d_out(r),d_typeKind(0)
