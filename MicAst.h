@@ -213,6 +213,7 @@ namespace Mic
         MetaParamList metaParams;
         MetaActualList metaActuals;
         QByteArray suffix;
+        QByteArray fullName; // path.join('/') + suffix as symbol
     };
 
     class AstModel

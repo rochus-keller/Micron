@@ -159,7 +159,6 @@ namespace Mic {
         Declaration* addDecl(const Token& id, quint8 visi, quint8 mode, bool* doublette = 0);
         Declaration* addDecl(const IdentDef& id, quint8 mode, bool* doublette = 0);
         void resolveDeferreds();
-        static QByteArray toDesig(const Quali&);
         Expression* toExpr(Declaration* d, const RowCol&);
         void emitType(Type*, const Quali& = Quali());
         Declaration* addHelper(Type*);

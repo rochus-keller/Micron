@@ -160,17 +160,25 @@ bool Evaluator::prepareRhs(Type* lhs)
             rhs.type->form == BasicType::String )
     {   // NOTE: already checked that lhs is large enough for rhs
         Q_ASSERT( lhs->len > quint32(dequote(rhs.val.toByteArray()).size()) );
-        out->ldobj_(toDesig(lhs));
+        out->ldobj_(toQuali(lhs));
     }else if( lhs && lhs->form == BasicType::CHAR &&
               rhs.type->form == BasicType::String )
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
     else if( lhs && lhs->form == Type::Proc &&
              rhs.mode == Value::Procedure )
-        out->ldproc_(toDesig(rhs.val.value<Declaration*>()));
+        out->ldproc_(toQuali(rhs.val.value<Declaration*>()));
     else
         assureTopOnMilStack();
 
     return true;
+}
+
+static inline MilQuali coreName(const QByteArray& proc)
+{
+    MilQuali res;
+    res.first = Token::getSymbol("$MIC");
+    res.second = Token::getSymbol(proc);
+    return res;
 }
 
 bool Evaluator::assign()
@@ -201,7 +209,7 @@ bool Evaluator::assign()
             if( rhs.type->form == Type::Array && rhs.type->base->form == BasicType::CHAR )
             {
                 Q_ASSERT(rhs.ref);
-                out->call_("$MIC$strcopy",2);
+                out->call_(coreName("strcopy"),2);
                 return err.isEmpty();
             }
         } // else copy memory block TODO
@@ -244,7 +252,7 @@ bool Evaluator::assign()
     case Type::Record:
     case Type::Array:
     case Type::Generic:
-        out->stobj_(toDesig(lhs.type));
+        out->stobj_(toQuali(lhs.type));
         break;
     default:
         Q_ASSERT( false );
@@ -331,7 +339,7 @@ bool Evaluator::derefValue()
     case Type::Record:
     case Type::Array:
     case Type::Generic:
-        out->ldobj_(toDesig(v.type));
+        out->ldobj_(toQuali(v.type));
         break;
     default:
         return false;
@@ -368,7 +376,7 @@ bool Evaluator::desigField(Declaration* field, bool byVal)
     Q_ASSERT(lhs.ref && lhs.type && lhs.type->form == Type::Record);
 
     Q_ASSERT(field);
-    const QByteArray desig = toDesig(lhs.type) + "." + field->name;
+    const MilTrident desig = qMakePair(toQuali(lhs.type),field->name);
     if( byVal )
         out->ldfld_(desig);
     else
@@ -398,7 +406,7 @@ bool Evaluator::desigVar(bool byVal)
         switch( v.mode )
         {
         case Value::VarDecl:
-            out->ldvar_(v.val.toByteArray());
+            out->ldvar_(v.val.value<Qualident>());
             break;
         case Value::LocalDecl:
             out->ldloc_(v.val.toInt());
@@ -413,7 +421,7 @@ bool Evaluator::desigVar(bool byVal)
         switch( v.mode )
         {
         case Value::VarDecl:
-            out->ldvara_(v.val.toByteArray());
+            out->ldvara_(v.val.value<Qualident>());
             break;
         case Value::LocalDecl:
             out->ldloca_(v.val.toInt());
@@ -453,7 +461,7 @@ bool Evaluator::desigIndex(bool byVal)
         pushMilStack(rhs);
     }
 
-    const QByteArray elemType = toDesig(lhs.type->base);
+    const Qualident elemType = toQuali(lhs.type->base);
     if( byVal )
         out->ldelem_(elemType);
     else
@@ -497,7 +505,7 @@ bool Evaluator::call(int nArgs)
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
             ret = proc->type;
-            out->call_(toDesig(proc),nArgs, ret != 0); // TODO: desig in imported module
+            out->call_(toQuali(proc),nArgs, ret != 0); // TODO: desig in imported module
         }
         break;
     case Value::VarDecl:
@@ -507,7 +515,7 @@ bool Evaluator::call(int nArgs)
         ret = callee.type->base;
         if( callee.type->form == Type::Proc )
         {
-            out->calli_(toDesig(callee.type), nArgs, ret != 0);
+            out->calli_(toQuali(callee.type), nArgs, ret != 0);
             break;
         }
         // else fall through
@@ -541,7 +549,7 @@ bool Evaluator::castPtr(Type* to)
     Value lhs = stack.takeLast(); // object
     // TODO
     Q_ASSERT(to && to->form == Type::Pointer);
-    out->castptr_(toDesig(to->base));
+    out->castptr_(toQuali(to->base));
     // TODO restrict to pointers, add to MIL
     lhs.type = to;
     stack.push_back(lhs);
@@ -561,41 +569,41 @@ bool Evaluator::castNum(Type* to)
         stack.back().type = to;
     else
     {
-        MilEmitter::ToType tt;
+        MilEmitter::Type tt;
         switch(to->form)
         {
         case BasicType::BOOLEAN:
         case BasicType::CHAR:
         case BasicType::UINT8:
-            tt = MilEmitter::ToU1;
+            tt = MilEmitter::U1;
             break;
         case BasicType::UINT16:
-            tt = MilEmitter::ToU2;
+            tt = MilEmitter::U2;
             break;
         case BasicType::UINT32:
         case BasicType::SET:
-            tt = MilEmitter::ToU4;
+            tt = MilEmitter::U4;
             break;
         case BasicType::UINT64:
-            tt = MilEmitter::ToU8;
+            tt = MilEmitter::U8;
             break;
         case BasicType::INT8:
-            tt = MilEmitter::ToI1;
+            tt = MilEmitter::I1;
             break;
         case BasicType::INT16:
-            tt = MilEmitter::ToI2;
+            tt = MilEmitter::I2;
             break;
         case BasicType::INT32:
-            tt = MilEmitter::ToI4;
+            tt = MilEmitter::I4;
             break;
         case BasicType::INT64:
-            tt = MilEmitter::ToI8;
+            tt = MilEmitter::I8;
             break;
         case BasicType::REAL:
-            tt = MilEmitter::ToR4;
+            tt = MilEmitter::R4;
             break;
         case BasicType::LONGREAL:
-            tt = MilEmitter::ToR8;
+            tt = MilEmitter::R8;
             break;
         default:
             Q_ASSERT(false);
@@ -701,7 +709,7 @@ bool Evaluator::pushMilStack(const Value& v)
         }else
         {
             MilObject obj;
-            obj.typeRef = toDesig(v.type);
+            obj.typeRef = toQuali(v.type);
             obj.data = v.val;
             out->ldc_obj(obj);
         }
@@ -771,9 +779,9 @@ void Evaluator::emitArithOp(quint8 op, bool unsig, bool i64)
         else
         {
             if( i64 )
-                out->call_("$MIC$Div64",2,1);
+                out->call_(coreName("Div64"),2,1);
             else
-                out->call_("$MIC$Div32",2,1);
+                out->call_(coreName("Div32"),2,1);
         }
         break;
     case Expression::Mod:
@@ -782,9 +790,9 @@ void Evaluator::emitArithOp(quint8 op, bool unsig, bool i64)
         else
         {
             if( i64 )
-                out->call_("$MIC$Mod64",2,1);
+                out->call_(coreName("Mod64"),2,1);
             else
-                out->call_("$MIC$Mod32",2,1);
+                out->call_(coreName("Mod32"),2,1);
         }
         break;
     case Expression::Add:
@@ -805,13 +813,13 @@ void Evaluator::adjustNumType(Type* me, Type* other)
     {
         if( me->isInt() && other->isInt() &&
                 other->form == BasicType::INT64 && me->form < BasicType::INT64 )
-            out->conv_(MilEmitter::ToI8);
+            out->conv_(MilEmitter::I8);
         else if( me->isUInt() && other->isUInt() &&
                  other->form == BasicType::UINT64 && me->form < BasicType::UINT64 )
-            out->conv_(MilEmitter::ToU8);
+            out->conv_(MilEmitter::U8);
         else if( me->isReal() && other->isReal() &&
                  other->form == BasicType::LONGREAL && me->form < BasicType::LONGREAL )
-            out->conv_(MilEmitter::ToR8);
+            out->conv_(MilEmitter::R8);
     }
 }
 
@@ -994,7 +1002,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 out->and_();
                 break;
             case Expression::Fdiv:
-                out->call_("$MIC$SetDiv",2,1);
+                out->call_(coreName("SetDiv"),2,1);
                 break;
             case Expression::Add:
                 out->or_();
@@ -1158,13 +1166,13 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             break;
         }
         if( lhs.type->form == BasicType::CHAR && rhs.type->form == BasicType::CHAR )
-            out->call_("$MIC$relop4",3,true);
+            out->call_(coreName("relop4"),3,true);
         else if( lhs.type->form == BasicType::CHAR )
-            out->call_("$MIC$relop3",3,true);
+            out->call_(coreName("relop3"),3,true);
         else if( rhs.type->form == BasicType::CHAR )
-            out->call_("$MIC$relop2",3,true);
+            out->call_(coreName("relop2"),3,true);
         else
-            out->call_("$MIC$relop1",3,true);
+            out->call_(coreName("relop1"),3,true);
     }else if( lhs.type->form == Type::Pointer && rhs.type->form == Type::Pointer ||
               lhs.type->form == Type::Pointer && rhs.type->form == BasicType::Nil ||
               lhs.type->form == BasicType::Nil && rhs.type->form == Type::Pointer ||
@@ -1296,7 +1304,7 @@ Value Evaluator::inOp(const Value& lhs, const Value& rhs)
             res.mode = Value::Const;
         }else
         {
-            out->calli_("$MIC$SetIn",2,1);
+            out->calli_(coreName("SetIn"),2,1);
         }
 
     }else
@@ -1315,9 +1323,9 @@ void Evaluator::unaryMinusOp(Value& v)
             else
             {
                 if( v.type->form == BasicType::INT32 )
-                    out->conv_(MilEmitter::ToI4);
+                    out->conv_(MilEmitter::I4);
                 else
-                    out->conv_(MilEmitter::ToI8);
+                    out->conv_(MilEmitter::I8);
                 out->neg_();
             }
         }else if( v.type->isInteger() )
@@ -1349,82 +1357,75 @@ void Evaluator::unaryPlusOp(Value& v)
     // NOP
 }
 
-QByteArray Evaluator::toDesig(Declaration* d)
+Qualident Evaluator::toQuali(Declaration* d)
 {
+    Q_ASSERT( d && d->mode != Declaration::Field ); // use toTriple for fields
+
     QByteArray desig;
     Declaration* last = 0;
+    bool doSymbol = false;
     while( d && d->mode != Declaration::Module )
     {
-        if( !desig.isEmpty() )
-            desig += (last && last->mode == Declaration::Field) ? "." : "$"  + d->name;
+        Q_ASSERT(d->mode != Declaration::Field);
         if( d->mode == Declaration::LocalDecl ||
                 d->mode == Declaration::ParamDecl )
-            return d->name; // locals and params have no desig
+            return qMakePair(QByteArray(),d->name); // locals and params have no desig
         if( d->outer == 0 && last == 0 )
-            return toDesig(d->type); // this is a built-in type
+            return toQuali(d->type); // this is a built-in type
+        if( !desig.isEmpty() )
+        {
+            desig += "$" + d->name;
+            doSymbol = true;
+        }
         desig += d->name;
         last = d;
         d = d->outer;
     }
+    if( doSymbol )
+        desig = Token::getSymbol(desig);
 
     Q_ASSERT( d && d->mode == Declaration::Module );
     if( d == mdl->getTopModule() )
-        return desig; // local symbol
+        return qMakePair(QByteArray(),desig); // local symbol
     // else imported symbol
     ModuleData md = d->data.value<ModuleData>();
-    desig = md.path.join('/') + md.suffix + "!" + desig;
-
-    return desig;
+    return qMakePair(md.fullName, desig);
 }
 
-QByteArray Evaluator::toDesig(Type* t)
+Qualident Evaluator::toQuali(Type* t)
 {
+    static QByteArray symbols[BasicType::Max];
+
     if( t == 0 )
-        return QByteArray();
+        return Qualident();
 
     if( t->isSimple() )
     {
-        switch( t->form )
+        if( symbols[BasicType::Any].isEmpty() )
         {
-        case BasicType::Any:
-            return "any";
-        case BasicType::Nil:
-            return "nil";
-        case BasicType::BOOLEAN:
-            return "bool";
-        case BasicType::CHAR:
-            return "char";
-        case BasicType::UINT8:
-            return "uint8";
-        case BasicType::UINT16:
-            return "uint16";
-        case BasicType::UINT32:
-        case BasicType::SET:
-            return "uint32";
-        case BasicType::UINT64:
-            return "uint64";
-        case BasicType::INT8:
-            return "int8";
-        case BasicType::INT16:
-            return "int16";
-        case BasicType::INT32:
-            return "int32";
-        case BasicType::INT64:
-            return "int64";
-        case BasicType::REAL:
-            return "float32";
-        case BasicType::LONGREAL:
-            return "float64";
-        default:
-            return "<invalid type>";
-        }
+            symbols[BasicType::Any] = Token::getSymbol("any");
+            symbols[BasicType::Nil] = Token::getSymbol("nil");
+            symbols[BasicType::BOOLEAN] = Token::getSymbol("bool");
+            symbols[BasicType::CHAR] = Token::getSymbol("char");
+            symbols[BasicType::UINT8] = Token::getSymbol("uint8");
+            symbols[BasicType::UINT16] = Token::getSymbol("uint16");
+            symbols[BasicType::UINT32] = symbols[BasicType::SET] = Token::getSymbol("uint32");
+            symbols[BasicType::UINT64] = Token::getSymbol("uint64");
+            symbols[BasicType::INT8] = Token::getSymbol("int8");
+            symbols[BasicType::INT16] = Token::getSymbol("int16");
+            symbols[BasicType::INT32] = Token::getSymbol("int32");
+            symbols[BasicType::INT64] = Token::getSymbol("int64");
+            symbols[BasicType::REAL] = Token::getSymbol("float32");
+            symbols[BasicType::LONGREAL] = Token::getSymbol("float64");
+        }else
+            return qMakePair(QByteArray(),symbols[t->form]);
     }else if( t->decl)
     {
         Q_ASSERT( t && t->decl );
-        return toDesig(t->decl);
+        return toQuali(t->decl);
     }else if( t->form == Type::NameRef )
-        return toDesig(t->subs.first());
-    return QByteArray();
+        return toQuali(t->subs.first());
+    return Qualident();
 }
 
 QByteArray Evaluator::dequote(const QByteArray& str)

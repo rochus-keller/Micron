@@ -16,11 +16,14 @@ include(MicParser.pri)
 
 SOURCES += \
     MicCompiler.cpp \ 
-    MicEiGen.cpp
+    MicEiGen.cpp \
+    MicCilGen.cpp
 
 HEADERS += \
-    MicEiGen.h
+    MicEiGen.h \
+    MicCilGen.h
 
 
 
 
+include( ../PeLib/PeLib.pri )

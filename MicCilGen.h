@@ -1,5 +1,5 @@
-#ifndef MICEIGEN_H
-#define MICEIGEN_H
+#ifndef MICCILGEN_H
+#define MICCILGEN_H
 
 /*
 ** Copyright (C) 2024 Rochus Keller (me@rochus-keller.ch)
@@ -21,11 +21,11 @@
 
 namespace Mic
 {
-    class EiGen : public MilRenderer
+    class CilGen : public MilRenderer
     {
     public:
-        EiGen(MilLoader*l, QIODevice* out);
-        ~EiGen();
+        CilGen(MilLoader*l);
+        ~CilGen();
 
         void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& );
         void endModule();
@@ -50,4 +50,4 @@ namespace Mic
     };
 }
 
-#endif // MICEIGEN_H
+#endif // MICCILGEN_H

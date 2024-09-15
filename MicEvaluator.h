@@ -23,6 +23,8 @@ namespace Mic
 {
 class MilEmitter;
 
+typedef QPair<QByteArray,QByteArray> Qualident;
+
 class Evaluator
 {
 public:
@@ -41,8 +43,8 @@ public:
 
     const QString& getErr() const { return err; }
 
-    QByteArray toDesig(Declaration*);
-    QByteArray toDesig(Type*);
+    Qualident toQuali(Declaration*);
+    Qualident toQuali(Type*);
     static QByteArray dequote(const QByteArray& str);
 
 protected:
@@ -85,5 +87,7 @@ private:
     friend class Builtins;
 };
 }
+
+Q_DECLARE_METATYPE(Mic::Qualident)
 
 #endif // MICEVALUATOR_H

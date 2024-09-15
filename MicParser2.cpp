@@ -1381,9 +1381,9 @@ void Parser2::VariableDeclaration() {
         d->outer = outer;
         d->type = t;
         if( d->mode == Declaration::VarDecl )
-            out->addVariable(ev->toDesig(d->type),d->name);
+            out->addVariable(ev->toQuali(d->type),d->name);
         else
-            out->addLocal(ev->toDesig(d->type),d->name);
+            out->addLocal(ev->toQuali(d->type),d->name);
     }
 }
 
@@ -1407,7 +1407,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
         break;
     case Declaration::VarDecl:
         k = Expression::ModuleVar;
-        val = ev->toDesig(d);
+        val = QVariant::fromValue(ev->toQuali(d));
         break;
     case Declaration::LocalDecl:
     case Declaration::ParamDecl:
@@ -1418,7 +1418,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
         break;
     case Declaration::TypeDecl:
         k = Expression::TypeDecl;
-        val = ev->toDesig(d);
+        val = QVariant::fromValue(ev->toQuali(d));
         break;
     default:
         error(rc.d_row, rc.d_col, "invalid designator");
@@ -1438,7 +1438,7 @@ void Parser2::emitType(Type* t, const Quali& q)
     Q_ASSERT( t && t->decl );
     if( !q.second.isEmpty() )
     {
-       out->addType(ev->toDesig(t),t->decl->isPublic(),toDesig(q), MilEmitter::Alias);
+       out->addType(ev->toQuali(t).second,t->decl->isPublic(),q, MilEmitter::Alias);
     }else if( t->form == Type::Record || t->form == Type::Proc )
     {
         if( t->form == Type::Record )
@@ -1453,39 +1453,39 @@ void Parser2::emitType(Type* t, const Quali& q)
                     hasVariant = true;
             }
 
-            out->beginType(ev->toDesig(t),t->decl->isPublic(), !hasFixed ? MilEmitter::Union : MilEmitter::Struct );
+            out->beginType(ev->toQuali(t).second,t->decl->isPublic(), !hasFixed ? MilEmitter::Union : MilEmitter::Struct );
             // TODO: record can have fixed and variable part which go to separate struct and union or embedded union
             foreach( Declaration* field, t->subs )
-                out->addField(field->name,ev->toDesig(field->type),field->isPublic());
+                out->addField(field->name,ev->toQuali(field->type),field->isPublic());
         }else
         {
-            out->beginType(ev->toDesig(t),t->decl->isPublic(), MilEmitter::ProcType );
+            out->beginType(ev->toQuali(t).second,t->decl->isPublic(), MilEmitter::ProcType );
             foreach( Declaration* param, t->subs )
-                out->addArgument(ev->toDesig(param->type), param->name);
+                out->addArgument(ev->toQuali(param->type), param->name);
             if( t->base && t->base->form != BasicType::NoType )
-                out->setReturnType(ev->toDesig(t->base));
+                out->setReturnType(ev->toQuali(t->base));
         }
         out->endType();
     }else if( t->form == Type::Pointer || t->form == Type::Array )
     {
-        QByteArray base;
+        Qualident base;
         if( t->deferred )
         {
             for( int i = 0; i < deferred.size(); i++ )
             {
                 if( deferred[i].first == t )
                 {
-                    base = deferred[i].second.d_val;
+                    base = qMakePair(QByteArray(),deferred[i].second.d_val);
                     break;
                 }
             }
         }else
-            base = t && t->base ? ev->toDesig(t->base) : QByteArray();
-        out->addType(ev->toDesig(t),t->decl->isPublic(),base,
+            base = t && t->base ? ev->toQuali(t->base) : Qualident();
+        out->addType(ev->toQuali(t).second,t->decl->isPublic(),base,
                      t->form == Type::Pointer ? MilEmitter::Pointer : MilEmitter::Array, t->len );
     }else if( t->form == Type::ConstEnum )
     {
-        out->addType(ev->toDesig(t),t->decl->isPublic(),"int32", MilEmitter::Alias);
+        out->addType(ev->toQuali(t).second,t->decl->isPublic(),qMakePair(QByteArray(),Token::getSymbol("int32")), MilEmitter::Alias);
     }else
         Q_ASSERT(false);
 }
@@ -1510,7 +1510,7 @@ Declaration*Parser2::addTemp(Type* t)
     decl->mode = Declaration::LocalDecl;
     decl->type = t;
     decl->outer = mdl->getTopScope();
-    decl->id = out->addLocal(ev->toDesig(t),decl->name);
+    decl->id = out->addLocal(ev->toQuali(t),decl->name);
     return decl;
 }
 
@@ -1776,15 +1776,6 @@ void Parser2::checkRelOp(Expression* e)
             error(e->pos.d_row, e->pos.d_col, "operation not supported for given operands");
     }else
         error(e->pos.d_row, e->pos.d_col, "operands not compatible with operator");
-}
-
-QByteArray Parser2::toDesig(const Parser2::Quali& q)
-{
-    QByteArray res;
-    if( q.first.isEmpty() )
-        res = "." + q.first;
-    res += q.second;
-    return res;
 }
 
 static bool renderLvalue( Expression* proc, int arg )
@@ -2980,14 +2971,14 @@ void Parser2::ProcedureDeclaration() {
             }
             expect(Tok_EXTERN, true, "ProcedureDeclaration");
             procDecl->extern_ = true;
-            out->beginProc(ev->toDesig(procDecl),mdl->getTopScope()->mode == Declaration::Module &&
+            out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->mode == Declaration::Module &&
                            id.visi > 0, MilProcedure::Extern);
 
             const QList<Declaration*> params = procDecl->getParams();
             foreach( Declaration* p, params )
-                out->addArgument(ev->toDesig(p->type),p->name);
+                out->addArgument(ev->toQuali(p->type),p->name);
             if( procDecl->type && procDecl->type->form != BasicType::NoType )
-                out->setReturnType(ev->toDesig(procDecl->type));
+                out->setReturnType(ev->toQuali(procDecl->type));
 
             if( la.d_type == Tok_ident ) {
                 expect(Tok_ident, false, "ProcedureDeclaration");
@@ -3012,14 +3003,14 @@ void Parser2::ProcedureDeclaration() {
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "ProcedureDeclaration");
 			}
-            out->beginProc(ev->toDesig(procDecl),mdl->getTopScope()->mode == Declaration::Module &&
+            out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->mode == Declaration::Module &&
                            id.visi > 0, kind);
 
             const QList<Declaration*> params = procDecl->getParams();
             foreach( Declaration* p, params )
-                out->addArgument(ev->toDesig(p->type),p->name);
+                out->addArgument(ev->toQuali(p->type),p->name);
             if( procDecl->type && procDecl->type->form != BasicType::NoType )
-                out->setReturnType(ev->toDesig(procDecl->type));
+                out->setReturnType(ev->toQuali(procDecl->type));
 
             // inlined ProcedureBody();
             DeclarationSequence();
@@ -3243,8 +3234,9 @@ void Parser2::module() {
     m->name = cur.d_val;
 
     ModuleData md;
-    md.path = scanner->path();;
+    md.path = scanner->path();
     md.path += cur.d_val;
+    md.fullName = Token::getSymbol(md.path.join('/'));
     md.metaActuals = metaActuals;
 
     const QString source = cur.d_sourcePath;
@@ -3271,7 +3263,7 @@ void Parser2::module() {
                         m.isConst = mp[i]->mode == Declaration::ConstDecl;
                     }else
                     {
-                        m.type = ev->toDesig(mp[i]->type);
+                        m.type = ev->toQuali(mp[i]->type);
                         delete mp[i]->type;
                         mp[i]->ownstype = false;
                         if( mp[i]->mode == Declaration::TypeDecl )
@@ -3293,7 +3285,11 @@ void Parser2::module() {
                 i.metaActuals = metaActuals;
                 i.path = md.path;
                 md.suffix = imp->moduleSuffix(i);
-                m->name += md.suffix;
+                if( !md.suffix.isEmpty() )
+                {
+                    md.fullName = Token::getSymbol(md.fullName + md.suffix);
+                    m->name = Token::getSymbol(m->name + md.suffix);
+                }
             }
         }else
         {
@@ -3325,11 +3321,11 @@ void Parser2::module() {
         if( ma.mode == Value::Const )
         {
             if( i < md.metaParams.size() )
-                out->addConst(ev->toDesig(ma.type), md.metaParams[i]->name, ma.val );
+                out->addConst(ev->toQuali(ma.type), md.metaParams[i]->name, ma.val );
         }else if( ma.type->isSimple() )
         {
             if( i < md.metaParams.size() )
-                out->addType(md.metaParams[i]->name,false,ev->toDesig(ma.type),MilEmitter::Alias);
+                out->addType(md.metaParams[i]->name,false,ev->toQuali(ma.type),MilEmitter::Alias);
         }else
             emitType(ma.type);  // TODO: this doesn't look right; what name should we use?
     }

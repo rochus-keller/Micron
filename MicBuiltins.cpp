@@ -20,6 +20,14 @@
 #include "MicToken.h"
 using namespace Mic;
 
+static inline MilQuali coreName(const QByteArray& proc)
+{
+    MilQuali res;
+    res.first = Token::getSymbol("$MIC");
+    res.second = Token::getSymbol(proc);
+    return res;
+}
+
 static inline void expectingNArgs(const ExpList& args,int n)
 {
     if( args.size() != n )
@@ -361,7 +369,7 @@ void Builtins::ASSERT(int nArgs)
         return;
     }
 
-    ev->out->call_("$MIC$assert",3);
+    ev->out->call_(coreName("assert"),3);
 
     Value res;
     res.mode = Value::Val;
@@ -408,7 +416,7 @@ void Builtins::incdec(int nArgs, bool inc)
                 else
                 {
                     ev->out->ldloc_(tmp);
-                    ev->out->conv_(MilEmitter::ToI8);
+                    ev->out->conv_(MilEmitter::I8);
                 }
             }else
                 ev->out->ldc_i8(1);
@@ -456,7 +464,7 @@ void Builtins::incdec(int nArgs, bool inc)
     {
         ev->out->dup_();
         ev->out->ldind_(MilEmitter::IntPtr);
-        ev->out->sizeof_(ev->toDesig(what.type->base));
+        ev->out->sizeof_(ev->toQuali(what.type->base));
         if( nArgs == 2 )
         {
             if( step.isConst() )
@@ -511,40 +519,40 @@ void Builtins::PRINT(int nArgs, bool ln)
         ev->err = "expecting one argument of basic or char array type";
     else if( ev->stack.back().type->form == Type::ConstEnum )
     {
-        ev->out->conv_(MilEmitter::ToI8);
-        ev->out->call_("$MIC$printI8",1,false);
+        ev->out->conv_(MilEmitter::I8);
+        ev->out->call_(coreName("printI8"),1,false);
     }else if( ev->stack.back().type->isInt() )
     {
         if( ev->stack.back().type->form != BasicType::INT64 )
-            ev->out->conv_(MilEmitter::ToI8);
-        ev->out->call_("$MIC$printI8",1,false);
+            ev->out->conv_(MilEmitter::I8);
+        ev->out->call_(coreName("printI8"),1,false);
     }else if( ev->stack.back().type->isUInt() )
     {
         if( ev->stack.back().type->form != BasicType::UINT64 )
-            ev->out->conv_(MilEmitter::ToU8);
-        ev->out->call_("$MIC$printU8",1,false);
+            ev->out->conv_(MilEmitter::U8);
+        ev->out->call_(coreName("printU8"),1,false);
     }else if( ev->stack.back().type->isReal() )
     {
         if( ev->stack.back().type->form != BasicType::LONGREAL )
-            ev->out->conv_(MilEmitter::ToR8);
-        ev->out->call_("$MIC$printF8",1,false);
+            ev->out->conv_(MilEmitter::R8);
+        ev->out->call_(coreName("printF8"),1,false);
     }else if( ev->stack.back().type->isText() )
     {
         // TODO: do we really accept array of string by value?
         if( ev->stack.back().type->form != BasicType::CHAR )
-            ev->out->call_("$MIC$printStr",1,false);
+            ev->out->call_(coreName("printStr"),1,false);
         else
-            ev->out->call_("$MIC$printCh",1,false);
+            ev->out->call_(coreName("printCh"),1,false);
     }else if( ev->stack.back().type->isBoolean() )
-        ev->out->call_("$MIC$printBool",1,false);
+        ev->out->call_(coreName("printBool"),1,false);
     else if( ev->stack.back().type->isSet() )
-        ev->out->call_("$MIC$printSet",1,false);
+        ev->out->call_(coreName("printSet"),1,false);
     else
         ev->err = "given type not supported with PRINT or PRINTLN";
     if( ln )
     {
         ev->out->ldc_i4(0xa); // LF
-        ev->out->call_("$MIC$printCh",1,false);
+        ev->out->call_(coreName("printCh"),1,false);
     }
 }
 
@@ -572,9 +580,9 @@ void Builtins::NEW(int nArgs)
     }
     if( what.type->base->form == Type::Record )
     {
-        ev->out->sizeof_(ev->toDesig(what.type->base));
-        ev->out->call_("$MIC$alloc32",1,1);
-        ev->out->castptr_(ev->toDesig(what.type->base));
+        ev->out->sizeof_(ev->toQuali(what.type->base));
+        ev->out->call_(coreName("alloc32"),1,1);
+        ev->out->castptr_(ev->toQuali(what.type->base));
         ev->out->stind_(MilEmitter::IntPtr);
     }else if( what.type->base->len > 0 ) // fixed size array
     {
@@ -583,11 +591,11 @@ void Builtins::NEW(int nArgs)
             ev->err = "cannot dynamically set array length for non-open array";
             return;
         }
-        ev->out->sizeof_(ev->toDesig(what.type->base->base));
+        ev->out->sizeof_(ev->toQuali(what.type->base->base));
         ev->out->ldc_i4(what.type->base->len);
         ev->out->mul_();
-        ev->out->call_("$MIC$alloc32",1,1);
-        ev->out->castptr_(ev->toDesig(what.type->base));
+        ev->out->call_(coreName("alloc32"),1,1);
+        ev->out->castptr_(ev->toQuali(what.type->base));
         ev->out->stind_(MilEmitter::IntPtr);
     }else // open array
     {
@@ -596,10 +604,10 @@ void Builtins::NEW(int nArgs)
             ev->err = "expecting two arguments, the second as the explicit length";
             return;
         }
-        ev->out->sizeof_(ev->toDesig(what.type->base->base));
+        ev->out->sizeof_(ev->toQuali(what.type->base->base));
         ev->out->mul_();
-        ev->out->call_("$MIC$alloc32",1,1);
-        ev->out->castptr_(ev->toDesig(what.type->base));
+        ev->out->call_(coreName("alloc32"),1,1);
+        ev->out->castptr_(ev->toQuali(what.type->base));
         ev->out->stind_(MilEmitter::IntPtr);
     }
 }
@@ -614,7 +622,7 @@ void Builtins::DISPOSE(int nArgs)
         return;
     }
 
-    ev->out->call_("$MIC$free",1,1);
+    ev->out->call_(coreName("free"),1,1);
 
 }
 
@@ -690,7 +698,7 @@ int Builtins::addIncDecTmp()
         decl->mode = Declaration::LocalDecl;
         decl->type = ev->mdl->getType(BasicType::INT32);
         decl->outer = ev->mdl->getTopScope();
-        decl->id = ev->out->addLocal(ev->toDesig(decl->type),decl->name);
+        decl->id = ev->out->addLocal(ev->toQuali(decl->type),decl->name);
     }
     return decl->id;
 }

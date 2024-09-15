@@ -20,6 +20,7 @@
 #include "MicRowCol.h"
 #include "MicMilEmitter.h"
 #include "MicMilOp.h"
+#include "MicToken.h" // TODO: move getSymbol to separate class
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QtDebug>
@@ -50,9 +51,9 @@ void MilEmitter::beginModule(const QByteArray& moduleName, const QString& source
         if( !m.isGeneric )
             continue; // otherwise the client directly calls addType/beginType or addConst
         if( m.isConst )
-            d_out->addConst("",m.name,QVariant());
+            d_out->addConst(MilQuali(),m.name,QVariant());
         else
-            d_out->addType(m.name,false,"",Generic,0);
+            d_out->addType(m.name,false,MilQuali(),Generic,0);
     }
 }
 
@@ -62,19 +63,19 @@ void MilEmitter::endModule()
     d_out->endModule();
 }
 
-void MilEmitter::addImport(const QByteArray& path, const QByteArray& name)
+void MilEmitter::addImport(const QByteArray& path)
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
-    d_out->addImport(path, name);
+    d_out->addImport(path);
 }
 
-void MilEmitter::addVariable(const QByteArray& typeRef, QByteArray name, bool isPublic)
+void MilEmitter::addVariable(const MilQuali& typeRef, QByteArray name, bool isPublic)
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
     d_out->addVariable(typeRef,name, isPublic);
 }
 
-void MilEmitter::addConst(const QByteArray& typeRef, const QByteArray& name, const QVariant& val)
+void MilEmitter::addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val)
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
     d_out->addConst(typeRef, name, val);
@@ -130,40 +131,40 @@ void MilEmitter::endType()
     d_typeKind = 0;
 }
 
-void MilEmitter::addType(const QByteArray& name, bool isPublic, const QByteArray& baseType, quint8 typeKind, quint32 len)
+void MilEmitter::addType(const QByteArray& name, bool isPublic, const MilQuali& baseType, quint8 typeKind, quint32 len)
 {
     Q_ASSERT( d_typeKind == 0 );
     Q_ASSERT( typeKind == Alias || typeKind == Pointer || typeKind == Array);
     d_out->addType(name,isPublic,baseType,typeKind,len);
 }
 
-void MilEmitter::addField(const QByteArray& fieldName, const QByteArray& typeRef, bool isPublic)
+void MilEmitter::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic)
 {
     Q_ASSERT( d_typeKind == Struct || d_typeKind == Union );
     d_out->addField(fieldName, typeRef, isPublic );
 }
 
-quint32 MilEmitter::addLocal(const QByteArray& typeRef, QByteArray name)
+quint32 MilEmitter::addLocal(const MilQuali& typeRef, QByteArray name)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    Q_ASSERT( !typeRef.isEmpty() );
+    Q_ASSERT( !typeRef.second.isEmpty() );
     d_proc.back().d_locals.append(qMakePair(typeRef,name));
     return d_proc.back().d_locals.size()-1;
 }
 
-quint32 MilEmitter::addArgument(const QByteArray& typeRef, QByteArray name)
+quint32 MilEmitter::addArgument(const MilQuali& typeRef, QByteArray name)
 {
     Q_ASSERT( !d_proc.isEmpty() || d_typeKind == ProcType );
-    if( typeRef.isEmpty() )
+    if( typeRef.second.isEmpty() )
         return 0; // error reported elsewhere
     d_proc.back().d_args.append(qMakePair(typeRef,name));
     return 0;
 }
 
-void MilEmitter::setReturnType(const QByteArray& typeRef)
+void MilEmitter::setReturnType(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty()  || d_typeKind == ProcType );
-    Q_ASSERT( d_proc.back().d_retType.isEmpty() );
+    Q_ASSERT( d_proc.back().d_retType.second.isEmpty() );
     d_proc.back().d_retType = typeRef;
 }
 
@@ -177,6 +178,40 @@ void MilEmitter::setVararg()
 {
     Q_ASSERT( !d_proc.isEmpty() || d_typeKind == ProcType );
     d_proc.back().d_isVararg = true;
+}
+
+QByteArray MilEmitter::typeSymbol(MilEmitter::Type t)
+{
+    static QByteArray symbols[IntPtr];
+    if( symbols[0].isEmpty() )
+    {
+        symbols[U1] = Token::getSymbol("uint8");
+        symbols[U2] = Token::getSymbol("uint16");
+        symbols[U4] = Token::getSymbol("uint32");
+        symbols[U8] = Token::getSymbol("uint64");
+        symbols[I1] = Token::getSymbol("int8");
+        symbols[I2] = Token::getSymbol("int16");
+        symbols[I4] = Token::getSymbol("int32");
+        symbols[I8] = Token::getSymbol("int64");
+        symbols[R4] = Token::getSymbol("float32");
+        symbols[R8] = Token::getSymbol("float64");
+    }
+    return symbols[t];
+}
+
+bool MilEmitter::equals(const QByteArray& str, MilEmitter::Type t)
+{
+    return str.constData() == typeSymbol(t).constData();
+}
+
+QByteArray MilEmitter::toString(const MilQuali& q)
+{
+    QByteArray res = q.first;
+    if( res.isEmpty() )
+        res = q.second;
+    else
+        res += "!" + q.second;
+    return res;
 }
 
 void MilEmitter::add_()
@@ -193,17 +228,17 @@ void MilEmitter::and_()
     delta(-2+1);
 }
 
-void MilEmitter::call_(const QByteArray& methodRef, int argCount, bool hasRet)
+void MilEmitter::call_(const MilQuali& methodRef, int argCount, bool hasRet)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_call,methodRef) );
+    d_proc.back().d_body.append(MilOperation(IL_call,QVariant::fromValue(methodRef)) );
     delta(-argCount + (hasRet?1:0) );
 }
 
-void MilEmitter::calli_(const QByteArray& methodRef, int argCount, bool hasRet)
+void MilEmitter::calli_(const MilQuali& methodRef, int argCount, bool hasRet)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_calli,methodRef) );
+    d_proc.back().d_body.append(MilOperation(IL_calli,QVariant::fromValue(methodRef)) );
     delta(-argCount + (hasRet?1:0) );
 }
 
@@ -214,10 +249,10 @@ void MilEmitter::case_(const CaseLabelList& l)
     delta(0);
 }
 
-void MilEmitter::castptr_(const QByteArray& typeRef)
+void MilEmitter::castptr_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_castptr,typeRef) );
+    d_proc.back().d_body.append(MilOperation(IL_castptr,QVariant::fromValue(typeRef)) );
     delta(-1+1);
 }
 
@@ -248,43 +283,43 @@ void MilEmitter::clt_(bool withUnsigned)
     delta(-2+1);
 }
 
-void MilEmitter::conv_(MilEmitter::ToType t)
+void MilEmitter::conv_(MilEmitter::Type t)
 {
     // NOTE that the value on the stack is at least int32 or uint32
     Q_ASSERT( !d_proc.isEmpty() );
     switch( t )
     {
-    case ToI1:
+    case I1:
         d_proc.back().d_body.append(MilOperation(IL_conv_i1));
         break;
-    case ToI2:
+    case I2:
         d_proc.back().d_body.append(MilOperation(IL_conv_i2));
         break;
-    case ToI4:
+    case I4:
         d_proc.back().d_body.append(MilOperation(IL_conv_i4));
         break;
-    case ToI8:
+    case I8:
         d_proc.back().d_body.append(MilOperation(IL_conv_i8));
         break;
-    case ToR4:
+    case R4:
         d_proc.back().d_body.append(MilOperation(IL_conv_r4));
         break;
-    case ToR8:
+    case R8:
         d_proc.back().d_body.append(MilOperation(IL_conv_r8));
         break;
-    case ToU1:
+    case U1:
         d_proc.back().d_body.append(MilOperation(IL_conv_u1));
         break;
-    case ToU2:
+    case U2:
         d_proc.back().d_body.append(MilOperation(IL_conv_u2));
         break;
-    case ToU4:
+    case U4:
         d_proc.back().d_body.append(MilOperation(IL_conv_u4));
         break;
-    case ToU8:
+    case U8:
         d_proc.back().d_body.append(MilOperation(IL_conv_u8));
         break;
-    case ToIp:
+    case IntPtr:
         d_proc.back().d_body.append(MilOperation(IL_conv_ip));
         break;
     default:
@@ -360,10 +395,10 @@ void MilEmitter::if_()
     delta(0);
 }
 
-void MilEmitter::initobj(const QByteArray& typeRef)
+void MilEmitter::initobj(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_initobj,typeRef));
+    d_proc.back().d_body.append(MilOperation(IL_initobj,QVariant::fromValue(typeRef)));
     delta(0);
 }
 
@@ -482,63 +517,67 @@ void MilEmitter::ldc_obj(const MilObject& v)
     delta(+1);
 }
 
-void MilEmitter::ldelem_(const QByteArray& typeRef)
+void MilEmitter::ldelem_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    if( typeRef == "int8" )
-        d_proc.back().d_body.append(MilOperation(IL_ldelem_i1));
-    else if( typeRef == "int16" )
-        d_proc.back().d_body.append(MilOperation(IL_ldelem_i2));
-    else if( typeRef == "int32" )
-        d_proc.back().d_body.append(MilOperation(IL_ldelem_i4));
-    else if( typeRef == "int64" )
-        d_proc.back().d_body.append(MilOperation(IL_ldelem_i8));
-    else if( typeRef == "float32" )
-        d_proc.back().d_body.append(MilOperation(IL_ldelem_r4));
-    else if( typeRef == "float64" )
-        d_proc.back().d_body.append(MilOperation(IL_ldelem_r8));
-    else if( typeRef == "uint8" )
-        d_proc.back().d_body.append(MilOperation(IL_ldelem_u1));
-    else if( typeRef == "uint16" )
-        d_proc.back().d_body.append(MilOperation(IL_ldelem_u2));
-    else if( typeRef == "uint32" )
-        d_proc.back().d_body.append(MilOperation(IL_ldelem_u4));
-    else if( typeRef == "uint64" )
-        d_proc.back().d_body.append(MilOperation(IL_ldelem_u8));
-    else
-        d_proc.back().d_body.append(MilOperation(IL_ldelem,typeRef));
+    if( typeRef.first.isEmpty() )
+    {
+        if( equals( typeRef.second,  I1) )
+            d_proc.back().d_body.append(MilOperation(IL_ldelem_i1));
+        else if( equals( typeRef.second,  I2) )
+            d_proc.back().d_body.append(MilOperation(IL_ldelem_i2));
+        else if( equals( typeRef.second,  I4) )
+            d_proc.back().d_body.append(MilOperation(IL_ldelem_i4));
+        else if( equals( typeRef.second,  I8) )
+            d_proc.back().d_body.append(MilOperation(IL_ldelem_i8));
+        else if( equals( typeRef.second, R4 ) )
+            d_proc.back().d_body.append(MilOperation(IL_ldelem_r4));
+        else if( equals( typeRef.second,  R8 ) )
+            d_proc.back().d_body.append(MilOperation(IL_ldelem_r8));
+        else if( equals( typeRef.second,  U1 ) )
+            d_proc.back().d_body.append(MilOperation(IL_ldelem_u1));
+        else if( equals( typeRef.second,  U2 ) )
+            d_proc.back().d_body.append(MilOperation(IL_ldelem_u2));
+        else if( equals( typeRef.second,  U4 ) )
+            d_proc.back().d_body.append(MilOperation(IL_ldelem_u4));
+        else if( equals( typeRef.second,  U8 ) )
+            d_proc.back().d_body.append(MilOperation(IL_ldelem_u8));
+        else
+            d_proc.back().d_body.append(MilOperation(IL_ldelem,QVariant::fromValue(typeRef)));
+    }else
+        d_proc.back().d_body.append(MilOperation(IL_ldelem,QVariant::fromValue(typeRef)));
     delta(-2+1);
 }
 
-void MilEmitter::ldelema_(const QByteArray& typeRef)
+void MilEmitter::ldelema_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_ldelema,typeRef));
+    d_proc.back().d_body.append(MilOperation(IL_ldelema,QVariant::fromValue(typeRef)));
     delta(-2+1);
 }
 
-void MilEmitter::ldfld_(const QByteArray& fieldRef)
+void MilEmitter::ldfld_(const MilTrident& fieldRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_ldfld,fieldRef));
+    d_proc.back().d_body.append(MilOperation(IL_ldfld,QVariant::fromValue(fieldRef)));
     delta(-1+1);
 }
 
-void MilEmitter::ldflda_(const QByteArray& fieldRef)
+void MilEmitter::ldflda_(const MilTrident& fieldRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_ldflda,fieldRef));
+    d_proc.back().d_body.append(MilOperation(IL_ldflda,QVariant::fromValue(fieldRef)));
     delta(-1+1);
 }
 
-void MilEmitter::ldproc_(const QByteArray& methodRef)
+void MilEmitter::ldproc_(const MilQuali& methodRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_ldproc,methodRef));
+    d_proc.back().d_body.append(MilOperation(IL_ldproc,QVariant::fromValue(methodRef)));
     delta(+1);
 }
 
-void MilEmitter::ldind_(MilEmitter::IndType t)
+void MilEmitter::ldind_(MilEmitter::Type t)
 {
     Q_ASSERT( !d_proc.isEmpty() );
     IL_op i = IL_invalid;
@@ -627,24 +666,24 @@ void MilEmitter::ldnull_()
     delta(+1);
 }
 
-void MilEmitter::ldobj_(const QByteArray& typeRef)
+void MilEmitter::ldobj_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_ldobj,typeRef));
+    d_proc.back().d_body.append(MilOperation(IL_ldobj,QVariant::fromValue(typeRef)));
     delta(-1+1);
 }
 
-void MilEmitter::ldvar_(const QByteArray& fieldRef)
+void MilEmitter::ldvar_(const MilQuali& memberRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_ldvar, fieldRef));
+    d_proc.back().d_body.append(MilOperation(IL_ldvar, QVariant::fromValue(memberRef)));
     delta(+1);
 }
 
-void MilEmitter::ldvara_(const QByteArray& fieldRef)
+void MilEmitter::ldvara_(const MilQuali& memberRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_ldvara,fieldRef));
+    d_proc.back().d_body.append(MilOperation(IL_ldvara,QVariant::fromValue(memberRef)));
     delta(+1);
 }
 
@@ -688,24 +727,24 @@ void MilEmitter::neg_()
     delta(-1+1);
 }
 
-void MilEmitter::newarr_(const QByteArray& typeRef)
+void MilEmitter::newarr_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_newarr,typeRef));
+    d_proc.back().d_body.append(MilOperation(IL_newarr,QVariant::fromValue(typeRef)));
     delta(-1+1);
 }
 
-void MilEmitter::newvla_(const QByteArray& typeRef)
+void MilEmitter::newvla_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_newvla,typeRef) );
+    d_proc.back().d_body.append(MilOperation(IL_newvla,QVariant::fromValue(typeRef)) );
     delta(0);
 }
 
-void MilEmitter::newobj_(const QByteArray& typeRef)
+void MilEmitter::newobj_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_newobj,typeRef));
+    d_proc.back().d_body.append(MilOperation(IL_newobj,QVariant::fromValue(typeRef)));
     delta(-0+1);
 }
 
@@ -771,10 +810,10 @@ void MilEmitter::shr_(bool withUnsigned)
     delta(-2+1);
 }
 
-void MilEmitter::sizeof_(const QByteArray& typeRef)
+void MilEmitter::sizeof_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_sizeof,typeRef ) );
+    d_proc.back().d_body.append(MilOperation(IL_sizeof,QVariant::fromValue(typeRef) ) );
     delta(+1);
 }
 
@@ -788,34 +827,34 @@ void MilEmitter::starg_(quint16 arg)
     delta(-1);
 }
 
-void MilEmitter::stelem_(const QByteArray& typeRef)
+void MilEmitter::stelem_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    if( typeRef == "int8" )
+    if( equals( typeRef.second,  I1) )
         d_proc.back().d_body.append(MilOperation(IL_stelem_i1));
-    else if( typeRef == "int16" )
+    else if( equals( typeRef.second,  I2) )
         d_proc.back().d_body.append(MilOperation(IL_stelem_i2));
-    else if( typeRef == "int32" )
+    else if( equals( typeRef.second,  I4) )
         d_proc.back().d_body.append(MilOperation(IL_stelem_i4));
-    else if( typeRef == "int64" )
+    else if( equals( typeRef.second,  I8) )
         d_proc.back().d_body.append(MilOperation(IL_stelem_i8));
-    else if( typeRef == "float32" )
+    else if( equals( typeRef.second,  R4) )
         d_proc.back().d_body.append(MilOperation(IL_stelem_r4));
-    else if( typeRef == "float64" )
+    else if( equals( typeRef.second,  R8) )
         d_proc.back().d_body.append(MilOperation(IL_stelem_r8));
     else
-        d_proc.back().d_body.append(MilOperation(IL_stelem,typeRef));
+        d_proc.back().d_body.append(MilOperation(IL_stelem,QVariant::fromValue(typeRef)));
     delta(-3);
 }
 
-void MilEmitter::stfld_(const QByteArray& fieldRef)
+void MilEmitter::stfld_(const MilTrident& fieldRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_stfld,fieldRef ) );
+    d_proc.back().d_body.append(MilOperation(IL_stfld,QVariant::fromValue(fieldRef) ) );
     delta(-2);
 }
 
-void MilEmitter::stind_(MilEmitter::IndType t)
+void MilEmitter::stind_(MilEmitter::Type t)
 {
     Q_ASSERT( !d_proc.isEmpty() );
     IL_op i = IL_invalid;
@@ -875,17 +914,17 @@ void MilEmitter::stloc_(quint16 loc)
     delta(-1);
 }
 
-void MilEmitter::stobj_(const QByteArray& typeRef)
+void MilEmitter::stobj_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_stobj,typeRef) );
+    d_proc.back().d_body.append(MilOperation(IL_stobj,QVariant::fromValue(typeRef)) );
     delta(-2);
 }
 
-void MilEmitter::stvar_(const QByteArray& fieldRef)
+void MilEmitter::stvar_(const MilQuali& memberRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
-    d_proc.back().d_body.append(MilOperation(IL_stvar,fieldRef) );
+    d_proc.back().d_body.append(MilOperation(IL_stvar,QVariant::fromValue(memberRef)) );
     delta(-1);
 }
 
@@ -987,19 +1026,15 @@ void IlAsmRenderer::endModule()
     state = Idle;
 }
 
-void IlAsmRenderer::addImport(const QByteArray& path, const QByteArray& name)
+void IlAsmRenderer::addImport(const QByteArray& path)
 {
-    out << ws() << "import ";
-    if( !name.isEmpty() )
-        out << name << " := " << path;
-    else
-        out << path;
+    out << ws() << "import " << path;
     out << endl;
 }
 
-void IlAsmRenderer::addVariable(const QByteArray& typeRef, QByteArray name, bool isPublic)
+void IlAsmRenderer::addVariable(const MilQuali& typeRef, QByteArray name, bool isPublic)
 {
-    out << ws() << "var " << name << ": " << typeRef << endl;
+    out << ws() << "var " << name << ": " << MilEmitter::toString(typeRef) << endl;
 }
 
 void IlAsmRenderer::addProcedure(const MilProcedure& m)
@@ -1033,7 +1068,7 @@ void IlAsmRenderer::endType()
     state = Module;
 }
 
-void IlAsmRenderer::addType(const QByteArray& name, bool isPublic, const QByteArray& baseType, quint8 typeKind, quint32 len)
+void IlAsmRenderer::addType(const QByteArray& name, bool isPublic, const MilQuali& baseType, quint8 typeKind, quint32 len)
 {
     out << ws() << "type " << name;
     if( isPublic )
@@ -1043,21 +1078,21 @@ void IlAsmRenderer::addType(const QByteArray& name, bool isPublic, const QByteAr
     switch(typeKind)
     {
     case MilEmitter::Alias:
-        out << baseType << endl;
+        out << MilEmitter::toString(baseType) << endl;
         break;
     case MilEmitter::Pointer:
-        out << "pointer to " << baseType << endl;
+        out << "pointer to " << MilEmitter::toString(baseType) << endl;
         break;
     case MilEmitter::Array:
         out << "array ";
         if( len )
             out << len << " ";
-        out << "of " << baseType << endl;
+        out << "of " << MilEmitter::toString(baseType) << endl;
         break;
     }
 }
 
-void IlAsmRenderer::addField(const QByteArray& fieldName, const QByteArray& typeRef, bool isPublic)
+void IlAsmRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic)
 {
     out << ws();
     if( state == Module )
@@ -1066,7 +1101,7 @@ void IlAsmRenderer::addField(const QByteArray& fieldName, const QByteArray& type
     if( isPublic )
         out << "*";
 
-    out << ": " << typeRef << endl;
+    out << ": " << MilEmitter::toString(typeRef) << endl;
 }
 
 static inline bool isAllPrintable(const QString& str)
@@ -1164,18 +1199,18 @@ void IlAsmRenderer::render(const MilProcedure& m)
     {
         if( i != 0 )
             out << "; ";
-        if( !m.d_args[i].first.isEmpty() )
+        if( !m.d_args[i].first.second.isEmpty() )
             out << m.d_args[i].second;
         else
             out << i;
-        out << ": "<< m.d_args[i].first;
+        out << ": "<< MilEmitter::toString(m.d_args[i].first);
     }
     if( m.d_isVararg )
         out << ", .. ";
 
     out << ")";
-    if( !m.d_retType.isEmpty() )
-        out << ":" << m.d_retType;
+    if( !m.d_retType.second.isEmpty() )
+        out << ":" << MilEmitter::toString(m.d_retType);
 
     switch( m.d_kind)
     {
@@ -1208,7 +1243,7 @@ void IlAsmRenderer::render(const MilProcedure& m)
                 out << m.d_locals[i].second;
             else
                 out << i;
-            out << ": " << m.d_locals[i].first << "; ";
+            out << ": " << MilEmitter::toString(m.d_locals[i].first) << "; ";
         }
         out << endl;
         level--;
@@ -1260,7 +1295,7 @@ void IlAsmRenderer::render(const MilProcedure& m)
                           obj.data.type() == QVariant::List ||
                           obj.data.type() == QVariant::Map );
                 if( obj.data.type() != QVariant::ByteArray )
-                    out << obj.typeRef;
+                    out << MilEmitter::toString(obj.typeRef);
                 renderComponents(out,obj.data);
                 out << endl;
             }
@@ -1279,11 +1314,11 @@ void IlAsmRenderer::render(const MilProcedure& m)
     state = old;
 }
 
-void IlAsmRenderer::addConst(const QByteArray& typeRef, const QByteArray& name, const QVariant& val)
+void IlAsmRenderer::addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val)
 {
     out << ws() << "const " << name;
-    if( !typeRef.isEmpty() )
-        out << " : " << typeRef;
+    if( !typeRef.second.isEmpty() )
+        out << " : " << MilEmitter::toString(typeRef);
     if( !val.isNull() )
     {
         out << " = ";
@@ -1291,10 +1326,71 @@ void IlAsmRenderer::addConst(const QByteArray& typeRef, const QByteArray& name, 
         {
             const MilObject obj = val.value<MilObject>();
             if( obj.data.type() != QVariant::ByteArray )
-                out << obj.typeRef;
+                out << MilEmitter::toString(obj.typeRef);
             renderComponents(out,obj.data);
         }else
             renderComponents(out, val );
         out << endl;
     }
+}
+
+
+void MilSplitter::beginModule(const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& mp)
+{
+    foreach(MilRenderer* r, renderer)
+        r->beginModule(moduleName, sourceFile, mp);
+}
+
+void MilSplitter::endModule()
+{
+    foreach(MilRenderer* r, renderer)
+        r->endModule();
+}
+
+void MilSplitter::addImport(const QByteArray& path)
+{
+    foreach(MilRenderer* r, renderer)
+        r->addImport(path);
+}
+
+void MilSplitter::addVariable(const MilQuali& typeRef, QByteArray name, bool isPublic)
+{
+    foreach(MilRenderer* r, renderer)
+        r->addVariable(typeRef, name, isPublic);
+}
+
+void MilSplitter::addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val)
+{
+    foreach(MilRenderer* r, renderer)
+        r->addConst(typeRef, name, val);
+}
+
+void MilSplitter::addProcedure(const MilProcedure& method)
+{
+    foreach(MilRenderer* r, renderer)
+        r->addProcedure(method);
+}
+
+void MilSplitter::beginType(const QByteArray& name, bool isPublic, quint8 typeKind)
+{
+    foreach(MilRenderer* r, renderer)
+        r->beginType(name,isPublic,typeKind);
+}
+
+void MilSplitter::endType()
+{
+    foreach(MilRenderer* r, renderer)
+        r->endType();
+}
+
+void MilSplitter::addType(const QByteArray& name, bool isPublic, const MilQuali& baseType, quint8 typeKind, quint32 len)
+{
+    foreach(MilRenderer* r, renderer)
+        r->addType(name,isPublic,baseType, typeKind, len);
+}
+
+void MilSplitter::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic)
+{
+    foreach(MilRenderer* r, renderer)
+        r->addField(fieldName,typeRef,isPublic);
 }

@@ -53,18 +53,15 @@ void InMemRenderer::endModule()
     module = 0;
 }
 
-void InMemRenderer::addImport(const QByteArray& path, const QByteArray& name)
+void InMemRenderer::addImport(const QByteArray& path)
 {
     Q_ASSERT(module);
-    MilImport imp;
-    imp.name = name;
-    imp.path = path;
-    module->imports.append(imp);
-    module->symbols[name] = qMakePair(MilModule::Import,module->imports.size()-1);
+    module->imports.append(path);
+    module->symbols[path] = qMakePair(MilModule::Import,module->imports.size()-1);
     module->order.append(qMakePair(MilModule::Import,module->imports.size()-1) );
 }
 
-void InMemRenderer::addVariable(const QByteArray& typeRef, QByteArray name,  bool isPublic)
+void InMemRenderer::addVariable(const MilQuali& typeRef, QByteArray name,  bool isPublic)
 {
     Q_ASSERT(module);
     MilVariable var;
@@ -74,6 +71,18 @@ void InMemRenderer::addVariable(const QByteArray& typeRef, QByteArray name,  boo
     module->vars.append(var);
     module->symbols[name] = qMakePair(MilModule::Variable,module->vars.size()-1);
     module->order.append(qMakePair(MilModule::Variable,module->vars.size()-1) );
+}
+
+void InMemRenderer::addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val)
+{
+    Q_ASSERT(module);
+    MilConst c;
+    c.name = name;
+    c.type = typeRef;
+    c.val = val;
+    module->consts.append(c);
+    module->symbols[name] = qMakePair(MilModule::Const,module->consts.size()-1);
+    module->order.append(qMakePair(MilModule::Const,module->consts.size()-1) );
 }
 
 void InMemRenderer::addProcedure(const Mic::MilProcedure& method)
@@ -103,7 +112,7 @@ void InMemRenderer::endType()
     type = 0;
 }
 
-void InMemRenderer::addType(const QByteArray& name, bool isPublic, const QByteArray& baseType, quint8 typeKind, quint32 len)
+void InMemRenderer::addType(const QByteArray& name, bool isPublic, const MilQuali& baseType, quint8 typeKind, quint32 len)
 {
     Q_ASSERT(module);
     MilType t;
@@ -117,7 +126,7 @@ void InMemRenderer::addType(const QByteArray& name, bool isPublic, const QByteAr
     module->order.append(qMakePair(MilModule::Type,module->types.size()-1));
 }
 
-void InMemRenderer::addField(const QByteArray& fieldName, const QByteArray& typeRef, bool isPublic)
+void InMemRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic)
 {
     Q_ASSERT(module);
     Q_ASSERT(type);
@@ -158,34 +167,31 @@ static void render_(const MilProcedure* p, MilRenderer* r)
     r->addProcedure(*p);
 }
 
-static void render_(const MilImport* i, MilRenderer* r)
-{
-    r->addImport(i->path,i->name);
-}
-
-bool MilModule::render(MilRenderer* r) const
+bool MilLoader::render(MilRenderer* r, const MilModule* m)
 {
     Q_ASSERT(r);
-    MilEmitter e(r);
+   // MilEmitter e(r);
 
-    r->beginModule(name,"", metaParams);
-    foreach( const Order& i, order )
+    r->beginModule(m->name,"", m->metaParams);
+    foreach( const MilModule::Order& i, m->order )
     {
         switch(i.first)
         {
-        case Type:
-            render_(&types[i.second],r);
+        case MilModule::Type:
+            render_(&m->types[i.second],r);
             break;
-        case Variable:
-            render_(&vars[i.second],r);
+        case MilModule::Variable:
+            render_(&m->vars[i.second],r);
             break;
-        case Proc:
-            render_(&procs[i.second],r);
+        case MilModule::Proc:
+            render_(&m->procs[i.second],r);
             break;
-        case Import:
-            render_(&imports[i.second],r);
+        case MilModule::Import:
+            // TODO render_(&m->imports[i.second],r);
             break;
+            // TODO Const
         }
     }
     r->endModule();
+    return true;
 }

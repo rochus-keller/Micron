@@ -26,48 +26,6 @@
 namespace Mic
 {
 
-struct MilVariable
-{
-    QByteArray name;
-    QByteArray type;
-    bool isPublic;
-};
-
-struct MilType
-{
-    QByteArray name;
-    quint8 kind;
-    bool isPublic;
-    QByteArray base;
-    quint32 len;
-    QList<MilVariable> fields;
-};
-
-struct MilImport
-{
-    QByteArray name;
-    QByteArray path;
-};
-
-struct MilModule
-{
-    QByteArray name;
-
-    QByteArrayList metaParams; // just names, pointing to const or type decls
-    // TODO: optional metaActuals
-
-    enum What { Type, Variable, Proc, Import };
-    QHash<QByteArray,QPair<What,quint32> >  symbols;
-    typedef QPair<What,quint32> Order;
-    QList<Order> order;
-    QList<MilType> types;
-    QList<MilProcedure> procs;
-    QList<MilImport> imports;
-    QList<MilVariable> vars;
-
-    bool render(MilRenderer*) const;
-};
-
 class MilLoader
 {
 public:
@@ -75,6 +33,7 @@ public:
 
     const MilModule* getModule(const QByteArray& name) const;
     const QList<MilModule>& getModules() const { return modules; }
+    static bool render(MilRenderer*, const MilModule*);
 private:
     friend class InMemRenderer;
     QList<MilModule> modules;
@@ -88,19 +47,23 @@ public:
     void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& );
     void endModule();
 
-    void addImport( const QByteArray& path, const QByteArray& name );
+    void addImport(const QByteArray& path);
 
-    void addVariable(const QByteArray& typeRef, QByteArray name , bool isPublic);
+    void addVariable(const MilQuali& typeRef, QByteArray name , bool isPublic);
+    void addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val );
     void addProcedure(const Mic::MilProcedure& method );
 
     void beginType(const QByteArray& name, bool isPublic, quint8 typeKind);
     void endType();
-    void addType( const QByteArray& name, bool isPublic, const QByteArray& baseType,
+    void addType( const QByteArray& name, bool isPublic, const MilQuali& baseType,
                   quint8 typeKind, quint32 len = 0);
 
     void addField( const QByteArray& fieldName, // on top level or in class
-                   const QByteArray& typeRef,
+                   const MilQuali& typeRef,
                    bool isPublic = true );
+
+    MilModule* getCurrentModule() const { return module; }
+    MilType* getCurrentType() const { return type; }
 private:
     MilLoader* loader;
     MilModule* module;
