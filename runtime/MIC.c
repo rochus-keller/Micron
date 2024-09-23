@@ -2,8 +2,9 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <stdio.h>
 
-int $MIC$relop1(const char* lhs, const char* rhs, int op)
+int $MIC$relop1(const char* l, const char* r, int op)
 {
 	switch( op )
 	{
@@ -43,47 +44,6 @@ int $MIC$relop4(char lhs, char rhs, int op)
 	char r[2] = "x";
 	l[0] = rhs;
 	return $MIC$relop1(l,r,op);
-}
-
-int32_t $MIC$Div32( int32_t a, int32_t b )
-{
-    // source: http://lists.inf.ethz.ch/pipermail/oberon/2019/013353.html
-    assert( b != 0 );
-    if( a < 0 )
-        return (a - b + 1) / b;
-    else
-        return a / b;
-}
-
-int64_t $MIC$Div64( int64_t a, int64_t b )
-{
-    // source: http://lists.inf.ethz.ch/pipermail/oberon/2019/013353.html
-    assert( b != 0 );
-    if( a < 0 )
-        return (a - b + 1) / b;
-    else
-        return a / b;
-}
-
-
-int32_t $MIC$Mod32( int32_t a, int32_t b )
-{
-    // source: http://lists.inf.ethz.ch/pipermail/oberon/2019/013353.html
-    assert( b != 0 );
-    if (a < 0)
-        return (b - 1) + (a - b + 1) % b;
-    else
-        return a % b;
-}
-
-int64_t $MIC$Mod64( int64_t a, int64_t b )
-{
-    // source: http://lists.inf.ethz.ch/pipermail/oberon/2019/013353.html
-    assert( b != 0 );
-    if (a < 0)
-        return (b - 1) + (a - b + 1) % b;
-    else
-        return a % b;
 }
 
 uint32_t $MIC$SetDiv( uint32_t lhs, uint32_t rhs )
@@ -129,16 +89,6 @@ void $MIC$printBool(uint8_t b)
 void $MIC$printSet(uint32_t s)
 {
 	printf("%x", s);
-}
-
-void* $MIC$alloc32(uint32_t sz)
-{
-	return malloc(sz);
-}
-
-void $MIC$free(void* ptr)
-{
-	free(ptr);
 }
 
 void $MIC$strcopy(char* lhs,char* rhs)

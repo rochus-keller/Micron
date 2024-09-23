@@ -1,5 +1,7 @@
 module Mini
-
+var i : integer
 begin
-	println("Hello")
+	print("Hello ")
+	i := 42
+	println(i)
 end Mini

@@ -19,6 +19,7 @@
 
 #include "MicEiGen.h"
 #include "MicMilLoader.h"
+#include "MicMilInterpreter.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -35,22 +36,6 @@
 #include <MilToken.h>
 #include <QBuffer>
 #include <QCommandLineParser>
-
-QStringList collectFiles( const QDir& dir, const QStringList& suffix )
-{
-    QStringList res;
-    QStringList files = dir.entryList( QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name );
-
-    foreach( const QString& f, files )
-        res += collectFiles( QDir( dir.absoluteFilePath(f) ), suffix );
-
-    files = dir.entryList( suffix, QDir::Files, QDir::Name );
-    foreach( const QString& f, files )
-    {
-        res.append(dir.absoluteFilePath(f));
-    }
-    return res;
-}
 
 class Lex2 : public Mic::Scanner2
 {
@@ -137,7 +122,12 @@ public:
         return 0;
     }
 
-    QByteArray moduleSuffix( const Mic::Import& imp )
+    QByteArray modulePath( const QByteArrayList& path )
+    {
+        return path.join('$');
+    }
+
+    QByteArray moduleSuffix( const Mic::MetaActualList& ma )
     {
         // TODO: this is an intermediate solution assuming everything is built from sources in full everytime.
         return "$" + QByteArray::number(modules.size());
@@ -161,7 +151,7 @@ public:
         modules.append(ModuleSlot(imp,file,0));
         ms = &modules.back();
 
-#define _GEN_OUTPUT_
+//#define _GEN_OUTPUT_
 #ifdef _GEN_OUTPUT_
 #if 0
         QFileInfo info(file);
@@ -225,7 +215,7 @@ public:
     }
 };
 
-static void compile(const QStringList& files, const QStringList& searchPaths)
+static void process(const QStringList& files, const QStringList& searchPaths, bool run, bool dump)
 {
     int ok = 0;
     int all = 0;
@@ -244,21 +234,27 @@ static void compile(const QStringList& files, const QStringList& searchPaths)
         }
 
         Mic::Import imp;
-        imp.path.append(info.baseName().toUtf8());
+        imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
         mgr.loadModule(imp); // recursively compiles all imported files
-#if 0
-        foreach( const Mic::MilModule& m, mgr.loader.getModules() )
-        {
-            QFile out;
-            out.open(stdout, QIODevice::WriteOnly);
-            Mic::IlAsmRenderer r(&out);
-            Mic::MilLoader::render(&r,&m);
-            out.putChar('\n');
-        }
-#endif
+
+        if( dump )
+            foreach( const Mic::MilModule& m, mgr.loader.getModules() )
+            {
+                QFile out;
+                out.open(stdout, QIODevice::WriteOnly);
+                Mic::IlAsmRenderer r(&out);
+                Mic::MilLoader::render(&r,&m);
+                out.putChar('\n');
+            }
+
         all += mgr.modules.size();
         foreach( const ModuleSlot& m, mgr.modules )
             ok += m.decl ? 1 : 0;
+        if( run )
+        {
+            Mic::MilInterpreter intp(&mgr.loader);
+            intp.run(imp.path.back());
+        }
     }
     Mic::Expression::killArena();
     Mic::AstModel::cleanupGlobals();
@@ -277,6 +273,10 @@ int main(int argc, char *argv[])
     cp.addPositionalArgument("main", "the main module of the application");
     QCommandLineOption sp("I", "add a path where to look for modules", "path");
     cp.addOption(sp);
+    QCommandLineOption run("r", "run in interpreter");
+    cp.addOption(run);
+    QCommandLineOption dump("d", "dump MIL code");
+    cp.addOption(dump);
 
     cp.process(a);
     const QStringList args = cp.positionalArguments();
@@ -284,7 +284,7 @@ int main(int argc, char *argv[])
         return -1;
     const QStringList searchPaths = cp.values(sp);
 
-    compile(QStringList() << args[0], searchPaths);
+    process(QStringList() << args[0], searchPaths, cp.isSet(run), cp.isSet(dump));
 
     return 0;
 }

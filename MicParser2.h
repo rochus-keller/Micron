@@ -38,7 +38,8 @@ namespace Mic {
     class Importer {
     public:
         virtual Declaration* loadModule( const Import& imp ) = 0;
-        virtual QByteArray moduleSuffix( const Import& imp ) = 0;
+        virtual QByteArray moduleSuffix( const MetaActualList& imp ) = 0;
+        virtual QByteArray modulePath( const QByteArrayList& imp ) = 0;
     };
 
     class Parser2 {

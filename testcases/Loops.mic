@@ -7,24 +7,24 @@ begin
 		println(i)
 		i := i + 1
 	end
-	
+
 	i := +1
 	repeat
 		println(i)
 		i := i + 1
 	until i >= 10
 	
-	i := +0
+	i := 0
 	loop
 		println(i)
-		i := i + 1
+		inc(i)
 		if i >= 5 then 
 			exit 
 		end
 	end	
 
 	for 
-		i := +1 
+		i := 1 
 		to 10 
 		by +2 
 		do
@@ -38,6 +38,5 @@ begin
 		do
 		println(i)
 	end
-	
 	println("Loops done")
 end Loops

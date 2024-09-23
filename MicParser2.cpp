@@ -1005,8 +1005,10 @@ void Parser2::ConstDeclaration() {
     const IdentDef id = identdef();
 	expect(Tok_Eq, false, "ConstDeclaration");
     Declaration* d = addDecl(id, Declaration::ConstDecl);
+    Token t = la;
     Expression* e = ConstExpression();
-    ev->evaluate(e);
+    if( !ev->evaluate(e) )
+        error(t, ev->getErr());
     Value v = ev->pop();
     d->data = v.val;
     d->type = v.type;
@@ -1146,7 +1148,8 @@ void Parser2::length(quint32& len) {
 	if( FIRST_ConstExpression(la.d_type) ) {
         const Token tok = la;
         Expression* lenExpr = ConstExpression();
-        ev->evaluate(lenExpr);
+        if( !ev->evaluate(lenExpr) )
+            error(tok, ev->getErr());
         Value v = ev->pop();
         if( !v.type->isUInt() )
         {
@@ -1163,7 +1166,9 @@ void Parser2::length(quint32& len) {
         }
 	} else if( la.d_type == Tok_VAR ) {
 		expect(Tok_VAR, true, "length");
-        ev->evaluate(expression());
+        Token t = la;
+        if( !ev->evaluate(expression()) )
+            error(t, ev->getErr());
         Value v = ev->pop();
         // TODO
         len = 0;
@@ -1341,7 +1346,8 @@ DeclList Parser2::constEnum() {
 	if( la.d_type == Tok_Eq ) {
 		expect(Tok_Eq, false, "constEnum");
         const Token tok = la;
-        ev->evaluate(ConstExpression());
+        if( !ev->evaluate(ConstExpression()) )
+            error(tok, ev->getErr());
         Value v = ev->pop();
         if( !v.type->isInteger() )
             error(tok,"expecting an integer");
@@ -2268,6 +2274,7 @@ Expression* Parser2::literal() {
         res = Expression::create(Expression::Literal,cur.toRowCol());
         res->type = mdl->getType(BasicType::String);
         res->val = ev->dequote(cur.d_val);
+        // string literal: byte array latin-1 with type BasicType::String
     }else if( la.d_type == Tok_hexstring ) {
         expect(Tok_hexstring, false, "literal");
         // alternative syntax for A{ x x x } with A = array of byte
@@ -2280,17 +2287,19 @@ Expression* Parser2::literal() {
         addHelper(arr);
         res->type = arr;
         res->val = bytes;
+        // byte array literal: byte array with type array of uint8
     } else if( la.d_type == Tok_hexchar ) {
 		expect(Tok_hexchar, false, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
         res->type = mdl->getType(BasicType::CHAR);
         QByteArray tmp = cur.d_val;
         tmp.chop(1); // remove X postfix
-        res->val = QVariant::fromValue((char)tmp.toUInt(0,16));
+        res->val = QVariant::fromValue((char)(quint8)tmp.toUInt(0,16));
     } else if( la.d_type == Tok_NIL ) {
 		expect(Tok_NIL, true, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
         res->type = mdl->getType(BasicType::Nil);
+        res->val = QVariant();
     } else if( FIRST_set(la.d_type) ) {
         res = set();
 	} else if( la.d_type == Tok_TRUE ) {
@@ -2341,19 +2350,43 @@ Expression* Parser2::constructor() {
             if( count.first != dl.size() )
                 error(ttok,QString("the number of components (%1) doesn't fit the number of fields "
                                    "(%2, variants count as one)").arg(dl.size()).arg(count.first));
+            MilRecordLiteral m;
             if( state == Named )
             {
-                QVariantMap m;
+                QVector<MilFieldSlot> fields(vals.size());
                 for( int i = 0; i < vals.size(); i++ )
-                    m.insert(dl[i]->name, vals[i].val);
-                v.val = m;
+                {
+                    Declaration* f = t->findField(dl[i]->name);
+                    if( f == 0 )
+                    {
+                        error(ttok,QString("the record type has not field named '%1'").arg(dl[i]->name.constData()));
+                        continue;
+                    }
+                    if( f->mode == Declaration::Variant )
+                    {
+                        if( !fields.back().first.isEmpty() )
+                        {
+                            error(ttok,QString("cannot initialize variant part more than once '%1'").arg(dl[i]->name.constData()));
+                        }else
+                            fields.back() = qMakePair(dl[i]->name, vals[i].val);
+                    }else
+                    {
+                        const int idx = t->subs.indexOf(f);
+                        if( !fields[idx].first.isEmpty() )
+                            error(ttok,QString("cannot initialize field more than once '%1'").arg(dl[i]->name.constData()));
+                        else
+                            fields[idx] = qMakePair(dl[i]->name, vals[i].val);
+                    }
+                }
+                m = fields.toList();
             }else
             {
-                QVariantList l;
+                Q_ASSERT( vals.size() <= t->subs.size() );
                 for( int i = 0; i < vals.size(); i++ )
-                    l.append(vals[i].val);
-                v.val = l;
+                    m.append(qMakePair(t->subs[i]->name,vals[i].val));
+                // this just takes the first variable part field, if any, which comes after the fix part fields
             }
+            v.val = QVariant::fromValue(m);
         }else if( t->form == Type::Array )
         {
             QVariantList l;
@@ -2449,7 +2482,8 @@ void Parser2::component(Type* constrType, Value& v, quint8& state,  DeclList& dl
         error(tok,QString("only record constructors support named components"));
 
     Expression* res = ConstExpression();
-    ev->evaluate(res);
+    if( !ev->evaluate(res) )
+        error(tok, ev->getErr());
     v = ev->pop();
     if( res->type->form == BasicType::String )
         v.val = QString::fromLatin1(v.val.toByteArray());
@@ -2575,15 +2609,18 @@ void Parser2::statement() {
 }
 
 void Parser2::assignmentOrProcedureCall() {
+    Token t = la;
     Expression* lhs = designator(true);
     if( lhs == 0 )
         return;
-    ev->evaluate(lhs);
-	if( la.d_type == Tok_ColonEq ) {
+    if( !ev->evaluate(lhs) )
+        error(t, ev->getErr());
+    if( la.d_type == Tok_ColonEq ) {
         const Token tok = la;
 		expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
         Expression* rhs = expression();
-        ev->evaluate(rhs); // value is pushed in ev->assign
+        if( !ev->evaluate(rhs) )
+            error(tok, ev->getErr());         // value is pushed in ev->assign
         // TODO: avoid assigning to structured return values of functions on left side
         if( !assigCompat( lhs->type, rhs ) )
             error(tok, "right side is not assignment compatible with left side");
@@ -2630,7 +2667,9 @@ void Parser2::GotoStatement() {
 void Parser2::IfStatement() {
 	expect(Tok_IF, true, "IfStatement");
     out->if_();
-    ev->evaluate(expression(),true);
+    Token t = la;
+    if( !ev->evaluate(expression(), true) )
+        error(t, ev->getErr());
     Expression::deleteAllExpressions();
     ev->pop();
 	expect(Tok_THEN, true, "IfStatement");
@@ -2642,7 +2681,9 @@ void Parser2::IfStatement() {
         out->else_();
         expect(Tok_ELSIF, true, "ElsifStatement");
         out->if_();
-        ev->evaluate(expression(),true);
+        Token t = la;
+        if( !ev->evaluate(expression(), true) )
+            error(t, ev->getErr());
         Expression::deleteAllExpressions();
         ev->pop();
         expect(Tok_THEN, true, "ElsifStatement");
@@ -2666,7 +2707,8 @@ void Parser2::CaseStatement() {
 	expect(Tok_CASE, true, "CaseStatement");
     out->switch_();
     Token tok = la;
-    ev->evaluate(expression(), true);
+    if( !ev->evaluate(expression(), true) )
+        error(tok, ev->getErr());
     Type* t = ev->top().type;
     Expression::deleteAllExpressions();
     ev->pop();
@@ -2749,7 +2791,8 @@ void Parser2::LabelRange(Type* t, CaseLabels& l) {
 Value Parser2::label(Type* t) {
     Token tok = la;
     Expression* e = ConstExpression();
-    ev->evaluate(e);
+    if( !ev->evaluate(e) )
+        error(tok, ev->getErr());
     Value res = ev->pop();
     if( !assigCompat(t, e) )
         error(tok,"label has incompatible type");
@@ -2761,7 +2804,8 @@ void Parser2::WhileStatement() {
 	expect(Tok_WHILE, true, "WhileStatement");
     out->while_();
     const Token t = la;
-    ev->evaluate(expression(),true);
+    if( !ev->evaluate(expression(), true) )
+        error(t, ev->getErr());
     if( ev->top().type->form != BasicType::BOOLEAN )
         error(t,"expecting boolean expression");
     Expression::deleteAllExpressions();
@@ -2780,7 +2824,8 @@ void Parser2::RepeatStatement() {
 	expect(Tok_UNTIL, true, "RepeatStatement");
     out->until_();
     const Token t = la;
-    ev->evaluate(expression(), true);
+    if( !ev->evaluate(expression(), true) )
+        error(t, ev->getErr());
     if( ev->top().type->form != BasicType::BOOLEAN )
         error(t,"expecting boolean expression");
     Expression::deleteAllExpressions();
@@ -2803,8 +2848,10 @@ void Parser2::ForStatement() {
     {
         // i := start
         Expression* lhs = toExpr(idxvar, tok.toRowCol());
-        ev->evaluate(lhs);
-        ev->evaluate(expression()); // rhs
+        if( !ev->evaluate(lhs) )
+            error(tok, ev->getErr());
+        if( !ev->evaluate(expression()) )
+            error(tok, ev->getErr());         // rhs
         ev->assign();
         Expression::deleteAllExpressions();
     }
@@ -2815,8 +2862,10 @@ void Parser2::ForStatement() {
     {
         // to := end
         Expression* lhs = toExpr(to, tok.toRowCol());
-        ev->evaluate(lhs);
-        ev->evaluate(expression()); // rhs
+        if( !ev->evaluate(lhs) )
+            error(tok, ev->getErr());
+        if( !ev->evaluate(expression()) )
+            error(tok, ev->getErr());         // rhs
         ev->assign();
         Expression::deleteAllExpressions();
     }
@@ -2826,7 +2875,8 @@ void Parser2::ForStatement() {
 		expect(Tok_BY, true, "ForStatement");
         tok = la;
         Expression* e = ConstExpression();
-        ev->evaluate(e);
+        if( !ev->evaluate(e) )
+            error(tok, ev->getErr());
         Value v = ev->pop();
         if( idxvar && !assigCompat(idxvar->type, e) )
             error(tok,"constant expression is not compatible with control variable");
@@ -2850,7 +2900,8 @@ void Parser2::ForStatement() {
         op->lhs = lhs;
         op->rhs = rhs;
         op->type = lhs->type;
-        ev->evaluate(op);
+        if( !ev->evaluate(op) )
+            error(tok, ev->getErr());
         ev->pop();
         Expression::deleteAllExpressions();
     }
@@ -2860,7 +2911,8 @@ void Parser2::ForStatement() {
     // i := i + 1
     {
         Expression* lhs = toExpr(idxvar, tok.toRowCol());
-        ev->evaluate(lhs);
+        if( !ev->evaluate(lhs) )
+            error(tok, ev->getErr());
 
         Expression* l = toExpr(idxvar, tok.toRowCol());
         l->byVal = true;
@@ -2873,7 +2925,8 @@ void Parser2::ForStatement() {
         rhs->lhs = l;
         rhs->rhs = r;
         rhs->type = idxvar->type;
-        ev->evaluate(rhs);
+        if( !ev->evaluate(rhs) )
+            error(tok, ev->getErr());
 
         ev->assign();
         Expression::deleteAllExpressions();
@@ -3107,15 +3160,18 @@ void Parser2::ReturnStatement() {
                 error(cur,"this return statement doesn't expect an expression");
         const Token tok = la;
         Expression* e = expression();
-        ev->evaluate(e); // value is pushed on stack by prepareRhs
+        if( !ev->evaluate(e) )
+            error(tok, ev->getErr()); // value is pushed on stack by prepareRhs
         if( !assigCompat( mdl->getTopScope()->type, e ) )
             error(tok,"expression is not compatible with the return type");
         if( !ev->prepareRhs(mdl->getTopScope()->type) )
             error(tok, ev->getErr());
-        out->ret_();
+        out->ret_(true);
         Expression::deleteAllExpressions();
     }else if( mdl->getTopScope()->type != 0 && mdl->getTopScope()->type->form != BasicType::NoType )
         error(cur,"this return statement requires an expression");
+    else
+        out->ret_(false);
 }
 
 Type* Parser2::FormalParameters() {
@@ -3236,7 +3292,10 @@ void Parser2::module() {
     ModuleData md;
     md.path = scanner->path();
     md.path += cur.d_val;
-    md.fullName = Token::getSymbol(md.path.join('/'));
+    if( imp )
+        md.fullName = Token::getSymbol(imp->modulePath(md.path));
+    else
+        md.fullName = Token::getSymbol(md.path.join('/'));
     md.metaActuals = metaActuals;
 
     const QString source = cur.d_sourcePath;
@@ -3284,7 +3343,7 @@ void Parser2::module() {
                 Import i;
                 i.metaActuals = metaActuals;
                 i.path = md.path;
-                md.suffix = imp->moduleSuffix(i);
+                md.suffix = imp->moduleSuffix(i.metaActuals);
                 if( !md.suffix.isEmpty() )
                 {
                     md.fullName = Token::getSymbol(md.fullName + md.suffix);
@@ -3310,7 +3369,7 @@ void Parser2::module() {
     if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
 	}
-    out->beginModule(m->name,source,mps); // TODO: name extension for instantiated generic modules
+    out->beginModule(md.fullName,source,mps);
 
     // call "out" here for all non-generic type and const
     for( int i = 0; i < metaActuals.size(); i++ )
@@ -3404,7 +3463,8 @@ void Parser2::import() {
 	if( FIRST_MetaActuals(la.d_type) ) {
         // inlined MetaActuals();
         expect(Tok_Lpar, false, "MetaActuals");
-        ev->evaluate(ConstExpression());
+        if( !ev->evaluate(ConstExpression()) )
+            error(cur, ev->getErr());
         Value v = ev->pop();
         i.metaActuals << v;
         Expression::deleteAllExpressions();
@@ -3412,7 +3472,8 @@ void Parser2::import() {
             if( la.d_type == Tok_Comma ) {
                 expect(Tok_Comma, false, "MetaActuals");
             }
-            ev->evaluate(ConstExpression());
+            if( !ev->evaluate(ConstExpression()) )
+                error(cur, ev->getErr());
             v = ev->pop();
             i.metaActuals << v;
             Expression::deleteAllExpressions();
@@ -3425,11 +3486,16 @@ void Parser2::import() {
 
     if( imp )
     {
-        importDecl->link = imp->loadModule(i);
-        if( importDecl->link )
+        Declaration* mod = imp->loadModule(i);
+        if( mod )
+        {
             // loadModule returns the module decl; we just need the list of module elements:
-            importDecl->link = importDecl->link->link;
-    }
+            importDecl->link = mod->link;
+            ModuleData md = mod->data.value<ModuleData>();
+            out->addImport(md.fullName);
+        }
+    }else
+        out->addImport(Token::getSymbol(i.path.join('/')));
 }
 
 bool Parser2::isUnique( const MetaParamList& l, const Declaration* m)

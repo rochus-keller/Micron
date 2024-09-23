@@ -365,7 +365,7 @@ void Builtins::ASSERT(int nArgs)
     }
     if( !file.type->isText() )
     {
-        ev->err = "expecting string thirs argument";
+        ev->err = "expecting string third argument";
         return;
     }
 
@@ -397,7 +397,7 @@ void Builtins::incdec(int nArgs, bool inc)
     }
     Value what = ev->stack.takeLast();
 
-    if( !what.isLvalue() || !what.ref )
+    if( !what.isLvalue() && !what.ref )
     {
         ev->err = "cannot write to first argument";
         return;
@@ -464,19 +464,14 @@ void Builtins::incdec(int nArgs, bool inc)
     {
         ev->out->dup_();
         ev->out->ldind_(MilEmitter::IntPtr);
-        ev->out->sizeof_(ev->toQuali(what.type->base));
         if( nArgs == 2 )
         {
             if( step.isConst() )
                 ev->out->ldc_i4(step.val.toInt());
             else
                 ev->out->ldloc_(tmp);
-            ev->out->mul_();
         }
-        if( inc )
-            ev->out->add_();
-        else
-            ev->out->sub_();
+        ev->out->ptroff_(ev->toQuali(what.type->base));
         ev->out->stind_(MilEmitter::IntPtr);
     }else
         ev->err = "invalid argument types";
@@ -580,9 +575,7 @@ void Builtins::NEW(int nArgs)
     }
     if( what.type->base->form == Type::Record )
     {
-        ev->out->sizeof_(ev->toQuali(what.type->base));
-        ev->out->call_(coreName("alloc32"),1,1);
-        ev->out->castptr_(ev->toQuali(what.type->base));
+        ev->out->newobj_(ev->toQuali(what.type->base));
         ev->out->stind_(MilEmitter::IntPtr);
     }else if( what.type->base->len > 0 ) // fixed size array
     {
@@ -591,11 +584,8 @@ void Builtins::NEW(int nArgs)
             ev->err = "cannot dynamically set array length for non-open array";
             return;
         }
-        ev->out->sizeof_(ev->toQuali(what.type->base->base));
         ev->out->ldc_i4(what.type->base->len);
-        ev->out->mul_();
-        ev->out->call_(coreName("alloc32"),1,1);
-        ev->out->castptr_(ev->toQuali(what.type->base));
+        ev->out->newarr_(ev->toQuali(what.type->base->base));
         ev->out->stind_(MilEmitter::IntPtr);
     }else // open array
     {
@@ -604,16 +594,18 @@ void Builtins::NEW(int nArgs)
             ev->err = "expecting two arguments, the second as the explicit length";
             return;
         }
-        ev->out->sizeof_(ev->toQuali(what.type->base->base));
-        ev->out->mul_();
-        ev->out->call_(coreName("alloc32"),1,1);
-        ev->out->castptr_(ev->toQuali(what.type->base));
+        ev->out->newarr_(ev->toQuali(what.type->base->base));
         ev->out->stind_(MilEmitter::IntPtr);
     }
 }
 
 void Builtins::DISPOSE(int nArgs)
 {
+    if( nArgs != 1 )
+    {
+        ev->err = "expecting one pointer argument";
+        return;
+    }
     Value what = ev->stack.takeLast();
     if( what.type->form != Type::Pointer &&
             !(what.type->base->form == Type::Record || what.type->base->form == Type::Array) )
@@ -622,7 +614,7 @@ void Builtins::DISPOSE(int nArgs)
         return;
     }
 
-    ev->out->call_(coreName("free"),1,1);
+    ev->out->free_();
 
 }
 

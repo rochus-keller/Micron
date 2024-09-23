@@ -25,11 +25,11 @@ MilLoader::MilLoader()
 
 }
 
-const MilModule*MilLoader::getModule(const QByteArray& name) const
+MilModule*MilLoader::getModule(const QByteArray& fullName)
 {
     for( int i = 0; i < modules.size(); i++ )
     {
-        if( modules[i].name == name )
+        if( modules[i].fullName.constData() == fullName.constData() )
             return &modules[i];
     }
     return 0;
@@ -44,7 +44,7 @@ void InMemRenderer::beginModule(const QByteArray& moduleName, const QString& sou
 {
     loader->modules.append(MilModule());
     module = &loader->modules.back();
-    module->name = moduleName;
+    module->fullName = moduleName;
     module->metaParams = mp;
 }
 
@@ -89,7 +89,7 @@ void InMemRenderer::addProcedure(const Mic::MilProcedure& method)
 {
     Q_ASSERT(module);
     module->procs.append(method);
-    module->symbols[method.d_name] = qMakePair(MilModule::Proc,module->procs.size()-1);
+    module->symbols[method.name] = qMakePair(MilModule::Proc,module->procs.size()-1);
     module->order.append(qMakePair(MilModule::Proc,module->procs.size()-1) );
 }
 
@@ -172,7 +172,7 @@ bool MilLoader::render(MilRenderer* r, const MilModule* m)
     Q_ASSERT(r);
    // MilEmitter e(r);
 
-    r->beginModule(m->name,"", m->metaParams);
+    r->beginModule(m->fullName,"", m->metaParams);
     foreach( const MilModule::Order& i, m->order )
     {
         switch(i.first)

@@ -31,7 +31,7 @@ class MilLoader
 public:
     MilLoader();
 
-    const MilModule* getModule(const QByteArray& name) const;
+    MilModule* getModule(const QByteArray& fullName);
     const QList<MilModule>& getModules() const { return modules; }
     static bool render(MilRenderer*, const MilModule*);
 private:

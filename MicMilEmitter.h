@@ -52,15 +52,16 @@ namespace Mic
         MilQuali base;
         quint32 len;
         QList<MilVariable> fields;
+        int indexOf(const QByteArray& name) const;
     };
 
     struct MilOperation
     {
-        uint d_ilop : 8;
-        uint d_flags : 24;
-        QVariant d_arg;
-        MilOperation(quint8 ilop = 0):d_ilop(ilop),d_flags(0){}
-        MilOperation(quint8 ilop, const QVariant& arg, quint16 flags = 0 ):d_ilop(ilop),d_flags(flags),d_arg(arg){}
+        uint op : 8;
+        uint index : 24; // used for jumps, field access
+        QVariant arg;
+        MilOperation(quint8 ilop = 0):op(ilop),index(0){}
+        MilOperation(quint8 ilop, const QVariant& arg, quint32 i = 0 ):op(ilop),index(i),arg(arg){}
     };
 
     struct MilObject
@@ -68,23 +69,26 @@ namespace Mic
         MilQuali typeRef;
         QVariant data; // note that array of byte can be either QByteArray or QVariantList
     };
+    typedef QPair<QByteArray,QVariant> MilFieldSlot;
+    typedef QList<MilFieldSlot> MilRecordLiteral;
 
     typedef QList<qint64> CaseLabelList;
 
     struct MilProcedure
     {
-        enum Kind { Invalid, Normal, Extern, Inline, Invar, ModuleInit, ProcType };
-        uint d_kind : 3;
-        uint d_isPublic : 1;
-        uint d_isVararg : 1;
-        uint d_stackDepth: 16;
-        QByteArray d_name;
-        QList<MilOperation> d_body;
-        QList< QPair<MilQuali,QByteArray> > d_args; // idx, type, name
-        QList< QPair<MilQuali,QByteArray> > d_locals; // idx, type, name
-        MilQuali d_retType;
-        QByteArray d_origName; // extern
-        MilProcedure():d_kind(Invalid),d_isPublic(0),d_isVararg(0),d_stackDepth(0) {}
+        enum Kind { Invalid, Intrinsic, Normal, Extern, Inline, Invar, ModuleInit, ProcType };
+        uint kind : 3;
+        uint isPublic : 1;
+        uint isVararg : 1;
+        uint stackDepth: 16;
+        uint compiled: 1;
+        QByteArray name;
+        QList<MilOperation> body;
+        QList< QPair<MilQuali,QByteArray> > params; // idx, type, name
+        QList< QPair<MilQuali,QByteArray> > locals; // idx, type, name
+        MilQuali retType;
+        QByteArray origName; // extern
+        MilProcedure():kind(Invalid),isPublic(0),isVararg(0),stackDepth(0),compiled(0) {}
     };
 
     struct MilConst
@@ -96,10 +100,8 @@ namespace Mic
 
     struct MilModule
     {
-        QByteArray name;
-
+        QByteArray fullName; // concatenation of path, name and suffix as symbol
         QByteArrayList metaParams; // just names, pointing to const or type decls
-        // TODO: optional metaActuals
 
         enum What { Type, Variable, Proc, Import, Const };
         QMap<const char*,QPair<What,quint32> >  symbols;
@@ -110,6 +112,7 @@ namespace Mic
         QList<QByteArray> imports; // paths
         QList<MilVariable> vars;
         QList<MilConst> consts;
+        int indexOfVar(const QByteArray&) const;
     };
 
     struct MilMetaParam {
@@ -124,7 +127,7 @@ namespace Mic
     class MilRenderer
     {
     public:
-        virtual void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& ) {}
+        virtual void beginModule( const QByteArray& fullName, const QString& sourceFile, const QByteArrayList& ) {}
         virtual void endModule() {}
 
         virtual void addImport( const QByteArray& path ) {}
@@ -148,7 +151,7 @@ namespace Mic
     public:
         MilEmitter(MilRenderer*);
 
-        void beginModule( const QByteArray& moduleName, const QString& sourceFile, const MilMetaParams& = MilMetaParams() );
+        void beginModule( const QByteArray& fullName, const QString& sourceFile, const MilMetaParams& = MilMetaParams() );
         void endModule();
 
         void addImport(const QByteArray& path);
@@ -182,6 +185,7 @@ namespace Mic
         static QByteArray typeSymbol(Type);
         static bool equals(const QByteArray&, Type);
         static QByteArray toString(const MilQuali&);
+        static QByteArray toString(const MilTrident&);
 
         void add_();
         void and_();
@@ -194,7 +198,7 @@ namespace Mic
         void clt_(bool withUnsigned = false);
         void conv_(Type);
         void div_(bool withUnsigned = false);
-        void disp_();
+        void free_();
         void do_();
         void dup_();
         void else_();
@@ -234,9 +238,10 @@ namespace Mic
         void not_();
         void or_();
         void pop_();
+        void ptroff_(const MilQuali& typeRef);
         void rem_(bool withUnsigned = false);
         void repeat_();
-        void ret_(bool hasRetType = false);
+        void ret_(bool pop);
         void shl_();
         void shr_(bool withUnsigned = false );
         void sizeof_(const MilQuali& typeRef);
@@ -328,5 +333,6 @@ namespace Mic
 Q_DECLARE_METATYPE(Mic::MilObject)
 Q_DECLARE_METATYPE(Mic::CaseLabelList)
 Q_DECLARE_METATYPE(Mic::MilTrident)
+Q_DECLARE_METATYPE(Mic::MilRecordLiteral)
 
 #endif // OBXILEMITTER_H

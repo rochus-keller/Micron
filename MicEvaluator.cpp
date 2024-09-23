@@ -638,16 +638,6 @@ void Evaluator::assureTopOnMilStack(bool pop)
         this->pop();
 }
 
-static inline bool isAllPrintable(const QString& str)
-{
-    for( int i = 0; i < str.size(); i++ )
-    {
-        if( !str[i].isPrint() )
-            return false;
-    }
-    return true;
-}
-
 bool Evaluator::pushMilStack(const Value& v)
 {
     err.clear();
@@ -659,20 +649,7 @@ bool Evaluator::pushMilStack(const Value& v)
             switch( v.type->form )
             {
             case BasicType::String:
-                {
-                    const QByteArray bytes = v.val.toByteArray();
-                    const QString str = QString::fromLatin1(bytes);
-                    if(isAllPrintable(str))
-                    {
-                        if( str.contains('\"') )
-                            out->ldstr_( "'" + bytes + "'" );
-                        else
-                            out->ldstr_( "\"" + bytes + "\"" );
-                    }else
-                    {
-                        out->ldstr_( "#" + bytes.toHex() + "00#" );
-                    }
-                }
+                out->ldstr_( v.val.toByteArray() );
                 break;
             case BasicType::Nil:
                 out->ldnull_();
@@ -739,20 +716,23 @@ void Evaluator::emitRelOp(quint8 op, bool unsig)
     case Expression::Eq:
         out->ceq_();
         break;
-    case Expression::Neq:
+    case Expression::Neq: // not eq
         out->ceq_();
-        out->not_();
+        out->ldc_i4(0);
+        out->ceq_();
         break;
     case Expression::Geq: // not lt
         out->clt_(unsig);
-        out->not_();
+        out->ldc_i4(0);
+        out->ceq_();
         break;
     case Expression::Gt:
         out->cgt_(unsig);
         break;
     case Expression::Leq: // not gt
         out->cgt_(unsig);
-        out->not_();
+        out->ldc_i4(0);
+        out->ceq_();
         break;
     case Expression::Lt:
         out->clt_(unsig);
@@ -774,26 +754,10 @@ void Evaluator::emitArithOp(quint8 op, bool unsig, bool i64)
         out->div_();
         break;
     case Expression::Div:
-        if( unsig )
-            out->div_(unsig);
-        else
-        {
-            if( i64 )
-                out->call_(coreName("Div64"),2,1);
-            else
-                out->call_(coreName("Div32"),2,1);
-        }
+        out->div_(unsig);
         break;
     case Expression::Mod:
-        if( unsig )
-            out->rem_(unsig);
-        else
-        {
-            if( i64 )
-                out->call_(coreName("Mod64"),2,1);
-            else
-                out->call_(coreName("Mod32"),2,1);
-        }
+        out->rem_(unsig);
         break;
     case Expression::Add:
         out->add_();
@@ -829,7 +793,11 @@ void Evaluator::notOp(Value& v)
     if( v.isConst() )
         v.val = !v.val.toBool();
     else
-        out->not_();
+    {
+        // logic not
+        out->ldc_i4(0);
+        out->ceq_();
+    }
 }
 
 Value Evaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs)
@@ -1417,8 +1385,8 @@ Qualident Evaluator::toQuali(Type* t)
             symbols[BasicType::INT64] = Token::getSymbol("int64");
             symbols[BasicType::REAL] = Token::getSymbol("float32");
             symbols[BasicType::LONGREAL] = Token::getSymbol("float64");
-        }else
-            return qMakePair(QByteArray(),symbols[t->form]);
+        }
+        return qMakePair(QByteArray(),symbols[t->form]);
     }else if( t->decl)
     {
         Q_ASSERT( t && t->decl );

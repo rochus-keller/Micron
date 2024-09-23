@@ -45,9 +45,10 @@ const char* s_opName[] =
     "ldobj", "ldproc", "ldstr",
     "ldvar", "ldvara", "mul", "neg",
     "newarr", "newvla", "newobj",
-    "not", "or", "rem", "rem_un", "shl", "shr", "shr_un", "sizeof", "sub", "xor",
+    "not", "or", "rem", "rem_un", "shl", "shr", "shr_un",
+    "sizeof", "sub", "xor", "ptroff",
     // statements
-    "disp", "repeat", "until",
+    "free", "repeat", "until",
     "exit", "goto", "if", "then", "else", "end",
     "label", "line", "loop", "pop", "ret",
     "starg", "starg_s",
