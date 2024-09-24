@@ -22,7 +22,7 @@ begin
 	elsif t = B then println("B")
 	elsif t = C then println("C")
 	else
-		println("nop")
+		println("if else")
 	end
 	println("end Enum2")
 end Enum2

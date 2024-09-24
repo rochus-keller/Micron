@@ -590,6 +590,7 @@ Token Lexer::string()
         if( c == 0 )
             return token( Tok_Invalid, off, "non-terminated string" );
     }
+    // TODO: unquote and explicit terminating zero
     const QByteArray str = d_line.mid(d_colNr, off );
     return token( Tok_string, off, str );
 }

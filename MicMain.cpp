@@ -284,7 +284,7 @@ int main(int argc, char *argv[])
         return -1;
     const QStringList searchPaths = cp.values(sp);
 
-    process(QStringList() << args[0], searchPaths, cp.isSet(run), cp.isSet(dump));
+    process(args, searchPaths, cp.isSet(run), cp.isSet(dump));
 
     return 0;
 }

@@ -738,7 +738,7 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs) const
 
     if( lhs->form == Type::Array && lhs->base->form == BasicType::CHAR && lhs->len > 0 &&
             rhs->mode == Declaration::ConstDecl && rhs->type->form == BasicType::String )
-        return rhs->data.toByteArray().size() < lhs->len;
+        return strlen(rhs->data.toByteArray().constData()) < lhs->len;
 
     return assigCompat(lhs, rhs->type);
 }
@@ -761,11 +761,11 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs) const
 
     if( lhs->form == Type::Array && lhs->base->form == BasicType::CHAR && lhs->len > 0 &&
             rhs->isLiteral() && rhs->type->form == BasicType::String)
-        return rhs->getLiteralValue().toByteArray().size() < lhs->len;
+        return strlen(rhs->getLiteralValue().toByteArray().constData()) < lhs->len;
 
     // A string of length 1 can be used wherever a character constant is allowed and vice versa.
     if( lhs->form == BasicType::CHAR && rhs->type->form == BasicType::String )
-        return rhs->val.toByteArray().size() == 1;
+        return strlen(rhs->val.toByteArray().constData()) == 1;
 
     return assigCompat(lhs, rhs->type);
 }
@@ -2613,11 +2613,11 @@ void Parser2::assignmentOrProcedureCall() {
     Expression* lhs = designator(true);
     if( lhs == 0 )
         return;
-    if( !ev->evaluate(lhs) )
-        error(t, ev->getErr());
     if( la.d_type == Tok_ColonEq ) {
         const Token tok = la;
 		expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
+        if( !ev->evaluate(lhs) )
+            error(t, ev->getErr());
         Expression* rhs = expression();
         if( !ev->evaluate(rhs) )
             error(tok, ev->getErr());         // value is pushed in ev->assign
@@ -2627,6 +2627,24 @@ void Parser2::assignmentOrProcedureCall() {
         else if( !ev->assign() )
             error(tok, ev->getErr() );
         Expression::deleteAllExpressions();
+    }else
+    {
+        if( lhs->kind == Expression::ProcDecl || lhs->type && lhs->type->form == Type::Proc )
+        {
+            // call procedure without ()
+            const DeclList formals = lhs->getFormals();
+            if( !formals.isEmpty() )
+                error(t,"expecting actual parameters to call this procedure");
+            Expression* tmp = Expression::create(Expression::Call, lhs->pos);
+            tmp->lhs = lhs;
+            if( lhs->kind == Expression::ProcDecl )
+                tmp->type = lhs->type;
+            else
+                tmp->type = lhs->type->base;
+            lhs = tmp;
+        }
+        if( !ev->evaluate(lhs) )
+            error(t, ev->getErr());
     }
     Expression::deleteAllExpressions();
 }

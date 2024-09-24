@@ -49,7 +49,7 @@ enum IL_op
     IL_ldvar, IL_ldvara, IL_mul, IL_neg,
     IL_newarr, IL_newvla, IL_newobj,
     IL_not, IL_or, IL_rem, IL_rem_un, IL_shl, IL_shr, IL_shr_un,
-    IL_sizeof, IL_sub, IL_xor, IL_ptroff,
+    IL_sizeof, IL_sub, IL_xor, IL_ptroff, IL_nop,
     // statements
     IL_free, IL_repeat, IL_until,
     IL_exit, IL_goto, IL_if, IL_then, IL_else, IL_end,

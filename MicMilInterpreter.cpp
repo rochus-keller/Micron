@@ -65,6 +65,7 @@ struct MemSlot
     ~MemSlot();
     MemSlot& operator=(const MemSlot& rhs);
     void move( MemSlot& rhs );
+    void copy(MemSlots* rhs);
 };
 
 struct MemSlots : public QVector<MemSlot>
@@ -72,17 +73,24 @@ struct MemSlots : public QVector<MemSlot>
     MemSlots(int len = 0):QVector<MemSlot>(len) {}
 };
 
+void MemSlot::copy(MemSlots* rhs)
+{
+    t = SS;
+    ssp = 0;
+    if( rhs == 0 )
+        return;
+    ssp = new MemSlots(rhs->length());
+    for(int i = 0; i < rhs->length(); i++ )
+        ssp->operator[](i) = rhs->at(i);
+}
+
 MemSlot& MemSlot::operator=(const MemSlot& rhs)
 {
     u = rhs.u;
     t = rhs.t;
     hw = rhs.hw;
     if( t == SS )
-    {
-        ssp = new MemSlots(rhs.ssp->length());
-        for(int i = 0; i < rhs.ssp->length(); i++ )
-            ssp->operator[](i) = rhs.ssp->at(i);
-    }
+        copy(rhs.ssp);
     return *this;
 }
 
@@ -138,13 +146,47 @@ public:
         MemSlots& s = strings[str];
         if( s.isEmpty() )
         {
-            s.resize(str.size() + 1);
+            s.resize(str.size()); // string literals are expected to have an explicit terminating zero
             // TODO: this is pretty wasteful; maybe we should support byte strings directly
             for( int i = 0; i < str.size(); i++ )
                 s[i] = MemSlot(quint64((quint8)str[i]),true);
-            s[str.size()] = MemSlot(quint64(0),true);
         }
         return &s;
+    }
+
+    void initSlot(ModuleData* module, MemSlot& s, const MilQuali& type )
+    {
+        const MilType* t = getType(module, type);
+        if( t == 0 )
+            return; // intrinsic type, nothing to initialize
+        switch( t->kind )
+        {
+        // TODO Union, Alias
+        case MilEmitter::Struct:
+            s.t = MemSlot::SS;
+            s.ssp = new MemSlots(t->fields.size());
+            initSlots(module, *s.ssp, t->fields);
+            break;
+        case MilEmitter::Array:
+            s.t = MemSlot::SS;
+            s.ssp = new MemSlots(t->len);
+            initSlots(module, *s.ssp, t->base);
+            break;
+        }
+
+    }
+
+    void initSlots(ModuleData* module, MemSlots& ss, const MilQuali& type )
+    {
+        for( int i = 0; i < ss.size(); i++ )
+            initSlot(module,ss[i],type);
+    }
+
+    void initSlots(ModuleData* module, MemSlots& ss, const QList<MilVariable>& types )
+    {
+        ss.resize(types.size());
+        for(int i = 0; i < types.size(); i++ )
+            initSlot(module, ss[i], types[i].type);
     }
 
     ModuleData* loadModule(const QByteArray& fullName)
@@ -163,7 +205,7 @@ public:
             return 0;
         md = new ModuleData();
         md->module = module;
-        md->variables.resize(module->vars.size());
+        initSlots(md, md->variables,module->vars);
         modules.insert(fullName.constData(), md);
 
         for( int i = 0; i < module->imports.size(); i++ )
@@ -230,18 +272,20 @@ public:
             .arg(proc->name.constData()).arg(s_opName[proc->body[pc].op]).arg(pc).arg(msg);
     }
 
-    inline const MilType* getType(ModuleData* module, const MilQuali& q) const
+    const MilType* getType(ModuleData* module, const MilQuali& q) const
     {
+        // this is only for custom types defined with Emitter::addType or begin/endType, not for intrinsic types
         MilModule* m = q.first.isEmpty() ? module->module : loader->getModule(q.first);
         if( m == 0 )
-            return 0; // error?
+            return 0;
         QPair<MilModule::What,quint32> what = m->symbols.value(q.second.constData());
-        if( what.first != MilModule::Type )
-            return 0; // error?
-        return &m->types[what.second];
+        if( what.first == MilModule::Type )
+            return &m->types[what.second];
+        // else
+        return 0;
     }
 
-    inline ProcData* getProc(ModuleData* module, const MilQuali& q)
+    ProcData* getProc(ModuleData* module, const MilQuali& q)
     {
         ModuleData* m = q.first.isEmpty() ? module : loadModule(q.first);
         if( m == 0 )
@@ -326,7 +370,7 @@ public:
                 }
                 assureValid(module,proc,start,pc,IL_end);
                 foreach( quint32 off, thenList )
-                    op[off] = pc; // all then and else point to end
+                    op[off].index = pc; // all then and else point to end
                 pc++;
             }
             break;
@@ -337,20 +381,21 @@ public:
                 while( pc < op.size() && op[pc].op != IL_then )
                     processBlock(module, proc,pc);
                 assureValid(module,proc,start,pc, IL_then);
-                int prev = pc;
+                int then = pc;
                 pc++;
                 while( pc < op.size() && op[pc].op != IL_else && op[pc].op != IL_end)
                     processBlock(module, proc, pc); // then statements
                 assureValid(module,proc,start,pc, IL_else, IL_end);
                 if( op[pc].op == IL_else )
                 {
-                    op[prev].index = pc+1; // then -> else+1
+                    op[then].index = pc+1; // then -> else+1
+                    const int else_ = pc;
                     pc++;
                     while( pc < op.size() && op[pc].op != IL_end )
                         processBlock(module, proc, pc); // else statements
-                    op[prev].index = pc; // else -> end
+                    op[else_].index = pc; // else -> end
                 }else
-                    op[prev].index = pc; // then -> end
+                    op[then].index = pc; // then -> end
                 assureValid(module,proc,start,pc,IL_end);
                 pc++;
             }
@@ -405,7 +450,8 @@ public:
                 MilTrident td = op[pc].arg.value<MilTrident>();
                 const MilType* ty = getType(module, td.first);
                 if( ty == 0 )
-                    break;
+                    execError(module, proc, pc, QString("unknown type '%1'").
+                              arg(MilEmitter::toString(td.first).constData()));
                 const int idx = ty->indexOf(td.second);
                 if( idx < 0 )
                     break; // error?
@@ -511,7 +557,10 @@ public:
                 s.f = s.i;
             break;
         default:
-            Q_ASSERT(false);
+            s.u = 0;
+            if( size && size < 8 )
+                s.hw = true;
+            break;
         }
         s.t = to;
         stack.push_back(s);
@@ -708,6 +757,15 @@ public:
         }
     }
 
+    static inline MemSlot addressOf(MemSlot& s)
+    {
+        if( s.t == MemSlot::SS )
+            // in case of a structured value copy the address of the structure, otherwise of the slot
+            return MemSlot(s.ssp);
+        else
+            return &s;
+    }
+
     void execute(ModuleData* module, MilProcedure* proc, MemSlots& args, MemSlot& ret)
     {
         if( proc->kind == MilProcedure::Intrinsic )
@@ -728,6 +786,7 @@ public:
             proc->compiled = true;
         }
         MemSlots locals(proc->locals.size());
+        initSlots(module, locals, proc->locals);
         ret = MemSlot();
         pc = 0;
         QList<MemSlot> stack;
@@ -945,7 +1004,7 @@ public:
                 break;
             case IL_ldarga:
             case IL_ldarga_s:
-                stack.push_back(&args[op.arg.toUInt()]);
+                stack.push_back(addressOf(args[op.arg.toUInt()]));
                 pc++;
                 break;
             case IL_ldc_i4:
@@ -1039,7 +1098,7 @@ public:
                 lhs = stack.takeLast();
                 if( lhs.t != MemSlot::SSP || lhs.ssp == 0 || rhs.u >= lhs.ssp->length() )
                     execError(module, proc, pc, "invalid array or index out of bound");
-                stack.push_back(&lhs.ssp->operator[](rhs.u));
+                stack.push_back(addressOf(lhs.ssp->operator[](rhs.u)));
                 pc++;
                 break;
             case IL_ldfld:
@@ -1058,7 +1117,7 @@ public:
                     if( (s.t != MemSlot::SS && s.t != MemSlot::SSP) ||
                             s.ssp == 0 || s.ssp->size() <= op.index )
                         execError(module, proc, pc, "invalid record or field");
-                    stack.push_back(&s.ssp->operator[](op.index));
+                    stack.push_back(addressOf(s.ssp->operator[](op.index)));
                 }
                 pc++;
                 break;
@@ -1086,7 +1145,7 @@ public:
                 break;
             case IL_ldloca:
             case IL_ldloca_s:
-                stack.push_back(&locals[op.arg.toUInt()]);
+                stack.push_back(addressOf(locals[op.arg.toUInt()]));
                 pc++;
                 break;
             case IL_ldloc_0:
@@ -1111,9 +1170,16 @@ public:
                 break;
             case IL_ldobj:
                 lhs = stack.takeLast();
-                if( lhs.t != MemSlot::SP || lhs.sp == 0 )
+                if( (lhs.t != MemSlot::SP && lhs.t != MemSlot::SSP) || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer on stack");
-                stack.push_back(*lhs.sp);
+                if( lhs.t == MemSlot::SP )
+                    stack.push_back(*lhs.sp);
+                else
+                {
+                    //stack.push_back(MemSlot());
+                    //stack.back().copy(lhs.ssp);
+                    stack.push_back(lhs);
+                }
                 pc++;
                 break;
             case IL_ldproc:
@@ -1136,7 +1202,7 @@ public:
                 {
                     if( module->variables.size() <= op.index )
                         execError(module, proc, pc, "invalid variable reference");
-                    stack.push_back(&module->variables[op.index]);
+                    stack.push_back(addressOf(module->variables[op.index]));
                 }
                 pc++;
                 break;
@@ -1175,17 +1241,16 @@ public:
                 pc++;
                 break;
             case IL_newarr:
-                lhs = stack.takeLast();
-                if( lhs.u == 0 )
-                    execError(module, proc, pc, "invalid array size");
-                stack.push_back(MemSlot( new MemSlots(lhs.u) ) );
-                pc++;
-                break;
             case IL_newvla:
-                lhs = stack.takeLast();
-                if( lhs.u == 0 )
-                    execError(module, proc, pc, "invalid array size");
-                stack.push_back(MemSlot( new MemSlots(lhs.u),true ) );
+                {
+                    lhs = stack.takeLast();
+                    if( lhs.u == 0 )
+                        execError(module, proc, pc, "invalid array size");
+                    MemSlots* array = new MemSlots(lhs.u);
+                    MilQuali ety = op.arg.value<MilQuali>();
+                    initSlots(module, *array, ety);
+                    stack.push_back(MemSlot(array) );
+                }
                 pc++;
                 break;
             case IL_newobj:
@@ -1193,10 +1258,13 @@ public:
                     const MilQuali q = op.arg.value<MilQuali>();
                     const MilType* ty = getType(module, q);
                     if( ty == 0 )
-                        break;
+                        execError(module, proc, pc, QString("unknown type '%1'").
+                                  arg(MilEmitter::toString(q).constData()));
                     if( ty->kind != MilEmitter::Struct && ty->kind != MilEmitter::Union )
                         execError(module, proc, pc, "operation not available for given type");
-                    stack.push_back(MemSlot( new MemSlots(ty->fields.size()) ) );
+                    MemSlots* record = new MemSlots(ty->fields.size());
+                    initSlots(module, *record, ty->fields);
+                    stack.push_back(MemSlot( record ) );
                     // TODO: we treat unions as structs here
                 }
                 pc++;
@@ -1528,11 +1596,24 @@ public:
                 pc++;
                 break;
             case IL_stobj:
-                lhs = stack.takeLast(); // destination
-                if( lhs.t != MemSlot::SP || lhs.sp == 0 )
-                    execError(module, proc, pc, "invalid pointer");
-                lhs.sp->move(stack.back());
+                rhs.move(stack.back());
                 stack.pop_back();
+                lhs = stack.takeLast(); // destination
+                if( (lhs.t != MemSlot::SP && lhs.t != MemSlot::SSP) || lhs.sp == 0 )
+                    execError(module, proc, pc, "invalid pointer");
+                if( lhs.t == MemSlot::SP )
+                {
+                    lhs.sp->move(rhs);
+                }else
+                {
+                    if( (rhs.t != MemSlot::SSP && rhs.t != MemSlot::SS) || rhs.ssp == 0 )
+                        execError(module, proc, pc, "invalid value");
+                    if( lhs.ssp->length() < rhs.ssp->length() )
+                        execError(module, proc, pc, "array not big enough for copy");
+                    for( int i = 0; i < rhs.ssp->length(); i++ )
+                        lhs.ssp->operator[](i) = rhs.ssp->at(i);
+                        // copy string literal
+                }
                 pc++;
                 break;
             case IL_stvar:
@@ -1579,6 +1660,8 @@ public:
                 }else
                     pc++;
                 break;
+            case IL_nop:
+                break;
             default:
                 Q_ASSERT(false);
             }
@@ -1595,7 +1678,7 @@ static inline MilProcedure createIntrinsic(const QByteArray& name, int code, int
     if(ret)
         p.retType.second = "?";
     for( int i = 0; i < pars; i++ )
-        p.params.append( qMakePair( MilQuali("","?"),QByteArray("?")));
+        p.params.append( MilVariable( MilQuali("","?"),QByteArray("?")));
     return p;
 }
 

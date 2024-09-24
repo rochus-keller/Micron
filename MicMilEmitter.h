@@ -42,12 +42,13 @@ namespace Mic
         int offset : 31;
         int isPublic : 1;
         MilVariable():offset(0),isPublic(0) {}
+        MilVariable(const MilQuali& type, const QByteArray& name):type(type),name(name),offset(0),isPublic(0){}
     };
 
     struct MilType
     {
         QByteArray name;
-        quint8 kind;
+        quint8 kind; // MilEmitter::TypeKind
         bool isPublic;
         MilQuali base;
         quint32 len;
@@ -84,8 +85,8 @@ namespace Mic
         uint compiled: 1;
         QByteArray name;
         QList<MilOperation> body;
-        QList< QPair<MilQuali,QByteArray> > params; // idx, type, name
-        QList< QPair<MilQuali,QByteArray> > locals; // idx, type, name
+        QList<MilVariable> params;
+        QList<MilVariable> locals;
         MilQuali retType;
         QByteArray origName; // extern
         MilProcedure():kind(Invalid),isPublic(0),isVararg(0),stackDepth(0),compiled(0) {}
@@ -103,7 +104,7 @@ namespace Mic
         QByteArray fullName; // concatenation of path, name and suffix as symbol
         QByteArrayList metaParams; // just names, pointing to const or type decls
 
-        enum What { Type, Variable, Proc, Import, Const };
+        enum What { Invalid, Type, Variable, Proc, Import, Const };
         QMap<const char*,QPair<What,quint32> >  symbols;
         typedef QPair<What,quint32> Order;
         QList<Order> order;
@@ -235,6 +236,7 @@ namespace Mic
         void newarr_(const MilQuali& typeRef);
         void newvla_(const MilQuali& typeRef); // not in CIL
         void newobj_(const MilQuali& typeRef);
+        void nop_();
         void not_();
         void or_();
         void pop_();

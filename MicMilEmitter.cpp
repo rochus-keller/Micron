@@ -148,7 +148,7 @@ quint32 MilEmitter::addLocal(const MilQuali& typeRef, QByteArray name)
 {
     Q_ASSERT( !d_proc.isEmpty() );
     Q_ASSERT( !typeRef.second.isEmpty() );
-    d_proc.back().locals.append(qMakePair(typeRef,name));
+    d_proc.back().locals.append(MilVariable(typeRef,name));
     return d_proc.back().locals.size()-1;
 }
 
@@ -157,7 +157,7 @@ quint32 MilEmitter::addArgument(const MilQuali& typeRef, QByteArray name)
     Q_ASSERT( !d_proc.isEmpty() || d_typeKind == ProcType );
     if( typeRef.second.isEmpty() )
         return 0; // error reported elsewhere
-    d_proc.back().params.append(qMakePair(typeRef,name));
+    d_proc.back().params.append(MilVariable(typeRef,name));
     return 0;
 }
 
@@ -709,6 +709,8 @@ void MilEmitter::line_(quint32 l)
 void MilEmitter::loop_()
 {
     Q_ASSERT( !d_proc.isEmpty() );
+    if( d_proc.back().body.isEmpty() )
+        d_proc.back().body.append(MilOperation(IL_nop));
     d_proc.back().body.append(MilOperation(IL_loop) );
     delta(0);
 }
@@ -746,6 +748,13 @@ void MilEmitter::newobj_(const MilQuali& typeRef)
     Q_ASSERT( !d_proc.isEmpty() );
     d_proc.back().body.append(MilOperation(IL_newobj,QVariant::fromValue(typeRef)));
     delta(-0+1);
+}
+
+void MilEmitter::nop_()
+{
+    Q_ASSERT( !d_proc.isEmpty() );
+    d_proc.back().body.append(MilOperation(IL_nop));
+    delta(0);
 }
 
 void MilEmitter::not_()
@@ -789,6 +798,8 @@ void MilEmitter::rem_(bool withUnsigned)
 void MilEmitter::repeat_()
 {
     Q_ASSERT( !d_proc.isEmpty() );
+    if( d_proc.back().body.isEmpty() )
+        d_proc.back().body.append(MilOperation(IL_nop));
     d_proc.back().body.append(MilOperation(IL_repeat) );
     delta(0);
 }
@@ -966,6 +977,8 @@ void MilEmitter::until_()
 void MilEmitter::while_()
 {
     Q_ASSERT( !d_proc.isEmpty() );
+    if( d_proc.back().body.isEmpty() )
+        d_proc.back().body.append(MilOperation(IL_nop));
     d_proc.back().body.append(MilOperation(IL_while) );
     delta(0);
 }
@@ -1205,11 +1218,11 @@ void IlAsmRenderer::render(const MilProcedure& m)
     {
         if( i != 0 )
             out << "; ";
-        if( !m.params[i].first.second.isEmpty() )
-            out << m.params[i].second;
+        if( !m.params[i].type.second.isEmpty() )
+            out << m.params[i].name;
         else
             out << i;
-        out << ": "<< MilEmitter::toString(m.params[i].first);
+        out << ": "<< MilEmitter::toString(m.params[i].type);
     }
     if( m.isVararg )
         out << ", .. ";
@@ -1245,11 +1258,11 @@ void IlAsmRenderer::render(const MilProcedure& m)
         level++;
         for( int i = 0; i < m.locals.size(); i++ )
         {
-            if( !m.locals[i].second.isEmpty() )
-                out << m.locals[i].second;
+            if( !m.locals[i].name.isEmpty() )
+                out << m.locals[i].name;
             else
                 out << i;
-            out << ": " << MilEmitter::toString(m.locals[i].first) << "; ";
+            out << ": " << MilEmitter::toString(m.locals[i].type) << "; ";
         }
         out << endl;
         level--;
@@ -1269,7 +1282,10 @@ void IlAsmRenderer::render(const MilProcedure& m)
         case IL_repeat:
         case IL_switch:
         case IL_while:
-            out << ws() << s_opName[op.op] << endl;
+            out << ws() << s_opName[op.op];
+            if( op.index )
+                out << " // " << op.index;
+            out << endl;
             level++;
             break;
         case IL_then:
@@ -1277,16 +1293,25 @@ void IlAsmRenderer::render(const MilProcedure& m)
         case IL_until:
         case IL_do:
             level--;
-            out << ws() << s_opName[op.op] << endl;
+            out << ws() << s_opName[op.op];
+            if( op.index )
+                out << " // " << op.index;
+            out << endl;
             level++;
             break;
         case IL_end:
             level--;
-            out << ws() << s_opName[op.op] << endl;
+            out << ws() << s_opName[op.op];
+            if( op.index )
+                out << " // " << op.index;
+            out << endl;
             break;
         case IL_case:
             level--;
-            out << ws() << s_opName[op.op] << endl;
+            out << ws() << s_opName[op.op];
+            if( op.index )
+                out << " // " << op.index;
+            out << endl;
             level++;
             out << ws();
             foreach(qint64 i, op.arg.value<CaseLabelList>() )
@@ -1308,7 +1333,7 @@ void IlAsmRenderer::render(const MilProcedure& m)
             break;
         case IL_ldstr:
             {
-                const QByteArray bytes = op.arg.toByteArray();
+                QByteArray bytes = op.arg.toByteArray();
                 const QString str = QString::fromLatin1(bytes);
                 bool isPrint = true;
                 for( int i = 0; i < str.size(); i++ )
@@ -1320,12 +1345,18 @@ void IlAsmRenderer::render(const MilProcedure& m)
                 out << ws() << s_opName[op.op] << " ";
                 if( isPrint )
                 {
+                    bytes = str.toLatin1(); // to get rid of explicit terminating zero
                     if( bytes.contains('"') )
                         out << "'" << bytes << "'";
                     else
                         out << "\"" << bytes << "\"";
                 }else
-                    out << "#" << bytes.toHex() << "00#";
+                {
+                    out << "#" << bytes.toHex();
+                    if( !bytes.endsWith('\0') )
+                        out << "00";
+                    out << "#";
+                }
                 out << endl;
             }
             break;

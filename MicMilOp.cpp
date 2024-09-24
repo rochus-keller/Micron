@@ -46,7 +46,7 @@ const char* s_opName[] =
     "ldvar", "ldvara", "mul", "neg",
     "newarr", "newvla", "newobj",
     "not", "or", "rem", "rem_un", "shl", "shr", "shr_un",
-    "sizeof", "sub", "xor", "ptroff",
+    "sizeof", "sub", "xor", "ptroff", "nop",
     // statements
     "free", "repeat", "until",
     "exit", "goto", "if", "then", "else", "end",

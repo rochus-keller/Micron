@@ -159,7 +159,8 @@ bool Evaluator::prepareRhs(Type* lhs)
     if( lhs && lhs->form == Type::Array && lhs->base->form == BasicType::CHAR &&
             rhs.type->form == BasicType::String )
     {   // NOTE: already checked that lhs is large enough for rhs
-        Q_ASSERT( lhs->len > quint32(dequote(rhs.val.toByteArray()).size()) );
+        Q_ASSERT( lhs->len >= quint32(dequote(rhs.val.toByteArray()).size()) );
+        assureTopOnMilStack();
         out->ldobj_(toQuali(lhs));
     }else if( lhs && lhs->form == BasicType::CHAR &&
               rhs.type->form == BasicType::String )
@@ -1342,10 +1343,10 @@ Qualident Evaluator::toQuali(Declaration* d)
             return toQuali(d->type); // this is a built-in type
         if( !desig.isEmpty() )
         {
-            desig += "$" + d->name;
+            desig = "$" + desig;
             doSymbol = true;
         }
-        desig += d->name;
+        desig = d->name + desig;
         last = d;
         d = d->outer;
     }
@@ -1398,11 +1399,14 @@ Qualident Evaluator::toQuali(Type* t)
 
 QByteArray Evaluator::dequote(const QByteArray& str)
 {
+    QByteArray res;
     if( str.startsWith('\'') && str.endsWith('\'') ||
             str.startsWith('"') && str.endsWith('"') )
-        return str.mid(1,str.size()-2);
+        res = str.mid(1,str.size()-2);
     else
-        return str;
+        res = str;
+    res += '\0'; // make terminating zero explicit in value
+    return res;
 }
 
 void Evaluator::recursiveRun(Expression* e)
