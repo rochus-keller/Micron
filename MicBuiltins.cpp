@@ -75,13 +75,27 @@ static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* m
 static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl)
 {
     expectingNArgs(args,2);
-    if( !args[0]->type->isUInt() )
-        throw QString("expecing unsigned first argument");
+    if( builtin == Builtin::BITASR )
+    {
+        if( !args[0]->type->isInt() )
+            throw QString("expecing unsigned first argument");
+    }else
+    {
+        if( !args[0]->type->isUInt() )
+            throw QString("expecing unsigned first argument");
+    }
     if( !args[1]->type->isUInt() )
         throw QString("expecing unsigned second argument");
 
-    if( args[0]->type->form < BasicType::UINT32 )
-        args[0] = createAutoCast(args[0], mdl->getType(BasicType::UINT32) );
+    if( builtin == Builtin::BITASR )
+    {
+        if( args[0]->type->form < BasicType::INT32 )
+            args[0] = createAutoCast(args[0], mdl->getType(BasicType::INT32) );
+    }else
+    {
+        if( args[0]->type->form < BasicType::UINT32 )
+            args[0] = createAutoCast(args[0], mdl->getType(BasicType::UINT32) );
+    }
     if( args[1]->type->form < BasicType::UINT32 )
         args[1] = createAutoCast(args[1], mdl->getType(BasicType::UINT32) );
 
@@ -103,7 +117,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::ABS:
         expectingNArgs(args,1);
         if( !args.first()->type->isNumber() )
-            throw QString("expecting numeric argument");
+            throw "expecting numeric argument";
         *ret = args.first()->type;
         break;
     case Builtin::CAP:
@@ -118,7 +132,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::BITNOT:
         expectingNArgs(args,1);
         if( !args.first()->type->isUInt() )
-            throw QString("expecting unsigned integer");
+            throw "expecting unsigned integer";
         if( args.first()->type->form < BasicType::UINT32 )
             args[0] = createAutoCast(args[0], mdl->getType(BasicType::UINT32) );
         *ret = args[0]->type;
@@ -152,6 +166,12 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::FLT:
         expectingNArgs(args,1);
+        if( !args.first()->type->isInt() )
+            throw "expecting signed integer argument";
+        if( args.first()->type->form == BasicType::INT64 )
+            *ret = ev->mdl->getType(BasicType::LONGREAL);
+        else
+            *ret = ev->mdl->getType(BasicType::REAL);
         break;
     case Builtin::GETENV:
         expectingNArgs(args,2);
@@ -180,6 +200,23 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::SIGNED:
         expectingNArgs(args,1);
+        switch(args.first()->type->form)
+        {
+        case BasicType::UINT8:
+            *ret = ev->mdl->getType(BasicType::INT8);
+            break;
+        case BasicType::UINT16:
+            *ret = ev->mdl->getType(BasicType::INT16);
+            break;
+        case BasicType::UINT32:
+            *ret = ev->mdl->getType(BasicType::INT32);
+            break;
+        case BasicType::UINT64:
+            *ret = ev->mdl->getType(BasicType::INT64);
+            break;
+        default:
+            throw "expecting unsigned integer";
+        }
         break;
     case Builtin::SIZE:
         expectingNArgs(args,1);
@@ -189,6 +226,23 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::UNSIGNED:
         expectingNArgs(args,1);
+        switch(args.first()->type->form)
+        {
+        case BasicType::INT8:
+            *ret = ev->mdl->getType(BasicType::UINT8);
+            break;
+        case BasicType::INT16:
+            *ret = ev->mdl->getType(BasicType::UINT16);
+            break;
+        case BasicType::INT32:
+            *ret = ev->mdl->getType(BasicType::UINT32);
+            break;
+        case BasicType::INT64:
+            *ret = ev->mdl->getType(BasicType::UINT64);
+            break;
+        default:
+            throw "expecting signed integer";
+        }
         break;
     case Builtin::VARARG:
         expectingNMArgs(args,2,3);
@@ -240,6 +294,9 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     }catch( const QString& err )
     {
         return err;
+    }catch( const char* str)
+    {
+        return str;
     }
 
     return QString();
@@ -267,13 +324,12 @@ Builtins::Builtins(Evaluator* ev):ev(ev)
     Q_ASSERT(ev);
 }
 
-void Builtins::bitarith(int op, int nArgs)
+void Builtins::bitarith(int op)
 {
-    Q_ASSERT(ev->stack.size() >= 3);
     Value rhs = ev->stack.takeLast();
     Value lhs = ev->stack.takeLast();
 
-    Q_ASSERT( lhs.type == rhs.type );
+    //Q_ASSERT( lhs.type == rhs.type );
 
     Value res = lhs;
     if( lhs.isConst() && rhs.isConst() )
@@ -297,10 +353,13 @@ void Builtins::bitarith(int op, int nArgs)
         }
     }else
     {
+#if 0
+        // no, args were already pushed in Evaluator::recursiveRun Expression::Call
         if( lhs.isConst() )
             ev->pushMilStack(lhs);
         if( rhs.isConst() )
             ev->pushMilStack(rhs);
+#endif
 
         switch(op)
         {
@@ -321,9 +380,8 @@ void Builtins::bitarith(int op, int nArgs)
     ev->stack.push_back(res);
 }
 
-void Builtins::bitnot(int nArgs)
+void Builtins::bitnot()
 {
-    Q_ASSERT(ev->stack.size() >= 2);
     Value v = ev->stack.takeLast();
 
     if( v.isConst() )
@@ -340,18 +398,184 @@ void Builtins::bitnot(int nArgs)
     ev->stack.push_back(v);
 }
 
+void Builtins::doSigned()
+{
+    Value v = ev->stack.takeLast();
+    Type* t;
+    MilEmitter::Type tt;
+    switch(v.type->form)
+    {
+    case BasicType::UINT8:
+        t = ev->mdl->getType(BasicType::INT8);
+        tt = MilEmitter::I1;
+        break;
+    case BasicType::UINT16:
+        t = ev->mdl->getType(BasicType::INT16);
+        tt = MilEmitter::I2;
+        break;
+    case BasicType::UINT32:
+    default:
+        t = ev->mdl->getType(BasicType::INT32);
+        tt = MilEmitter::I4;
+        break;
+    case BasicType::UINT64:
+        t = ev->mdl->getType(BasicType::INT64);
+        tt = MilEmitter::I8;
+        break;
+    }
+    v.type = t;
+    if( !v.isConst() )
+    {
+        ev->out->conv_(tt);
+    }
+    ev->stack.push_back(v);
+}
+
+void Builtins::doUnsigned()
+{
+    Value v = ev->stack.takeLast();
+    Type* t;
+    MilEmitter::Type tt;
+    switch(v.type->form)
+    {
+    case BasicType::INT8:
+        t = ev->mdl->getType(BasicType::UINT8);
+        tt = MilEmitter::U1;
+        break;
+    case BasicType::INT16:
+        t = ev->mdl->getType(BasicType::UINT16);
+        tt = MilEmitter::U2;
+        break;
+    case BasicType::INT32:
+    default:
+        t = ev->mdl->getType(BasicType::UINT32);
+        tt = MilEmitter::U4;
+        break;
+    case BasicType::INT64:
+        t = ev->mdl->getType(BasicType::UINT64);
+        tt = MilEmitter::U8;
+        break;
+    }
+    v.type = t;
+    if( !v.isConst() )
+    {
+        ev->out->conv_(tt);
+    }
+    ev->stack.push_back(v);
+}
+
+void Builtins::doAbs()
+{
+    static int count = 0;
+    Value v = ev->stack.takeLast();
+    if( v.isConst() )
+    {
+        if( v.type->isInteger() )
+            v.val = qAbs(v.val.toLongLong() );
+        else
+            v.val = qAbs(v.val.toDouble() );
+    }else if( v.type->isInt() || v.type->isReal() )
+    {
+        ev->out->dup_();
+        if( v.type->form == BasicType::INT64 )
+            ev->out->ldc_i8(0);
+        else if( v.type->form == BasicType::LONGREAL )
+            ev->out->ldc_r8(0);
+        else if( v.type->isInt() )
+            ev->out->ldc_i4(0);
+        else
+            ev->out->ldc_r4(0);
+        ev->out->cgt_(); // push v > 0, i.e. jump if v < 0
+        const QByteArray label = "$ABS" + QByteArray::number(count++);
+        ev->out->ifgoto_(label);
+        ev->out->neg_();
+        ev->out->label_(label);
+    }
+    ev->stack.push_back(v);
+}
+
+void Builtins::doFlt()
+{
+    Value v = ev->stack.takeLast();
+    Q_ASSERT(v.type->isInt());
+    if( v.type->form == BasicType::INT64 )
+    {
+        v.type = ev->mdl->getType(BasicType::LONGREAL);
+        if( v.isConst() )
+            v.val = (double)v.val.toLongLong();
+        else
+            ev->out->conv_(MilEmitter::R8);
+    }else
+    {
+        v.type = ev->mdl->getType(BasicType::REAL);
+        if( v.isConst() )
+            v.val = (double)v.val.toLongLong();
+        else
+            ev->out->conv_(MilEmitter::R4);
+    }
+    ev->stack.push_back(v);
+}
+
+void Builtins::doShiftRight()
+{
+    Value rhs = ev->stack.takeLast();
+    Value lhs = ev->stack.takeLast();
+    if( lhs.type->isInt() )
+    {
+        if( lhs.isConst() )
+            lhs.val = lhs.val.toLongLong() >> rhs.val.toUInt();
+        else
+            ev->out->shr_();
+    }else
+    {
+        if( lhs.isConst() )
+            lhs.val = lhs.val.toULongLong() >> rhs.val.toUInt();
+        else
+            ev->out->shr_(true);
+    }
+    ev->stack.push_back(lhs);
+}
+
+void Builtins::doShiftLeft()
+{
+    Value rhs = ev->stack.takeLast();
+    Value lhs = ev->stack.takeLast();
+    if( lhs.isConst() )
+        lhs.val = lhs.val.toULongLong() << rhs.val.toUInt();
+    else
+        ev->out->shl_();
+    ev->stack.push_back(lhs);
+}
+
+void Builtins::checkNumOfActuals(int nArgs, int min, int max)
+{
+    Q_ASSERT( max == 0 || min <= max );
+    if( min == max || max == 0 )
+    {
+        if( nArgs != min )
+            throw QString("expecting exactly %1 arguments").arg(min);
+    }else
+    {
+        if( nArgs < min || nArgs > max )
+            throw QString("expecting %1 to %2 arguments").arg(min).arg(max);
+    }
+}
+
 void Builtins::ASSERT(int nArgs)
 {
     Value file = ev->stack.takeLast();
     Value line = ev->stack.takeLast();
     Value cond = ev->stack.takeLast();
 
+#if 0
+    // no, args were already pushed in Evaluator::recursiveRun Expression::Call
     if( cond.isConst() )
         ev->pushMilStack(cond);
     if( line.isConst() )
         ev->pushMilStack(line);
     if( file.isConst() )
         ev->pushMilStack(file);
+#endif
 
     if( cond.type->form != BasicType::BOOLEAN )
     {
@@ -379,11 +603,6 @@ void Builtins::ASSERT(int nArgs)
 
 void Builtins::incdec(int nArgs, bool inc)
 {
-    if( nArgs == 0 || nArgs > 2 )
-    {
-        ev->err = "expecting one or two arguments";
-        return;
-    }
     Value step;
     int tmp = -1;
     if( nArgs == 2 )
@@ -553,11 +772,6 @@ void Builtins::PRINT(int nArgs, bool ln)
 
 void Builtins::NEW(int nArgs)
 {
-    if( nArgs == 0 || nArgs > 2 )
-    {
-        ev->err = "expecting one or two arguments";
-        return;
-    }
     Value len;
     if( nArgs == 2 )
         len = ev->stack.takeLast();
@@ -601,11 +815,6 @@ void Builtins::NEW(int nArgs)
 
 void Builtins::DISPOSE(int nArgs)
 {
-    if( nArgs != 1 )
-    {
-        ev->err = "expecting one pointer argument";
-        return;
-    }
     Value what = ev->stack.takeLast();
     if( what.type->form != Type::Pointer &&
             !(what.type->base->form == Type::Record || what.type->base->form == Type::Array) )
@@ -624,53 +833,93 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs)
     ret.mode = Value::Val;
     ret.type = ev->mdl->getType(BasicType::NoType);
     bool handleStack = true;
+    try
+    {
     switch( builtin )
     {
     case Builtin::PRINT:
     case Builtin::PRINTLN:
+        checkNumOfActuals(nArgs, 1);
         PRINT(nArgs,builtin == Builtin::PRINTLN);
         break;
     case Builtin::NEW:
+        checkNumOfActuals(nArgs, 1, 2);
         NEW(nArgs);
         handleStack = false;
         break;
     case Builtin::DISPOSE:
+        checkNumOfActuals(nArgs, 1);
         DISPOSE(nArgs);
         handleStack = false;
         break;
     case Builtin::INC:
+        checkNumOfActuals(nArgs, 1, 2);
         INC(nArgs);
         handleStack = false;
         break;
     case Builtin::DEC:
+        checkNumOfActuals(nArgs, 1, 2);
         DEC(nArgs);
         handleStack = false;
         break;
     case Builtin::LEN:
+        checkNumOfActuals(nArgs, 1);
         LEN(nArgs);
         handleStack = false;
         break;
     case Builtin::ASSERT:
+        checkNumOfActuals(nArgs, 3);
         ASSERT(nArgs);
         handleStack = false;
         break;
     case Builtin::BITAND:
-    case Builtin::BITNOT:
     case Builtin::BITOR:
     case Builtin::BITXOR:
-        bitarith(builtin,nArgs);
+        checkNumOfActuals(nArgs, 2);
+        bitarith(builtin);
         handleStack = false;
         break;
-        /* TODO
+    case Builtin::BITNOT:
+        checkNumOfActuals(nArgs, 1);
+        bitnot();
+        handleStack = false;
+        break;
     case Builtin::BITASR:
-    case Builtin::BITSHL:
     case Builtin::BITSHR:
-        BITSHIFT(builtin,nArgs);
+        doShiftRight();
+        handleStack = false;
         break;
-        */
+    case Builtin::BITSHL:
+        doShiftLeft();
+        handleStack = false;
+        break;
+    case Builtin::SIGNED:
+        checkNumOfActuals(nArgs, 1);
+        doSigned();
+        handleStack = false;
+        break;
+    case Builtin::UNSIGNED:
+        checkNumOfActuals(nArgs, 1);
+        doUnsigned();
+        handleStack = false;
+        break;
+    case Builtin::ABS:
+        checkNumOfActuals(nArgs, 1);
+        doAbs();
+        handleStack = false;
+        break;
+    case Builtin::FLT:
+        checkNumOfActuals(nArgs, 1);
+        doFlt();
+        handleStack = false;
+        break;
     default:
-        ev->err = "built-in not yet implemented";
+        throw QString("built-in not yet implemented");
         break;
+    }
+    }catch(const QString& str)
+    {
+        ev->err = str;
     }
 
     if( handleStack )

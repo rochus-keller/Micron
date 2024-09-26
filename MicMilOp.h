@@ -52,14 +52,15 @@ enum IL_op
     IL_sizeof, IL_sub, IL_xor, IL_ptroff, IL_nop,
     // statements
     IL_free, IL_repeat, IL_until,
-    IL_exit, IL_goto, IL_if, IL_then, IL_else, IL_end,
+    IL_exit, IL_goto, IL_ifgoto, IL_if, IL_then, IL_else, IL_end,
     IL_label, IL_line, IL_loop, IL_pop, IL_ret,
     IL_starg, IL_starg_s,
     IL_stelem, IL_stelem_i1, IL_stelem_i2, IL_stelem_i4, IL_stelem_i8,
     IL_stelem_r4, IL_stelem_r8, IL_stelem_ip, IL_stfld,
     IL_stind_i1, IL_stind_i2, IL_stind_i4, IL_stind_i8, IL_stind_r4, IL_stind_r8, IL_stind_ip,
     IL_stloc, IL_stloc_s, IL_stloc_0, IL_stloc_1, IL_stloc_2, IL_stloc_3,
-    IL_stobj, IL_stvar, IL_switch, IL_case, IL_while, IL_do
+    IL_stobj, IL_stvar, IL_switch, IL_case, IL_while, IL_do,
+    IL_NUM_OF_OPS
 }; // Update s_opName !!!
 
 extern const char* s_opName[];

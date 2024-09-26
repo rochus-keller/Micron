@@ -6,7 +6,7 @@ module Fibonacci
 	  if n > 1 then 
 		   a := calc( n - 1 )
 		   b := calc( n - 2 )
-			return ( a + b )
+		   return ( a + b )
 	  elsif n = 0 then 
 			return 0
 	  else 
@@ -16,6 +16,7 @@ module Fibonacci
 	
 	var res: integer
 begin
+	println("Fibonacci start")
 	res := calc(21)
 	assert( res = 10946 )
 	println("Fibonacci done")

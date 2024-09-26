@@ -20,9 +20,48 @@
 #include "MicMilInterpreter.h"
 #include "MicMilOp.h"
 #include "MicToken.h"
+#include <QElapsedTimer>
 #include <QVector>
 #include <QtDebug>
 using namespace Mic;
+
+//#define _USE_GETTIMEOFDAY
+#ifdef _USE_GETTIMEOFDAY
+#if defined(_WIN32) && !defined(__GNUC__)
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+// Source: https://stackoverflow.com/questions/10905892/equivalent-of-gettimeday-for-windows/26085827
+
+// MSVC defines this in winsock2.h!?
+typedef struct timeval {
+    long tv_sec;
+    long tv_usec;
+} timeval;
+
+int gettimeofday(struct timeval * tp, struct timezone * tzp)
+{
+    // Note: some broken versions only have 8 trailing zero's, the correct epoch has 9 trailing zero's
+    // This magic number is the number of 100 nanosecond intervals since January 1, 1601 (UTC)
+    // until 00:00:00 January 1, 1970
+    static const uint64_t EPOCH = ((uint64_t) 116444736000000000ULL);
+
+    SYSTEMTIME  system_time;
+    FILETIME    file_time;
+    uint64_t    time;
+
+    GetSystemTime( &system_time );
+    SystemTimeToFileTime( &system_time, &file_time );
+    time =  ((uint64_t)file_time.dwLowDateTime )      ;
+    time += ((uint64_t)file_time.dwHighDateTime) << 32;
+
+    tp->tv_sec  = (long) ((time - EPOCH) / 10000000L);
+    tp->tv_usec = (long) (system_time.wMilliseconds * 1000);
+    return 0;
+}
+#else
+#include <sys/time.h>
+#endif
+#endif
 
 struct MemSlots;
 struct ModuleData;
@@ -68,6 +107,7 @@ struct MemSlot
     void copy(MemSlots* rhs);
 };
 
+// TODO: arrays of arrays should be layed out as single string, see Procs3.mic
 struct MemSlots : public QVector<MemSlot>
 {
     MemSlots(int len = 0):QVector<MemSlot>(len) {}
@@ -132,14 +172,24 @@ public:
     MilLoader* loader;
 
     QMap<const char*, ModuleData*> modules; // moduleFullName -> data
-    QList< QList<int> > loopStack;
-    typedef QMap<const char*, QPair<quint32,QList<quint32> > > Labels;
-    Labels labels; // name -> label pos, goto poss
+    typedef QList< QList<int> > LoopStack;
+    struct MilLabel
+    {
+        quint32 labelPc;
+        QList<quint32> gotoPcs;
+        MilLabel():labelPc(0){}
+    };
+    typedef QMap<const char*,MilLabel> Labels;
     QMap<QByteArray,MemSlots> strings; // internalized strings
-    QByteArray intrinsicMod;
+    QByteArray intrinsicMod, outMod, inputMod;
     typedef QMap<const char*, MilProcedure> Intrinsics;
     Intrinsics intrinsics;
     QTextStream out;
+#ifdef _USE_GETTIMEOFDAY
+    struct timeval start; // 57732 us for Bounce 1500, i.e. 23 times worse than Lua 5.4.7 without jump table
+#else
+    QElapsedTimer timer; // NOTE: QElapsedTimer and gettimeofday are virtually identical
+#endif
 
     MemSlots* internalize(const QByteArray& str)
     {
@@ -272,6 +322,13 @@ public:
             .arg(proc->name.constData()).arg(s_opName[proc->body[pc].op]).arg(pc).arg(msg);
     }
 
+    void execError(ModuleData* module, const MilProcedure* proc, const QString& msg = QString())
+    {
+        throw QString("%1!%2 error: %3")
+            .arg(module->module->fullName.constData())
+            .arg(proc->name.constData()).arg(msg);
+    }
+
     const MilType* getType(ModuleData* module, const MilQuali& q) const
     {
         // this is only for custom types defined with Emitter::addType or begin/endType, not for intrinsic types
@@ -313,64 +370,64 @@ public:
         return res;
     }
 
-    void processBlock(ModuleData* module, MilProcedure* proc, quint32& pc)
+    void processBlock(ModuleData* module, MilProcedure* proc, quint32& pc, Labels& labels, LoopStack& loopStack)
     {
-        QList<MilOperation>& op = proc->body;
+        QList<MilOperation>& ops = proc->body;
         const int start = pc;
-        switch(op[pc].op)
+        switch(ops[pc].op)
         {
         case IL_while:
             {
                 // end -> while+1, then -> end+1
                 pc++;
-                while( pc < op.size() && op[pc].op != IL_do )
-                    processBlock(module, proc,pc);
+                while( pc < ops.size() && ops[pc].op != IL_do )
+                    processBlock(module, proc,pc, labels, loopStack);
                 assureValid(module,proc,start,pc,IL_do);
                 const int then = pc;
                 pc++;
-                while( pc < op.size() && op[pc].op != IL_end )
-                    processBlock(module, proc, pc); // look for nested statements
+                while( pc < ops.size() && ops[pc].op != IL_end )
+                    processBlock(module, proc, pc, labels, loopStack); // look for nested statements
                 assureValid(module,proc,start,pc,IL_end);
-                op[pc].index = start+1; // end jumps to while+1
+                ops[pc].index = start+1; // end jumps to while+1
                 pc++;
-                op[then].index = pc; // then jumps to end+1
+                ops[then].index = pc; // then jumps to end+1
             }
             break;
         case IL_switch:
             {
                 // switch -> case -> case -> else -> end
                 pc++;
-                while( pc < op.size() && op[pc].op != IL_case &&
-                       op[pc].op != IL_else && op[pc].op != IL_end )
-                    processBlock(module, proc,pc);
+                while( pc < ops.size() && ops[pc].op != IL_case &&
+                       ops[pc].op != IL_else && ops[pc].op != IL_end )
+                    processBlock(module, proc,pc, labels, loopStack);
                 assureValid(module,proc,start,pc,IL_case, IL_else, IL_end);
                 int prev = start;
                 QList<quint32> thenList;
-                while( op[pc].op == IL_case )
+                while( ops[pc].op == IL_case )
                 {
-                    op[prev].index = pc;
+                    ops[prev].index = pc;
                     prev = pc;
                     pc++;
                     assureValid(module,proc,start,pc,IL_then);
                     thenList.append(pc);
                     pc++;
-                    while( pc < op.size() && op[pc].op != IL_case &&
-                           op[pc].op != IL_else && op[pc].op != IL_end )
-                        processBlock(module, proc, pc); // look for nested statements
+                    while( pc < ops.size() && ops[pc].op != IL_case &&
+                           ops[pc].op != IL_else && ops[pc].op != IL_end )
+                        processBlock(module, proc, pc, labels, loopStack); // look for nested statements
                     assureValid(module,proc,start,pc,IL_case, IL_else, IL_end);
                 }
-                if( op[pc].op == IL_else )
+                if( ops[pc].op == IL_else )
                 {
-                    op[prev].index = pc;
+                    ops[prev].index = pc;
                     prev = pc;
                     thenList.append(pc);
                     pc++;
-                    while( pc < op.size() && op[pc].op != IL_end )
-                        processBlock(module, proc, pc);
+                    while( pc < ops.size() && ops[pc].op != IL_end )
+                        processBlock(module, proc, pc, labels, loopStack);
                 }
                 assureValid(module,proc,start,pc,IL_end);
                 foreach( quint32 off, thenList )
-                    op[off].index = pc; // all then and else point to end
+                    ops[off].index = pc; // all then and else point to end
                 pc++;
             }
             break;
@@ -378,24 +435,24 @@ public:
             {
                 // if -> then -> else -> end
                 pc++;
-                while( pc < op.size() && op[pc].op != IL_then )
-                    processBlock(module, proc,pc);
+                while( pc < ops.size() && ops[pc].op != IL_then )
+                    processBlock(module, proc,pc, labels, loopStack);
                 assureValid(module,proc,start,pc, IL_then);
                 int then = pc;
                 pc++;
-                while( pc < op.size() && op[pc].op != IL_else && op[pc].op != IL_end)
-                    processBlock(module, proc, pc); // then statements
+                while( pc < ops.size() && ops[pc].op != IL_else && ops[pc].op != IL_end)
+                    processBlock(module, proc, pc, labels, loopStack); // then statements
                 assureValid(module,proc,start,pc, IL_else, IL_end);
-                if( op[pc].op == IL_else )
+                if( ops[pc].op == IL_else )
                 {
-                    op[then].index = pc+1; // then -> else+1
+                    ops[then].index = pc+1; // then -> else+1
                     const int else_ = pc;
                     pc++;
-                    while( pc < op.size() && op[pc].op != IL_end )
-                        processBlock(module, proc, pc); // else statements
-                    op[else_].index = pc; // else -> end
+                    while( pc < ops.size() && ops[pc].op != IL_end )
+                        processBlock(module, proc, pc, labels, loopStack); // else statements
+                    ops[else_].index = pc; // else -> end
                 }else
-                    op[then].index = pc; // then -> end
+                    ops[then].index = pc; // then -> end
                 assureValid(module,proc,start,pc,IL_end);
                 pc++;
             }
@@ -404,14 +461,14 @@ public:
             {
                 // end -> repeat+1
                 pc++;
-                while( pc < op.size() && op[pc].op != IL_until )
-                    processBlock(module, proc, pc);
+                while( pc < ops.size() && ops[pc].op != IL_until )
+                    processBlock(module, proc, pc, labels, loopStack);
                 assureValid(module,proc,start,pc, IL_until);
                 pc++;
-                while( pc < op.size() && op[pc].op != IL_end )
-                    processBlock(module, proc,pc);
+                while( pc < ops.size() && ops[pc].op != IL_end )
+                    processBlock(module, proc,pc, labels, loopStack);
                 assureValid(module,proc,start,pc, IL_end);
-                op[pc].index = start+1;
+                ops[pc].index = start+1;
                 pc++;
             }
             break;
@@ -420,13 +477,13 @@ public:
                 // end -> loop
                 loopStack.push_back(QList<int>());
                 pc++;
-                while( pc < op.size() && op[pc].op != IL_end )
-                    processBlock(module, proc, pc);
+                while( pc < ops.size() && ops[pc].op != IL_end )
+                    processBlock(module, proc, pc, labels, loopStack);
                 assureValid(module,proc,start,pc, IL_end);
-                op[pc].index = start+1;
+                ops[pc].index = start+1;
                 pc++;
                 foreach( int exit_, loopStack.back() )
-                    op[exit_].index = pc;
+                    ops[exit_].index = pc;
                 loopStack.pop_back();
             }
             break;
@@ -437,17 +494,19 @@ public:
             pc++;
             break;
         case IL_label:
-            labels[op[pc].arg.toByteArray().constData()].first = pc;
+            labels[ops[pc].arg.toByteArray().constData()].labelPc = pc;
             pc++;
             break;
         case IL_goto:
-            labels[op[pc].arg.toByteArray().constData()].second.append(pc);
+        case IL_ifgoto:
+            labels[ops[pc].arg.toByteArray().constData()].gotoPcs.append(pc);
             pc++;
-            break;        case IL_ldfld:
+            break;
+        case IL_ldfld:
         case IL_ldflda:
         case IL_stfld:
             {
-                MilTrident td = op[pc].arg.value<MilTrident>();
+                MilTrident td = ops[pc].arg.value<MilTrident>();
                 const MilType* ty = getType(module, td.first);
                 if( ty == 0 )
                     execError(module, proc, pc, QString("unknown type '%1'").
@@ -455,7 +514,7 @@ public:
                 const int idx = ty->indexOf(td.second);
                 if( idx < 0 )
                     break; // error?
-                op[pc].index = idx;
+                ops[pc].index = idx;
             }
             pc++;
             break;
@@ -463,14 +522,14 @@ public:
         case IL_ldvara:
         case IL_stvar:
             {
-                MilQuali q = op[pc].arg.value<MilQuali>();
+                MilQuali q = ops[pc].arg.value<MilQuali>();
                 MilModule* m = q.first.isEmpty() ? module->module : loader->getModule(q.first);
                 if( m == 0 )
                     break; // error?
                 const int idx = m->indexOfVar(q.second);
                 if( idx < 0 )
                     break; // error?
-                op[pc].index = idx;
+                ops[pc].index = idx;
             }
             pc++;
             break;
@@ -482,9 +541,17 @@ public:
 
     void calcOffsets(ModuleData* module, MilProcedure* proc, quint32& pc)
     {
+        Labels labels; // name -> label pos, goto poss
+        LoopStack loopStack;
         while( pc < proc->body.size() )
         {
-            processBlock(module, proc, pc);
+            processBlock(module, proc, pc, labels, loopStack);
+        }
+        Labels::const_iterator i;
+        for( i = labels.begin(); i != labels.end(); ++i )
+        {
+            for(int j = 0; j < i.value().gotoPcs.size(); j++ )
+                proc->body[i.value().gotoPcs[j]].index = i.value().labelPc;
         }
     }
 
@@ -622,6 +689,8 @@ public:
         MemSlots args(proc->proc->params.size());
         for( int i = proc->proc->params.size()-1; i >= 0; i-- )
         {
+            if( stack.isEmpty() )
+                execError(proc->module,proc->proc,"not enough actual parameters");
             args[i].move(stack.back());
             stack.pop_back();
         }
@@ -660,6 +729,69 @@ public:
         case 6: // GEQ
             return strcmp(l,r) >= 0;
         }
+        return 0;
+    }
+
+    void nyiError(ModuleData* module, MilProcedure* proc)
+    {
+        throw QString("%1!%2 not yet implemented")
+                .arg(module->module->fullName.constData())
+                .arg(proc->name.constData());
+    }
+
+    void callExtern(ModuleData* module, MilProcedure* proc, MemSlots& args, MemSlot& ret)
+    {
+        static QByteArray symbols[10];
+        if( symbols[0].isEmpty() )
+        {
+            symbols[0] = Token::getSymbol("Open");
+            symbols[1] = Token::getSymbol("Char");
+            symbols[2] = Token::getSymbol("String");
+            symbols[3] = Token::getSymbol("Int");
+            symbols[4] = Token::getSymbol("Real");
+            symbols[5] = Token::getSymbol("LongReal");
+            symbols[6] = Token::getSymbol("Ln");
+            symbols[7] = Token::getSymbol("Time");
+        }
+        const char* mn = module->module->fullName.constData();
+        const char* pn = proc->name.constData();
+        if( mn == outMod.constData() )
+        {
+            if( pn == symbols[2].constData() ) // Out.String(const str: POINTER TO ARRAY OF CHAR)
+            {
+                Q_ASSERT(args.size() == 1);
+                out << toStr(args.first()).constData() << flush;
+            }else if( pn == symbols[1].constData() ) // Out.Char(c: CHAR)
+            {
+                Q_ASSERT(args.size() == 1);
+                out << (char)(quint8)args.first().i << flush;
+            }else if( pn == symbols[3].constData() ) // Out.Int(i: INT64;n: INT32)
+            {
+                Q_ASSERT(args.size() == 2);
+                out << args.first().i << flush;
+            }else if( pn == symbols[6].constData() ) // Out.Ln
+            {
+                out << endl << flush;
+            }else
+                nyiError(module,proc);
+        }else if( mn == inputMod.constData() )
+        {
+            if( pn == symbols[7].constData() ) // Input.Time
+            {
+                ret.t = MemSlot::I;
+#ifdef _USE_GETTIMEOFDAY
+                static struct timeval now;
+                gettimeofday(&now, 0);
+                const long seconds = now.tv_sec - start.tv_sec;
+                const long microseconds = now.tv_usec - start.tv_usec;
+                ret.i = seconds*1000000 + microseconds;
+#else
+                ret.i = timer.nsecsElapsed() / 1000;
+#endif
+            }else
+                nyiError(module,proc);
+        }else
+            nyiError(module,proc);
     }
 
     void callIntrinsic(MilProcedure* proc, MemSlots& args, MemSlot& ret)
@@ -669,7 +801,7 @@ public:
         case 1: // relop1
             Q_ASSERT(args.size()==3);
             ret.t = MemSlot::U;
-            ret.u = MIC_relop1(toStr(args[0]).constData(), toStr(args[1]).constData(), args[3].u);
+            ret.u = MIC_relop1(toStr(args[0]).constData(), toStr(args[1]).constData(), args[2].u);
             break;
         case 2: // relop2
             {
@@ -677,7 +809,7 @@ public:
                 char tmp[2] = ".";
                 tmp[0] = (char)(quint8)args[1].u;
                 ret.t = MemSlot::U;
-                ret.u = MIC_relop1(toStr(args[0]).constData(), tmp, args[3].u);
+                ret.u = MIC_relop1(toStr(args[0]).constData(), tmp, args[2].u);
             }
             break;
         case 3: // relop3
@@ -686,7 +818,7 @@ public:
                 char tmp[2] = ".";
                 tmp[0] = (char)(quint8)args[0].u;
                 ret.t = MemSlot::U;
-                ret.u = MIC_relop1(tmp, toStr(args[1]).constData(), args[3].u);
+                ret.u = MIC_relop1(tmp, toStr(args[1]).constData(), args[2].u);
             }
             break;
         case 4: // relop4
@@ -697,7 +829,7 @@ public:
                 char r[2] = ".";
                 r[0] = (char)(quint8)args[1].u;
                 ret.t = MemSlot::U;
-                ret.u = MIC_relop1(l, r, args[3].u);
+                ret.u = MIC_relop1(l, r, args[2].u);
             }
             break;
         case 5: // SetDiv
@@ -766,6 +898,10 @@ public:
             return &s;
     }
 
+#define vmdispatch(o)	switch(o)
+#define vmcase(l)	case l:
+#define vmbreak		break
+
     void execute(ModuleData* module, MilProcedure* proc, MemSlots& args, MemSlot& ret)
     {
         if( proc->kind == MilProcedure::Intrinsic )
@@ -773,36 +909,94 @@ public:
             callIntrinsic(proc,args,ret);
             return;
         }
+        if( proc->kind == MilProcedure::Extern )
+        {
+            callExtern(module, proc,args,ret);
+            return;
+        }
         quint32 pc = 0;
         if( !proc->compiled )
         {
             calcOffsets(module, proc, pc);
-            Labels::const_iterator i;
-            for( i = labels.begin(); i != labels.end(); ++i )
-            {
-                for(int j = 0; j < i.value().second.size(); j++ )
-                    proc->body[i.value().second[j]].index = i.value().first;
-            }
             proc->compiled = true;
         }
+
+// #define _USE_JUMP_TABLE
+        // crashes and the debugger becomes veeeery slow
+        // likely needs a totally new architecture to make this work; maybe later
+#ifdef _USE_JUMP_TABLE
+#undef vmdispatch
+#undef vmcase
+#undef vmbreak
+
+#define vmdispatch(x)     goto *disptab[x];
+
+#define vmcase(l)     L_##l:
+
+#define vmbreak		 if( pc >= proc->body.size() ) return; op = proc->body[pc]; vmdispatch(op.op);
+
+        static const void *const disptab[IL_NUM_OF_OPS] = {
+            &&L_IL_invalid,
+            &&L_IL_add, &&L_IL_and, &&L_IL_call, &&L_IL_calli, &&L_IL_castptr,
+            &&L_IL_ceq, &&L_IL_cgt, &&L_IL_cgt_un, &&L_IL_clt, &&L_IL_clt_un,
+            &&L_IL_conv_i1, &&L_IL_conv_i2, &&L_IL_conv_i4, &&L_IL_conv_i8, &&L_IL_conv_r4, &&L_IL_conv_r8,
+            &&L_IL_conv_u1, &&L_IL_conv_u2, &&L_IL_conv_u4, &&L_IL_conv_u8, &&L_IL_conv_ip,
+            &&L_IL_div, &&L_IL_div_un, &&L_IL_dup, &&L_IL_initobj, &&L_IL_ldarg, &&L_IL_ldarg_s,
+            &&L_IL_ldarg_0, &&L_IL_ldarg_1, &&L_IL_ldarg_2, &&L_IL_ldarg_3,
+            &&L_IL_ldarga, &&L_IL_ldarga_s,
+            &&L_IL_ldc_i4, &&L_IL_ldc_i8, &&L_IL_ldc_i4_s, &&L_IL_ldc_r4, &&L_IL_ldc_r8,
+            &&L_IL_ldc_i4_0, &&L_IL_ldc_i4_1, &&L_IL_ldc_i4_2, &&L_IL_ldc_i4_3, &&L_IL_ldc_i4_4, &&L_IL_ldc_i4_5,
+            &&L_IL_ldc_i4_6, &&L_IL_ldc_i4_7, &&L_IL_ldc_i4_8, &&L_IL_ldc_i4_m1, &&L_IL_ldc_obj,
+            &&L_IL_ldelem, &&L_IL_ldelema, &&L_IL_ldelem_i1, &&L_IL_ldelem_i2,
+            &&L_IL_ldelem_i4, &&L_IL_ldelem_i8, &&L_IL_ldelem_u1, &&L_IL_ldelem_u2,
+            &&L_IL_ldelem_u4, &&L_IL_ldelem_u8, &&L_IL_ldelem_r4, &&L_IL_ldelem_r8, &&L_IL_ldelem_ip,
+            &&L_IL_ldfld, &&L_IL_ldflda,
+            &&L_IL_ldind_i1, &&L_IL_ldind_i2, &&L_IL_ldind_i4, &&L_IL_ldind_i8, &&L_IL_ldind_u1, &&L_IL_ldind_u2,
+            &&L_IL_ldind_u4, &&L_IL_ldind_r4, &&L_IL_ldind_u8, &&L_IL_ldind_r8, &&L_IL_ldind_ip,
+            &&L_IL_ldloc, &&L_IL_ldloc_s, &&L_IL_ldloca, &&L_IL_ldloca_s,
+            &&L_IL_ldloc_0, &&L_IL_ldloc_1, &&L_IL_ldloc_2, &&L_IL_ldloc_3, &&L_IL_ldnull,
+            &&L_IL_ldobj, &&L_IL_ldproc, &&L_IL_ldstr,
+            &&L_IL_ldvar, &&L_IL_ldvara, &&L_IL_mul, &&L_IL_neg,
+            &&L_IL_newarr, &&L_IL_newvla, &&L_IL_newobj,
+            &&L_IL_not, &&L_IL_or, &&L_IL_rem, &&L_IL_rem_un, &&L_IL_shl, &&L_IL_shr, &&L_IL_shr_un,
+            &&L_IL_sizeof, &&L_IL_sub, &&L_IL_xor, &&L_IL_ptroff, &&L_IL_nop,
+            &&L_IL_free, &&L_IL_repeat, &&L_IL_until,
+            &&L_IL_exit, &&L_IL_goto, &&L_IL_ifgoto, &&L_IL_if, &&L_IL_then, &&L_IL_else, &&L_IL_end,
+            &&L_IL_label, &&L_IL_line, &&L_IL_loop, &&L_IL_pop, &&L_IL_ret,
+            &&L_IL_starg, &&L_IL_starg_s,
+            &&L_IL_stelem, &&L_IL_stelem_i1, &&L_IL_stelem_i2, &&L_IL_stelem_i4, &&L_IL_stelem_i8,
+            &&L_IL_stelem_r4, &&L_IL_stelem_r8, &&L_IL_stelem_ip, &&L_IL_stfld,
+            &&L_IL_stind_i1, &&L_IL_stind_i2, &&L_IL_stind_i4, &&L_IL_stind_i8, &&L_IL_stind_r4, &&L_IL_stind_r8, &&L_IL_stind_ip,
+            &&L_IL_stloc, &&L_IL_stloc_s, &&L_IL_stloc_0, &&L_IL_stloc_1, &&L_IL_stloc_2, &&L_IL_stloc_3,
+            &&L_IL_stobj, &&L_IL_stvar, &&L_IL_switch, &&L_IL_case, &&L_IL_while, &&L_IL_do
+        };
+
+#endif
         MemSlots locals(proc->locals.size());
         initSlots(module, locals, proc->locals);
         ret = MemSlot();
         pc = 0;
         QList<MemSlot> stack;
         MemSlot lhs, rhs;
+        MilObject mo;
         QList<MemSlot> switchExpr;
         QList<quint8> curStatement;
         while(true)
         {
             if( pc >= proc->body.size() )
-                break;
-            const MilOperation& op = proc->body[pc];
-            // NOTE: jump tables (i.e. &&label) makes no sense, since GCC is able
-            // to derive it automatically; e.g. Lua 5.4.7 has exactly same performance w/wo jump tables
-            switch(op.op)
+                return;
+            MilOperation& op = proc->body[pc];
+
+            // NOTE: jump tables (i.e. &&label, computed gotos) makes little sense, since GCC is able
+            // to derive it automatically in principle; e.g. Lua 5.4.7 has exactly same
+            // performance with or without jump tables; but the VM has a different architecture than
+            // the present one.
+            vmdispatch(op.op)
             {
-            case IL_add:
+            vmcase(IL_invalid)
+                    pc++;
+                    vmbreak;
+            vmcase(IL_add)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -820,8 +1014,8 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_and:
+                vmbreak;
+            vmcase(IL_and)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -836,38 +1030,36 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_call:
+                vmbreak;
+            vmcase(IL_call)
                 {
                     ProcData* pd = getProc(module, op.arg.value<MilQuali>());
                     if( pd == 0 )
                         execError(module, proc, pc, QString("cannot resolve procedure %1").
                                   arg(MilEmitter::toString(op.arg.value<MilQuali>()).constData()));
-                    makeCall(stack,pd);
+                    makeCall(stack, pd);
                 }
                 pc++;
-                break;
-            case IL_calli:
-                {
-                    MemSlot p = stack.takeLast();
-                    if( p.t != MemSlot::PP || p.pp == 0 )
-                        execError(module, proc, pc, "top of stack is not a procedure");
-                    makeCall(stack,p.pp);
-                }
+                vmbreak;
+            vmcase(IL_calli)
+                lhs = stack.takeLast();
+                if( lhs.t != MemSlot::PP || lhs.pp == 0 )
+                    execError(module, proc, pc, "top of stack is not a procedure");
+                makeCall(stack, lhs.pp);
                 pc++;
-                break;
-            case IL_castptr:
+                vmbreak;
+            vmcase(IL_castptr)
                 // NOP
                 pc++;
-                break;
-            case IL_ceq:
+                vmbreak;
+            vmcase(IL_ceq)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 stack.push_back(MemSlot(qint64(lhs.u == rhs.u),true));
                 pc++;
-                break;
-            case IL_cgt:
-            case IL_cgt_un:
+                vmbreak;
+            vmcase(IL_cgt)
+            vmcase(IL_cgt_un)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -883,9 +1075,9 @@ public:
                     break;
                 }
                 pc++;
-                break;
-            case IL_clt:
-            case IL_clt_un:
+                vmbreak;
+            vmcase(IL_clt)
+            vmcase(IL_clt_un)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -901,49 +1093,49 @@ public:
                     break;
                 }
                 pc++;
-                break;
-            case IL_conv_i1:
+                vmbreak;
+            vmcase(IL_conv_i1)
                 convertTo(stack, MemSlot::I, 1);
                 pc++;
-                break;
-            case IL_conv_i2:
+                vmbreak;
+            vmcase(IL_conv_i2)
                 convertTo(stack, MemSlot::I, 2);
                 pc++;
-                break;
-            case IL_conv_i4:
+                vmbreak;
+            vmcase(IL_conv_i4)
                 convertTo(stack, MemSlot::I, 4);
                 pc++;
-                break;
-            case IL_conv_i8:
+                vmbreak;
+            vmcase(IL_conv_i8)
                 convertTo(stack, MemSlot::I, 0);
                 pc++;
-                break;
-            case IL_conv_r4:
-            case IL_conv_r8:
+                vmbreak;
+            vmcase(IL_conv_r4)
+            vmcase(IL_conv_r8)
                 convertTo(stack, MemSlot::F, 0);
                 pc++;
-                break;
-            case IL_conv_u1:
+                vmbreak;
+            vmcase(IL_conv_u1)
                 convertTo(stack, MemSlot::U, 1);
                 pc++;
-                break;
-            case IL_conv_u2:
+                vmbreak;
+            vmcase(IL_conv_u2)
                 convertTo(stack, MemSlot::U, 2);
                 pc++;
-                break;
-            case IL_conv_u4:
+                vmbreak;
+            vmcase(IL_conv_u4)
                 convertTo(stack, MemSlot::U, 4);
                 pc++;
-                break;
-            case IL_conv_u8:
+                vmbreak;
+            vmcase(IL_conv_u8)
                 convertTo(stack, MemSlot::U, 0);
                 pc++;
-                break;
-            case IL_conv_ip:
+                vmbreak;
+            vmcase(IL_conv_ip)
                 convertTo(stack, MemSlot::SP, 0); // TODO
                 pc++;
-                break;
-            case IL_div:
+                vmbreak;
+            vmcase(IL_div)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -958,8 +1150,8 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_div_un:
+                vmbreak;
+            vmcase(IL_div_un)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -971,204 +1163,197 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_dup:
+                vmbreak;
+            vmcase(IL_dup)
                 stack.push_back(stack.back());
                 pc++;
-                break;
-            case IL_initobj:
+                vmbreak;
+            vmcase(IL_initobj)
                 // NOP
                 stack.pop_back();
                 pc++;
-                break;
-            case IL_ldarg:
-            case IL_ldarg_s:
+                vmbreak;
+            vmcase(IL_ldarg)
+            vmcase(IL_ldarg_s)
                 stack.push_back(args.at(op.arg.toUInt()));
                 pc++;
-                break;
-            case IL_ldarg_0:
+                vmbreak;
+            vmcase(IL_ldarg_0)
                 stack.push_back(args.at(0));
                 pc++;
-                break;
-            case IL_ldarg_1:
+                vmbreak;
+            vmcase(IL_ldarg_1)
                 stack.push_back(args.at(1));
                 pc++;
-                break;
-            case IL_ldarg_2:
+                vmbreak;
+            vmcase(IL_ldarg_2)
                 stack.push_back(args.at(2));
                 pc++;
-                break;
-            case IL_ldarg_3:
+                vmbreak;
+            vmcase(IL_ldarg_3)
                 stack.push_back(args.at(3));
                 pc++;
-                break;
-            case IL_ldarga:
-            case IL_ldarga_s:
+                vmbreak;
+            vmcase(IL_ldarga)
+            vmcase(IL_ldarga_s)
                 stack.push_back(addressOf(args[op.arg.toUInt()]));
                 pc++;
-                break;
-            case IL_ldc_i4:
-            case IL_ldc_i4_s:
+                vmbreak;
+            vmcase(IL_ldc_i4)
+            vmcase(IL_ldc_i4_s)
                 stack.push_back(MemSlot(op.arg.toLongLong(),true));
                 pc++;
-                break;
-            case IL_ldc_i8:
+                vmbreak;
+            vmcase(IL_ldc_i8)
                 stack.push_back(MemSlot(op.arg.toLongLong()));
                 pc++;
-                break;
-            case IL_ldc_r4:
+                vmbreak;
+            vmcase(IL_ldc_r4)
                 stack.push_back(MemSlot(op.arg.toDouble(),true));
                 pc++;
-                break;
-            case IL_ldc_r8:
+                vmbreak;
+            vmcase(IL_ldc_r8)
                 stack.push_back(MemSlot(op.arg.toDouble(),false));
                 pc++;
-                break;
-            case IL_ldc_i4_0:
+                vmbreak;
+            vmcase(IL_ldc_i4_0)
                 stack.push_back(MemSlot(0));
                 pc++;
-                break;
-            case IL_ldc_i4_1:
+                vmbreak;
+            vmcase(IL_ldc_i4_1)
                 stack.push_back(MemSlot(1));
                 pc++;
-                break;
-            case IL_ldc_i4_2:
+                vmbreak;
+            vmcase(IL_ldc_i4_2)
                 stack.push_back(MemSlot(2));
                 pc++;
-                break;
-            case IL_ldc_i4_3:
+                vmbreak;
+            vmcase(IL_ldc_i4_3)
                 stack.push_back(MemSlot(3));
                 pc++;
-                break;
-            case IL_ldc_i4_4:
+                vmbreak;
+            vmcase(IL_ldc_i4_4)
                 stack.push_back(MemSlot(4));
                 pc++;
-                break;
-            case IL_ldc_i4_5:
+                vmbreak;
+            vmcase(IL_ldc_i4_5)
                 stack.push_back(MemSlot(5));
                 pc++;
-                break;
-            case IL_ldc_i4_6:
+                vmbreak;
+            vmcase(IL_ldc_i4_6)
                 stack.push_back(MemSlot(6));
                 pc++;
-                break;
-            case IL_ldc_i4_7:
+                vmbreak;
+            vmcase(IL_ldc_i4_7)
                 stack.push_back(MemSlot(7));
                 pc++;
-                break;
-            case IL_ldc_i4_8:
+                vmbreak;
+            vmcase(IL_ldc_i4_8)
                 stack.push_back(MemSlot(8));
                 pc++;
-                break;
-            case IL_ldc_i4_m1:
+                vmbreak;
+            vmcase(IL_ldc_i4_m1)
                 stack.push_back(MemSlot(-1));
                 pc++;
-                break;
-            case IL_ldc_obj:
-                {
-                    MilObject o = op.arg.value<MilObject>();
-                    MemSlot s;
-                    convert(s, o.data);
-                    stack.push_back(MemSlot());
-                    stack.back().move(s);
-                }
+                vmbreak;
+            vmcase(IL_ldc_obj)
+                mo = op.arg.value<MilObject>();
+                convert(lhs, mo.data);
+                stack.push_back(MemSlot());
+                stack.back().move(lhs);
                 pc++;
-                break;
-            case IL_ldelem:
-            case IL_ldelem_i1:
-            case IL_ldelem_i2:
-            case IL_ldelem_i4:
-            case IL_ldelem_i8:
-            case IL_ldelem_u1:
-            case IL_ldelem_u2:
-            case IL_ldelem_u4:
-            case IL_ldelem_u8:
-            case IL_ldelem_r4:
-            case IL_ldelem_r8:
-            case IL_ldelem_ip:
+                vmbreak;
+            vmcase(IL_ldelem)
+            vmcase(IL_ldelem_i1)
+            vmcase(IL_ldelem_i2)
+            vmcase(IL_ldelem_i4)
+            vmcase(IL_ldelem_i8)
+            vmcase(IL_ldelem_u1)
+            vmcase(IL_ldelem_u2)
+            vmcase(IL_ldelem_u4)
+            vmcase(IL_ldelem_u8)
+            vmcase(IL_ldelem_r4)
+            vmcase(IL_ldelem_r8)
+            vmcase(IL_ldelem_ip)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 if( lhs.ssp == 0 || rhs.u >= lhs.ssp->length() )
                     execError(module, proc, pc, "invalid array or index out of bound");
                 stack.push_back(lhs.ssp->at(rhs.u));
                 pc++;
-                break;
-            case IL_ldelema:
+                vmbreak;
+            vmcase(IL_ldelema)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 if( lhs.t != MemSlot::SSP || lhs.ssp == 0 || rhs.u >= lhs.ssp->length() )
                     execError(module, proc, pc, "invalid array or index out of bound");
                 stack.push_back(addressOf(lhs.ssp->operator[](rhs.u)));
                 pc++;
-                break;
-            case IL_ldfld:
-                {
-                    MemSlot s = stack.takeLast();
-                    if( (s.t != MemSlot::SS && s.t != MemSlot::SSP) ||
-                            s.ssp == 0 || s.ssp->size() <= op.index )
-                        execError(module, proc, pc, "invalid record or field");
-                    stack.push_back(s.ssp->at(op.index));
-                }
+                vmbreak;
+            vmcase(IL_ldfld)
+                lhs = stack.takeLast();
+                if( (lhs.t != MemSlot::SS && lhs.t != MemSlot::SSP) ||
+                        lhs.ssp == 0 || lhs.ssp->size() <= op.index )
+                    execError(module, proc, pc, "invalid record or field");
+                stack.push_back(lhs.ssp->at(op.index));
                 pc++;
-                break;
-            case IL_ldflda:
-                {
-                    MemSlot s = stack.takeLast();
-                    if( (s.t != MemSlot::SS && s.t != MemSlot::SSP) ||
-                            s.ssp == 0 || s.ssp->size() <= op.index )
-                        execError(module, proc, pc, "invalid record or field");
-                    stack.push_back(addressOf(s.ssp->operator[](op.index)));
-                }
+                vmbreak;
+            vmcase(IL_ldflda)
+                lhs = stack.takeLast();
+                if( (lhs.t != MemSlot::SS && lhs.t != MemSlot::SSP) ||
+                        lhs.ssp == 0 || lhs.ssp->size() <= op.index )
+                    execError(module, proc, pc, "invalid record or field");
+                stack.push_back(addressOf(lhs.ssp->operator[](op.index)));
                 pc++;
-                break;
-            case IL_ldind_i1:
-            case IL_ldind_i2:
-            case IL_ldind_i4:
-            case IL_ldind_i8:
-            case IL_ldind_u1:
-            case IL_ldind_u2:
-            case IL_ldind_u4:
-            case IL_ldind_u8:
-            case IL_ldind_r4:
-            case IL_ldind_r8:
-            case IL_ldind_ip:
+                vmbreak;
+            vmcase(IL_ldind_i1)
+            vmcase(IL_ldind_i2)
+            vmcase(IL_ldind_i4)
+            vmcase(IL_ldind_i8)
+            vmcase(IL_ldind_u1)
+            vmcase(IL_ldind_u2)
+            vmcase(IL_ldind_u4)
+            vmcase(IL_ldind_u8)
+            vmcase(IL_ldind_r4)
+            vmcase(IL_ldind_r8)
+            vmcase(IL_ldind_ip)
                 lhs = stack.takeLast();
                 if( lhs.sp == 0 || lhs.t != MemSlot::SP)
                     execError(module, proc, pc, "invalid pointer on stack");
                 stack.push_back(*lhs.sp);
                 pc++;
-                break;
-            case IL_ldloc:
-            case IL_ldloc_s:
+                vmbreak;
+            vmcase(IL_ldloc)
+            vmcase(IL_ldloc_s)
                 stack.push_back(locals.at(op.arg.toUInt()));
                 pc++;
-                break;
-            case IL_ldloca:
-            case IL_ldloca_s:
+                vmbreak;
+            vmcase(IL_ldloca)
+            vmcase(IL_ldloca_s)
                 stack.push_back(addressOf(locals[op.arg.toUInt()]));
                 pc++;
-                break;
-            case IL_ldloc_0:
+                vmbreak;
+            vmcase(IL_ldloc_0)
                 stack.push_back(locals.at(0));
                 pc++;
-                break;
-            case IL_ldloc_1:
+                vmbreak;
+            vmcase(IL_ldloc_1)
                 stack.push_back(locals.at(1));
                 pc++;
-                break;
-            case IL_ldloc_2:
+                vmbreak;
+            vmcase(IL_ldloc_2)
                 stack.push_back(locals.at(2));
                 pc++;
-                break;
-            case IL_ldloc_3:
+                vmbreak;
+            vmcase(IL_ldloc_3)
                 stack.push_back(locals.at(3));
                 pc++;
-                break;
-            case IL_ldnull:
+                vmbreak;
+            vmcase(IL_ldnull)
                 stack.push_back(MemSlot((MemSlot*)0));
                 pc++;
-                break;
-            case IL_ldobj:
+                vmbreak;
+            vmcase(IL_ldobj)
                 lhs = stack.takeLast();
                 if( (lhs.t != MemSlot::SP && lhs.t != MemSlot::SSP) || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer on stack");
@@ -1181,32 +1366,28 @@ public:
                     stack.push_back(lhs);
                 }
                 pc++;
-                break;
-            case IL_ldproc:
+                vmbreak;
+            vmcase(IL_ldproc)
                 stack.push_back(MemSlot(getProc(module,op.arg.value<MilQuali>())));
                 pc++;
-                break;
-            case IL_ldstr:
+                vmbreak;
+            vmcase(IL_ldstr)
                 stack.push_back(MemSlot(internalize(op.arg.toByteArray())));
                 pc++;
-                break;
-            case IL_ldvar:
-                {
-                    if( module->variables.size() <= op.index )
-                        execError(module, proc, pc, "invalid variable reference");
-                    stack.push_back(module->variables.at(op.index));
-                }
+                vmbreak;
+            vmcase(IL_ldvar)
+                if( module->variables.size() <= op.index )
+                    execError(module, proc, pc, "invalid variable reference");
+                stack.push_back(module->variables.at(op.index));
                 pc++;
-                break;
-            case IL_ldvara:
-                {
-                    if( module->variables.size() <= op.index )
-                        execError(module, proc, pc, "invalid variable reference");
-                    stack.push_back(addressOf(module->variables[op.index]));
-                }
+                vmbreak;
+            vmcase(IL_ldvara)
+                if( module->variables.size() <= op.index )
+                    execError(module, proc, pc, "invalid variable reference");
+                stack.push_back(addressOf(module->variables[op.index]));
                 pc++;
-                break;
-            case IL_mul:
+                vmbreak;
+            vmcase(IL_mul)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -1224,8 +1405,8 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_neg:
+                vmbreak;
+            vmcase(IL_neg)
                 lhs = stack.takeLast();
                 switch( lhs.t )
                 {
@@ -1239,9 +1420,9 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_newarr:
-            case IL_newvla:
+                vmbreak;
+            vmcase(IL_newarr)
+            vmcase(IL_newvla)
                 {
                     lhs = stack.takeLast();
                     if( lhs.u == 0 )
@@ -1252,8 +1433,8 @@ public:
                     stack.push_back(MemSlot(array) );
                 }
                 pc++;
-                break;
-            case IL_newobj:
+                vmbreak;
+            vmcase(IL_newobj)
                 {
                     const MilQuali q = op.arg.value<MilQuali>();
                     const MilType* ty = getType(module, q);
@@ -1268,8 +1449,8 @@ public:
                     // TODO: we treat unions as structs here
                 }
                 pc++;
-                break;
-            case IL_not:
+                vmbreak;
+            vmcase(IL_not)
                 lhs = stack.takeLast();
                 switch( lhs.t )
                 {
@@ -1283,8 +1464,8 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_or:
+                vmbreak;
+            vmcase(IL_or)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -1299,8 +1480,9 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_rem:
+                vmbreak;
+            vmcase(IL_rem)
+            vmcase(IL_rem_un)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -1308,16 +1490,6 @@ public:
                 case MemSlot::I:
                     stack.push_back(MemSlot(lhs.i % rhs.i,lhs.hw));
                     break;
-                default:
-                    Q_ASSERT(false);
-                }
-                pc++;
-                break;
-            case IL_rem_un:
-                rhs = stack.takeLast();
-                lhs = stack.takeLast();
-                switch( lhs.t )
-                {
                 case MemSlot::U:
                     stack.push_back(MemSlot(lhs.u % rhs.u,lhs.hw));
                     break;
@@ -1325,8 +1497,8 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_shl:
+                vmbreak;
+            vmcase(IL_shl)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -1341,8 +1513,8 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_shr:
+                vmbreak;
+            vmcase(IL_shr)
                 switch( lhs.t )
                 {
                 case MemSlot::I:
@@ -1360,16 +1532,16 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_shr_un:
+                vmbreak;
+            vmcase(IL_shr_un)
                 stack.push_back(MemSlot(lhs.u >> rhs.u,lhs.hw));
                 pc++;
-                break;
-            case IL_sizeof:
+                vmbreak;
+            vmcase(IL_sizeof)
                 stack.push_back(MemSlot(1)); // RISK
                 pc++;
-                break;
-            case IL_sub:
+                vmbreak;
+            vmcase(IL_sub)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -1387,8 +1559,8 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_xor:
+                vmbreak;
+            vmcase(IL_xor)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -1403,8 +1575,8 @@ public:
                     Q_ASSERT(false);
                 }
                 pc++;
-                break;
-            case IL_free:
+                vmbreak;
+            vmcase(IL_free)
                 lhs = stack.takeLast();
                 if( (lhs.t != MemSlot::SP && lhs.t != MemSlot::SSP) || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer");
@@ -1413,30 +1585,37 @@ public:
                 else
                     delete lhs.ssp;
                 pc++;
-                break;
-            case IL_repeat: // repeat(1) until(1) end(5)
+                vmbreak;
+            vmcase(IL_repeat) // repeat(1) until(1) end(5)
                 curStatement.push_back(IL_repeat);
                 pc++;
-                break;
-            case IL_until:
+                vmbreak;
+            vmcase(IL_until)
                 pc++;
-                break;
-            case IL_exit:
+                vmbreak;
+            vmcase(IL_exit)
                 while( !curStatement.isEmpty() && curStatement.back() != IL_loop )
                     curStatement.pop_back(); // exit everything up to the closest loop statement
                 if( curStatement.isEmpty() || curStatement.back() != IL_loop )
                     execError(module, proc, pc, "operation not allowed here");
                 curStatement.pop_back();
                 pc = op.index;
-                break;
-            case IL_goto:
+                vmbreak;
+            vmcase(IL_goto)
                 pc = op.index;
-                break;
-            case IL_if: // if(1) then(2) else(2) end(5)
+                vmbreak;
+            vmcase(IL_ifgoto)
+                lhs = stack.takeLast();
+                if( lhs.u )
+                    pc = op.index;
+                else
+                    pc++;
+                vmbreak;
+            vmcase(IL_if) // if(1) then(2) else(2) end(5)
                 curStatement.push_back(IL_if);
                 pc++;
-                break;
-            case IL_then:
+                vmbreak;
+            vmcase(IL_then)
                 if( curStatement.isEmpty() )
                     execError(module, proc, pc, "operation not expected here");
                 if( curStatement.back() == IL_if )
@@ -1448,8 +1627,8 @@ public:
                         pc++;
                 }else // we never execute then in a switch statement
                     execError(module, proc, pc, "operation not expected here");
-                break;
-            case IL_else:
+                vmbreak;
+            vmcase(IL_else)
                 if( curStatement.isEmpty() )
                     execError(module, proc, pc, "operation not expected here");
                 if( curStatement.back() == IL_switch )
@@ -1460,8 +1639,8 @@ public:
                         pc++; // execute else
                 }else if( curStatement.back() == IL_if )
                     pc = op.index; // else points to end, only hit after then is executed
-                break;
-            case IL_end:
+                vmbreak;
+            vmcase(IL_end)
                 if( curStatement.isEmpty() )
                     execError(module, proc, pc, "operation not expected here");
                 if( curStatement.back() == IL_repeat )
@@ -1483,24 +1662,24 @@ public:
                     curStatement.pop_back();
                     pc++;
                 }
-                break;
-            case IL_label:
+                vmbreak;
+            vmcase(IL_label)
                 // NOP
                 pc++;
-                break;
-            case IL_line:
+                vmbreak;
+            vmcase(IL_line)
                 // NOP
                 pc++;
-                break;
-            case IL_loop: // loop(1) end(5)
+                vmbreak;
+            vmcase(IL_loop) // loop(1) end(5)
                 curStatement.push_back(IL_loop);
                 pc++;
-                break;
-            case IL_pop:
+                vmbreak;
+            vmcase(IL_pop)
                 stack.pop_back();
                 pc++;
-                break;
-            case IL_ptroff:
+                vmbreak;
+            vmcase(IL_ptroff)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 if( lhs.t != MemSlot::SP || rhs.t != MemSlot::I )
@@ -1508,8 +1687,8 @@ public:
                 lhs.sp += rhs.i;
                 stack.push_back(lhs);
                 pc++;
-                break;
-            case IL_ret:
+                vmbreak;
+            vmcase(IL_ret)
                 if( !proc->retType.second.isEmpty() )
                 {
                     ret.move(stack.back());
@@ -1519,20 +1698,20 @@ public:
                     execError(module, proc, pc, "stack must be empty at this place");
                 return;
 
-            case IL_starg:
-            case IL_starg_s:
+            vmcase(IL_starg)
+            vmcase(IL_starg_s)
                 args[op.arg.toUInt()].move(stack.back());
                 stack.pop_back();
                 pc++;
-                break;
-            case IL_stelem:
-            case IL_stelem_i1:
-            case IL_stelem_i2:
-            case IL_stelem_i4:
-            case IL_stelem_i8:
-            case IL_stelem_r4:
-            case IL_stelem_r8:
-            case IL_stelem_ip:
+                vmbreak;
+            vmcase(IL_stelem)
+            vmcase(IL_stelem_i1)
+            vmcase(IL_stelem_i2)
+            vmcase(IL_stelem_i4)
+            vmcase(IL_stelem_i8)
+            vmcase(IL_stelem_r4)
+            vmcase(IL_stelem_r8)
+            vmcase(IL_stelem_ip)
                 {
                     MemSlot val;
                     val.move(stack.back());
@@ -1544,8 +1723,8 @@ public:
                     array.ssp->operator[](index.u).move(val);
                 }
                 pc++;
-                break;
-            case IL_stfld:
+                vmbreak;
+            vmcase(IL_stfld)
                 rhs.move(stack.back());
                 stack.pop_back();
                 lhs = stack.takeLast();
@@ -1553,49 +1732,49 @@ public:
                     execError(module, proc, pc, "invalid record");
                 lhs.ssp->operator[](op.index).move(rhs);
                 pc++;
-                break;
-            case IL_stind_i1:
-            case IL_stind_i2:
-            case IL_stind_i4:
-            case IL_stind_i8:
-            case IL_stind_r4:
-            case IL_stind_r8:
-            case IL_stind_ip:
+                vmbreak;
+            vmcase(IL_stind_i1)
+            vmcase(IL_stind_i2)
+            vmcase(IL_stind_i4)
+            vmcase(IL_stind_i8)
+            vmcase(IL_stind_r4)
+            vmcase(IL_stind_r8)
+            vmcase(IL_stind_ip)
                 rhs.move(stack.back());
                 stack.pop_back();
                 lhs = stack.takeLast();
-                if( lhs.sp == 0 )
+                if( lhs.t != MemSlot::SP || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer");
                 lhs.sp->move(rhs);
                 pc++;
-                break;
-            case IL_stloc:
-            case IL_stloc_s:
+                vmbreak;
+            vmcase(IL_stloc)
+            vmcase(IL_stloc_s)
                 locals[op.arg.toUInt()].move(stack.back());
                 stack.pop_back();
                 pc++;
-                break;
-            case IL_stloc_0:
+                vmbreak;
+            vmcase(IL_stloc_0)
                 locals[0].move(stack.back());
                 stack.pop_back();
                 pc++;
-                break;
-            case IL_stloc_1:
+                vmbreak;
+            vmcase(IL_stloc_1)
                 locals[1].move(stack.back());
                 stack.pop_back();
                 pc++;
-                break;
-            case IL_stloc_2:
+                vmbreak;
+            vmcase(IL_stloc_2)
                 locals[2].move(stack.back());
                 stack.pop_back();
                 pc++;
-                break;
-            case IL_stloc_3:
+                vmbreak;
+            vmcase(IL_stloc_3)
                 locals[3].move(stack.back());
                 stack.pop_back();
                 pc++;
-                break;
-            case IL_stobj:
+                vmbreak;
+            vmcase(IL_stobj)
                 rhs.move(stack.back());
                 stack.pop_back();
                 lhs = stack.takeLast(); // destination
@@ -1615,18 +1794,18 @@ public:
                         // copy string literal
                 }
                 pc++;
-                break;
-            case IL_stvar:
+                vmbreak;
+            vmcase(IL_stvar)
                 module->variables[op.index].move(stack.back());
                 stack.pop_back();
                 pc++;
-                break;
-            case IL_switch: // switch(1) {case(1) then(2)} [else(2)] end(5)
+                vmbreak;
+            vmcase(IL_switch) // switch(1) {case(1) then(2)} [else(2)] end(5)
                 curStatement.push_back(IL_switch);
                 switchExpr.append(MemSlot());
                 pc++;
-                break;
-            case IL_case:
+                vmbreak;
+            vmcase(IL_case)
                 if( switchExpr.back().t == MemSlot::PP )
                 {
                     // done
@@ -1646,12 +1825,12 @@ public:
                     pc += 2; // skip then
                 }else
                     pc = op.index;
-                break;
-            case IL_while: // while(1) do(1) end(5)
+                vmbreak;
+            vmcase(IL_while) // while(1) do(1) end(5)
                 curStatement.push_back(IL_while);
                 pc++;
-                break;
-            case IL_do:
+                vmbreak;
+            vmcase(IL_do)
                 lhs = stack.takeLast();
                 if( lhs.u == 0 )
                 {
@@ -1659,11 +1838,14 @@ public:
                     pc = op.index; // jump to end+1
                 }else
                     pc++;
-                break;
-            case IL_nop:
-                break;
+                vmbreak;
+            vmcase(IL_nop)
+                pc++;
+                vmbreak;
+#if 0
             default:
                 Q_ASSERT(false);
+#endif
             }
         }
     }
@@ -1686,8 +1868,15 @@ MilInterpreter::MilInterpreter(MilLoader* l)
 {
     imp = new Imp;
     imp->loader = l;
+#ifdef _USE_GETTIMEOFDAY
+    gettimeofday(&imp->start, 0);
+#else
+    imp->timer.start();
+#endif
 
     imp->intrinsicMod = Token::getSymbol("$MIC");
+    imp->outMod = Token::getSymbol("Out");
+    imp->inputMod = Token::getSymbol("Input");
     QByteArray name;
     name = Token::getSymbol("relop1");
     imp->intrinsics.insert(name.constData(), createIntrinsic(name,1,3,true));

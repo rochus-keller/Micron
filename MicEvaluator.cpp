@@ -98,14 +98,6 @@ bool Evaluator::binaryOp(quint8 op)
     Value rhs = stack.takeLast();
     Value lhs = stack.takeLast();
 
-    if( !(lhs.isConst() && rhs.isConst()) )
-    {
-        if( lhs.isConst() )
-            pushMilStack(lhs);
-        if( rhs.isConst() )
-            pushMilStack(rhs);
-    }
-
     switch( op )
     {
     // Arith
@@ -634,7 +626,12 @@ Value Evaluator::top()
 void Evaluator::assureTopOnMilStack(bool pop)
 {
     if( top().isConst() )
-        pushMilStack(top());
+    {
+        Value v = stack.takeLast();
+        pushMilStack(v);
+        v.mode = Value::Val;
+        stack.push_back(v);
+    }
     if(pop)
         this->pop();
 }
@@ -938,7 +935,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 emitArithOp(op);
             }
         }else
-            Q_ASSERT(false);
+            err = "operation not supported";
     }else if( lhs.type->isSet() && rhs.type->isSet() )
     {
         // + - * /
@@ -994,7 +991,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
         Q_ASSERT( lhs.isConst() && rhs.isConst() );
         res.val = lhs.val.toByteArray() + rhs.val.toByteArray();
     }else
-        Q_ASSERT(false);
+        err = "operation not supported";
 
     return res;
 }
@@ -1438,7 +1435,11 @@ void Evaluator::recursiveRun(Expression* e)
     case Expression::Mod:
     case Expression::And: // MulOp
         recursiveRun(e->lhs);
+        if( e->lhs->isConst() && !e->rhs->isConst() )
+            assureTopOnMilStack();
         recursiveRun(e->rhs);
+        if( !e->lhs->isConst() && e->rhs->isConst() )
+            assureTopOnMilStack();
         binaryOp(e->kind);
         break;
     case Expression::Select:

@@ -26,7 +26,7 @@ class Evaluator;
 class Builtins
 {
 public:
-    static QString checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl);
+    QString checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl);
     static bool requiresLvalue(quint8 builtin, quint8 argNr);
 
     Builtins(Evaluator*);
@@ -44,9 +44,16 @@ protected:
     void LEN(int nArgs);
     void incdec(int nArgs, bool inc);
     void ASSERT(int nArgs);
-    void bitarith(int op, int nArgs);
-    void bitnot(int nArgs);
+    void bitarith(int op);
+    void bitnot();
+    void doSigned();
+    void doUnsigned();
+    void doAbs();
+    void doFlt();
+    void doShiftRight();
+    void doShiftLeft();
 
+    void checkNumOfActuals(int nArgs, int min, int max = 0);
 private:
     Evaluator* ev;
 };

@@ -49,7 +49,7 @@ const char* s_opName[] =
     "sizeof", "sub", "xor", "ptroff", "nop",
     // statements
     "free", "repeat", "until",
-    "exit", "goto", "if", "then", "else", "end",
+    "exit", "goto", "ifgoto", "if", "then", "else", "end",
     "label", "line", "loop", "pop", "ret",
     "starg", "starg_s",
     "stelem", "stelem_i1", "stelem_i2", "stelem_i4", "stelem_i8",

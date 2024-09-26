@@ -649,11 +649,13 @@ bool Parser2::expect(int tt, bool pkw, const char* where) {
 
 void Parser2::error(const Token& t, const QString& msg)
 {
+    Q_ASSERT(!msg.isEmpty());
     errors << Error(msg,t.d_lineNr, t.d_colNr, t.d_sourcePath);
 }
 
 void Parser2::error(int row, int col, const QString& msg)
 {
+    Q_ASSERT(!msg.isEmpty());
     errors << Error(msg, row, col, scanner->source());
 }
 
@@ -722,6 +724,9 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs) const
             first = !first->type->subs.isEmpty() ? first->type->subs.first() : 0;
         }
     }
+
+    if( lhs->form == Type::Proc && rhs->form == Type::Proc )
+        return matchFormals(lhs->subs, rhs->subs) && matchResultType(lhs->base,rhs->base);
 
     return false;
 }
@@ -820,6 +825,9 @@ bool Parser2::equalTypes(Type* lhs, Type* rhs) const
     // Ta and Tb are the same type,
     if(sameType(lhs,rhs))
         return true;
+
+    if( lhs == 0 || rhs == 0 )
+        return false;
 
     // Ta and Tb are pointer types with equal base types
     if( lhs->form == Type::Pointer && rhs->form == Type::Pointer &&
@@ -1915,6 +1923,8 @@ Expression* Parser2::designator(bool needsLvalue) {
                     if( !isTypeCast && proc->kind != Expression::Builtin )
                         prepareParam(formals,args);
                 }
+                if( !isTypeCast && proc->kind != Expression::Builtin && args.size() < formals.size() )
+                    error(tok,"not enough actual arguments");
             }
             expect(Tok_Rpar, false, "selector");
 
@@ -1925,7 +1935,8 @@ Expression* Parser2::designator(bool needsLvalue) {
                 retType = proc->type;
             else if( proc->kind == Expression::Builtin )
             {
-                const QString err = Builtins::checkArgs(proc->val.toInt(), args, &retType, mdl);
+                Builtins bi(ev);
+                const QString err = bi.checkArgs(proc->val.toInt(), args, &retType, mdl);
                 if( !err.isEmpty() )
                     error(lpar,err);
             }else if( proc->type )
@@ -2619,7 +2630,7 @@ void Parser2::assignmentOrProcedureCall() {
         if( !ev->evaluate(lhs) )
             error(t, ev->getErr());
         Expression* rhs = expression();
-        if( !ev->evaluate(rhs) )
+        if( rhs && !ev->evaluate(rhs) )
             error(tok, ev->getErr());         // value is pushed in ev->assign
         // TODO: avoid assigning to structured return values of functions on left side
         if( !assigCompat( lhs->type, rhs ) )
@@ -3178,7 +3189,7 @@ void Parser2::ReturnStatement() {
                 error(cur,"this return statement doesn't expect an expression");
         const Token tok = la;
         Expression* e = expression();
-        if( !ev->evaluate(e) )
+        if( e && !ev->evaluate(e) )
             error(tok, ev->getErr()); // value is pushed on stack by prepareRhs
         if( !assigCompat( mdl->getTopScope()->type, e ) )
             error(tok,"expression is not compatible with the return type");

@@ -393,6 +393,13 @@ void MilEmitter::goto_(const QByteArray& label)
     delta(0);
 }
 
+void MilEmitter::ifgoto_(const QByteArray& label)
+{
+    Q_ASSERT( !d_proc.isEmpty() );
+    d_proc.back().body.append(MilOperation(IL_ifgoto, label) );
+    delta(0);
+}
+
 void MilEmitter::if_()
 {
     Q_ASSERT( !d_proc.isEmpty() );
