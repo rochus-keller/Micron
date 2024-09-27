@@ -1082,32 +1082,31 @@ Type* Parser2::type(bool deanonymize) {
     return res;
 }
 
-Type* Parser2::NamedType(Quali* qout) {
+Type* Parser2::NamedType(Quali* qout,bool allowUnresovedLocal) {
+    // allowUnresovedLocal==true...allow pointer base to reference not yet declared record
     const Token tok = la;
-    Declaration* d = resolveQualident(qout);
+    Declaration* d = resolveQualident(qout, allowUnresovedLocal);
     if( d == 0 )
         return 0;
     Type* t = d->type;
     if( thisDecl != 0 )
     {
+        // we are in a type declaration; mark each named type by this intermediate object
+        // which is then removed and replaced later
         t = new Type();
         t->form = Type::NameRef;
         t->subs.append(d);
         t->base = d->type;
     }
-    if( d == 0 || d->type == 0 || d->mode != Declaration::TypeDecl )
+    if( d->mode != Declaration::TypeDecl )
+        error(tok, QString("invalid type: %1").arg(d->name.constData()) );
+    else if( d == thisDecl )
     {
-        if( d == thisDecl )
-        {
-            // we are in a type declaration using itself;
-            // the type is not yet known and has to be resolved later
-            t->selfref = true;
-            return t;
-        }else if( d )
-            error(tok, QString("invalid type: %1").arg(d->name.constData()) );
-        return mdl->getType(BasicType::Undefined);
-    }else
-        return t;
+        // we are in a type declaration using itself;
+        // the type is not yet known and has to be resolved later
+        t->selfref = true;
+    }
+    return t;
 }
 
 Type* Parser2::ArrayType() {
@@ -1303,24 +1302,20 @@ Type* Parser2::PointerType() {
     res->form = Type::Pointer;
 
     if( FIRST_NamedType(la.d_type) ) {
-        Quali q;
         const Token tok = la;
-        Declaration* d = resolveQualident(&q, true); // true...allow pointer base to reference not yet declared record
-        if( d == 0 || d->type == 0 || d->mode != Declaration::TypeDecl )
+        Quali q;
+        Type* t = NamedType(&q, true);
+        if( t == 0 )
         {
             res->base = mdl->getType(BasicType::Undefined);
             if( q.first.isEmpty() )
             {
-                if( d )
-                    error(tok, QString("invalid type: %1").arg(tok.d_val.constData()) );
-                else
-                {
-                    res->deferred = true;
-                    deferred << qMakePair(res,tok);
-                }
+                // we're looking for a local declaration
+                res->deferred = true;
+                deferred << qMakePair(res,tok);
             } // else import error already reported
         }else
-            res->base = d->type;
+            res->base = t;
     }else
         res->base = type();
 

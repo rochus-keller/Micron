@@ -73,7 +73,7 @@ namespace Mic {
         Expression* ConstExpression();
 		void TypeDeclaration();
         Type* type(bool deanonymize = true);
-        Type* NamedType(Quali* = 0);
+        Type* NamedType(Quali* = 0, bool allowUnresovedLocal = false);
         Type* ArrayType();
         void length(quint32& len);
         Type* RecordType();
