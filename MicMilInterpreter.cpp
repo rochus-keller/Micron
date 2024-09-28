@@ -63,7 +63,6 @@ int gettimeofday(struct timeval * tp, struct timezone * tzp)
 #endif
 #endif
 
-struct MemSlots;
 struct ModuleData;
 
 struct ProcData
@@ -73,6 +72,10 @@ struct ProcData
     ProcData(MilProcedure* p, ModuleData* m):proc(p),module(m) {}
 };
 
+// NOTE: replaced original design based on MemSlots(QVector) by MemSlot[] and integrated
+// all embedded arrays and structs into the same MemSlot[] so that constructs like
+// struct Permute { Benchmark base; int count; } (from Permute.c) can be represented.
+
 struct MemSlot
 {
     union {
@@ -80,14 +83,14 @@ struct MemSlot
         quint64 u;
         double f;
         MemSlot* sp;
-        MemSlots* ssp;
         ProcData* pp;
     };
     enum Type { Invalid, I, U, F,
-                SS,  // pointer to MemSlots, owned
-                SP, // pointer to MemSlot, not owned
-                SSP, // pointer to MemSlots, not owned
-                PP, // pointer to procedure/module, not owned
+                SeqVal,  // pointer to sequence of MemSlot, owned
+                SeqPtr,  // pointer to sequence of MemSlot, not owned
+                SlotPtr, // pointer to MemSlot (variable, parameter, field, element), not owned
+                ProcPtr, // pointer to procedure/module, not owned
+                Header // the header slot of a record or array; the pointer points to the next slot; u is size
               };
     quint8 t;
     bool hw; // half width for i, u or f
@@ -97,31 +100,37 @@ struct MemSlot
     MemSlot(qint64 i, bool h = false):i(i),t(I),hw(h) { if(hw) i = (qint32)i; }
     MemSlot(int i, bool h = true):i(i),t(I),hw(h) {}
     MemSlot(double d,bool h):f(d),t(F),hw(h) {}
-    MemSlot(MemSlot* s):sp(s),t(SP), hw(false) {}
-    MemSlot(MemSlots* ss, bool owned = false):ssp(ss),t(owned?SS:SSP), hw(false) {}
-    MemSlot(ProcData* p):pp(p),t(PP),hw(false) {}
+    MemSlot(MemSlot* s, bool owned = false):sp(s),t(owned?SeqVal:SeqPtr), hw(false) {}
+    MemSlot(ProcData* p):pp(p),t(ProcPtr),hw(false) {}
     MemSlot(const MemSlot& rhs):MemSlot() { *this = rhs; }
     ~MemSlot();
     MemSlot& operator=(const MemSlot& rhs);
     void move( MemSlot& rhs );
-    void copy(MemSlots* rhs);
+    void copy(MemSlot* rhs);
 };
 
-// TODO: arrays of arrays should be layed out as single string, see Procs3.mic
-struct MemSlots : public QVector<MemSlot>
-{
-    MemSlots(int len = 0):QVector<MemSlot>(len) {}
-};
+typedef QVector<MemSlot> MemSlotList;
 
-void MemSlot::copy(MemSlots* rhs)
+static MemSlot* createSequence(int size)
 {
-    t = SS;
-    ssp = 0;
+    MemSlot* s = new MemSlot[size+1];
+    s->t = MemSlot::Header;
+    s->u = size;
+    s++; // point to the second element which is the actual first element of the sequence
+    return s;
+}
+
+void MemSlot::copy(MemSlot* rhs)
+{
+    t = SeqVal;
+    sp = 0;
     if( rhs == 0 )
         return;
-    ssp = new MemSlots(rhs->length());
-    for(int i = 0; i < rhs->length(); i++ )
-        ssp->operator[](i) = rhs->at(i);
+    MemSlot* header = rhs - 1;
+    Q_ASSERT(header->t == MemSlot::Header);
+    sp = createSequence(header->u);
+    for(int i = 0; i < header->u; i++ )
+        sp[i] = rhs[i];
 }
 
 MemSlot& MemSlot::operator=(const MemSlot& rhs)
@@ -129,8 +138,8 @@ MemSlot& MemSlot::operator=(const MemSlot& rhs)
     u = rhs.u;
     t = rhs.t;
     hw = rhs.hw;
-    if( t == SS )
-        copy(rhs.ssp);
+    if( t == SeqVal )
+        copy(rhs.sp);
     return *this;
 }
 
@@ -139,20 +148,24 @@ void MemSlot::move( MemSlot& rhs )
     u = rhs.u;
     t = rhs.t;
     hw = rhs.hw;
-    if( t == SS )
-        rhs.ssp = 0;
+    if( t == SeqVal )
+        rhs.sp = 0;
 }
 
 MemSlot::~MemSlot()
 {
-    if( t == SS && ssp )
-        delete ssp;
+    if( t == SeqVal && sp )
+    {
+        MemSlot* header = sp - 1;
+        Q_ASSERT(header->t == MemSlot::Header);
+        delete[] header;
+    }
 }
 
 struct ModuleData
 {
     MilModule* module;
-    MemSlots variables;
+    MemSlotList variables;
     QMap<const char*,ProcData*> procs;
 
     ModuleData():module(0){}
@@ -180,7 +193,7 @@ public:
         MilLabel():labelPc(0){}
     };
     typedef QMap<const char*,MilLabel> Labels;
-    QMap<QByteArray,MemSlots> strings; // internalized strings
+    QMap<QByteArray,MemSlotList> strings; // internalized strings
     QByteArray intrinsicMod, outMod, inputMod;
     typedef QMap<const char*, MilProcedure> Intrinsics;
     Intrinsics intrinsics;
@@ -191,17 +204,19 @@ public:
     QElapsedTimer timer; // NOTE: QElapsedTimer and gettimeofday are virtually identical
 #endif
 
-    MemSlots* internalize(const QByteArray& str)
+    MemSlot* internalize(const QByteArray& str)
     {
-        MemSlots& s = strings[str];
+        MemSlotList& s = strings[str];
         if( s.isEmpty() )
         {
-            s.resize(str.size()); // string literals are expected to have an explicit terminating zero
+            s.resize(str.size()+1); // string literals are expected to have an explicit terminating zero
             // TODO: this is pretty wasteful; maybe we should support byte strings directly
-            for( int i = 0; i < str.size(); i++ )
-                s[i] = MemSlot(quint64((quint8)str[i]),true);
+            s[0].t = MemSlot::Header;
+            s[0].u = str.size();
+            for( int i = 1; i <= str.size(); i++ )
+                s[i] = MemSlot(quint64((quint8)str[i-1]),true);
         }
-        return &s;
+        return s.data() + 1;
     }
 
     void initSlot(ModuleData* module, MemSlot& s, const MilQuali& type )
@@ -213,28 +228,29 @@ public:
         {
         // TODO Union, Alias
         case MilEmitter::Struct:
-            s.t = MemSlot::SS;
-            s.ssp = new MemSlots(t->fields.size());
-            initSlots(module, *s.ssp, t->fields);
+            s.t = MemSlot::SeqVal;
+            s.sp = createSequence(t->fields.size()); // TODO: flatten structured types
+            initSlots(module, s.sp, t->fields);
             break;
         case MilEmitter::Array:
-            s.t = MemSlot::SS;
-            s.ssp = new MemSlots(t->len);
-            initSlots(module, *s.ssp, t->base);
+            s.t = MemSlot::SeqVal;
+            s.sp = createSequence(t->len); // TODO: flatten structured types
+            initSlots(module, s.sp, t->base);
             break;
         }
 
     }
 
-    void initSlots(ModuleData* module, MemSlots& ss, const MilQuali& type )
+    void initSlots(ModuleData* module, MemSlot* ss, const MilQuali& type )
     {
-        for( int i = 0; i < ss.size(); i++ )
+        for( int i = 0; i < (ss-1)->u; i++ )
             initSlot(module,ss[i],type);
     }
 
-    void initSlots(ModuleData* module, MemSlots& ss, const QList<MilVariable>& types )
+    void initSlots(ModuleData* module, MemSlot* ss, const QList<MilVariable>& types )
     {
-        ss.resize(types.size());
+        // ss.resize(types.size());
+        //Q_ASSERT((ss-1)->u == types.size());
         for(int i = 0; i < types.size(); i++ )
             initSlot(module, ss[i], types[i].type);
     }
@@ -255,7 +271,8 @@ public:
             return 0;
         md = new ModuleData();
         md->module = module;
-        initSlots(md, md->variables,module->vars);
+        md->variables.resize(module->vars.size());
+        initSlots(md, md->variables.data(),module->vars);
         modules.insert(fullName.constData(), md);
 
         for( int i = 0; i < module->imports.size(); i++ )
@@ -276,7 +293,7 @@ public:
         }
         if( init )
         {
-            MemSlots args;
+            MemSlotList args;
             MemSlot ret;
             execute(md, init, args, ret);
         }
@@ -618,8 +635,8 @@ public:
                 }
             }
             break;
-        case MemSlot::SP:
-        case MemSlot::SSP:
+        case MemSlot::SeqPtr:
+        case MemSlot::SlotPtr:
             if( to == MemSlot::F )
                 s.f = s.i;
             break;
@@ -637,11 +654,12 @@ public:
     {
         if( data.canConvert<MilRecordLiteral>() )
         {
+            // TODO: flatten embedded elements
             MilRecordLiteral m = data.value<MilRecordLiteral>();
-            out.ssp = new MemSlots(m.size());
-            out.t = MemSlot::SS;
+            out.sp = createSequence(m.size());
+            out.t = MemSlot::SeqVal;
             for( int i = 0; i < m.size(); i++ )
-                convert(out.ssp->operator[](i), m[i].second);
+                convert(out.sp[i], m[i].second);
             return;
         }
         switch( data.type() )
@@ -649,19 +667,19 @@ public:
         case QVariant::List:
             {
                 QVariantList l = data.toList();
-                out.ssp = new MemSlots(l.size());
-                out.t = MemSlot::SS;
+                out.sp = createSequence(l.size());
+                out.t = MemSlot::SeqVal;
                 for( int i = 0; i < l.size(); i++ )
-                    convert(out.ssp->operator[](i), l[i]);
+                    convert(out.sp[i], l[i]);
             }
             break;
         case QVariant::ByteArray:
-            out.ssp = internalize(data.toByteArray());
-            out.t = MemSlot::SSP;
+            out.sp = internalize(data.toByteArray());
+            out.t = MemSlot::SeqPtr;
             break;
         case QVariant::String:
-            out.ssp = internalize(data.toString().toLatin1());
-            out.t = MemSlot::SSP;
+            out.sp = internalize(data.toString().toLatin1());
+            out.t = MemSlot::SeqPtr;
             break;
         case QVariant::LongLong:
         case QVariant::Int:
@@ -686,7 +704,7 @@ public:
     inline void makeCall(QList<MemSlot>& stack, ProcData* proc)
     {
         // TODO: support varargs
-        MemSlots args(proc->proc->params.size());
+        MemSlotList args(proc->proc->params.size());
         for( int i = proc->proc->params.size()-1; i >= 0; i-- )
         {
             if( stack.isEmpty() )
@@ -705,10 +723,12 @@ public:
 
     static inline QByteArray toStr(const MemSlot& s)
     {
-        Q_ASSERT( s.ssp );
-        QByteArray str(s.ssp->length(), ' ');
+        Q_ASSERT( s.sp );
+        MemSlot* header = s.sp - 1;
+        Q_ASSERT( header->t == MemSlot::Header );
+        QByteArray str(header->u, ' ');
         for( int i = 0; i < str.size(); i++ )
-            str[i] = (char)(quint8)s.ssp->at(i).u;
+            str[i] = (char)(quint8)s.sp[i].u;
         return str;
     }
 
@@ -739,7 +759,7 @@ public:
                 .arg(proc->name.constData());
     }
 
-    void callExtern(ModuleData* module, MilProcedure* proc, MemSlots& args, MemSlot& ret)
+    void callExtern(ModuleData* module, MilProcedure* proc, MemSlotList& args, MemSlot& ret)
     {
         static QByteArray symbols[10];
         if( symbols[0].isEmpty() )
@@ -794,7 +814,7 @@ public:
             nyiError(module,proc);
     }
 
-    void callIntrinsic(MilProcedure* proc, MemSlots& args, MemSlot& ret)
+    void callIntrinsic(MilProcedure* proc, MemSlotList& args, MemSlot& ret)
     {
         switch(proc->stackDepth)
         {
@@ -871,11 +891,11 @@ public:
             out << QByteArray::number(args.first().u,2).constData() << flush;
             break;
         case 14: // strcopy
-            Q_ASSERT(args.size()==2 && args.first().ssp && args.last().ssp );
-            for( int i = 0; i < args.last().ssp->length(); i++ )
+            Q_ASSERT(args.size()==2 && args.first().sp && args.last().sp );
+            for( int i = 0; ; i++ )
             {
-                args.first().ssp->operator[](i) = args.last().ssp->at(i);
-                if( args.last().ssp->at(i).u == 0 )
+                args.first().sp[i] = args.last().sp[i];
+                if( args.last().sp[i].u == 0 )
                     break;
             }
             break;
@@ -891,9 +911,9 @@ public:
 
     static inline MemSlot addressOf(MemSlot& s)
     {
-        if( s.t == MemSlot::SS )
+        if( s.t == MemSlot::SeqVal )
             // in case of a structured value copy the address of the structure, otherwise of the slot
-            return MemSlot(s.ssp);
+            return MemSlot(s.sp);
         else
             return &s;
     }
@@ -902,7 +922,7 @@ public:
 #define vmcase(l)	case l:
 #define vmbreak		break
 
-    void execute(ModuleData* module, MilProcedure* proc, MemSlots& args, MemSlot& ret)
+    void execute(ModuleData* module, MilProcedure* proc, MemSlotList& args, MemSlot& ret)
     {
         if( proc->kind == MilProcedure::Intrinsic )
         {
@@ -972,8 +992,8 @@ public:
         };
 
 #endif
-        MemSlots locals(proc->locals.size());
-        initSlots(module, locals, proc->locals);
+        MemSlotList locals(proc->locals.size());
+        initSlots(module, locals.data(), proc->locals);
         ret = MemSlot();
         pc = 0;
         QList<MemSlot> stack;
@@ -1043,7 +1063,7 @@ public:
                 vmbreak;
             vmcase(IL_calli)
                 lhs = stack.takeLast();
-                if( lhs.t != MemSlot::PP || lhs.pp == 0 )
+                if( lhs.t != MemSlot::ProcPtr || lhs.pp == 0 )
                     execError(module, proc, pc, "top of stack is not a procedure");
                 makeCall(stack, lhs.pp);
                 pc++;
@@ -1132,7 +1152,7 @@ public:
                 pc++;
                 vmbreak;
             vmcase(IL_conv_ip)
-                convertTo(stack, MemSlot::SP, 0); // TODO
+                convertTo(stack, MemSlot::SeqPtr, 0); // TODO
                 pc++;
                 vmbreak;
             vmcase(IL_div)
@@ -1277,33 +1297,33 @@ public:
             vmcase(IL_ldelem_ip)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
-                if( lhs.ssp == 0 || rhs.u >= lhs.ssp->length() )
+                if( (lhs.t != MemSlot::SeqPtr) || lhs.sp == 0 || rhs.u >= (lhs.sp-1)->u )
                     execError(module, proc, pc, "invalid array or index out of bound");
-                stack.push_back(lhs.ssp->at(rhs.u));
+                stack.push_back(lhs.sp[rhs.u]);
                 pc++;
                 vmbreak;
             vmcase(IL_ldelema)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
-                if( lhs.t != MemSlot::SSP || lhs.ssp == 0 || rhs.u >= lhs.ssp->length() )
+                if( lhs.t != MemSlot::SeqPtr || lhs.sp == 0 || rhs.u >= (lhs.sp-1)->u )
                     execError(module, proc, pc, "invalid array or index out of bound");
-                stack.push_back(addressOf(lhs.ssp->operator[](rhs.u)));
+                stack.push_back(addressOf(lhs.sp[rhs.u]));
                 pc++;
                 vmbreak;
             vmcase(IL_ldfld)
                 lhs = stack.takeLast();
-                if( (lhs.t != MemSlot::SS && lhs.t != MemSlot::SSP) ||
-                        lhs.ssp == 0 || lhs.ssp->size() <= op.index )
+                if( (lhs.t != MemSlot::SeqPtr) ||
+                        lhs.sp == 0 || (lhs.sp-1)->u <= op.index )
                     execError(module, proc, pc, "invalid record or field");
-                stack.push_back(lhs.ssp->at(op.index));
+                stack.push_back(lhs.sp[op.index]);
                 pc++;
                 vmbreak;
             vmcase(IL_ldflda)
                 lhs = stack.takeLast();
-                if( (lhs.t != MemSlot::SS && lhs.t != MemSlot::SSP) ||
-                        lhs.ssp == 0 || lhs.ssp->size() <= op.index )
+                if( (lhs.t != MemSlot::SeqPtr) ||
+                        lhs.sp == 0 || (lhs.sp-1)->u <= op.index )
                     execError(module, proc, pc, "invalid record or field");
-                stack.push_back(addressOf(lhs.ssp->operator[](op.index)));
+                stack.push_back(addressOf(lhs.sp[op.index]));
                 pc++;
                 vmbreak;
             vmcase(IL_ldind_i1)
@@ -1318,7 +1338,7 @@ public:
             vmcase(IL_ldind_r8)
             vmcase(IL_ldind_ip)
                 lhs = stack.takeLast();
-                if( lhs.sp == 0 || lhs.t != MemSlot::SP)
+                if( lhs.sp == 0 || lhs.t != MemSlot::SeqPtr)
                     execError(module, proc, pc, "invalid pointer on stack");
                 stack.push_back(*lhs.sp);
                 pc++;
@@ -1355,9 +1375,9 @@ public:
                 vmbreak;
             vmcase(IL_ldobj)
                 lhs = stack.takeLast();
-                if( (lhs.t != MemSlot::SP && lhs.t != MemSlot::SSP) || lhs.sp == 0 )
+                if( (lhs.t != MemSlot::SlotPtr && lhs.t != MemSlot::SeqPtr) || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer on stack");
-                if( lhs.t == MemSlot::SP )
+                if( lhs.t == MemSlot::SlotPtr )
                     stack.push_back(*lhs.sp);
                 else
                 {
@@ -1427,10 +1447,10 @@ public:
                     lhs = stack.takeLast();
                     if( lhs.u == 0 )
                         execError(module, proc, pc, "invalid array size");
-                    MemSlots* array = new MemSlots(lhs.u);
+                    MemSlot* array = createSequence(lhs.u);
                     MilQuali ety = op.arg.value<MilQuali>();
-                    initSlots(module, *array, ety);
-                    stack.push_back(MemSlot(array) );
+                    initSlots(module, array, ety);
+                    stack.push_back(MemSlot(array));
                 }
                 pc++;
                 vmbreak;
@@ -1443,8 +1463,8 @@ public:
                                   arg(MilEmitter::toString(q).constData()));
                     if( ty->kind != MilEmitter::Struct && ty->kind != MilEmitter::Union )
                         execError(module, proc, pc, "operation not available for given type");
-                    MemSlots* record = new MemSlots(ty->fields.size());
-                    initSlots(module, *record, ty->fields);
+                    MemSlot* record = createSequence(ty->fields.size()); // TODO: flatten
+                    initSlots(module, record, ty->fields);
                     stack.push_back(MemSlot( record ) );
                     // TODO: we treat unions as structs here
                 }
@@ -1576,16 +1596,16 @@ public:
                 }
                 pc++;
                 vmbreak;
-            vmcase(IL_free)
+            vmcase(IL_free) {
                 lhs = stack.takeLast();
-                if( (lhs.t != MemSlot::SP && lhs.t != MemSlot::SSP) || lhs.sp == 0 )
+                if( (lhs.t != MemSlot::SeqPtr) || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer");
-                if( lhs.t == MemSlot::SP )
-                    delete lhs.sp;
-                else
-                    delete lhs.ssp;
+                MemSlot* header = lhs.sp-1;
+                Q_ASSERT(header->t == MemSlot::Header);
+                delete[] header;
                 pc++;
                 vmbreak;
+            }
             vmcase(IL_repeat) // repeat(1) until(1) end(5)
                 curStatement.push_back(IL_repeat);
                 pc++;
@@ -1633,7 +1653,7 @@ public:
                     execError(module, proc, pc, "operation not expected here");
                 if( curStatement.back() == IL_switch )
                 {
-                    if( switchExpr.back().t == MemSlot::PP )
+                    if( switchExpr.back().t == MemSlot::ProcPtr )
                         pc = op.index; // done, else points to end
                     else
                         pc++; // execute else
@@ -1682,7 +1702,7 @@ public:
             vmcase(IL_ptroff)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
-                if( lhs.t != MemSlot::SP || rhs.t != MemSlot::I )
+                if( lhs.t != MemSlot::SlotPtr || rhs.t != MemSlot::I )
                     execError(module, proc, pc, "invalid argument types");
                 lhs.sp += rhs.i;
                 stack.push_back(lhs);
@@ -1718,9 +1738,9 @@ public:
                     stack.pop_back();
                     MemSlot index = stack.takeLast();
                     MemSlot array = stack.takeLast();
-                    if( array.t != MemSlot::SSP || array.ssp == 0 || index.u >= array.ssp->length() )
+                    if( array.t != MemSlot::SeqPtr || array.sp == 0 || index.u >= (array.sp-1)->u )
                         execError(module, proc, pc, "invalid array or index out of range");
-                    array.ssp->operator[](index.u).move(val);
+                    array.sp[index.u].move(val);
                 }
                 pc++;
                 vmbreak;
@@ -1728,9 +1748,9 @@ public:
                 rhs.move(stack.back());
                 stack.pop_back();
                 lhs = stack.takeLast();
-                if( lhs.t != MemSlot::SSP || lhs.ssp == 0 )
+                if( lhs.t != MemSlot::SeqPtr || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid record");
-                lhs.ssp->operator[](op.index).move(rhs);
+                lhs.sp[op.index].move(rhs);
                 pc++;
                 vmbreak;
             vmcase(IL_stind_i1)
@@ -1743,7 +1763,7 @@ public:
                 rhs.move(stack.back());
                 stack.pop_back();
                 lhs = stack.takeLast();
-                if( lhs.t != MemSlot::SP || lhs.sp == 0 )
+                if( lhs.t != MemSlot::SeqPtr || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer");
                 lhs.sp->move(rhs);
                 pc++;
@@ -1778,19 +1798,19 @@ public:
                 rhs.move(stack.back());
                 stack.pop_back();
                 lhs = stack.takeLast(); // destination
-                if( (lhs.t != MemSlot::SP && lhs.t != MemSlot::SSP) || lhs.sp == 0 )
+                if( (lhs.t != MemSlot::SlotPtr && lhs.t != MemSlot::SeqPtr) || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer");
-                if( lhs.t == MemSlot::SP )
+                if( lhs.t == MemSlot::SlotPtr )
                 {
                     lhs.sp->move(rhs);
                 }else
                 {
-                    if( (rhs.t != MemSlot::SSP && rhs.t != MemSlot::SS) || rhs.ssp == 0 )
+                    if( (rhs.t != MemSlot::SeqPtr && rhs.t != MemSlot::SeqVal) || rhs.sp == 0 )
                         execError(module, proc, pc, "invalid value");
-                    if( lhs.ssp->length() < rhs.ssp->length() )
+                    if( (lhs.sp-1)->u < (rhs.sp-1)->u )
                         execError(module, proc, pc, "array not big enough for copy");
-                    for( int i = 0; i < rhs.ssp->length(); i++ )
-                        lhs.ssp->operator[](i) = rhs.ssp->at(i);
+                    for( int i = 0; i < (rhs.sp-1)->u; i++ )
+                        lhs.sp[i] = rhs.sp[i];
                         // copy string literal
                 }
                 pc++;
@@ -1806,7 +1826,7 @@ public:
                 pc++;
                 vmbreak;
             vmcase(IL_case)
-                if( switchExpr.back().t == MemSlot::PP )
+                if( switchExpr.back().t == MemSlot::ProcPtr )
                 {
                     // done
                     pc++;
@@ -1821,7 +1841,7 @@ public:
                     execError(module, proc, pc+1, "switch expression has invalid type");
                 if( op.arg.value<CaseLabelList>().contains( switchExpr.back().i ) )
                 {
-                    switchExpr.back().t = MemSlot::PP; // mark as done
+                    switchExpr.back().t = MemSlot::ProcPtr; // mark as done
                     pc += 2; // skip then
                 }else
                     pc = op.index;
