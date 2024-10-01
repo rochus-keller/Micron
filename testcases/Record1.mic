@@ -13,7 +13,25 @@ var
 begin
 	println("start Record1")
 	new(b)
+	b.a.i := 33
+	b.a.j := 44
+	b.str := "hello"
+	
+	println(b.str)
+	
 	a := b
+	println(a.i)
+	println(a.j)
+	println(b.str)
 
 	println("end Record1")
 end Record1
+
+(* output:
+start Record1
+hello
+33
+44
+hello
+end Record1
+*)

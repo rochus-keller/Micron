@@ -54,6 +54,7 @@ namespace Mic
         quint32 len;
         QList<MilVariable> fields;
         int indexOf(const QByteArray& name) const;
+        const MilVariable* findField(const QByteArray& name) const;
     };
 
     struct MilOperation

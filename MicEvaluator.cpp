@@ -1030,7 +1030,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                     res.val = lhs.val.toLongLong() < rhs.val.toLongLong();
                     break;
                 default:
-                    Q_ASSERT(false);
+                    return res; // Q_ASSERT(false);
                     break;
                 }
             }else
@@ -1063,7 +1063,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                     res.val = lhs.val.toULongLong() < rhs.val.toULongLong();
                     break;
                 default:
-                    Q_ASSERT(false);
+                    return res; // Q_ASSERT(false);
                     break;
                 }
             }else
@@ -1096,7 +1096,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                     res.val = lhs.val.toDouble() < rhs.val.toDouble();
                     break;
                 default:
-                    Q_ASSERT(false);
+                    return res; // Q_ASSERT(false);
                     break;
                 }
             }else
@@ -1104,7 +1104,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                 emitRelOp(op,false);
             }
         }else
-            Q_ASSERT(false);
+            return res; // Q_ASSERT(false);
     }else if( lhs.type->isText() && rhs.type->isText() )
     {
         switch(op)
@@ -1128,7 +1128,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             out->ldc_i4(3);
             break;
         default:
-            Q_ASSERT(false);
+            return res; // Q_ASSERT(false);
             break;
         }
         if( lhs.type->form == BasicType::CHAR && rhs.type->form == BasicType::CHAR )
@@ -1169,7 +1169,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                 res.val = lhs.val.toULongLong() < rhs.val.toULongLong();
                 break;
             default:
-                Q_ASSERT(false);
+                return res; // Q_ASSERT(false);
                 break;
             }
         }else
@@ -1178,7 +1178,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
         }
     }else if( lhs.type->form == Type::ConstEnum  && rhs.type->form == Type::ConstEnum )
     {
-        Q_ASSERT( lhs.type == rhs.type );
+        // Q_ASSERT( lhs.type == rhs.type );
         if( lhs.isConst() && rhs.isConst() )
         {
             res.mode = Value::Const;
@@ -1225,7 +1225,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                 res.val = lhs.val.toUInt() != rhs.val.toUInt();
                 break;
             default:
-                Q_ASSERT(false);
+                return res; // Q_ASSERT(false);
             }
         }else
         {

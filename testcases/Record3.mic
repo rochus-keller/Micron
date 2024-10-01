@@ -6,7 +6,7 @@ var
 		a : array 2 of array 3 of array 4 of T
 begin
 
-	a[1][2][3].a := 33
-	println(a[1][2][3].a)
+	a[1][2][3].b := 33
+	println(a[1][2][3].b)
 
 end Record3

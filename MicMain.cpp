@@ -235,7 +235,7 @@ static void process(const QStringList& files, const QStringList& searchPaths, bo
 
         Mic::Import imp;
         imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
-        mgr.loadModule(imp); // recursively compiles all imported files
+        Mic::Declaration* module = mgr.loadModule(imp); // recursively compiles all imported files
 
         if( dump )
             foreach( const Mic::MilModule& m, mgr.loader.getModules() )
@@ -250,7 +250,7 @@ static void process(const QStringList& files, const QStringList& searchPaths, bo
         all += mgr.modules.size();
         foreach( const ModuleSlot& m, mgr.modules )
             ok += m.decl ? 1 : 0;
-        if( run )
+        if( run && module )
         {
             Mic::MilInterpreter intp(&mgr.loader);
             intp.run(imp.path.back());

@@ -1,0 +1,49 @@
+module Record4
+
+type
+	A = record i,j: integer end
+	B = record str: array 10 of char; a: A end
+
+var
+	a: pointer to A
+	b: pointer to B
+	c: A
+
+begin
+	println("start Record4")
+	new(b)
+	b.a.i := 33
+	b.a.j := 44
+	b.str := "hello"
+	
+	c := b.a
+	
+	println(c.i)
+	println(c.j)
+	
+	a := @b.a
+
+	println(a.i)
+	println(a.j)
+	
+	c.i := 55
+	c.j := 66
+	b.a := c
+
+	println(b.a.i)
+	println(b.a.j)
+
+	println("end Record4")
+end Record4
+
+(* output:
+start Record4
+33
+44
+33
+44
+55
+66
+end Record4
+*)
+

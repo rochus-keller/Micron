@@ -25,7 +25,7 @@
 #include <QtDebug>
 using namespace Mic;
 
-//#define _USE_GETTIMEOFDAY
+#define _USE_GETTIMEOFDAY
 #ifdef _USE_GETTIMEOFDAY
 #if defined(_WIN32) && !defined(__GNUC__)
 #define WIN32_LEAN_AND_MEAN
@@ -87,8 +87,7 @@ struct MemSlot
     };
     enum Type { Invalid, I, U, F,
                 SeqVal,  // pointer to sequence of MemSlot, owned
-                SeqPtr,  // pointer to sequence of MemSlot, not owned
-                SlotPtr, // pointer to MemSlot (variable, parameter, field, element), not owned
+                SlotPtr, // pointer to MemSlot (sequence, variable, parameter, field, element), not owned
                 ProcPtr, // pointer to procedure/module, not owned
                 Header // the header slot of a record or array; the pointer points to the next slot; u is size
               };
@@ -100,16 +99,23 @@ struct MemSlot
     MemSlot(qint64 i, bool h = false):i(i),t(I),hw(h) { if(hw) i = (qint32)i; }
     MemSlot(int i, bool h = true):i(i),t(I),hw(h) {}
     MemSlot(double d,bool h):f(d),t(F),hw(h) {}
-    MemSlot(MemSlot* s, bool owned = false):sp(s),t(owned?SeqVal:SeqPtr), hw(false) {}
+    MemSlot(MemSlot* s):sp(s),t(SlotPtr), hw(false) {}
     MemSlot(ProcData* p):pp(p),t(ProcPtr),hw(false) {}
-    MemSlot(const MemSlot& rhs):MemSlot() { *this = rhs; }
+    MemSlot(const MemSlot& rhs):t(Invalid),u(0) { *this = rhs; }
     ~MemSlot();
+    void clear();
     MemSlot& operator=(const MemSlot& rhs);
     void move( MemSlot& rhs );
-    void copy(MemSlot* rhs);
+    void copy(const MemSlot* rhs);
+    void copy(const MemSlot* rhs, quint32 off, quint32 len);
+    static void dispose(MemSlot*);
 };
 
 typedef QVector<MemSlot> MemSlotList;
+
+#ifdef _MIC_MEM_CHECK
+static QHash<MemSlot*,bool> dynamicSeqs;
+#endif
 
 static MemSlot* createSequence(int size)
 {
@@ -117,49 +123,92 @@ static MemSlot* createSequence(int size)
     s->t = MemSlot::Header;
     s->u = size;
     s++; // point to the second element which is the actual first element of the sequence
+#ifdef _MIC_MEM_CHECK
+    dynamicSeqs.insert(s,false);
+#endif
     return s;
 }
 
-void MemSlot::copy(MemSlot* rhs)
+void MemSlot::copy(const MemSlot* rhs)
 {
+    clear();
     t = SeqVal;
     sp = 0;
     if( rhs == 0 )
         return;
-    MemSlot* header = rhs - 1;
+    const MemSlot* header = rhs - 1;
     Q_ASSERT(header->t == MemSlot::Header);
     sp = createSequence(header->u);
     for(int i = 0; i < header->u; i++ )
         sp[i] = rhs[i];
 }
 
+void MemSlot::copy(const MemSlot* rhs, quint32 off, quint32 len)
+{
+    clear();
+    t = SeqVal;
+    if( rhs == 0 )
+        return;
+    sp = createSequence(len);
+    for(int i = 0; i < len; i++ )
+        sp[i] = rhs[i+off];
+}
+
+
 MemSlot& MemSlot::operator=(const MemSlot& rhs)
 {
-    u = rhs.u;
-    t = rhs.t;
-    hw = rhs.hw;
-    if( t == SeqVal )
+    if( rhs.t == SeqVal )
         copy(rhs.sp);
+    else
+    {
+        clear();
+        u = rhs.u;
+        t = rhs.t;
+        hw = rhs.hw;
+    }
     return *this;
 }
 
 void MemSlot::move( MemSlot& rhs )
 {
+    clear();
     u = rhs.u;
     t = rhs.t;
     hw = rhs.hw;
-    if( t == SeqVal )
+    if( rhs.t == SeqVal )
         rhs.sp = 0;
+}
+
+void MemSlot::clear()
+{
+    if( t == SeqVal )
+        dispose(sp);
+    t = Invalid;
+    u = 0;
+    hw = 0;
 }
 
 MemSlot::~MemSlot()
 {
-    if( t == SeqVal && sp )
-    {
-        MemSlot* header = sp - 1;
-        Q_ASSERT(header->t == MemSlot::Header);
-        delete[] header;
-    }
+    clear();
+}
+
+void MemSlot::dispose(MemSlot* s)
+{
+    if( s == 0 )
+        return;
+#ifdef _MIC_MEM_CHECK
+    if( !dynamicSeqs.contains(s) )
+        qCritical() << "not dynamically allocated";
+    else if( dynamicSeqs.value(s) )
+        qCritical() << "double delete";
+    else
+        dynamicSeqs[s] = true;
+#endif
+
+    MemSlot* header = s - 1;
+    Q_ASSERT(header->t == MemSlot::Header);
+    delete[] header;
 }
 
 struct ModuleData
@@ -184,7 +233,16 @@ public:
 
     MilLoader* loader;
 
-    QMap<const char*, ModuleData*> modules; // moduleFullName -> data
+    QHash<const char*, ModuleData*> modules; // moduleFullName -> data
+    struct FlattenedType
+    {
+        const MilType* type;
+        quint32 len : 31; // flattened multi-dim-arrays
+        quint32 flattened : 1;
+        QList<MilVariable*> fields;
+        FlattenedType():type(0),len(0),flattened(0) {}
+    };
+    QHash<const MilType*,FlattenedType> flattened;
     typedef QList< QList<int> > LoopStack;
     struct MilLabel
     {
@@ -192,10 +250,11 @@ public:
         QList<quint32> gotoPcs;
         MilLabel():labelPc(0){}
     };
-    typedef QMap<const char*,MilLabel> Labels;
-    QMap<QByteArray,MemSlotList> strings; // internalized strings
+    typedef QHash<const char*,MilLabel> Labels;
+    typedef QHash<QByteArray,MemSlot*> Strings;
+    Strings strings; // internalized strings
     QByteArray intrinsicMod, outMod, inputMod;
-    typedef QMap<const char*, MilProcedure> Intrinsics;
+    typedef QHash<const char*, MilProcedure> Intrinsics;
     Intrinsics intrinsics;
     QTextStream out;
 #ifdef _USE_GETTIMEOFDAY
@@ -204,55 +263,92 @@ public:
     QElapsedTimer timer; // NOTE: QElapsedTimer and gettimeofday are virtually identical
 #endif
 
+    ~Imp()
+    {
+        Strings::iterator i;
+        for( i = strings.begin(); i != strings.end(); ++i )
+        {
+            MemSlot::dispose(i.value());
+            i.value() = 0;
+        }
+    }
+
     MemSlot* internalize(const QByteArray& str)
     {
-        MemSlotList& s = strings[str];
-        if( s.isEmpty() )
+        MemSlot* s = strings.value(str);
+        if( s == 0 )
         {
-            s.resize(str.size()+1); // string literals are expected to have an explicit terminating zero
-            // TODO: this is pretty wasteful; maybe we should support byte strings directly
-            s[0].t = MemSlot::Header;
-            s[0].u = str.size();
-            for( int i = 1; i <= str.size(); i++ )
-                s[i] = MemSlot(quint64((quint8)str[i-1]),true);
+            s = createSequence(str.size());
+            for( int i = 0; i < str.size(); i++ )
+            {
+                s[i].t = MemSlot::U;
+                s[i].u = (quint8)str[i];
+            }
+            strings[str] = s;
         }
-        return s.data() + 1;
+        return s;
     }
 
     void initSlot(ModuleData* module, MemSlot& s, const MilQuali& type )
     {
-        const MilType* t = getType(module, type);
+        FlattenedType* t = getFlattenedType(module, type);
         if( t == 0 )
             return; // intrinsic type, nothing to initialize
-        switch( t->kind )
+        switch( t->type->kind )
         {
-        // TODO Union, Alias
+        // TODO Alias
         case MilEmitter::Struct:
+            s.clear();
             s.t = MemSlot::SeqVal;
-            s.sp = createSequence(t->fields.size()); // TODO: flatten structured types
-            initSlots(module, s.sp, t->fields);
+            s.sp = createSequence(t->fields.size());
+            initFields(module, s.sp, t->fields);
             break;
         case MilEmitter::Array:
+            s.clear();
             s.t = MemSlot::SeqVal;
-            s.sp = createSequence(t->len); // TODO: flatten structured types
-            initSlots(module, s.sp, t->base);
+            s.sp = createSequence(t->len);
+            initArray(module, s.sp, t->type->base);
             break;
         }
 
     }
 
-    void initSlots(ModuleData* module, MemSlot* ss, const MilQuali& type )
+    void initArray(ModuleData* module, MemSlot* ss, const MilQuali& etype )
     {
-        for( int i = 0; i < (ss-1)->u; i++ )
-            initSlot(module,ss[i],type);
+        MemSlot* header = ss-1;
+        Q_ASSERT( header->t == MemSlot::Header );
+        MilQuali q = etype;
+        FlattenedType* t = getFlattenedType(module,q);
+        while( t && t->type->kind == MilEmitter::Array )
+        {
+            // skip embedded arrays since multi-dim were flattened already and
+            // we just initialize the flattened one with the ultimate element type
+            q = t->type->base;
+            t = getFlattenedType(module,q);
+        }
+        if( t == 0 || (t->type->kind != MilEmitter::Struct && t->type->kind != MilEmitter::Union) )
+            return; // scalar or no struct/union type, no initialisation required
+        for( int i = 0; i < header->u; i++ )
+            initSlot(module,ss[i],q);
     }
 
-    void initSlots(ModuleData* module, MemSlot* ss, const QList<MilVariable>& types )
+    void initVars(ModuleData* module, MemSlot* ss, const QList<MilVariable>& types )
     {
-        // ss.resize(types.size());
-        //Q_ASSERT((ss-1)->u == types.size());
         for(int i = 0; i < types.size(); i++ )
+            // slot can either be a flattened array or struct or union, or a scalar
             initSlot(module, ss[i], types[i].type);
+    }
+
+    void initFields( ModuleData* module, MemSlot* ss, const QList<MilVariable*>& types )
+    {
+        for(int i = 0; i < types.size(); i++ )
+        {
+            FlattenedType* t = getFlattenedType(module,types[i]->type);
+            if( t == 0 || t->type->kind != MilEmitter::Array )
+                // skip embedded structs/unions since they were flattened already
+                continue;
+            initSlot(module, ss[i], types[i]->type);
+        }
     }
 
     ModuleData* loadModule(const QByteArray& fullName)
@@ -272,7 +368,7 @@ public:
         md = new ModuleData();
         md->module = module;
         md->variables.resize(module->vars.size());
-        initSlots(md, md->variables.data(),module->vars);
+        initVars(md, md->variables.data(),module->vars);
         modules.insert(fullName.constData(), md);
 
         for( int i = 0; i < module->imports.size(); i++ )
@@ -346,7 +442,7 @@ public:
             .arg(proc->name.constData()).arg(msg);
     }
 
-    const MilType* getType(ModuleData* module, const MilQuali& q) const
+    MilType* getType(ModuleData* module, const MilQuali& q)
     {
         // this is only for custom types defined with Emitter::addType or begin/endType, not for intrinsic types
         MilModule* m = q.first.isEmpty() ? module->module : loader->getModule(q.first);
@@ -357,6 +453,59 @@ public:
             return &m->types[what.second];
         // else
         return 0;
+    }
+
+    FlattenedType* getFlattenedType(ModuleData* module, const MilQuali& q)
+    {
+        MilType* type = getType(module,q);
+        if( type == 0 )
+            return 0;
+        FlattenedType& ft = flattened[type];
+        if( ft.type == 0 )
+        {
+            if( type->kind == MilEmitter::Struct )
+            {
+                for( int i = 0; i < type->fields.size(); i++ )
+                {
+                    FlattenedType* fieldType = getFlattenedType(module, type->fields[i].type);
+                    // fieldType is null e.g. in case of int32
+                    type->fields[i].offset = ft.fields.size();
+                    if( fieldType && !fieldType->fields.isEmpty() )
+                    {
+                        // field is itself a struct or union, use the flattened fields
+                        ft.fields << fieldType->fields;
+                        ft.flattened = true;
+                    }else
+                        ft.fields << &type->fields[i]; // scalars, arrays, and fieldless structs or unions
+                }
+            }else if( type->kind == MilEmitter::Union )
+            {
+                for( int i = 0; i < type->fields.size(); i++ )
+                {
+                    FlattenedType* fieldType = getFlattenedType(module, type->fields[i].type);
+                    type->fields[i].offset = 0;
+                    if( fieldType && !fieldType->fields.isEmpty() )
+                    {
+                        // field is itself a struct or union, use the flattened fields
+                        if( ft.fields.size() < fieldType->fields.size() )
+                            ft.fields = fieldType->fields; // use the largest field set
+                        ft.flattened = true;
+                    }else if( ft.fields.isEmpty() )
+                        ft.fields << &type->fields[i]; // scalars, arrays, and fieldless structs or unions
+                }
+            }else if( type->kind == MilEmitter::Array )
+            {
+                FlattenedType* elemType = getFlattenedType(module, type->base);
+                ft.len = type->len ? type->len : 1;
+                if( elemType && elemType->type->kind == MilEmitter::Array )
+                {
+                    ft.len *= elemType->len;
+                    ft.flattened = true;
+                }
+            }
+            ft.type = type;
+        }
+        return &ft;
     }
 
     ProcData* getProc(ModuleData* module, const MilQuali& q)
@@ -524,14 +673,14 @@ public:
         case IL_stfld:
             {
                 MilTrident td = ops[pc].arg.value<MilTrident>();
-                const MilType* ty = getType(module, td.first);
+                FlattenedType* ty = getFlattenedType(module, td.first);
                 if( ty == 0 )
                     execError(module, proc, pc, QString("unknown type '%1'").
                               arg(MilEmitter::toString(td.first).constData()));
-                const int idx = ty->indexOf(td.second);
+                const int idx = ty->type->indexOf(td.second);
                 if( idx < 0 )
                     break; // error?
-                ops[pc].index = idx;
+                ops[pc].index = ty->type->fields[idx].offset;
             }
             pc++;
             break;
@@ -546,6 +695,7 @@ public:
                 const int idx = m->indexOfVar(q.second);
                 if( idx < 0 )
                     break; // error?
+                // since the module is not a struct we don't flatten structs and the offset is the index in the field list
                 ops[pc].index = idx;
             }
             pc++;
@@ -635,7 +785,6 @@ public:
                 }
             }
             break;
-        case MemSlot::SeqPtr:
         case MemSlot::SlotPtr:
             if( to == MemSlot::F )
                 s.f = s.i;
@@ -652,6 +801,7 @@ public:
 
     void convert(MemSlot& out, const QVariant& data )
     {
+        out.clear();
         if( data.canConvert<MilRecordLiteral>() )
         {
             // TODO: flatten embedded elements
@@ -666,6 +816,7 @@ public:
         {
         case QVariant::List:
             {
+                // TODO: flatten multi-dim arrays
                 QVariantList l = data.toList();
                 out.sp = createSequence(l.size());
                 out.t = MemSlot::SeqVal;
@@ -675,11 +826,11 @@ public:
             break;
         case QVariant::ByteArray:
             out.sp = internalize(data.toByteArray());
-            out.t = MemSlot::SeqPtr;
+            out.t = MemSlot::SlotPtr;
             break;
         case QVariant::String:
             out.sp = internalize(data.toString().toLatin1());
-            out.t = MemSlot::SeqPtr;
+            out.t = MemSlot::SlotPtr;
             break;
         case QVariant::LongLong:
         case QVariant::Int:
@@ -723,12 +874,22 @@ public:
 
     static inline QByteArray toStr(const MemSlot& s)
     {
-        Q_ASSERT( s.sp );
+        Q_ASSERT( (s.t == MemSlot::SlotPtr || s.t == MemSlot::SeqVal) && s.sp );
+#if 0
         MemSlot* header = s.sp - 1;
         Q_ASSERT( header->t == MemSlot::Header );
         QByteArray str(header->u, ' ');
         for( int i = 0; i < str.size(); i++ )
             str[i] = (char)(quint8)s.sp[i].u;
+#else
+        QByteArray str;
+        MemSlot* p = s.sp;
+        while( p->u )
+        {
+            str += (char)(quint8)p->u;
+            p++;
+        }
+#endif
         return str;
     }
 
@@ -915,7 +1076,7 @@ public:
             // in case of a structured value copy the address of the structure, otherwise of the slot
             return MemSlot(s.sp);
         else
-            return &s;
+            return MemSlot(&s);
     }
 
 #define vmdispatch(o)	switch(o)
@@ -993,7 +1154,7 @@ public:
 
 #endif
         MemSlotList locals(proc->locals.size());
-        initSlots(module, locals.data(), proc->locals);
+        initVars(module, locals.data(), proc->locals);
         ret = MemSlot();
         pc = 0;
         QList<MemSlot> stack;
@@ -1152,7 +1313,7 @@ public:
                 pc++;
                 vmbreak;
             vmcase(IL_conv_ip)
-                convertTo(stack, MemSlot::SeqPtr, 0); // TODO
+                convertTo(stack, MemSlot::SlotPtr, 0);
                 pc++;
                 vmbreak;
             vmcase(IL_div)
@@ -1297,33 +1458,79 @@ public:
             vmcase(IL_ldelem_ip)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
-                if( (lhs.t != MemSlot::SeqPtr) || lhs.sp == 0 || rhs.u >= (lhs.sp-1)->u )
+                if( (lhs.t != MemSlot::SlotPtr) || lhs.sp == 0 ||
+                        (lhs.sp-1)->t == MemSlot::Header && rhs.u >= (lhs.sp-1)->u )
                     execError(module, proc, pc, "invalid array or index out of bound");
-                stack.push_back(lhs.sp[rhs.u]);
+                if( op.op == IL_ldelem )
+                {
+                    FlattenedType* ety = getFlattenedType(module, op.arg.value<MilQuali>());
+                    if( ety && ety->len )
+                        rhs.u *= ety->len; // multi-dim elem types are here by value
+                    if( ety && ety->len > 1 )
+                    {
+                        // in case of an array by value element make a value copy
+                        // TODO: why don't we use ldobj here?
+                        stack.push_back(MemSlot());
+                        stack.back().copy(lhs.sp, rhs.u, ety->len);
+                    }else
+                        stack.push_back(lhs.sp[rhs.u]);
+                }else
+                    stack.push_back(lhs.sp[rhs.u]);
                 pc++;
                 vmbreak;
-            vmcase(IL_ldelema)
+            vmcase(IL_ldelema) {
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
-                if( lhs.t != MemSlot::SeqPtr || lhs.sp == 0 || rhs.u >= (lhs.sp-1)->u )
-                    execError(module, proc, pc, "invalid array or index out of bound");
-                stack.push_back(addressOf(lhs.sp[rhs.u]));
+                if( lhs.t != MemSlot::SlotPtr || lhs.sp == 0 )
+                    execError(module, proc, pc, "invalid array");
+                MilQuali ety = op.arg.value<MilQuali>();
+                FlattenedType* ty = getFlattenedType(module, ety);
+                if( ty && ty->len )
+                    rhs.u *= ty->len; // multi-dim elem types are here by value
+                MemSlot* hdr = lhs.sp-1;
+                if( hdr->t == MemSlot::Header && rhs.u >= hdr->u )
+                    execError(module, proc, pc, "index out of bound");
+                if( ty && ty->type->kind == MilEmitter::Array )
+                    // the index points to an embedded array
+                    stack.push_back(&lhs.sp[rhs.u]);
+                else
+                    // the index point to an array element
+                    stack.push_back(addressOf(lhs.sp[rhs.u]));
                 pc++;
                 vmbreak;
-            vmcase(IL_ldfld)
+            }
+            vmcase(IL_ldfld) {
                 lhs = stack.takeLast();
-                if( (lhs.t != MemSlot::SeqPtr) ||
-                        lhs.sp == 0 || (lhs.sp-1)->u <= op.index )
+                if( (lhs.t != MemSlot::SlotPtr) || lhs.sp == 0 ||
+                        (lhs.sp-1)->t == MemSlot::Header && (lhs.sp-1)->u <= op.index )
                     execError(module, proc, pc, "invalid record or field");
-                stack.push_back(lhs.sp[op.index]);
+                MilTrident tri = op.arg.value<MilTrident>();
+                FlattenedType* rec = getFlattenedType(module, tri.first);
+                if( rec == 0 )
+                    execError(module, proc, pc, "invalid record or union type");
+                // TODO: do we really have to fetch field and its type for each call?
+                // TODO: shouldn't we use ldflda/ldobj here instead of ldfld?
+                const MilVariable* field = rec->type->findField(tri.second);
+                if( field == 0 )
+                    execError(module, proc, pc, "unknown field");
+                rec = getFlattenedType(module, field->type);
+                if( rec && !rec->fields.isEmpty() )
+                {
+                    // embedded struct by value
+                    stack.push_back(MemSlot());
+                    stack.back().copy(lhs.sp, op.index, rec->fields.size());
+                }else
+                    stack.push_back(lhs.sp[op.index]);
                 pc++;
                 vmbreak;
+            }
             vmcase(IL_ldflda)
                 lhs = stack.takeLast();
-                if( (lhs.t != MemSlot::SeqPtr) ||
-                        lhs.sp == 0 || (lhs.sp-1)->u <= op.index )
+                if( (lhs.t != MemSlot::SlotPtr) || lhs.sp == 0 ||
+                        (lhs.sp-1)->t == MemSlot::Header && (lhs.sp-1)->u <= op.index  )
                     execError(module, proc, pc, "invalid record or field");
                 stack.push_back(addressOf(lhs.sp[op.index]));
+                // TODO: if we want the address of the embedded record and not of its embedded array value?
                 pc++;
                 vmbreak;
             vmcase(IL_ldind_i1)
@@ -1338,7 +1545,7 @@ public:
             vmcase(IL_ldind_r8)
             vmcase(IL_ldind_ip)
                 lhs = stack.takeLast();
-                if( lhs.sp == 0 || lhs.t != MemSlot::SeqPtr)
+                if( lhs.sp == 0 || lhs.t != MemSlot::SlotPtr)
                     execError(module, proc, pc, "invalid pointer on stack");
                 stack.push_back(*lhs.sp);
                 pc++;
@@ -1375,26 +1582,24 @@ public:
                 vmbreak;
             vmcase(IL_ldobj)
                 lhs = stack.takeLast();
-                if( (lhs.t != MemSlot::SlotPtr && lhs.t != MemSlot::SeqPtr) || lhs.sp == 0 )
+                if( lhs.t != MemSlot::SlotPtr || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer on stack");
-                if( lhs.t == MemSlot::SlotPtr )
-                    stack.push_back(*lhs.sp);
-                else
-                {
-                    //stack.push_back(MemSlot());
-                    //stack.back().copy(lhs.ssp);
-                    stack.push_back(lhs);
-                }
+                stack.push_back(MemSlot());
+                stack.back().copy(lhs.sp);
+                //stack.push_back(lhs);
                 pc++;
                 vmbreak;
             vmcase(IL_ldproc)
                 stack.push_back(MemSlot(getProc(module,op.arg.value<MilQuali>())));
                 pc++;
                 vmbreak;
-            vmcase(IL_ldstr)
-                stack.push_back(MemSlot(internalize(op.arg.toByteArray())));
+            vmcase(IL_ldstr) {
+                MemSlot* str = internalize(op.arg.toByteArray());
+                MemSlot s(str);
+                stack.push_back(s);
                 pc++;
                 vmbreak;
+            }
             vmcase(IL_ldvar)
                 if( module->variables.size() <= op.index )
                     execError(module, proc, pc, "invalid variable reference");
@@ -1447,9 +1652,11 @@ public:
                     lhs = stack.takeLast();
                     if( lhs.u == 0 )
                         execError(module, proc, pc, "invalid array size");
-                    MemSlot* array = createSequence(lhs.u);
                     MilQuali ety = op.arg.value<MilQuali>();
-                    initSlots(module, array, ety);
+                    FlattenedType* ty = getFlattenedType(module, ety);
+                    // multi-dim arrays are flattened
+                    MemSlot* array = createSequence(lhs.u * ( ty && ty->len ? ty->len : 1 ) );
+                    initArray(module, array, ety);
                     stack.push_back(MemSlot(array));
                 }
                 pc++;
@@ -1457,16 +1664,15 @@ public:
             vmcase(IL_newobj)
                 {
                     const MilQuali q = op.arg.value<MilQuali>();
-                    const MilType* ty = getType(module, q);
+                    FlattenedType* ty = getFlattenedType(module, q);
                     if( ty == 0 )
                         execError(module, proc, pc, QString("unknown type '%1'").
                                   arg(MilEmitter::toString(q).constData()));
-                    if( ty->kind != MilEmitter::Struct && ty->kind != MilEmitter::Union )
+                    if( ty->type->kind != MilEmitter::Struct && ty->type->kind != MilEmitter::Union )
                         execError(module, proc, pc, "operation not available for given type");
-                    MemSlot* record = createSequence(ty->fields.size()); // TODO: flatten
-                    initSlots(module, record, ty->fields);
+                    MemSlot* record = createSequence(ty->fields.size()); // use the flattened version of the record or union
+                    initFields(module, record, ty->fields);
                     stack.push_back(MemSlot( record ) );
-                    // TODO: we treat unions as structs here
                 }
                 pc++;
                 vmbreak;
@@ -1598,10 +1804,11 @@ public:
                 vmbreak;
             vmcase(IL_free) {
                 lhs = stack.takeLast();
-                if( (lhs.t != MemSlot::SeqPtr) || lhs.sp == 0 )
+                if( (lhs.t != MemSlot::SlotPtr) || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer");
                 MemSlot* header = lhs.sp-1;
-                Q_ASSERT(header->t == MemSlot::Header);
+                if(header->t != MemSlot::Header)
+                    execError(module, proc, pc, "cannot free this object");
                 delete[] header;
                 pc++;
                 vmbreak;
@@ -1738,21 +1945,48 @@ public:
                     stack.pop_back();
                     MemSlot index = stack.takeLast();
                     MemSlot array = stack.takeLast();
-                    if( array.t != MemSlot::SeqPtr || array.sp == 0 || index.u >= (array.sp-1)->u )
+                    if( array.t != MemSlot::SlotPtr || array.sp == 0 || index.u >= (array.sp-1)->u )
                         execError(module, proc, pc, "invalid array or index out of range");
+                    if( op.op == IL_stelem )
+                    {
+                        MilQuali ety = op.arg.value<MilQuali>();
+                        FlattenedType* ty = getFlattenedType(module, ety);
+                        if( ty && ty->len )
+                            index.u *= ty->len; // multi-dim elem types are here by value
+                    }
                     array.sp[index.u].move(val);
                 }
                 pc++;
                 vmbreak;
-            vmcase(IL_stfld)
+            vmcase(IL_stfld) {
                 rhs.move(stack.back());
                 stack.pop_back();
                 lhs = stack.takeLast();
-                if( lhs.t != MemSlot::SeqPtr || lhs.sp == 0 )
+                if( lhs.t != MemSlot::SlotPtr || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid record");
-                lhs.sp[op.index].move(rhs);
+#if 0
+                // this is not required since stobj is used to store the result of ldflda B.a in c
+                MilTrident tri = op.arg.value<MilTrident>();
+                FlattenedType* rec = getFlattenedType(module, tri.first);
+                if( rec == 0 )
+                    execError(module, proc, pc, "invalid record or union type");
+                const MilVariable* field = rec->type->findField(tri.second);
+                if( field == 0 )
+                    execError(module, proc, pc, "unknown field");
+                rec = getFlattenedType(module, field->type);
+                if( rec && !rec->fields.isEmpty() )
+                {
+                    // embedded struct by value
+                    if( rhs.t != MemSlot::SeqVal || rhs.sp == 0 )
+                        execError(module, proc, pc, "invalid value");
+                    for( int i = 0; i < rec->fields.size(); i++ )
+                        lhs.sp[op.index+i].move(rhs.sp[i]);
+                }else
+#endif
+                    lhs.sp[op.index].move(rhs);
                 pc++;
                 vmbreak;
+            }
             vmcase(IL_stind_i1)
             vmcase(IL_stind_i2)
             vmcase(IL_stind_i4)
@@ -1763,7 +1997,7 @@ public:
                 rhs.move(stack.back());
                 stack.pop_back();
                 lhs = stack.takeLast();
-                if( lhs.t != MemSlot::SeqPtr || lhs.sp == 0 )
+                if( lhs.t != MemSlot::SlotPtr || lhs.sp == 0 )
                     execError(module, proc, pc, "invalid pointer");
                 lhs.sp->move(rhs);
                 pc++;
@@ -1794,27 +2028,30 @@ public:
                 stack.pop_back();
                 pc++;
                 vmbreak;
-            vmcase(IL_stobj)
-                rhs.move(stack.back());
+            vmcase(IL_stobj) {
+                Q_ASSERT( stack.size() >= 2 );
+                MemSlot value;
+                value.move(stack.back());
                 stack.pop_back();
-                lhs = stack.takeLast(); // destination
-                if( (lhs.t != MemSlot::SlotPtr && lhs.t != MemSlot::SeqPtr) || lhs.sp == 0 )
-                    execError(module, proc, pc, "invalid pointer");
-                if( lhs.t == MemSlot::SlotPtr )
-                {
-                    lhs.sp->move(rhs);
-                }else
-                {
-                    if( (rhs.t != MemSlot::SeqPtr && rhs.t != MemSlot::SeqVal) || rhs.sp == 0 )
-                        execError(module, proc, pc, "invalid value");
-                    if( (lhs.sp-1)->u < (rhs.sp-1)->u )
-                        execError(module, proc, pc, "array not big enough for copy");
-                    for( int i = 0; i < (rhs.sp-1)->u; i++ )
-                        lhs.sp[i] = rhs.sp[i];
-                        // copy string literal
-                }
+                MemSlot dest = stack.takeLast();
+
+                // dest can be a part of a MemSlot array when the corresponding struct or array was flattened
+                // we therefore cannot assume that there is always a header
+                if( dest.t != MemSlot::SlotPtr || dest.sp == 0 )
+                    execError(module, proc, pc, "invalid destination pointer");
+
+                // value can be a SeqVal created by ldobj or a SlotPtr created by an internalized literal
+                if( (value.t != MemSlot::SeqVal && value.t != MemSlot::SlotPtr) || value.sp == 0 ||
+                        (value.sp-1)->t != MemSlot::Header )
+                    execError(module, proc, pc, "invalid value");
+                MemSlot* vhdr = value.sp-1;
+                if( (dest.sp-1)->t == MemSlot::Header && (dest.sp-1)->u < vhdr->u )
+                    execError(module, proc, pc, "destination not big enough for copy");
+                for( quint32 i = 0; i < vhdr->u; i++ )
+                    dest.sp[i] = value.sp[i];
                 pc++;
                 vmbreak;
+            }
             vmcase(IL_stvar)
                 module->variables[op.index].move(stack.back());
                 stack.pop_back();

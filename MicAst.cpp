@@ -460,6 +460,14 @@ bool Value::isCallable() const
     }
 }
 
+static inline bool allConst( const ExpList& args )
+{
+    for( int i = 0; i < args.size(); i++ )
+        if( !args[i]->isConst() )
+            return false;
+    return true;
+}
+
 bool Expression::isConst() const
 {
     switch(kind)
@@ -477,18 +485,39 @@ bool Expression::isConst() const
 
     if( kind == Call )
     {
+        ExpList args = val.value<ExpList>();
+
         if( lhs->kind == ProcDecl )
         {
             Declaration* d = lhs->val.value<Declaration*>();
             if( !d->invar )
                 return false;
+            else
+                return allConst(args);
         }else if( lhs->kind == Builtin )
         {
             // TODO
+            switch( lhs->val.toInt() )
+            {
+            case Builtin::LEN:
+                return true;
+            case Builtin::MIN:
+            case Builtin::MAX:
+                return args.size() == 1 || allConst(args);
+            case Builtin::GETENV:
+            case Builtin::DEFAULT:
+            case Builtin::SIZE:
+                return true;
+            case Builtin::CAST:
+                return args.size() == 2 && args[1]->isConst();
+            case Builtin::VARARG:
+            case Builtin::VARARGS:
+                return false;
+            default:
+                return allConst(args);
+            }
         }else
             return false;
-
-        ExpList args = val.value<ExpList>();
 
         for( int i = 0; i < args.size(); i++ )
             if( !args[i]->isConst() )

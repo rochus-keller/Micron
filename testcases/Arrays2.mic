@@ -31,6 +31,20 @@ begin
 	c[2] := "gamma"
 	println(c[2])
 	P(@a,len(a))
-
 	println("Arrays2 done")
 end Arrays2
+
+(* output:
+Arrays2 start
+-2
+-1
+1
+2
+
+gamma
+-2
+-1
+1
+2
+Arrays2 done
+*)

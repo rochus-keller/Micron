@@ -886,15 +886,19 @@ void MilEmitter::stind_(MilEmitter::Type t)
     switch( t )
     {
     case I1:
+    case U1:
         i = IL_stind_i1;
         break;
     case I2:
+    case U2:
         i = IL_stind_i2;
         break;
     case I4:
+    case U4:
         i = IL_stind_i4;
         break;
     case I8:
+    case U8:
         i = IL_stind_i8;
         break;
     case R4:
@@ -1483,6 +1487,16 @@ int MilType::indexOf(const QByteArray& name) const
             return i;
     }
     return -1;
+}
+
+const MilVariable*MilType::findField(const QByteArray& name) const
+{
+    for( int i = 0; i < fields.size(); i++ )
+    {
+        if( fields[i].name.constData() == name.constData() )
+            return &fields[i];
+    }
+    return 0;
 }
 
 int MilModule::indexOfVar(const QByteArray& name) const

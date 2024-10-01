@@ -10,10 +10,10 @@ begin
 	y := 77
 	
 	z := x - y
-	println(z)
+	println(z) // -22
 	
 	z := 0 - y
-	println(z)
+	println(z) // -77
 	
 	println("Arith1 end")
 end Arith1
