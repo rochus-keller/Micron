@@ -180,7 +180,7 @@ void MilEmitter::setVararg()
     d_proc.back().isVararg = true;
 }
 
-QByteArray MilEmitter::typeSymbol(MilEmitter::Type t)
+QByteArray MilEmitter::typeSymbol(Type t)
 {
     static QByteArray symbols[IntPtr];
     if( symbols[0].isEmpty() )
@@ -196,7 +196,18 @@ QByteArray MilEmitter::typeSymbol(MilEmitter::Type t)
         symbols[R4] = Token::getSymbol("float32");
         symbols[R8] = Token::getSymbol("float64");
     }
-    return symbols[t];
+    if( t < IntPtr )
+        return symbols[t];
+    else
+        return QByteArray();
+}
+
+MilEmitter::Type MilEmitter::fromSymbol(const QByteArray& name)
+{
+    for( int i = I1; i <= IntPtr; i++ )
+        if( typeSymbol(Type(i)).constData() == name.constData() )
+            return Type(i);
+    return Unknown;
 }
 
 bool MilEmitter::equals(const QByteArray& str, MilEmitter::Type t)

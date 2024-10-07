@@ -153,7 +153,7 @@ bool Evaluator::prepareRhs(Type* lhs)
     {   // NOTE: already checked that lhs is large enough for rhs
         Q_ASSERT( lhs->len >= quint32(dequote(rhs.val.toByteArray()).size()) );
         assureTopOnMilStack();
-        out->ldobj_(toQuali(lhs));
+        out->ldobj_(MilQuali());
     }else if( lhs && lhs->form == BasicType::CHAR &&
               rhs.type->form == BasicType::String )
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
@@ -348,10 +348,7 @@ void Evaluator::assureTopIsValue()
         return;
     Value& v = stack.back();
     if( v.ref )
-    {
         derefValue();
-        v.ref = false;
-    }
 }
 
 bool Evaluator::desigField(Declaration* field, bool byVal)

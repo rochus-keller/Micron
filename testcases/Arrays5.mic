@@ -17,3 +17,10 @@ begin
   
 	println("Arrays5 done")
 end Arrays5
+
+(* output
+Arrays5 start
+33
+44
+Arrays5 done
+*)

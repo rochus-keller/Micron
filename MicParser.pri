@@ -27,5 +27,3 @@ HEADERS += \
     $$PWD/MicMilLoader.h \
     $$PWD/MicBuiltins.h
 
-
-

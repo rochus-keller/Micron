@@ -1,0 +1,6 @@
+module Mini2
+var s : array 30 of char
+begin
+	s := "Hello World";
+	println(s)
+end Mini2

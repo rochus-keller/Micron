@@ -23,3 +23,12 @@ begin
 	println( len(a) )
 	println("Arrays3 done")		
 end Arrays3
+
+(* output
+Arrays3 start
+33
+0
+test
+4
+Arrays3 done
+*)

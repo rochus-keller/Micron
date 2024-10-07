@@ -25,3 +25,9 @@ begin
   
   println("end CompCon2")
 end CompCon2
+
+(* output
+start CompCon2
+D
+end CompCon2
+*)

@@ -1,8 +1,6 @@
 module Arrays
 
 	type 
-	   T = record s: array 10 of char end
-	   S = record c: array 4 of T end
 	   A = array of byte
 	var a : array 20 of shortint
 		c : array 10 of char

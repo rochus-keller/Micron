@@ -50,9 +50,9 @@ namespace Mic
         QByteArray name;
         quint8 kind; // MilEmitter::TypeKind
         bool isPublic;
-        MilQuali base;
+        MilQuali base; // for arrays, pointers and proctypes
         quint32 len;
-        QList<MilVariable> fields;
+        QList<MilVariable> fields; // also proctype params
         int indexOf(const QByteArray& name) const;
         const MilVariable* findField(const QByteArray& name) const;
     };
@@ -183,8 +183,9 @@ namespace Mic
         void setExtern( const QByteArray& origName = QByteArray() );
         void setVararg();
 
-        enum Type { I1, I2, I4, I8, R4, R8, U1, U2, U4, U8, IntPtr };
-        static QByteArray typeSymbol(Type);
+        enum Type { Unknown, I1, I2, I4, I8, R4, R8, U1, U2, U4, U8, IntPtr };
+        static QByteArray typeSymbol(Type); // MilEmitter::Type
+        static Type fromSymbol(const QByteArray&);
         static bool equals(const QByteArray&, Type);
         static QByteArray toString(const MilQuali&);
         static QByteArray toString(const MilTrident&);
@@ -268,7 +269,7 @@ namespace Mic
         quint8 d_typeKind;
         quint16 d_stackDepth;
         quint16 d_maxStackDepth;
-        QList<MilProcedure> d_proc;
+        QList<MilProcedure> d_proc; // proc stack
         QByteArray d_library, d_origName;
         MilRenderer* d_out;
     };

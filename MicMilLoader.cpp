@@ -57,7 +57,7 @@ void InMemRenderer::addImport(const QByteArray& path)
 {
     Q_ASSERT(module);
     module->imports.append(path);
-    module->symbols[path] = qMakePair(MilModule::Import,module->imports.size()-1);
+    module->symbols[path.constData()] = qMakePair(MilModule::Import,module->imports.size()-1);
     module->order.append(qMakePair(MilModule::Import,module->imports.size()-1) );
 }
 
@@ -69,7 +69,7 @@ void InMemRenderer::addVariable(const MilQuali& typeRef, QByteArray name,  bool 
     var.type = typeRef;
     var.isPublic = isPublic;
     module->vars.append(var);
-    module->symbols[name] = qMakePair(MilModule::Variable,module->vars.size()-1);
+    module->symbols[name.constData()] = qMakePair(MilModule::Variable,module->vars.size()-1);
     module->order.append(qMakePair(MilModule::Variable,module->vars.size()-1) );
 }
 
@@ -81,16 +81,30 @@ void InMemRenderer::addConst(const MilQuali& typeRef, const QByteArray& name, co
     c.type = typeRef;
     c.val = val;
     module->consts.append(c);
-    module->symbols[name] = qMakePair(MilModule::Const,module->consts.size()-1);
+    module->symbols[name.constData()] = qMakePair(MilModule::Const,module->consts.size()-1);
     module->order.append(qMakePair(MilModule::Const,module->consts.size()-1) );
 }
 
 void InMemRenderer::addProcedure(const Mic::MilProcedure& method)
 {
     Q_ASSERT(module);
-    module->procs.append(method);
-    module->symbols[method.name] = qMakePair(MilModule::Proc,module->procs.size()-1);
-    module->order.append(qMakePair(MilModule::Proc,module->procs.size()-1) );
+    if( method.kind == Mic::MilProcedure::ProcType )
+    {
+        MilType t;
+        t.name = method.name;
+        t.isPublic = method.isPublic;
+        t.kind = MilEmitter::ProcType;
+        t.base = method.retType;
+        t.fields = method.params;
+        module->types.append(t);
+        module->symbols[method.name.constData()] = qMakePair(MilModule::Type,module->types.size()-1);
+        module->order.append(qMakePair(MilModule::Type,module->types.size()-1) );
+    }else
+    {
+        module->procs.append(method);
+        module->symbols[method.name.constData()] = qMakePair(MilModule::Proc,module->procs.size()-1);
+        module->order.append(qMakePair(MilModule::Proc,module->procs.size()-1) );
+    }
 }
 
 void InMemRenderer::beginType(const QByteArray& name, bool isPublic, quint8 typeKind)
@@ -101,7 +115,7 @@ void InMemRenderer::beginType(const QByteArray& name, bool isPublic, quint8 type
     t.isPublic = isPublic;
     t.kind = typeKind;
     module->types.append(t);
-    module->symbols[name] = qMakePair(MilModule::Type,module->types.size()-1);
+    module->symbols[name.constData()] = qMakePair(MilModule::Type,module->types.size()-1);
     module->order.append(qMakePair(MilModule::Type,module->types.size()-1) );
     type = &module->types.back();
 }
@@ -122,7 +136,7 @@ void InMemRenderer::addType(const QByteArray& name, bool isPublic, const MilQual
     t.kind = typeKind;
     t.len = len;
     module->types.append(t);
-    module->symbols[name] = qMakePair(MilModule::Type,module->types.size()-1);
+    module->symbols[name.constData()] = qMakePair(MilModule::Type,module->types.size()-1);
     module->order.append(qMakePair(MilModule::Type,module->types.size()-1));
 }
 

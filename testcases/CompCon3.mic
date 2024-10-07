@@ -14,3 +14,9 @@ begin
   
   println("end CompCon3")
 end CompCon3
+
+(* output
+start CompCon3
+hit2
+end CompCon3
+*)

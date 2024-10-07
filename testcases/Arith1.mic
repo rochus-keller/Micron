@@ -17,3 +17,10 @@ begin
 	
 	println("Arith1 end")
 end Arith1
+
+(* output
+Arith1 start
+-22
+-77
+Arith1 end
+*)
