@@ -2886,9 +2886,10 @@ void Parser2::ForStatement() {
     {
         // to := end
         Expression* lhs = toExpr(to, tok.toRowCol());
-        if( !ev->evaluate(lhs) )
+        if( lhs && !ev->evaluate(lhs) )
             error(tok, ev->getErr());
-        if( !ev->evaluate(expression()) )
+        Expression* rhs = expression();
+        if( rhs && !ev->evaluate(rhs) )
             error(tok, ev->getErr());         // rhs
         ev->assign();
         Expression::deleteAllExpressions();
@@ -2907,7 +2908,7 @@ void Parser2::ForStatement() {
         else
             by = v.val.toInt();
         if( by == 0 )
-            error(tok,"by cannot be zero");
+            error(tok,"BY expression cannot be zero");
         Expression::deleteAllExpressions();
     }
 	expect(Tok_DO, true, "ForStatement");

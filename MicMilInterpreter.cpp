@@ -306,8 +306,20 @@ public:
             else
             {
                 // out << (void*)s.sp;
-                out << " -> ";
-                dump(*s.p);
+                out << "->";
+                if( (s.p-1)->t == MemSlot::Header && (s.p->t != MemSlot::Record || s.p->t != MemSlot::Array ) )
+                {
+                    out << "[";
+                    for( int i = 0; i < (s.p - 1)->u; i++ )
+                    {
+                        if( i != 0 )
+                            out << " ";
+                        dump(s.p[i]);
+                    }
+                    out << "]";
+                    break;
+                }else
+                    dump(*s.p);
             }
             break;
         case MemSlot::Record:
@@ -434,8 +446,8 @@ public:
             q = t->type->base;
             t = getFlattenedType(module,q);
         }
-        if( t == 0 || (t->type->kind != MilEmitter::Struct && t->type->kind != MilEmitter::Union) )
-            return; // scalar or no struct/union type, no initialisation required
+        //if( t == 0 || (t->type->kind != MilEmitter::Struct && t->type->kind != MilEmitter::Union) )
+        //    return; // scalar or no struct/union type, no initialisation required
         for( int i = 0; i < header->u; i++ )
             initSlot(module,ss[i],q);
     }
@@ -452,9 +464,9 @@ public:
         for(int i = 0; i < types.size(); i++ )
         {
             FlattenedType* t = getFlattenedType(module,types[i]->type);
-            if( t == 0 || t->type->kind != MilEmitter::Array )
+            //if( t == 0 || t->type->kind != MilEmitter::Array )
                 // skip embedded structs/unions since they were flattened already
-                continue;
+            //    continue;
             initSlot(module, ss[i], types[i]->type);
         }
     }
@@ -1208,6 +1220,15 @@ public:
         return s;
     }
 
+    void boundsCheck(ModuleData* module, MilProcedure* proc, quint32 pc, MemSlot* array, int index)
+    {
+        MemSlot* lh = findHeader(array);
+        Q_ASSERT(lh != 0 && lh->t == MemSlot::Header);
+        const quint32 start = array - lh - 1;
+        if( index + start >= lh->u )
+            execError(module,proc,pc,"index out of upper bound");
+    }
+
     void store(ModuleData* module, MilProcedure* proc, quint32 pc, MemSlot* lhs, bool embedded, MemSlot& rhs)
     {
         if( rhs.t == MemSlot::Record || rhs.t == MemSlot::Array )
@@ -1215,11 +1236,12 @@ public:
             if( embedded )
             {
                 MemSlot* lh = findHeader(lhs);
-                Q_ASSERT(lh != 0);
-                const quint32 ls = lhs - lhs;
+                Q_ASSERT(lh != 0 && lh->t == MemSlot::Header);
+                const quint32 border = lhs - lh - 1;
                 MemSlot* rh = rhs.p - 1;
-                if( rh->u > (lh->u - ls) )
-                    execError(module,proc,pc,"value too large");
+                Q_ASSERT(rh->t == MemSlot::Header);
+                if( rh->u > (lh->u - border) )
+                    execError(module,proc,pc,"value slot width too large");
                 for( int i = 0; i < rh->u; i++ )
                     lhs[i].move(rhs.p[i]);
             }else if(lhs->t == MemSlot::Record || lhs->t == MemSlot::Array)
@@ -1313,12 +1335,20 @@ public:
         MilObject mo;
         QList<MemSlot> switchExpr;
         QList<quint8> curStatement;
+
+        //out << "***** " << module->module->fullName << "!" << proc->name << ":" << endl;
+        //dump(args,"args");
+
         while(true)
         {
             if( pc >= proc->body.size() )
             {
-                // dump(module->variables,"module");
-                // dump(locals,"locals");
+#if 0
+                out << "***** " << module->module->fullName << "!" << proc->name << ":" << endl;
+                //dump(module->variables,"module");
+                dump(args,"args");
+                //dump(locals,"locals");
+#endif
                 return;
             }
             MilOperation& op = proc->body[pc];
@@ -1624,21 +1654,28 @@ public:
                 if( !lhs.embedded && lhs.p->t == MemSlot::Array )
                     lhs.p = lhs.p->p;
                 // TODO: bounds check
+                if( rhs.i < 0 )
+                    execError(module,proc,pc,"index out of lower bound");
                 if( op.op == IL_ldelem )
                 {
                     FlattenedType* ety = getFlattenedType(module, op.arg.value<MilQuali>());
                     if( ety && ety->len )
                         rhs.u *= ety->len; // multi-dim elem types are here by value
+                    boundsCheck(module,proc,pc,lhs.p,rhs.u);
                     if( ety && ety->len > 1 )
                     {
                         // in case of an array by value element make a value copy
                         // TODO: why don't we use ldobj here?
                         stack.push_back(MemSlot());
+                        boundsCheck(module,proc,pc,lhs.p,rhs.u + ety->len - 1);
                         stack.back().copyOf(lhs.p, rhs.u, ety->len, false);
                     }else
                         stack.push_back(lhs.p[rhs.u]);
                 }else
+                {
+                    boundsCheck(module,proc,pc,lhs.p,rhs.u);
                     stack.push_back(lhs.p[rhs.u]);
+                }
                 pc++;
                 vmbreak;
             vmcase(IL_ldelema) {
@@ -1654,9 +1691,9 @@ public:
                 FlattenedType* ty = getFlattenedType(module, ety);
                 if( ty && ty->len )
                     rhs.u *= ty->len; // multi-dim elem types are all in the same flattened array
-                MemSlot* hdr = lhs.p-1;
-                if( hdr->t == MemSlot::Header && rhs.u >= hdr->u )
-                    execError(module, proc, pc, "index out of bound");
+                if( rhs.u < 0 )
+                    execError(module, proc, pc, "index out of lower bound");
+                boundsCheck(module,proc,pc, lhs.p,rhs.u);
                 stack.push_back(&lhs.p[rhs.u]);
                 /* if the array is multi-dim and the terminal array element is a struct, the pointer to a
                  * single element in the flattened array is ambiguous, i.e. we don't know if the actual
@@ -1673,23 +1710,22 @@ public:
                 if( (lhs.t != MemSlot::Pointer) || lhs.p == 0 ||
                         (lhs.p-1)->t == MemSlot::Header && (lhs.p-1)->u <= op.index )
                     execError(module, proc, pc, "invalid record or field");
-                // TODO
                 if( !lhs.embedded && lhs.p->t == MemSlot::Record )
                     lhs.p = lhs.p->p;
                 MilTrident tri = op.arg.value<MilTrident>();
                 FlattenedType* rec = getFlattenedType(module, tri.first);
                 if( rec == 0 )
                     execError(module, proc, pc, "invalid record or union type");
-                // TODO: do we really have to fetch field and its type for each call?
-                // TODO: shouldn't we use ldflda/ldobj here instead of ldfld?
                 const MilVariable* field = rec->type->findField(tri.second);
                 if( field == 0 )
                     execError(module, proc, pc, "unknown field");
                 FlattenedType* ft = getFlattenedType(module, field->type);
+                boundsCheck(module,proc,pc,lhs.p,op.index);
                 if( ft && !ft->fields.isEmpty() )
                 {
                     // embedded struct by value
                     stack.push_back(MemSlot());
+                    boundsCheck(module,proc,pc,lhs.p,op.index+ft->fields.size()-1);
                     stack.back().copyOf(lhs.p, op.index, ft->fields.size(), true);
                 }else
                     stack.push_back(lhs.p[op.index]);
@@ -1701,7 +1737,6 @@ public:
                 stack.pop_back();
                 if( (lhs.t != MemSlot::Pointer) || lhs.p == 0 )
                     execError(module, proc, pc, "invalid record or field");
-                // TODO
                 if( !lhs.embedded && lhs.p->t == MemSlot::Record )
                     lhs.p = lhs.p->p;
                 MilTrident tri = op.arg.value<MilTrident>();
@@ -1712,6 +1747,7 @@ public:
                 if( field == 0 )
                     execError(module, proc, pc, "unknown field");
                 FlattenedType* ft = getFlattenedType(module, field->type);
+                boundsCheck(module,proc,pc,lhs.p,op.index);
                 stack.push_back(&lhs.p[op.index]);
                 /* if the struct/union has embedded structs/unions and the (flattened) field pointed to is an
                  * embedded array, the pointer is ambigous, i.e. we don't know if the actual target of the
@@ -2168,17 +2204,22 @@ public:
                         execError(module, proc, pc, "invalid array pointer");
                     if( index.t != MemSlot::I && index.t != MemSlot::U )
                         execError(module, proc, pc, "invalid index type");
+                    if( rhs.i < 0 )
+                        execError(module, proc, pc, "index out of lower bound");
                     if( op.op == IL_stelem )
                     {
                         MilQuali ety = op.arg.value<MilQuali>();
                         FlattenedType* ty = getFlattenedType(module, ety);
                         if( ty && ty->len )
                             index.u *= ty->len; // multi-dim elem types are here by value
+                        boundsCheck(module,proc,pc,lhs.p,index.i);
                         store(module,proc,pc,lhs.p + index.u, lhs.embedded, rhs );
                     }else
                     {
-                        if( rhs.t != MemSlot::I && rhs.t != MemSlot::U && rhs.t != MemSlot::Pointer )
+                        if( rhs.t != MemSlot::I && rhs.t != MemSlot::U && rhs.t != MemSlot::F &&
+                                rhs.t != MemSlot::Pointer && rhs.t != MemSlot::Procedure )
                             execError(module, proc, pc, "invalid value type");
+                        boundsCheck(module,proc,pc,lhs.p,index.i);
                         lhs.p[index.u] = rhs;
                     }
                 pc++;

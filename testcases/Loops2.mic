@@ -1,0 +1,19 @@
+module Loops2
+	var i, n : integer
+begin
+	//println("Loops2 start")
+	
+	n := 10
+    for i := 10 to 0 by -1 do
+		println(i)
+    end
+	for 
+		i := 10
+		to 0 
+		by -3 
+		do
+		println(i)
+	end
+		
+	//println("Loops2 done")
+end Loops2
