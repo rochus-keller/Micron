@@ -45,6 +45,7 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_ProcedureDeclaration: return "ProcedureDeclaration";
 		case R_ProcedureHeading: return "ProcedureHeading";
 		case R_ProcedureType: return "ProcedureType";
+		case R_Receiver: return "Receiver";
 		case R_RecordType: return "RecordType";
 		case R_RepeatStatement: return "RepeatStatement";
 		case R_ReturnStatement: return "ReturnStatement";
@@ -63,7 +64,6 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_constructor: return "constructor";
 		case R_designator: return "designator";
 		case R_directive_: return "directive";
-		case R_element: return "element";
 		case R_enumeration: return "enumeration";
 		case R_expression: return "expression";
 		case R_factor: return "factor";
@@ -80,10 +80,9 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_procedure: return "procedure";
 		case R_qualident: return "qualident";
 		case R_relation: return "relation";
+		case R_reserved_for_future_extensions_: return "reserved_for_future_extensions";
 		case R_selector: return "selector";
-		case R_set: return "set";
 		case R_statement: return "statement";
-		case R_symbolEnum: return "symbolEnum";
 		case R_term: return "term";
 		case R_type: return "type";
 		case R_variableOrFunctionCall: return "variableOrFunctionCall";

@@ -45,7 +45,6 @@ namespace Mic {
 		void PointerType();
 		void enumeration();
 		void constEnum();
-		void symbolEnum();
 		void VariableDeclaration();
 		void designator();
 		void selector();
@@ -61,8 +60,6 @@ namespace Mic {
 		void component();
 		void factor();
 		void variableOrFunctionCall();
-		void set();
-		void element();
 		void statement();
 		void assignmentOrProcedureCall();
 		void StatementSequence();
@@ -85,6 +82,7 @@ namespace Mic {
 		void ProcedureType();
 		void ProcedureDeclaration();
 		void ProcedureHeading();
+		void Receiver();
 		void block();
 		void ProcedureBody();
 		void DeclarationSequence();

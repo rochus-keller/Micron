@@ -116,13 +116,12 @@ namespace Mic
         uint extern_ : 1; // extern name (if present) is in val
         uint alias : 1; // the original is in link
         uint meta : 1;
-        uint scope : 1;
         uint ownstype : 1;
         uint mode : 5;
         uint id : 16; // used for built-in code and local/param number
         QVariant data; // value for Const and Enum, path for Import, name for Extern
         Declaration():next(0),link(0),type(0),row(0),col(0),id(0),mode(0),visi(0),ownstype(false),
-            inline_(false),invar(false),extern_(false),meta(false),scope(false),outer(0),alias(0){}
+            inline_(false),invar(false),extern_(false),meta(false),outer(0),alias(0){}
         ~Declaration();
 
         QList<Declaration*> getParams() const;
@@ -148,7 +147,9 @@ namespace Mic
             Index, // a[i]
             Cast, AutoCast,
             Call,
-            Literal, Set, Range,
+            Literal,
+            Constructor, Range, NameValue, IndexValue,
+            Super,   // ^ supercall
             MAX
         };
 #ifdef _DEBUG
@@ -163,21 +164,25 @@ namespace Mic
         QVariant val; // set elements and call args are ExpList embedded in val
         Expression* lhs; // for unary and binary ops
         Expression* rhs; // for binary ops
+        Expression* next; // for args, set elems, and caselabellist
+
         bool isConst() const;
         bool isLiteral() const;
         QVariant getLiteralValue() const;
         DeclList getFormals() const;
         bool isLvalue() const; // true if result of expression is usually a ref to type; can be changed with byVal
         void setByVal();
+        void appendRhs(Expression*);
         static Expression* createFromToken(quint16,const RowCol&);
         static Expression* create(Kind k = Invalid, const RowCol& rc = RowCol());
+        static void append(Expression* list, Expression* elem);
         static void deleteAllExpressions();
         static void killArena();
     private:
         struct Arena;
         static Arena* arena;
         static quint32 used;
-        Expression(Kind k = Invalid, const RowCol& rc = RowCol()):kind(k),type(0),lhs(0),rhs(0),
+        Expression(Kind k = Invalid, const RowCol& rc = RowCol()):kind(k),type(0),lhs(0),rhs(0),next(0),
             pos(rc),byVal(false),visi(0){}
         ~Expression() {}
     };

@@ -70,7 +70,7 @@ namespace Mic {
         };
         IdentDef identdef();
 		void ConstDeclaration();
-        Expression* ConstExpression();
+        Expression* ConstExpression(Type* hint);
 		void TypeDeclaration();
         Type* type(bool deanonymize = true);
         Type* NamedType(Quali* = 0, bool allowUnresovedLocal = false);
@@ -88,19 +88,18 @@ namespace Mic {
         DeclList constEnum();
 		void VariableDeclaration();
         Expression* designator(bool lvalue);
-        Expression* expression(bool lvalue = false);
+        Expression* expression(Type* hint, bool lvalue = false);
         quint8 relation();
-        Expression* SimpleExpression(bool lvalue = false);
+        Expression* SimpleExpression(Type* hint, bool lvalue = false);
         quint8 AddOperator();
-        Expression* term(bool lvalue = false);
+        Expression* term(Type* hint, bool lvalue = false);
         quint8 MulOperator();
         Expression* literal();
-        Expression* constructor();
+        Expression* constructor(Type* hint);
         enum { FirstComponent, Named, Anonymous };
-        void component(Type* constrType, Value& v, quint8& state, DeclList&);
-        Expression* factor(bool lvalue = false);
+        Expression* component(Type* constrType, int& index);
+        Expression* factor(Type* hint, bool lvalue = false);
         Expression* variableOrFunctionCall(bool lvalue = false);
-        Expression* set();
         Expression* element();
 		void statement();
         void assignmentOrProcedureCall();
@@ -135,7 +134,7 @@ namespace Mic {
 
         static bool isUnique(const MetaParamList&, const Declaration*);
         MetaParamList MetaParams();
-        Declaration* MetaSection(bool& isType);
+        MetaParamList MetaSection(bool& isType);
 
     protected:
         void next();
@@ -144,6 +143,7 @@ namespace Mic {
         bool expect(int tt, bool pkw, const char* where);
         void error( const Token&, const QString& msg);
         void error( int row, int col, const QString& msg );
+        void error( const RowCol&, const QString& msg );
         Declaration* findDecl(const Token& id );
         bool assigCompat(Type* lhs, Declaration* rhs) const;
         bool assigCompat(Type* lhs, const Expression* rhs) const;
@@ -184,7 +184,6 @@ namespace Mic {
         Scanner2* scanner;
         Declaration* thisMod, *thisDecl;
         QList<QPair<Type*,Token> > deferred;
-        QList<Type*> componentTypeStack;
         QList<RowCol> loopStack;
         typedef QList<RowCol> Depth;
         Depth blockDepth;

@@ -5,6 +5,7 @@ module Arrays
 	var a : array 20 of shortint
 		c : array 10 of char
 		e : array 4 of byte
+		i : byte
 		
 	proc sub
 		var b : array 10 of byte
@@ -26,7 +27,8 @@ begin
 
 	// e := $20 61 62 63$ 
 	// equal to 
-	e := A{ 20h 61h 62h 63h }
+	i := 64h
+	e := A{ 20h 61h 62h 63h } // TODO: not yet implemented i }
 	println(e[2])
 	println("Arrays done")
 end Arrays

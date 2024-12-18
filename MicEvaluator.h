@@ -49,6 +49,8 @@ public:
 
 protected:
     void recursiveRun(Expression*);
+    void constructor(Expression*);
+    void recurseConstConstructor(Expression*);
 
     // expression:
     bool unaryOp(quint8 op); // Tok_Tilde, Tok_NOT, Tok_Plus, Tok_Minus, Tok_At

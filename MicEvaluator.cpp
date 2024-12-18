@@ -1516,14 +1516,153 @@ void Evaluator::recursiveRun(Expression* e)
         break;
 
     case Expression::Range:
-        // TODO
+    case Expression::NameValue:
+    case Expression::IndexValue:
         break;
-    case Expression::Set:
-        // TODO
+    case Expression::Constructor:
+        constructor(e);
         break;
 
     case Expression::Invalid:
         Q_ASSERT(false);
         break;
+    }
+}
+
+void Evaluator::constructor(Expression* e)
+{
+    // Expression::create(Expression::Literal, ttok.toRowCol());
+    if( e->isConst() )
+    {
+        recurseConstConstructor(e);
+        return;
+    }
+    // else
+    err = "dynamic constructors not yet supported by code generator";
+}
+
+void Evaluator::recurseConstConstructor(Expression* e)
+{
+    switch( e->type->form )
+    {
+    case Type::Record: {
+            MilRecordLiteral rec;
+            Expression* c = e->rhs;
+            while( c )
+            {
+                Q_ASSERT( c->kind == Expression::NameValue );
+                if( !evaluate(c->rhs) )
+                    return;
+                Value v = stack.takeLast();
+                Q_ASSERT( v.isConst() );
+                rec.append(qMakePair(c->val.value<Declaration*>()->name, v.val));
+                c = c->next;
+            }
+            Value v;
+            v.mode = Value::Const;
+            v.val = QVariant::fromValue(rec);
+            v.type = e->type;
+            stack.push_back(v);
+            break;
+        }
+    case Type::Array: {
+            Q_ASSERT( e->type->len > 0 );
+            QVector<QVariant> arr(e->type->len);
+            Expression* c = e->rhs;
+            while( c )
+            {
+                Q_ASSERT( c->kind == Expression::IndexValue );
+                if( !evaluate(c->rhs) )
+                    return;
+                Value v = stack.takeLast();
+                Q_ASSERT( v.isConst() );
+                arr[c->val.toLongLong()] = v.val;
+                c = c->next;
+            }
+            Value v;
+            v.mode = Value::Const;
+            v.val = QVariant::fromValue(arr.toList());
+            v.type = e->type;
+            stack.push_back(v);
+            break;
+        }
+    case Type::Pointer: {
+            Q_ASSERT(e->rhs);
+            Value v;
+            v.mode = Value::Const;
+            v.val = e->rhs->val;
+            v.type = e->type;
+            stack.push_back(v);
+            break;
+        }
+    case BasicType::SET: {
+            std::bitset<32> set;
+            Expression* c = e->rhs;
+            while( c )
+            {
+                if( c->kind == Expression::Range )
+                {
+                    if( !evaluate(c->lhs) )
+                        return;
+                    const qint64 lhs = stack.takeLast().val.toLongLong();
+                    if( !evaluate(c->rhs) )
+                        return;
+                    const qint64 rhs = stack.takeLast().val.toLongLong();
+                    if( lhs < 0 || lhs >= set.size() )
+                    {
+                        err = QString("element %1 out of range").arg(lhs);
+                        return;
+                    }else if( rhs < 0 || rhs >= set.size() )
+                    {
+                        err = QString("element %1 out of range").arg(rhs);
+                        return;
+                    }else
+                    {
+                        if( lhs <= rhs )
+                            for( int i = lhs; i <= rhs; i++ )
+                            {
+                                if( set.test(i) )
+                                {
+                                    err = QString("element %1 already included").arg(i);
+                                    return;
+                                }else
+                                    set.set(i);
+                            }
+                        else
+                            for( int i = rhs; i <= lhs; i++ )
+                            {
+                                if( set.test(i) )
+                                {
+                                    err = QString("element %1 already included").arg(i);
+                                    return;
+                                }else
+                                    set.set(i);
+                            }
+                    }
+                }else
+                {
+                    if( !evaluate(c) )
+                        return;
+                    const qint64 i = stack.takeLast().val.toLongLong();
+                    if( i < 0 || i >= set.size() )
+                    {
+                        err = QString("element %1 out of range").arg(i);
+                        return;
+                    }else if(set.test(i))
+                    {
+                        err = QString("element %1 already included").arg(i);
+                        return;
+                    }else
+                        set.set(i);
+                }
+                c = c->next;
+            }
+            Value v;
+            v.mode = Value::Const;
+            v.val = set.to_ullong();
+            v.type = e->type;
+            stack.push_back(v);
+            break;
+        }
     }
 }

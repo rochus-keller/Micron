@@ -40,6 +40,7 @@ namespace Mic {
 			case Tok_Tilde: return "~";
 			case Tok_AND: return "AND";
 			case Tok_ARRAY: return "ARRAY";
+			case Tok_AUTOPTR: return "AUTOPTR";
 			case Tok_BEGIN: return "BEGIN";
 			case Tok_BY: return "BY";
 			case Tok_CASE: return "CASE";
@@ -64,6 +65,7 @@ namespace Mic {
 			case Tok_MODULE: return "MODULE";
 			case Tok_NIL: return "NIL";
 			case Tok_NOT: return "NOT";
+			case Tok_OBJECT: return "OBJECT";
 			case Tok_OF: return "OF";
 			case Tok_OR: return "OR";
 			case Tok_POINTER: return "POINTER";
@@ -128,6 +130,7 @@ namespace Mic {
 			case Tok_Tilde: return "Tok_Tilde";
 			case Tok_AND: return "Tok_AND";
 			case Tok_ARRAY: return "Tok_ARRAY";
+			case Tok_AUTOPTR: return "Tok_AUTOPTR";
 			case Tok_BEGIN: return "Tok_BEGIN";
 			case Tok_BY: return "Tok_BY";
 			case Tok_CASE: return "Tok_CASE";
@@ -152,6 +155,7 @@ namespace Mic {
 			case Tok_MODULE: return "Tok_MODULE";
 			case Tok_NIL: return "Tok_NIL";
 			case Tok_NOT: return "Tok_NOT";
+			case Tok_OBJECT: return "Tok_OBJECT";
 			case Tok_OF: return "Tok_OF";
 			case Tok_OR: return "Tok_OR";
 			case Tok_POINTER: return "Tok_POINTER";
@@ -300,6 +304,19 @@ namespace Mic {
 					if( at(str,len,i+3) == 'A' ){
 						if( at(str,len,i+4) == 'Y' ){
 							res = Tok_ARRAY; i += 5;
+						}
+					}
+				}
+				break;
+			case 'U':
+				if( at(str,len,i+2) == 'T' ){
+					if( at(str,len,i+3) == 'O' ){
+						if( at(str,len,i+4) == 'P' ){
+							if( at(str,len,i+5) == 'T' ){
+								if( at(str,len,i+6) == 'R' ){
+									res = Tok_AUTOPTR; i += 7;
+								}
+							}
 						}
 					}
 				}
@@ -503,6 +520,17 @@ namespace Mic {
 			break;
 		case 'O':
 			switch( at(str,len,i+1) ){
+			case 'B':
+				if( at(str,len,i+2) == 'J' ){
+					if( at(str,len,i+3) == 'E' ){
+						if( at(str,len,i+4) == 'C' ){
+							if( at(str,len,i+5) == 'T' ){
+								res = Tok_OBJECT; i += 6;
+							}
+						}
+					}
+				}
+				break;
 			case 'F':
 				res = Tok_OF; i += 2;
 				break;

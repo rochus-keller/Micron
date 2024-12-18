@@ -191,7 +191,8 @@ static inline bool FIRST_relation(int tt) {
 	case Tok_IN:
 	case Tok_Eq:
 	case Tok_Leq:
-	case Tok_Hash:
+    //case Tok_IS:
+    case Tok_Hash:
 	case Tok_Lt:
 		return true;
 	default: return false;
@@ -250,44 +251,45 @@ static inline bool FIRST_MulOperator(int tt) {
 
 static inline bool FIRST_literal(int tt) {
 	switch(tt){
-	case Tok_TRUE:
-	case Tok_NIL:
-	case Tok_FALSE:
-	case Tok_hexchar:
-	case Tok_hexstring:
-	case Tok_string:
-	case Tok_integer:
-	case Tok_Lbrace:
-	case Tok_real:
-		return true;
+    case Tok_FALSE:
+    case Tok_hexchar:
+    case Tok_hexstring:
+    case Tok_integer:
+    case Tok_NIL:
+    case Tok_real:
+    case Tok_string:
+    case Tok_TRUE:
+       return true;
 	default: return false;
 	}
 }
 
 static inline bool FIRST_constructor(int tt) {
-	return tt == Tok_ident;
+    return tt == Tok_Lbrace || tt == Tok_ident;
 }
 
 static inline bool FIRST_component(int tt) {
-	switch(tt){
-	case Tok_Tilde:
-	case Tok_TRUE:
-	case Tok_NIL:
-	case Tok_Lpar:
-	case Tok_FALSE:
-	case Tok_hexchar:
-	case Tok_Plus:
-	case Tok_hexstring:
-	case Tok_string:
-	case Tok_integer:
-	case Tok_Minus:
-	case Tok_Lbrace:
-	case Tok_real:
-	case Tok_ident:
-	case Tok_At:
-		return true;
-	default: return false;
-	}
+    switch(tt){
+    case Tok_At:
+    case Tok_FALSE:
+    case Tok_hexchar:
+    case Tok_hexstring:
+    case Tok_ident:
+    case Tok_integer:
+    case Tok_Lbrace:
+    case Tok_Lbrack:
+    case Tok_Lpar:
+    case Tok_Minus:
+    case Tok_NIL:
+    case Tok_NOT:
+    case Tok_Plus:
+    case Tok_real:
+    case Tok_string:
+    case Tok_Tilde:
+    case Tok_TRUE:
+        return true;
+    default: return false;
+    }
 }
 
 static inline bool FIRST_factor(int tt) {
@@ -313,10 +315,6 @@ static inline bool FIRST_factor(int tt) {
 
 static inline bool FIRST_variableOrFunctionCall(int tt) {
 	return tt == Tok_ident;
-}
-
-static inline bool FIRST_set(int tt) {
-	return tt == Tok_Lbrace;
 }
 
 static inline bool FIRST_element(int tt) {
@@ -657,6 +655,12 @@ void Parser2::error(int row, int col, const QString& msg)
 {
     Q_ASSERT(!msg.isEmpty());
     errors << Error(msg, row, col, scanner->source());
+}
+
+void Parser2::error(const RowCol& pos, const QString& msg)
+{
+    Q_ASSERT(!msg.isEmpty());
+    errors << Error(msg, pos.d_row, pos.d_col, scanner->source());
 }
 
 Declaration* Parser2::findDecl(const Token& id)
@@ -1014,7 +1018,7 @@ void Parser2::ConstDeclaration() {
 	expect(Tok_Eq, false, "ConstDeclaration");
     Declaration* d = addDecl(id, Declaration::ConstDecl);
     Token t = la;
-    Expression* e = ConstExpression();
+    Expression* e = ConstExpression(0);
     if( !ev->evaluate(e) )
         error(t, ev->getErr());
     Value v = ev->pop();
@@ -1023,9 +1027,9 @@ void Parser2::ConstDeclaration() {
     Expression::deleteAllExpressions();
 }
 
-Expression* Parser2::ConstExpression() {
+Expression* Parser2::ConstExpression(Type* hint) {
     const Token tok = la;
-    Expression* res = expression();
+    Expression* res = expression(hint);
     if( res == 0 )
         return 0;
     if( !res->isConst() )
@@ -1154,7 +1158,7 @@ Type* Parser2::ArrayType() {
 void Parser2::length(quint32& len) {
 	if( FIRST_ConstExpression(la.d_type) ) {
         const Token tok = la;
-        Expression* lenExpr = ConstExpression();
+        Expression* lenExpr = ConstExpression(0);
         if( !ev->evaluate(lenExpr) )
             error(tok, ev->getErr());
         Value v = ev->pop();
@@ -1174,7 +1178,7 @@ void Parser2::length(quint32& len) {
 	} else if( la.d_type == Tok_VAR ) {
 		expect(Tok_VAR, true, "length");
         Token t = la;
-        if( !ev->evaluate(expression()) )
+        if( !ev->evaluate(expression(0)) )
             error(t, ev->getErr());
         Value v = ev->pop();
         // TODO
@@ -1349,7 +1353,7 @@ DeclList Parser2::constEnum() {
 	if( la.d_type == Tok_Eq ) {
 		expect(Tok_Eq, false, "constEnum");
         const Token tok = la;
-        if( !ev->evaluate(ConstExpression()) )
+        if( !ev->evaluate(ConstExpression(0)) )
             error(tok, ev->getErr());
         Value v = ev->pop();
         if( !v.type->isInteger() )
@@ -1713,7 +1717,7 @@ void Parser2::checkUnaryOp(Expression* e)
 {
     if( e->kind == Expression::Plus || e->kind == Expression::Minus )
     {
-        if( e->type->isNumber() )
+        if( e->lhs->type->isNumber() )
         {
             switch(e->type->form)
             {
@@ -1807,6 +1811,7 @@ Expression* Parser2::designator(bool needsLvalue) {
     if( !res )
         return 0;
 
+    // TODO: check res is a variable
     if( !res->isLvalue() )
         isLvalue = false;
 
@@ -1867,7 +1872,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             tmp->type = res->type->base;
             res = tmp;
             tok = la;
-            res->rhs = expression();
+            res->rhs = expression(0);
             expect(Tok_Rbrack, false, "selector");
             if( res->rhs && !res->rhs->type->isInteger())
             {
@@ -1900,7 +1905,8 @@ Expression* Parser2::designator(bool needsLvalue) {
             if( FIRST_expression(la.d_type) ) {
                 // inlined ExpList
                 tok = la;
-                Expression* arg = expression(renderLvalue(proc,args.size()));
+                Type* pt = formals.isEmpty() ? 0 : formals.first()->type;
+                Expression* arg = expression(pt, renderLvalue(proc,args.size()));
                 if( arg == 0 )
                     return 0;
                 args.append(arg);
@@ -1911,7 +1917,8 @@ Expression* Parser2::designator(bool needsLvalue) {
                     if( la.d_type == Tok_Comma )
                         expect(Tok_Comma, false, "ExpList");
                     tok = la;
-                    Expression* arg = expression(renderLvalue(proc,args.size()));
+                    Type* pt = args.size() < formals.size() ? formals[args.size()]->type : 0;
+                    Expression* arg = expression(pt, renderLvalue(proc,args.size()));
                     if( arg == 0 )
                         return 0;
                     args.append(arg);
@@ -1946,7 +1953,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 args << e;
                 e = Expression::create(Expression::Literal,lpar.toRowCol());
                 e->type = mdl->getType(BasicType::String);
-                e->val = "\"" + lpar.d_sourcePath.toUtf8() + "\"";
+                e->val = lpar.d_sourcePath.toUtf8();
                 args << e;
             }
 
@@ -2150,8 +2157,8 @@ void Parser2::resolveDeferreds()
     deferred.clear();
 }
 
-Expression* Parser2::expression(bool lvalue) {
-    Expression* res = SimpleExpression(lvalue);
+Expression* Parser2::expression(Type* hint, bool lvalue) {
+    Expression* res = SimpleExpression(hint, lvalue);
     if( res == 0 )
         return 0;
 	if( FIRST_relation(la.d_type) ) {
@@ -2160,7 +2167,7 @@ Expression* Parser2::expression(bool lvalue) {
         tmp->lhs = res;
         tmp->type = mdl->getType(BasicType::BOOLEAN);
         res = tmp;
-        res->rhs = SimpleExpression();
+        res->rhs = SimpleExpression(0);
         if( res->rhs == 0 )
             return 0;
         checkRelOp(res);
@@ -2188,7 +2195,7 @@ quint8 Parser2::relation() {
     return cur.d_type;
 }
 
-Expression* Parser2::SimpleExpression(bool lvalue) {
+Expression* Parser2::SimpleExpression(Type* hint, bool lvalue) {
     quint8 op = 0;
     Token tok = la;
     if( la.d_type == Tok_Plus || la.d_type == Tok_Minus ) {
@@ -2201,7 +2208,7 @@ Expression* Parser2::SimpleExpression(bool lvalue) {
 		} else
 			invalid("SimpleExpression");
 	}
-    Expression* res = term(lvalue);
+    Expression* res = term(hint, lvalue);
     if( res == 0 )
         return 0;
     if( op != 0 ) {
@@ -2216,7 +2223,7 @@ Expression* Parser2::SimpleExpression(bool lvalue) {
         Expression* tmp = Expression::createFromToken(AddOperator(), tok.toRowCol());
         tmp->lhs = res;
         res = tmp;
-        res->rhs = term();
+        res->rhs = term(0);
         if( res->rhs == 0 )
             return 0;
         checkArithOp(res);
@@ -2236,8 +2243,8 @@ quint8 Parser2::AddOperator() {
     return cur.d_type;
 }
 
-Expression* Parser2::term(bool lvalue) {
-    Expression* res = factor(lvalue);
+Expression* Parser2::term(Type* hint, bool lvalue) {
+    Expression* res = factor(hint, lvalue);
     if( res == 0 )
         return 0;
 	while( FIRST_MulOperator(la.d_type) ) {
@@ -2245,7 +2252,7 @@ Expression* Parser2::term(bool lvalue) {
         Expression* tmp = Expression::createFromToken(MulOperator(),tok.toRowCol());
         tmp->lhs = res;
         res = tmp;
-        res->rhs = factor();
+        res->rhs = factor(0);
         if( res->rhs == 0 )
             return 0;
         checkArithOp(res);
@@ -2306,9 +2313,7 @@ Expression* Parser2::literal() {
         res = Expression::create(Expression::Literal,cur.toRowCol());
         res->type = mdl->getType(BasicType::Nil);
         res->val = QVariant();
-    } else if( FIRST_set(la.d_type) ) {
-        res = set();
-	} else if( la.d_type == Tok_TRUE ) {
+    } else if( la.d_type == Tok_TRUE ) {
 		expect(Tok_TRUE, true, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
         res->type = mdl->getType(BasicType::BOOLEAN);
@@ -2323,203 +2328,235 @@ Expression* Parser2::literal() {
     return res;
 }
 
-Expression* Parser2::constructor() {
-    const Token ttok = la;
-    Quali q;
-    Type* t = NamedType(&q);
-    Q_ASSERT( t != 0 );
-    Value v;
-    v.mode = Value::Const;
-    v.type = t;
+Expression* Parser2::constructor(Type* hint) {
+    const Token t = la;
+    Expression* res = Expression::create(Expression::Constructor, t.toRowCol());
+    if( FIRST_NamedType(t.d_type) ) {
+        res->type = NamedType();
+    }else if( hint )
+        res->type = hint;
+    else
+        res->type = mdl->getType(BasicType::SET);
+
+    if( res->type == 0 )
+    {
+        error(t,"constructor type cannot be inferred");
+        return 0;
+    }else if( res->type->form != Type::Record && res->type->form != Type::Array &&
+              res->type->form != BasicType::SET && res->type->form != Type::Pointer )
+    {
+        error(t,"constructors only supported for record, array, set and pointer types");
+        return 0;
+    }
+
     expect(Tok_Lbrace, false, "constructor");
-	if( FIRST_component(la.d_type) ) {
-        QList<Value> vals;
-        Value c;
-        DeclList dl;
-        quint8 state = 0;
-        component(t,c,state,dl);
-        vals << c;
-
+    int index = 0;
+    if( FIRST_component(la.d_type) ) {
+        Expression* e = component(res->type, index);
+        if( e == 0 )
+            return 0;
+        res->appendRhs(e);
         while( la.d_type == Tok_Comma || FIRST_component(la.d_type) ) {
-            if( la.d_type == Tok_Comma )
+            if( la.d_type == Tok_Comma ) {
                 expect(Tok_Comma, false, "constructor");
-            component(t, c, state, dl);
-            vals << c;
-		}
-
-        if( t->form == Type::Record )
-        {
-            Q_ASSERT( vals.size() == dl.size() );
-            QPair<int, int> count = t->getFieldCount();
-            if( count.second )
-                count.first++;
-            if( count.first != dl.size() )
-                error(ttok,QString("the number of components (%1) doesn't fit the number of fields "
-                                   "(%2, variants count as one)").arg(dl.size()).arg(count.first));
-            MilRecordLiteral m;
-            if( state == Named )
-            {
-                QVector<MilFieldSlot> fields(vals.size());
-                for( int i = 0; i < vals.size(); i++ )
-                {
-                    Declaration* f = t->findField(dl[i]->name);
-                    if( f == 0 )
-                    {
-                        error(ttok,QString("the record type has not field named '%1'").arg(dl[i]->name.constData()));
-                        continue;
-                    }
-                    if( f->mode == Declaration::Variant )
-                    {
-                        if( !fields.back().first.isEmpty() )
-                        {
-                            error(ttok,QString("cannot initialize variant part more than once '%1'").arg(dl[i]->name.constData()));
-                        }else
-                            fields.back() = qMakePair(dl[i]->name, vals[i].val);
-                    }else
-                    {
-                        const int idx = t->subs.indexOf(f);
-                        if( !fields[idx].first.isEmpty() )
-                            error(ttok,QString("cannot initialize field more than once '%1'").arg(dl[i]->name.constData()));
-                        else
-                            fields[idx] = qMakePair(dl[i]->name, vals[i].val);
-                    }
-                }
-                m = fields.toList();
-            }else
-            {
-                Q_ASSERT( vals.size() <= t->subs.size() );
-                for( int i = 0; i < vals.size(); i++ )
-                    m.append(qMakePair(t->subs[i]->name,vals[i].val));
-                // this just takes the first variable part field, if any, which comes after the fix part fields
             }
-            v.val = QVariant::fromValue(m);
-        }else if( t->form == Type::Array )
-        {
-            QVariantList l;
-            if( t->len && t->len != vals.size() )
-                error(ttok,QString("the number of components doesn't fit the array length"));
-            else if( t->len == 0 )
-            {
-                Type* arr = new Type();
-                arr->base = t->base;
-                arr->form = Type::Array;
-                arr->len = vals.size();
-                addHelper(arr);
-                v.type = arr;
-            }
-            for( int i = 0; i < vals.size(); i++ )
-                l << vals[i].val;
-            v.val = l;
-        }else if( t->form == Type::Pointer )
-        {
-            if( vals.size() != 1 )
-                error(ttok,QString("a pointer constructor expects exactly one component"));
-            v.val = vals.first().val;
-        }else
-            error(ttok,QString("constructor for type '%1'' not supported").arg(q.second.constData()));
-	}
+            Expression* e = component(res->type, index);
+            if( e == 0 )
+                return 0;
+            res->appendRhs(e);
+        }
+    }
+    expect(Tok_Rbrace, false, "constructor");
 
-	expect(Tok_Rbrace, false, "constructor");
-    Expression* res = Expression::create(Expression::Literal, ttok.toRowCol());
-    res->val = v.val;
-    res->type = v.type;
+    if( res->type->form == Type::Record )
+    {
+        QSet<Declaration*> test;
+        Expression* c = res->rhs;
+        while(c)
+        {
+            Q_ASSERT( c->kind == Expression::NameValue);
+            Declaration* name = c->val.value<Declaration*>();
+            if( test.contains(name) )
+                error(c->pos, "value for this field was already defined");
+            test.insert(name);
+            c = c->next;
+        }
+        // TODO: If the record type has a variant part, only named component can be used, and
+        // only one option of the variant part can be initialized in the constructor.
+    }else if( res->type->form == Type::Array && res->type->len == 0 )
+    {
+        QSet<qint64> test; qint64 maxIndex = 0;
+        Expression* c = res->rhs;
+        while(c)
+        {
+            Q_ASSERT( c->kind == Expression::IndexValue);
+            const qint64 index = c->val.toLongLong();
+            if( test.contains(index) )
+                error(c->pos, "value at array index was already defined");
+            test.insert(index);
+            if( index > maxIndex )
+                maxIndex = index;
+            c = c->next;
+        }
+        if( test.isEmpty() )
+        {
+            error(res->pos, "cannot determine length of array");
+            return 0;
+        }
+        Type* a = new Type();
+        a->form = Type::Array;
+        a->len = maxIndex + 1;
+        a->base = res->type->base;
+        addHelper(a);
+        res->type = a;
+    }else if( res->type->form == Type::Pointer )
+    {
+        if( res->rhs == 0 || res->rhs->next != 0 )
+            error(res->pos, "pointer constructor requires exactly one component");
+    }
     return res;
 }
 
-void Parser2::component(Type* constrType, Value& v, quint8& state,  DeclList& dl) {
-    QByteArray id;
-    const Token tok = la;
-    if( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Eq )
-    {
+Expression* Parser2::component(Type* constrType, int& index) {
+    Expression* res;
+    if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Colon )  ) {
         expect(Tok_ident, false, "component");
-        id = cur.d_val;
-        expect(Tok_Eq, false, "component");
         if( constrType->form != Type::Record )
-            error(tok,QString("constructor for this type expects anonymous components"));
-    }
-
-    if( state == Anonymous && !id.isEmpty() || state == Named && id.isEmpty() )
-        error(tok,QString("named and anonymous components cannot be mixed"));
-
-    if( state == FirstComponent )
-    {
-        if( !id.isEmpty() )
-            state = Named;
-        else
-            state = Anonymous;
-    }
-
-    if( constrType->form == Type::Record )
-    {
-        if( !id.isEmpty() )
         {
-            Declaration* d = constrType->findField(id);
-            if( d == 0 )
-                error(tok,QString("the constructor type has no field '%1'").arg(id.constData()));
-            if( dl.contains(d) )
-                error(tok,QString("duplicate initializer for '%1'").arg(id.constData()));
-        }else if(dl.isEmpty())
-        {
-            dl.append(constrType->subs);
-        }else
-        {
-            if( dl.last()->next == 0 )
-                error(tok,QString("more components than fields"));
-            else
-                dl.append(dl.last()->next);
+            error(cur, "named components only supported in record constructors");
+            return 0;
         }
-        if( dl.back()->mode == Declaration::Variant && state != Named )
-            error(tok,QString("records with variant parts can only be constructed with named components"));
-        componentTypeStack.push_back(dl.back()->type);
-        int variantCount = 0;
-        for( int i = 0; i < dl.size(); i++ )
-            if( dl[i]->mode == Declaration::Variant )
-                variantCount++;
-        if(variantCount > 1)
-            error(tok,QString("records with variant parts can only initialize one variant (found %1)").arg(variantCount));
-    }else if( constrType->form == Type::Array )
-        componentTypeStack.push_back(constrType->base);
-    else if( constrType->form == Type::Pointer )
-        componentTypeStack.push_back(constrType);
-    else
-        componentTypeStack.push_back(mdl->getType(BasicType::Undefined));
-
-    if( ( constrType->form == Type::Array || constrType->form == Type::Pointer ) && state == Named )
-        error(tok,QString("only record constructors support named components"));
-
-    Expression* res = ConstExpression();
-    if( !ev->evaluate(res) )
-        error(tok, ev->getErr());
-    v = ev->pop();
-    if( res->type->form == BasicType::String )
-        v.val = QString::fromLatin1(v.val.toByteArray());
-
-    if( componentTypeStack.back()->form == Type::Pointer && !v.type->isUInt() )
-        error(tok,QString("pointer constructor expects one anonymous unsigned integer component"));
-    if( !assigCompat(componentTypeStack.back(), res) )
-        error(tok,QString("the component is not compatible with the given field or element type"));
-
-    componentTypeStack.pop_back();
+        Declaration* field = constrType->findField(cur.d_val);
+        if( field == 0 )
+        {
+            error(cur, "field not known in record");
+            return 0;
+        }
+        expect(Tok_Colon, false, "component");
+        const Token colon = cur;
+        Expression* rhs = expression(0);
+        if( rhs == 0 )
+            return 0;
+        res = Expression::create(Expression::NameValue, colon.toRowCol());
+        res->val = QVariant::fromValue(field);
+        res->rhs = rhs;
+        if( !assigCompat(field->type, rhs ) )
+            error(rhs->pos, "incompatible value");
+        index = constrType->subs.indexOf(field);
+    } else if( la.d_type == Tok_Lbrack ) {
+        expect(Tok_Lbrack, false, "component");
+        if( constrType->form != Type::Array )
+        {
+            error(cur, "indexed components only supported in array constructors");
+            return 0;
+        }
+        Expression* lhs = ConstExpression(0);
+        if( lhs == 0 )
+            return 0;
+        if( !lhs->type->isInteger() || lhs->val.toLongLong() < 0 )
+            error(lhs->pos, "expecting positive integer type index");
+        expect(Tok_Rbrack, false, "component");
+        expect(Tok_Colon, false, "component");
+        const Token colon = cur;
+        Expression* rhs = expression(0);
+        if( rhs == 0 )
+            return 0;
+        res = Expression::create(Expression::IndexValue, colon.toRowCol());
+        if( !ev->evaluate(lhs) )
+            error(lhs->pos, ev->getErr());
+        res->val = ev->pop().val;
+        index = res->val.toLongLong();
+        res->rhs = rhs;
+        if( !assigCompat(constrType->base, rhs ) )
+            error(rhs->pos, "incompatible value");
+    } else if( FIRST_expression(la.d_type) ) {
+        if( constrType->form == Type::Pointer )
+        {
+            res = ConstExpression(0);
+            if( res )
+            {
+                if( !ev->evaluate(res) )
+                    error(res->pos, ev->getErr() );
+                else
+                    res->val = ev->pop().val;
+            }
+        }else
+            res = expression(0);
+        if( res == 0 )
+            return 0;
+        if( la.d_type == Tok_2Dot ) {
+            expect(Tok_2Dot, false, "component");
+            const Token t = cur;
+            if( constrType->form != BasicType::SET )
+            {
+                error(cur, "range components only supported in set constructors");
+                return 0;
+            }
+            Expression* rhs = expression(0);
+            if( rhs == 0 )
+                return 0;
+            if( !res->type->isInteger() || !rhs->type->isInteger() )
+            {
+                error(cur, "range expects integer boundaries");
+                return 0;
+            }
+            Expression* range = Expression::create(Expression::Range, t.toRowCol());
+            range->lhs = res;
+            range->rhs = rhs;
+            res = range;
+        }else if( constrType->form == Type::Record)
+        {
+            if( index < 0 || index >= constrType->subs.size() )
+            {
+                error(res->pos, "component cannot be associated with record field");
+                return 0;
+            }
+            Expression* res2 = Expression::create(Expression::NameValue, res->pos);
+            res2->val = QVariant::fromValue(constrType->subs[index]);
+            res2->rhs = res;
+            if( !assigCompat(constrType->subs[index]->type, res ) )
+                error(res->pos, "incompatible value");
+            res = res2;
+        }else if( constrType->form == Type::Array)
+        {
+            if( constrType->len && index >= constrType->len || index < 0 )
+                error(res->pos, "component is out of range of the array");
+            Expression* res2 = Expression::create(Expression::IndexValue, res->pos);
+            res2->val = index;
+            res2->rhs = res;
+            if( !assigCompat(constrType->base, res ) )
+                error(res->pos, "incompatible value");
+            res = res2;
+        }else if( constrType->form == Type::Pointer)
+        {
+            if( !res->type->isUInt() )
+                error(res->pos, "expecting unsigned integer to initialize pointer");
+        }
+        index++;
+    } else
+        invalid("component");
+    // TODO: for arrays change the array type to correct len
+    return res;
 }
 
-Expression* Parser2::factor(bool lvalue) {
+Expression* Parser2::factor(Type* hint, bool lvalue) {
     Expression* res = 0;
 	if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Lbrace )  ) {
-        res = constructor();
+        res = constructor(hint);
 	} else if( FIRST_literal(la.d_type) ) {
         res = literal();
 	} else if( FIRST_variableOrFunctionCall(la.d_type) ) {
         res = variableOrFunctionCall(lvalue);
 	} else if( la.d_type == Tok_Lpar ) {
 		expect(Tok_Lpar, false, "factor");
-        res = expression();
+        res = expression(0);
 		expect(Tok_Rpar, false, "factor");
     } else if( la.d_type == Tok_Tilde || la.d_type == Tok_NOT ) {
         if( la.d_type == Tok_NOT )
             expect(Tok_NOT, false, "factor");
         else
             expect(Tok_Tilde, false, "factor");
-        Expression* tmp = factor();
+        Expression* tmp = factor(0);
         if( tmp == 0 )
             return 0;
 
@@ -2555,34 +2592,14 @@ Expression* Parser2::variableOrFunctionCall(bool lvalue) {
     return designator(lvalue);
 }
 
-Expression* Parser2::set() {
-    Expression* res = Expression::create(Expression::Set, la.toRowCol());
-
-    expect(Tok_Lbrace, false, "set");
-    ExpList e;
-    // TODO error checking
-	if( FIRST_element(la.d_type) ) {
-        e << element();
-        while( la.d_type == Tok_Comma || FIRST_element(la.d_type) ) {
-            if( la.d_type == Tok_Comma )
-                expect(Tok_Comma, false, "set");
-            e << element();
-        }
-	}
-	expect(Tok_Rbrace, false, "set");
-    res->val = QVariant::fromValue(e);
-    res->type = mdl->getType(BasicType::SET);
-    return res;
-}
-
 Expression* Parser2::element() {
-    Expression* res = expression();
+    Expression* res = expression(0);
 	if( la.d_type == Tok_2Dot ) {
 		expect(Tok_2Dot, false, "element");
         Expression* tmp = Expression::create(Expression::Range, cur.toRowCol());
         tmp->lhs = res;
         res = tmp;
-        res->rhs = expression();
+        res->rhs = expression(0);
 	}
     return res;
 }
@@ -2624,7 +2641,7 @@ void Parser2::assignmentOrProcedureCall() {
 		expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
         if( !ev->evaluate(lhs) )
             error(t, ev->getErr());
-        Expression* rhs = expression();
+        Expression* rhs = expression(lhs->type);
         if( rhs && !ev->evaluate(rhs) )
             error(tok, ev->getErr());         // value is pushed in ev->assign
         // TODO: avoid assigning to structured return values of functions on left side
@@ -2692,7 +2709,7 @@ void Parser2::IfStatement() {
 	expect(Tok_IF, true, "IfStatement");
     out->if_();
     Token t = la;
-    if( !ev->evaluate(expression(), true) )
+    if( !ev->evaluate(expression(0), true) )
         error(t, ev->getErr());
     Expression::deleteAllExpressions();
     ev->pop();
@@ -2706,7 +2723,7 @@ void Parser2::IfStatement() {
         expect(Tok_ELSIF, true, "ElsifStatement");
         out->if_();
         Token t = la;
-        if( !ev->evaluate(expression(), true) )
+        if( !ev->evaluate(expression(0), true) )
             error(t, ev->getErr());
         Expression::deleteAllExpressions();
         ev->pop();
@@ -2731,7 +2748,7 @@ void Parser2::CaseStatement() {
 	expect(Tok_CASE, true, "CaseStatement");
     out->switch_();
     Token tok = la;
-    if( !ev->evaluate(expression(), true) )
+    if( !ev->evaluate(expression(0), true) )
         error(tok, ev->getErr());
     Type* t = ev->top().type;
     Expression::deleteAllExpressions();
@@ -2757,19 +2774,17 @@ void Parser2::CaseStatement() {
 }
 
 void Parser2::Case(Type* t, CaseLabels& ll) {
-	if( FIRST_CaseLabelList(la.d_type) ) {
-        CaseLabels l;
-        Token tok = la;
-        CaseLabelList(t,l);
-        if( ll.contains(l) )
-            error(tok,"label list overlaps with other cases");
-        else
-            ll += l;
-		expect(Tok_Colon, false, "Case");
-        out->case_(l.toList());
-        out->then_();
-		StatementSequence();
-	}
+    CaseLabels l;
+    Token tok = la;
+    CaseLabelList(t,l);
+    if( ll.contains(l) )
+        error(tok,"label list overlaps with other cases");
+    else
+        ll += l;
+    expect(Tok_Colon, false, "Case");
+    out->case_(l.toList());
+    out->then_();
+    StatementSequence();
 }
 
 void Parser2::CaseLabelList(Type* t, CaseLabels& l) {
@@ -2814,7 +2829,7 @@ void Parser2::LabelRange(Type* t, CaseLabels& l) {
 
 Value Parser2::label(Type* t) {
     Token tok = la;
-    Expression* e = ConstExpression();
+    Expression* e = ConstExpression(0);
     if( !ev->evaluate(e) )
         error(tok, ev->getErr());
     Value res = ev->pop();
@@ -2828,7 +2843,7 @@ void Parser2::WhileStatement() {
 	expect(Tok_WHILE, true, "WhileStatement");
     out->while_();
     const Token t = la;
-    if( !ev->evaluate(expression(), true) )
+    if( !ev->evaluate(expression(0), true) )
         error(t, ev->getErr());
     if( ev->top().type->form != BasicType::BOOLEAN )
         error(t,"expecting boolean expression");
@@ -2848,7 +2863,7 @@ void Parser2::RepeatStatement() {
 	expect(Tok_UNTIL, true, "RepeatStatement");
     out->until_();
     const Token t = la;
-    if( !ev->evaluate(expression(), true) )
+    if( !ev->evaluate(expression(0), true) )
         error(t, ev->getErr());
     if( ev->top().type->form != BasicType::BOOLEAN )
         error(t,"expecting boolean expression");
@@ -2874,7 +2889,7 @@ void Parser2::ForStatement() {
         Expression* lhs = toExpr(idxvar, tok.toRowCol());
         if( !ev->evaluate(lhs) )
             error(tok, ev->getErr());
-        if( !ev->evaluate(expression()) )
+        if( !ev->evaluate(expression(0)) )
             error(tok, ev->getErr());         // rhs
         ev->assign();
         Expression::deleteAllExpressions();
@@ -2888,7 +2903,7 @@ void Parser2::ForStatement() {
         Expression* lhs = toExpr(to, tok.toRowCol());
         if( lhs && !ev->evaluate(lhs) )
             error(tok, ev->getErr());
-        Expression* rhs = expression();
+        Expression* rhs = expression(0);
         if( rhs && !ev->evaluate(rhs) )
             error(tok, ev->getErr());         // rhs
         ev->assign();
@@ -2899,7 +2914,7 @@ void Parser2::ForStatement() {
 	if( la.d_type == Tok_BY ) {
 		expect(Tok_BY, true, "ForStatement");
         tok = la;
-        Expression* e = ConstExpression();
+        Expression* e = ConstExpression(0);
         if( !ev->evaluate(e) )
             error(tok, ev->getErr());
         Value v = ev->pop();
@@ -3184,7 +3199,7 @@ void Parser2::ReturnStatement() {
         if( mdl->getTopScope()->type == 0 || mdl->getTopScope()->type->form == BasicType::NoType )
                 error(cur,"this return statement doesn't expect an expression");
         const Token tok = la;
-        Expression* e = expression();
+        Expression* e = expression(mdl->getTopScope()->type);
         if( e && !ev->evaluate(e) )
             error(tok, ev->getErr()); // value is pushed on stack by prepareRhs
         if( !assigCompat( mdl->getTopScope()->type, e ) )
@@ -3481,37 +3496,37 @@ void Parser2::import() {
     bool doublette;
     Declaration* importDecl = addDecl(localName, 0, Declaration::Import,&doublette);
 
-    Import i;
+    Import import;
     foreach( const Token& t, path)
-        i.path << t.d_val;
+        import.path << t.d_val;
 
 	if( FIRST_MetaActuals(la.d_type) ) {
         // inlined MetaActuals();
         expect(Tok_Lpar, false, "MetaActuals");
-        if( !ev->evaluate(ConstExpression()) )
+        if( !ev->evaluate(ConstExpression(0)) )
             error(cur, ev->getErr());
         Value v = ev->pop();
-        i.metaActuals << v;
+        import.metaActuals << v;
         Expression::deleteAllExpressions();
         while( la.d_type == Tok_Comma || FIRST_ConstExpression(la.d_type) ) {
             if( la.d_type == Tok_Comma ) {
                 expect(Tok_Comma, false, "MetaActuals");
             }
-            if( !ev->evaluate(ConstExpression()) )
+            if( !ev->evaluate(ConstExpression(0)) )
                 error(cur, ev->getErr());
             v = ev->pop();
-            i.metaActuals << v;
+            import.metaActuals << v;
             Expression::deleteAllExpressions();
         }
         expect(Tok_Rpar, false, "MetaActuals");
     }
 
     if( !doublette )
-        importDecl->data = QVariant::fromValue(i);
+        importDecl->data = QVariant::fromValue(import);
 
     if( imp )
     {
-        Declaration* mod = imp->loadModule(i);
+        Declaration* mod = imp->loadModule(import);
         if( mod )
         {
             // loadModule returns the module decl; we just need the list of module elements:
@@ -3520,7 +3535,7 @@ void Parser2::import() {
             out->addImport(md.fullName);
         }
     }else
-        out->addImport(Token::getSymbol(i.path.join('/')));
+        out->addImport(Token::getSymbol(import.path.join('/')));
 }
 
 bool Parser2::isUnique( const MetaParamList& l, const Declaration* m)
@@ -3538,8 +3553,8 @@ MetaParamList Parser2::MetaParams() {
     MetaParamList res;
     bool isType = true;
     res << MetaSection(isType);
-    while( la.d_type == Tok_Comma || FIRST_MetaSection(la.d_type) ) {
-        if( la.d_type == Tok_Comma ) {
+    while( la.d_type == Tok_Semi || FIRST_MetaSection(la.d_type) ) {
+        if( la.d_type == Tok_Semi ) {
             expect(Tok_Comma, false, "MetaParams");
 		}
         res << MetaSection(isType);
@@ -3548,7 +3563,7 @@ MetaParamList Parser2::MetaParams() {
     return res;
 }
 
-Declaration* Parser2::MetaSection(bool& isType) {
+MetaParamList Parser2::MetaSection(bool& isType) {
     if( la.d_type == Tok_CONST )
     {
         expect(Tok_CONST, true, "MetaSection");
@@ -3559,14 +3574,44 @@ Declaration* Parser2::MetaSection(bool& isType) {
         isType = true;
     }
 
+    MetaParamList res;
+
     expect(Tok_ident, false, "MetaSection");
 
     Declaration* decl = addDecl(cur, 0, isType ? Declaration::TypeDecl : Declaration::ConstDecl);
     decl->meta = true;
-    decl->type = new Type();
-    decl->type->form = Type::Generic;
-    decl->ownstype = true;
+    res << decl;
 
-    return decl;
+    while( ( ( peek(1).d_type == Tok_Comma && peek(2).d_type == Tok_ident ) || peek(1).d_type == Tok_ident )  ) {
+        if( la.d_type == Tok_Comma ) {
+            expect(Tok_Comma, false, "MetaSection");
+        }
+        expect(Tok_ident, false, "MetaSection");
+
+        Declaration* decl = addDecl(cur, 0, isType ? Declaration::TypeDecl : Declaration::ConstDecl);
+        decl->meta = true;
+        res << decl;
+    }
+    Type* t = 0;
+    if( la.d_type == Tok_Colon ) {
+        expect(Tok_Colon, false, "MetaSection");
+        t = NamedType();
+    }
+
+    for( int i = 0; i < res.size(); i++ )
+    {
+        if( t )
+            res[i]->type = t;
+        else
+        {
+            // don't share the type between the section items because it's not a variable
+            // but a type declaration
+            res[i]->type = new Type();
+            res[i]->type->form = Type::Generic;
+            res[i]->ownstype = true;
+        }
+    }
+
+    return res;
 }
 

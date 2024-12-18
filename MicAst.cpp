@@ -120,7 +120,6 @@ void AstModel::openScope(Declaration* scope)
         scope->type = 0;
         scope->next = 0;
     }
-    scope->scope = true;
     scopes.push_back(scope);
 }
 
@@ -529,6 +528,8 @@ bool Expression::isConst() const
         return false;
     if( rhs && !rhs->isConst() )
         return false;
+    if( next && !next->isConst() ) // recursively iterates over all next
+        return false;
     return true;
 }
 
@@ -574,6 +575,25 @@ void Expression::setByVal()
         cur = cur->lhs;
     if( cur )
         cur->byVal = true;
+}
+
+void Expression::appendRhs(Expression* e)
+{
+    if( rhs == 0 )
+        rhs = e;
+    else
+        append(rhs,e);
+}
+
+void Expression::append(Expression* list, Expression* elem)
+{
+    while( list && list->next )
+        list = list->next;
+    if( list )
+    {
+        Q_ASSERT(list->next == 0);
+        list->next = elem;
+    }
 }
 
 Expression*Expression::createFromToken(quint16 tt, const RowCol& rc)
