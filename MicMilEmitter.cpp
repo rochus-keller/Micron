@@ -418,6 +418,13 @@ void MilEmitter::if_()
     delta(0);
 }
 
+void MilEmitter::iif_()
+{
+    Q_ASSERT( !d_proc.isEmpty() );
+    d_proc.back().body.append(MilOperation(IL_iif) );
+    delta(0);
+}
+
 void MilEmitter::initobj(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
@@ -1300,6 +1307,7 @@ void IlAsmRenderer::render(const MilProcedure& m)
         case IL_invalid:
             break;
         case IL_if:
+        case IL_iif:
         case IL_loop:
         case IL_repeat:
         case IL_switch:

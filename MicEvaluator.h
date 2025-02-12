@@ -56,6 +56,8 @@ protected:
     bool unaryOp(quint8 op); // Tok_Tilde, Tok_NOT, Tok_Plus, Tok_Minus, Tok_At
     bool binaryOp(quint8 op); // push lhs first
     void assureTopOnMilStack(bool pop = false); // send current top const to mil stack
+    void shortCircuitAnd(Expression*);
+    void shortCircuitOr(Expression*);
 
     // designator:
     bool derefPointer(); // unary op

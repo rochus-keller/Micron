@@ -30,6 +30,7 @@ namespace Mil {
 		void qualident(SynTree*);
 		void trident(SynTree*);
 		void identdef(SynTree*);
+		void ConstDeclaration(SynTree*);
 		void TypeDeclaration(SynTree*);
 		void type(SynTree*);
 		void NamedType(SynTree*);
@@ -50,10 +51,10 @@ namespace Mil {
 		void module(SynTree*);
 		void ImportList(SynTree*);
 		void import(SynTree*);
-		void ImportPath(SynTree*);
 		void DeclarationSequence(SynTree*);
 		void Expression(SynTree*);
 		void ExpInstr(SynTree*);
+		void CondOp(SynTree*);
 		void StatementSequence(SynTree*);
 		void Statement(SynTree*);
 		void IfThenElse(SynTree*);
@@ -63,8 +64,8 @@ namespace Mil {
 		void WhileDo(SynTree*);
 		void MetaActuals(SynTree*);
 		void MetaParams(SynTree*);
-		void MetaSection(SynTree*);
 		void ConstExpression(SynTree*);
+		void ConstExpression2(SynTree*);
 		void constructor(SynTree*);
 		void component_list(SynTree*);
 		void component(SynTree*);

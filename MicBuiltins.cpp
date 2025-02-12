@@ -776,6 +776,10 @@ void Builtins::NEW(int nArgs)
     if( nArgs == 2 )
         len = ev->stack.takeLast();
     Value what = ev->stack.takeLast();
+
+    if( what.type == 0 || what.type->base == 0 )
+        return; // already reported
+
     if( what.type->form != Type::Pointer &&
             !(what.type->base->form == Type::Record || what.type->base->form == Type::Array) )
     {

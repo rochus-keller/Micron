@@ -210,6 +210,7 @@ namespace Mic
         void goto_(const QByteArray& label);
         void ifgoto_(const QByteArray& label);
         void if_();
+        void iif_();
         void initobj(const MilQuali& typeRef);
         void label_(const QByteArray& name);
         void ldarg_(quint16 arg);

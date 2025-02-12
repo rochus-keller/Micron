@@ -28,7 +28,7 @@ const char* s_opName[] =
     "ceq", "cgt", "cgt_un", "clt", "clt_un",
     "conv_i1", "conv_i2", "conv_i4", "conv_i8", "conv_r4", "conv_r8",
     "conv_u1", "conv_u2", "conv_u4", "conv_u8", "conv_ip",
-    "div", "div_un", "dup", "initobj", "ldarg", "ldarg_s",
+    "div", "div_un", "dup", "iif", "initobj", "ldarg", "ldarg_s",
     "ldarg_0", "ldarg_1", "ldarg_2", "ldarg_3",
     "ldarga", "ldarga_s",
     "ldc_i4", "ldc_i8", "ldc_i4_s", "ldc_r4", "ldc_r8",

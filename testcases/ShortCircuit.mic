@@ -1,0 +1,23 @@
+module ShortCircuit
+
+procedure a():boolean
+begin
+	println("running a")
+	return true
+end a
+
+procedure b(): boolean
+begin
+	println("running b")
+	return true;
+end b
+
+begin
+
+	if a() and b() then
+		println("hello")
+	else
+		println("nop")
+	end
+
+end ShortCircuit

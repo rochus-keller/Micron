@@ -633,6 +633,70 @@ void Evaluator::assureTopOnMilStack(bool pop)
         this->pop();
 }
 
+void Evaluator::shortCircuitAnd(Expression* e)
+{
+#if 0
+    recursiveRun(e->lhs);
+    if( e->lhs->isConst() && !e->rhs->isConst() )
+        assureTopOnMilStack();
+    recursiveRun(e->rhs);
+    if( !e->lhs->isConst() && e->rhs->isConst() )
+        assureTopOnMilStack();
+    binaryOp(e->kind);
+#else
+    if( e->lhs->isConst() && e->rhs->isConst() )
+    {
+        recursiveRun(e->lhs);
+        recursiveRun(e->rhs);
+        binaryOp(e->kind);
+    }else
+    {
+        // p and q : if p then q, else FALSE
+        out->iif_();
+        recursiveRun(e->lhs);
+        assureTopOnMilStack(true);
+        out->then_();
+        recursiveRun(e->rhs);
+        assureTopOnMilStack(); // leave the bool result on the stack
+        out->else_();
+        out->ldc_i4(0); // push FALSE
+        out->end_();
+    }
+#endif
+}
+
+void Evaluator::shortCircuitOr(Expression* e)
+{
+#if 0
+    recursiveRun(e->lhs);
+    if( e->lhs->isConst() && !e->rhs->isConst() )
+        assureTopOnMilStack();
+    recursiveRun(e->rhs);
+    if( !e->lhs->isConst() && e->rhs->isConst() )
+        assureTopOnMilStack();
+    binaryOp(e->kind);
+#else
+    if( e->lhs->isConst() && e->rhs->isConst() )
+    {
+        recursiveRun(e->lhs);
+        recursiveRun(e->rhs);
+        binaryOp(e->kind);
+    }else
+    {
+        // p or q : if p then TRUE, else q
+        out->iif_();
+        recursiveRun(e->lhs);
+        assureTopOnMilStack(true);
+        out->then_();
+        out->ldc_i4(1); // push TRUE
+        out->else_();
+        recursiveRun(e->rhs);
+        assureTopOnMilStack(); // leave the bool result on the stack
+        out->end_();
+    }
+#endif
+}
+
 bool Evaluator::pushMilStack(const Value& v)
 {
     err.clear();
@@ -998,6 +1062,9 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
     Value res;
     res.mode = Value::Val;
     res.type = mdl->getType(BasicType::BOOLEAN);
+
+    if( lhs.type == 0 || rhs.type == 0 )
+        return res;
 
     if( lhs.type->isNumber() && rhs.type->isNumber() )
     {
@@ -1424,13 +1491,11 @@ void Evaluator::recursiveRun(Expression* e)
     case Expression::Geq:
     case Expression::In: // Relation
     case Expression::Add:
-    case Expression::Sub:
-    case Expression::Or: // AddOp
+    case Expression::Sub: // AddOp
     case Expression::Mul:
     case Expression::Fdiv:
     case Expression::Div:
-    case Expression::Mod:
-    case Expression::And: // MulOp
+    case Expression::Mod: // MulOp
         recursiveRun(e->lhs);
         if( e->lhs->isConst() && !e->rhs->isConst() )
             assureTopOnMilStack();
@@ -1438,6 +1503,12 @@ void Evaluator::recursiveRun(Expression* e)
         if( !e->lhs->isConst() && e->rhs->isConst() )
             assureTopOnMilStack();
         binaryOp(e->kind);
+        break;
+    case Expression::Or:
+        shortCircuitOr(e);
+        break;
+    case Expression::And:
+        shortCircuitAnd(e);
         break;
     case Expression::Select:
         recursiveRun(e->lhs);

@@ -22,6 +22,7 @@
 #include "MicToken.h"
 #include <QElapsedTimer>
 #include <QVector>
+#include <QFile>
 #include <QtDebug>
 using namespace Mic;
 
@@ -656,7 +657,7 @@ public:
         return res;
     }
 
-    void processBlock(ModuleData* module, MilProcedure* proc, quint32& pc, Labels& labels, LoopStack& loopStack)
+    void prepareBytecode(ModuleData* module, MilProcedure* proc, quint32& pc, Labels& labels, LoopStack& loopStack)
     {
         QList<MilOperation>& ops = proc->body;
         const int start = pc;
@@ -667,12 +668,12 @@ public:
                 // end -> while+1, then -> end+1
                 pc++;
                 while( pc < ops.size() && ops[pc].op != IL_do )
-                    processBlock(module, proc,pc, labels, loopStack);
+                    prepareBytecode(module, proc,pc, labels, loopStack);
                 assureValid(module,proc,start,pc,IL_do);
                 const int then = pc;
                 pc++;
                 while( pc < ops.size() && ops[pc].op != IL_end )
-                    processBlock(module, proc, pc, labels, loopStack); // look for nested statements
+                    prepareBytecode(module, proc, pc, labels, loopStack); // look for nested statements
                 assureValid(module,proc,start,pc,IL_end);
                 ops[pc].index = start+1; // end jumps to while+1
                 pc++;
@@ -685,7 +686,7 @@ public:
                 pc++;
                 while( pc < ops.size() && ops[pc].op != IL_case &&
                        ops[pc].op != IL_else && ops[pc].op != IL_end )
-                    processBlock(module, proc,pc, labels, loopStack);
+                    prepareBytecode(module, proc,pc, labels, loopStack);
                 assureValid(module,proc,start,pc,IL_case, IL_else, IL_end);
                 int prev = start;
                 QList<quint32> thenList;
@@ -699,7 +700,7 @@ public:
                     pc++;
                     while( pc < ops.size() && ops[pc].op != IL_case &&
                            ops[pc].op != IL_else && ops[pc].op != IL_end )
-                        processBlock(module, proc, pc, labels, loopStack); // look for nested statements
+                        prepareBytecode(module, proc, pc, labels, loopStack); // look for nested statements
                     assureValid(module,proc,start,pc,IL_case, IL_else, IL_end);
                 }
                 if( ops[pc].op == IL_else )
@@ -709,7 +710,7 @@ public:
                     thenList.append(pc);
                     pc++;
                     while( pc < ops.size() && ops[pc].op != IL_end )
-                        processBlock(module, proc, pc, labels, loopStack);
+                        prepareBytecode(module, proc, pc, labels, loopStack);
                 }
                 assureValid(module,proc,start,pc,IL_end);
                 foreach( quint32 off, thenList )
@@ -722,12 +723,12 @@ public:
                 // if -> then -> else -> end
                 pc++;
                 while( pc < ops.size() && ops[pc].op != IL_then )
-                    processBlock(module, proc,pc, labels, loopStack);
+                    prepareBytecode(module, proc,pc, labels, loopStack);
                 assureValid(module,proc,start,pc, IL_then);
                 int then = pc;
                 pc++;
                 while( pc < ops.size() && ops[pc].op != IL_else && ops[pc].op != IL_end)
-                    processBlock(module, proc, pc, labels, loopStack); // then statements
+                    prepareBytecode(module, proc, pc, labels, loopStack); // then statements
                 assureValid(module,proc,start,pc, IL_else, IL_end);
                 if( ops[pc].op == IL_else )
                 {
@@ -735,10 +736,32 @@ public:
                     const int else_ = pc;
                     pc++;
                     while( pc < ops.size() && ops[pc].op != IL_end )
-                        processBlock(module, proc, pc, labels, loopStack); // else statements
+                        prepareBytecode(module, proc, pc, labels, loopStack); // else statements
                     ops[else_].index = pc; // else -> end
                 }else
                     ops[then].index = pc; // then -> end
+                assureValid(module,proc,start,pc,IL_end);
+                pc++;
+            }
+            break;
+        case IL_iif:
+            {
+                // iif -> then -> else -> end
+                pc++;
+                while( pc < ops.size() && ops[pc].op != IL_then )
+                    prepareBytecode(module, proc,pc, labels, loopStack);
+                assureValid(module,proc,start,pc, IL_then);
+                int then = pc;
+                pc++;
+                while( pc < ops.size() && ops[pc].op != IL_else)
+                    prepareBytecode(module, proc, pc, labels, loopStack); // then statements
+                assureValid(module,proc,start,pc, IL_else);
+                ops[then].index = pc+1; // then -> else+1
+                const int else_ = pc;
+                pc++;
+                while( pc < ops.size() && ops[pc].op != IL_end )
+                    prepareBytecode(module, proc, pc, labels, loopStack); // else statements
+                ops[else_].index = pc; // else -> end
                 assureValid(module,proc,start,pc,IL_end);
                 pc++;
             }
@@ -748,11 +771,11 @@ public:
                 // end -> repeat+1
                 pc++;
                 while( pc < ops.size() && ops[pc].op != IL_until )
-                    processBlock(module, proc, pc, labels, loopStack);
+                    prepareBytecode(module, proc, pc, labels, loopStack);
                 assureValid(module,proc,start,pc, IL_until);
                 pc++;
                 while( pc < ops.size() && ops[pc].op != IL_end )
-                    processBlock(module, proc,pc, labels, loopStack);
+                    prepareBytecode(module, proc,pc, labels, loopStack);
                 assureValid(module,proc,start,pc, IL_end);
                 ops[pc].index = start+1;
                 pc++;
@@ -764,7 +787,7 @@ public:
                 loopStack.push_back(QList<int>());
                 pc++;
                 while( pc < ops.size() && ops[pc].op != IL_end )
-                    processBlock(module, proc, pc, labels, loopStack);
+                    prepareBytecode(module, proc, pc, labels, loopStack);
                 assureValid(module,proc,start,pc, IL_end);
                 ops[pc].index = start+1;
                 pc++;
@@ -826,14 +849,14 @@ public:
         }
     }
 
-    void calcOffsets(ModuleData* module, MilProcedure* proc, quint32& pc)
+    void prepareBytecode(ModuleData* module, MilProcedure* proc, quint32& pc)
     {
         Labels labels; // name -> label pos, goto poss
         LoopStack loopStack;
+
         while( pc < proc->body.size() )
-        {
-            processBlock(module, proc, pc, labels, loopStack);
-        }
+            prepareBytecode(module, proc, pc, labels, loopStack);
+
         Labels::const_iterator i;
         for( i = labels.begin(); i != labels.end(); ++i )
         {
@@ -1271,7 +1294,16 @@ public:
         quint32 pc = 0;
         if( !proc->compiled )
         {
-            calcOffsets(module, proc, pc);
+            prepareBytecode(module, proc, pc);
+
+#if 0
+            QFile out;
+            out.open(stdout, QIODevice::WriteOnly);
+            Mic::IlAsmRenderer r(&out);
+            Mic::MilLoader::render(&r,module->module);
+            out.putChar('\n');
+#endif
+
             proc->compiled = true;
         }
 
@@ -1295,7 +1327,7 @@ public:
             &&L_IL_ceq, &&L_IL_cgt, &&L_IL_cgt_un, &&L_IL_clt, &&L_IL_clt_un,
             &&L_IL_conv_i1, &&L_IL_conv_i2, &&L_IL_conv_i4, &&L_IL_conv_i8, &&L_IL_conv_r4, &&L_IL_conv_r8,
             &&L_IL_conv_u1, &&L_IL_conv_u2, &&L_IL_conv_u4, &&L_IL_conv_u8, &&L_IL_conv_ip,
-            &&L_IL_div, &&L_IL_div_un, &&L_IL_dup, &&L_IL_initobj, &&L_IL_ldarg, &&L_IL_ldarg_s,
+            &&L_IL_div, &&L_IL_div_un, &&L_IL_dup, &&L_IL_iif, &&L_IL_initobj, &&L_IL_ldarg, &&L_IL_ldarg_s,
             &&L_IL_ldarg_0, &&L_IL_ldarg_1, &&L_IL_ldarg_2, &&L_IL_ldarg_3,
             &&L_IL_ldarga, &&L_IL_ldarga_s,
             &&L_IL_ldc_i4, &&L_IL_ldc_i8, &&L_IL_ldc_i4_s, &&L_IL_ldc_r4, &&L_IL_ldc_r8,
@@ -1381,7 +1413,7 @@ public:
                 }
                 pc++;
                 vmbreak;
-            vmcase(IL_and)
+            vmcase(IL_and) // TODO short-circuit evaluation
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -1947,7 +1979,7 @@ public:
                 }
                 pc++;
                 vmbreak;
-            vmcase(IL_or)
+            vmcase(IL_or) // TODO short-circuit evaluation
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
                 switch( lhs.t )
@@ -2098,10 +2130,14 @@ public:
                 curStatement.push_back(IL_if);
                 pc++;
                 vmbreak;
+            vmcase(IL_iif) // iif(1) then(2) else(2) end(5)
+                curStatement.push_back(IL_iif);
+                pc++;
+                vmbreak;
             vmcase(IL_then)
                 if( curStatement.isEmpty() )
                     execError(module, proc, pc, "operation not expected here");
-                if( curStatement.back() == IL_if )
+                if( curStatement.back() == IL_if || curStatement.back() == IL_iif )
                 {
                     lhs = stack.takeLast();
                     if( lhs.u == 0 )
@@ -2120,7 +2156,7 @@ public:
                         pc = op.index; // done, else points to end
                     else
                         pc++; // execute else
-                }else if( curStatement.back() == IL_if )
+                }else if( curStatement.back() == IL_if || curStatement.back() == IL_iif )
                     pc = op.index; // else points to end, only hit after then is executed
                 vmbreak;
             vmcase(IL_end)
@@ -2338,10 +2374,9 @@ public:
             vmcase(IL_nop)
                 pc++;
                 vmbreak;
-#if 0
             default:
+                qCritical() << s_opName[op.op] << "not implemented";
                 Q_ASSERT(false);
-#endif
             }
         }
     }

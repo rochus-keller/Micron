@@ -31,7 +31,7 @@ enum IL_op
     IL_ceq, IL_cgt, IL_cgt_un, IL_clt, IL_clt_un,
     IL_conv_i1, IL_conv_i2, IL_conv_i4, IL_conv_i8, IL_conv_r4, IL_conv_r8,
     IL_conv_u1, IL_conv_u2, IL_conv_u4, IL_conv_u8, IL_conv_ip,
-    IL_div, IL_div_un, IL_dup, IL_initobj, IL_ldarg, IL_ldarg_s,
+    IL_div, IL_div_un, IL_dup, IL_iif, IL_initobj, IL_ldarg, IL_ldarg_s,
     IL_ldarg_0, IL_ldarg_1, IL_ldarg_2, IL_ldarg_3,
     IL_ldarga, IL_ldarga_s,
     IL_ldc_i4, IL_ldc_i8, IL_ldc_i4_s, IL_ldc_r4, IL_ldc_r8,

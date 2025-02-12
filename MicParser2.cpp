@@ -1750,6 +1750,9 @@ void Parser2::checkUnaryOp(Expression* e)
 
 void Parser2::checkRelOp(Expression* e)
 {
+    if( e->lhs == 0 || e->lhs->type == 0 || e->rhs == 0 || e->rhs->type == 0 )
+        return; // already reported
+
     if( e->lhs->type->isNumber() && e->rhs->type->isNumber() )
     {
         castUintToInt(e->lhs, e->rhs, ev);
@@ -1819,6 +1822,9 @@ Expression* Parser2::designator(bool needsLvalue) {
 
     while( FIRST_selector(la.d_type) ) {
         // inlined selector
+
+        if( res->type == 0 )
+            break; // error already reported
 
         if( la.d_type == Tok_Dot ) {
             tok = la;
@@ -2645,9 +2651,9 @@ void Parser2::assignmentOrProcedureCall() {
         if( rhs && !ev->evaluate(rhs) )
             error(tok, ev->getErr());         // value is pushed in ev->assign
         // TODO: avoid assigning to structured return values of functions on left side
-        if( !assigCompat( lhs->type, rhs ) )
+        if( rhs && !assigCompat( lhs->type, rhs ) )
             error(tok, "right side is not assignment compatible with left side");
-        else if( !ev->assign() )
+        else if( rhs && !ev->assign() )
             error(tok, ev->getErr() );
         Expression::deleteAllExpressions();
     }else
@@ -2709,7 +2715,8 @@ void Parser2::IfStatement() {
 	expect(Tok_IF, true, "IfStatement");
     out->if_();
     Token t = la;
-    if( !ev->evaluate(expression(0), true) )
+    Expression* cond = expression(0);
+    if( cond != 0 && !ev->evaluate(cond, true) )
         error(t, ev->getErr());
     Expression::deleteAllExpressions();
     ev->pop();
@@ -2843,7 +2850,8 @@ void Parser2::WhileStatement() {
 	expect(Tok_WHILE, true, "WhileStatement");
     out->while_();
     const Token t = la;
-    if( !ev->evaluate(expression(0), true) )
+    Expression* res = expression(0);
+    if( res && !ev->evaluate(res, true) )
         error(t, ev->getErr());
     if( ev->top().type->form != BasicType::BOOLEAN )
         error(t,"expecting boolean expression");

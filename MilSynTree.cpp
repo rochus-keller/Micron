@@ -11,7 +11,10 @@ SynTree::SynTree(quint16 r, const Token& t ):d_tok(r){
 const char* SynTree::rToStr( quint16 r ) {
 	switch(r) {
 		case R_ArrayType: return "ArrayType";
+		case R_CondOp: return "CondOp";
+		case R_ConstDeclaration: return "ConstDeclaration";
 		case R_ConstExpression: return "ConstExpression";
+		case R_ConstExpression2: return "ConstExpression2";
 		case R_Expression: return "Expression";
 		case R_FPSection: return "FPSection";
 		case R_FieldList: return "FieldList";
@@ -19,12 +22,10 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_IdentList: return "IdentList";
 		case R_IfThenElse: return "IfThenElse";
 		case R_ImportList: return "ImportList";
-		case R_ImportPath: return "ImportPath";
 		case R_LocalDeclaration: return "LocalDeclaration";
 		case R_Loop: return "Loop";
 		case R_MetaActuals: return "MetaActuals";
 		case R_MetaParams: return "MetaParams";
-		case R_MetaSection: return "MetaSection";
 		case R_Mil: return "Mil";
 		case R_NamedType: return "NamedType";
 		case R_PointerType: return "PointerType";
