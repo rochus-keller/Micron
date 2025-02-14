@@ -27,7 +27,8 @@ bool Evaluator::evaluate(Expression* e, bool assureOnMilStack)
     err.clear();
     if( e == 0 )
         return false;
-    recursiveRun(e);
+    if( !recursiveRun(e) )
+        return false;
     if(assureOnMilStack)
         assureTopOnMilStack();
     return err.isEmpty();
@@ -832,7 +833,7 @@ void Evaluator::emitArithOp(quint8 op, bool unsig, bool i64)
 
 void Evaluator::adjustNumType(Type* me, Type* other)
 {
-    if( me->isNumber() && other->isNumber() )
+    if( me && me->isNumber() && other && other->isNumber() )
     {
         if( me->isInt() && other->isInt() &&
                 other->form == BasicType::INT64 && me->form < BasicType::INT64 )
@@ -900,6 +901,9 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
     Value res;
     res.mode = Value::Val;
     res.type = lhs.type;
+
+    if( lhs.type == 0 || rhs.type == 0 )
+        return Value();
 
     if( lhs.type->isNumber() && rhs.type->isNumber() )
     {
@@ -1470,17 +1474,18 @@ QByteArray Evaluator::dequote(const QByteArray& str)
     return res;
 }
 
-void Evaluator::recursiveRun(Expression* e)
+bool Evaluator::recursiveRun(Expression* e)
 {
     if( e == 0 )
-        return;
+        return false;
 
     switch( e->kind )
     {
     case Expression::Plus:
     case Expression::Minus:
     case Expression::Not: // Unary
-        recursiveRun(e->lhs);
+        if( !recursiveRun(e->lhs) )
+            return false;
         unaryOp(e->kind);
         break;
     case Expression::Eq:
@@ -1496,10 +1501,12 @@ void Evaluator::recursiveRun(Expression* e)
     case Expression::Fdiv:
     case Expression::Div:
     case Expression::Mod: // MulOp
-        recursiveRun(e->lhs);
+        if( !recursiveRun(e->lhs) )
+            return false;
         if( e->lhs->isConst() && !e->rhs->isConst() )
             assureTopOnMilStack();
-        recursiveRun(e->rhs);
+        if( !recursiveRun(e->rhs) )
+            return false;
         if( !e->lhs->isConst() && e->rhs->isConst() )
             assureTopOnMilStack();
         binaryOp(e->kind);
@@ -1511,29 +1518,36 @@ void Evaluator::recursiveRun(Expression* e)
         shortCircuitAnd(e);
         break;
     case Expression::Select:
-        recursiveRun(e->lhs);
+        if( !recursiveRun(e->lhs) )
+            return false;
         desigField(e->val.value<Declaration*>(), e->byVal);
         break;
     case Expression::Index:
-        recursiveRun(e->lhs);
-        recursiveRun(e->rhs);
+        if( !recursiveRun(e->lhs) )
+            return false;
+        if( !recursiveRun(e->rhs) )
+            return false;
         desigIndex(e->byVal);
         break;
     case Expression::Cast:
-        recursiveRun(e->lhs);
+        if( !recursiveRun(e->lhs) )
+            return false;
         castPtr(e->type);
         break;
     case Expression::AutoCast:
-        recursiveRun(e->lhs);
+        if( !recursiveRun(e->lhs) )
+            return false;
         castNum(e->type);
         break;
     case Expression::Deref:
-        recursiveRun(e->lhs);
+        if( !recursiveRun(e->lhs) )
+            return false;
         derefPointer();
         // TODO: derefValue?
         break;
     case Expression::Addr:
-        recursiveRun(e->lhs);
+        if( !recursiveRun(e->lhs) )
+            return false;
         stack.back().type = e->type; // NOP otherwise
         break;
     case Expression::Literal:
@@ -1575,13 +1589,15 @@ void Evaluator::recursiveRun(Expression* e)
             const DeclList formals = e->lhs->getFormals();
             for(int i = 0; i < args.size(); i++ )
             {
-                recursiveRun(args[i]);
+                if( !recursiveRun(args[i]) )
+                    return false;
                 if( i < formals.size() )
                     prepareRhs(formals[i]->type);
                 else
                     assureTopOnMilStack(); // effects builtin args and variable args
             }
-            recursiveRun(e->lhs);
+            if( !recursiveRun(e->lhs) )
+                return false;
             call(args.size());
         }
         break;
@@ -1598,6 +1614,7 @@ void Evaluator::recursiveRun(Expression* e)
         Q_ASSERT(false);
         break;
     }
+    return err.isEmpty();
 }
 
 void Evaluator::constructor(Expression* e)

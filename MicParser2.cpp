@@ -738,8 +738,13 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs) const
 bool Parser2::assigCompat(Type* lhs, Declaration* rhs) const
 {
     // Tv is a procedure type and e is the name of a procedure whose formal parameters match those of Tv.
-    if( lhs->form == Type::Proc && rhs->mode == Declaration::Procedure )
-        return matchFormals(lhs->subs, rhs->getParams()) && matchResultType(lhs->base,rhs->type);
+    if( rhs->mode == Declaration::Procedure )
+    {
+        if( lhs->form == Type::Proc )
+            return matchFormals(lhs->subs, rhs->getParams()) && matchResultType(lhs->base,rhs->type);
+        else
+            return false;
+    }
 
     // Tv is an enumeration type and e is a valid element of the enumeration;
     if( lhs->form == Type::ConstEnum )
@@ -791,6 +796,8 @@ bool Parser2::paramCompat(Declaration* lhs, const Expression* rhs) const
 
     if( rhs->kind == Expression::TypeDecl )
         return false;
+    if( rhs->kind == Expression::ProcDecl )
+        return assigCompat(lhs->type,rhs);
 
     // Tf and Ta are equal types, or Ta is assignment compatible with Tf
     return equalTypes(lhs->type,rhs->type) || assigCompat(lhs->type,rhs);
@@ -816,7 +823,7 @@ bool Parser2::matchResultType(Type* lhs, Type* rhs) const
 {
     if( lhs == 0 || rhs == 0 ) // TODO: is this a valid state?
         return false;
-    return sameType(lhs,rhs) || (lhs->form == BasicType::NoType && rhs->form == BasicType::NoType);
+    return equalTypes(lhs,rhs) || (lhs->form == BasicType::NoType && rhs->form == BasicType::NoType);
 }
 
 bool Parser2::sameType(Type* lhs, Type* rhs) const
@@ -1019,7 +1026,7 @@ void Parser2::ConstDeclaration() {
     Declaration* d = addDecl(id, Declaration::ConstDecl);
     Token t = la;
     Expression* e = ConstExpression(0);
-    if( !ev->evaluate(e) )
+    if( e && !ev->evaluate(e) )
         error(t, ev->getErr());
     Value v = ev->pop();
     d->data = v.val;
@@ -1404,6 +1411,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
 {
     Expression::Kind k = Expression::Invalid;
     QVariant val;
+
     switch( d->mode )
     {
     case Declaration::Builtin:
@@ -1411,6 +1419,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
         val = d->id;
         break;
     case Declaration::Procedure:
+    case Declaration::ForwardDecl:
         k = Expression::ProcDecl;
         val = QVariant::fromValue(d->alias ? d->link : d);
         break;
@@ -1912,6 +1921,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 // inlined ExpList
                 tok = la;
                 Type* pt = formals.isEmpty() ? 0 : formals.first()->type;
+
                 Expression* arg = expression(pt, renderLvalue(proc,args.size()));
                 if( arg == 0 )
                     return 0;
@@ -1924,6 +1934,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                         expect(Tok_Comma, false, "ExpList");
                     tok = la;
                     Type* pt = args.size() < formals.size() ? formals[args.size()]->type : 0;
+
                     Expression* arg = expression(pt, renderLvalue(proc,args.size()));
                     if( arg == 0 )
                         return 0;
@@ -2885,9 +2896,15 @@ void Parser2::ForStatement() {
 	expect(Tok_ident, false, "ForStatement");
     Declaration* idxvar = mdl->findDecl(cur.d_val);
     if( idxvar == 0 || !idxvar->isLvalue() )
+    {
         error(cur,"identifier must reference a variable or parameter");
+        return;
+    }
     if( idxvar->type == 0 || !idxvar->type->isInteger() )
+    {
         error(cur,"control variable must be of integer type");
+        return;
+    }
     // TODO: support enums as well
     expect(Tok_ColonEq, false, "ForStatement");
     Token tok = cur;

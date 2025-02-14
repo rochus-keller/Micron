@@ -48,7 +48,7 @@ public:
     static QByteArray dequote(const QByteArray& str);
 
 protected:
-    void recursiveRun(Expression*);
+    bool recursiveRun(Expression*);
     void constructor(Expression*);
     void recurseConstConstructor(Expression*);
 

@@ -729,9 +729,13 @@ void Builtins::LEN(int nArgs)
 
 void Builtins::PRINT(int nArgs, bool ln)
 {
-    if( nArgs != 1 && !(ev->stack.back().type->isSimple() || ev->stack.back().type->isText() ))
+    if( nArgs < 1 || ev->stack.back().type == 0 ||
+            !(ev->stack.back().type->isSimple() || ev->stack.back().type->isText() ))
+    {
         ev->err = "expecting one argument of basic or char array type";
-    else if( ev->stack.back().type->form == Type::ConstEnum )
+        return;
+    }
+    if( ev->stack.back().type->form == Type::ConstEnum )
     {
         ev->out->conv_(MilEmitter::I8);
         ev->out->call_(coreName("printI8"),1,false);

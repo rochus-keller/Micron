@@ -266,7 +266,7 @@ public:
     typedef QHash<const char*,MilLabel> Labels;
     typedef QHash<QByteArray,MemSlot*> Strings;
     Strings strings; // internalized strings
-    QByteArray intrinsicMod, outMod, inputMod;
+    QByteArray intrinsicMod, outMod, inputMod, mathlMod;
     typedef QHash<const char*, MilProcedure> Intrinsics;
     Intrinsics intrinsics;
     QTextStream out;
@@ -1076,6 +1076,7 @@ public:
             symbols[5] = Token::getSymbol("LongReal");
             symbols[6] = Token::getSymbol("Ln");
             symbols[7] = Token::getSymbol("Time");
+            symbols[8] = Token::getSymbol("sqrt");
         }
         const char* mn = module->module->fullName.constData();
         const char* pn = proc->name.constData();
@@ -1112,6 +1113,15 @@ public:
 #else
                 ret.i = timer.nsecsElapsed() / 1000;
 #endif
+            }else
+                nyiError(module,proc);
+        }else if( mn == mathlMod.constData() )
+        {
+            if( pn == symbols[8].constData() ) // MathL.sqrt (x : LONGREAL) : LONGREAL
+            {
+                Q_ASSERT(args.size() == 1);
+                ret.t = MemSlot::F;
+                ret.f = sqrt(args.first().f);
             }else
                 nyiError(module,proc);
         }else
@@ -1739,8 +1749,7 @@ public:
             vmcase(IL_ldfld) {
                 lhs.move(stack.back());
                 stack.pop_back();
-                if( (lhs.t != MemSlot::Pointer) || lhs.p == 0 ||
-                        (lhs.p-1)->t == MemSlot::Header && (lhs.p-1)->u <= op.index )
+                if( (lhs.t != MemSlot::Pointer) || lhs.p == 0 )
                     execError(module, proc, pc, "invalid record or field");
                 if( !lhs.embedded && lhs.p->t == MemSlot::Record )
                     lhs.p = lhs.p->p;
@@ -2408,6 +2417,7 @@ MilInterpreter::MilInterpreter(MilLoader* l)
     imp->intrinsicMod = Token::getSymbol("$MIC");
     imp->outMod = Token::getSymbol("Out");
     imp->inputMod = Token::getSymbol("Input");
+    imp->mathlMod = Token::getSymbol("MathL");
     QByteArray name;
     name = Token::getSymbol("relop1");
     imp->intrinsics.insert(name.constData(), createIntrinsic(name,1,3,true));
