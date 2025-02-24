@@ -350,8 +350,8 @@ void EiGen::addType(const QByteArray& name, bool isPublic, const MilQuali& baseT
 #endif
 }
 
-void EiGen::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic)
+void EiGen::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic, quint8 bits)
 {
-    imp->imr.addField(fieldName,typeRef,isPublic);
+    imp->imr.addField(fieldName,typeRef,isPublic,bits);
 }
 

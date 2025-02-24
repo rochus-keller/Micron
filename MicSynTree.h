@@ -46,7 +46,6 @@ namespace Mic {
 			R_ProcedureDeclaration,
 			R_ProcedureHeading,
 			R_ProcedureType,
-			R_Receiver,
 			R_RecordType,
 			R_RepeatStatement,
 			R_ReturnStatement,

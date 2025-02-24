@@ -325,7 +325,7 @@ void CilGen::addType(const QByteArray& name, bool isPublic, const MilQuali& base
     imp->imr.addType(name, isPublic, baseType, typeKind, len);
 }
 
-void CilGen::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic)
+void CilGen::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic, quint8 bits)
 {
-    imp->imr.addField(fieldName, typeRef, isPublic);
+    imp->imr.addField(fieldName, typeRef, isPublic, bits);
 }

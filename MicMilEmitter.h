@@ -39,10 +39,11 @@ namespace Mic
     {
         QByteArray name;
         MilQuali type;
-        int offset : 31;
-        int isPublic : 1;
-        MilVariable():offset(0),isPublic(0) {}
-        MilVariable(const MilQuali& type, const QByteArray& name):type(type),name(name),offset(0),isPublic(0){}
+        uint offset : 25;
+        uint isPublic : 1;
+        uint bits : 6;
+        MilVariable():offset(0),isPublic(0),bits(0) {}
+        MilVariable(const MilQuali& type, const QByteArray& name):type(type),name(name),offset(0),isPublic(0),bits(0){}
     };
 
     struct MilType
@@ -145,7 +146,7 @@ namespace Mic
 
         virtual void addField( const QByteArray& fieldName, // on top level or in class
                        const MilQuali& typeRef,
-                       bool isPublic = true ) {}
+                       bool isPublic = true, quint8 bits = 0 ) {}
     };
 
     class MilEmitter
@@ -176,7 +177,7 @@ namespace Mic
             // use for Alias, Pointer, Array
 
         void addField(const QByteArray& fieldName, // on top level or in struct/union
-                       const MilQuali& typeRef, bool isPublic = true);
+                       const MilQuali& typeRef, bool isPublic = true, quint8 bits = 0);
         quint32 addLocal( const MilQuali& typeRef, QByteArray name = QByteArray() );
         quint32 addArgument(const MilQuali& typeRef, QByteArray name = QByteArray() );
         void setReturnType(const MilQuali& typeRef);
@@ -184,7 +185,8 @@ namespace Mic
         void setVararg();
 
         enum Type { Unknown, I1, I2, I4, I8, R4, R8, U1, U2, U4, U8, IntPtr };
-        static QByteArray typeSymbol(Type); // MilEmitter::Type
+        static QByteArray typeSymbol1(Type); // MilEmitter::Type
+        static QByteArray typeSymbol2(Type); // MilEmitter::Type
         static Type fromSymbol(const QByteArray&);
         static bool equals(const QByteArray&, Type);
         static QByteArray toString(const MilQuali&);
@@ -296,7 +298,7 @@ namespace Mic
 
         virtual void addField( const QByteArray& fieldName,
                        const MilQuali& typeRef,
-                       bool isPublic = true);
+                       bool isPublic = true, quint8 bits = 0);
     protected:
         inline QByteArray ws() { return QByteArray(level*2,' '); }
         void render(const MilProcedure&);
@@ -330,7 +332,7 @@ namespace Mic
 
         virtual void addField( const QByteArray& fieldName, // on top level or in class
                        const MilQuali& typeRef,
-                       bool isPublic = true );
+                       bool isPublic = true, quint8 bits = 0 );
     private:
         QList<MilRenderer*> renderer;
     };

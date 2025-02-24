@@ -37,26 +37,46 @@ AstModel::AstModel():helper(0),helperId(0)
         types[BasicType::Nil] = newType(BasicType::Nil,1);
         types[BasicType::Any] = addType("ANY", BasicType::Any,1);
 
-        types[BasicType::BOOLEAN] = addType("BOOLEAN", BasicType::BOOLEAN, 1 );
+        types[BasicType::BOOL] = addType("BOOL", BasicType::BOOL, 1 );
+        addTypeAlias("BOOLEAN", types[BasicType::BOOL] );
+
         types[BasicType::CHAR] = addType("CHAR", BasicType::CHAR, 1 );
+
         types[BasicType::UINT8] = addType("UINT8", BasicType::UINT8, 1 );
         addTypeAlias("BYTE", types[BasicType::UINT8] );
-        types[BasicType::INT8] = addType("INT8", BasicType::INT8, 1 );
-        types[BasicType::INT16] = addType("INT16", BasicType::INT16, 2 );
-        types[BasicType::UINT16] = addType("UINT16", BasicType::UINT16, 2 );
-        types[BasicType::INT32] = addType("INT32", BasicType::INT32, 4 );
-        types[BasicType::UINT32] = addType("UINT32", BasicType::UINT32, 4 );
-        types[BasicType::INT64] = addType("INT64", BasicType::INT64, 8 );
-        types[BasicType::UINT64] = addType("UINT64", BasicType::UINT64, 8 );
-        types[BasicType::REAL] = addType("REAL", BasicType::REAL, 4 );
-        addTypeAlias("FLT32", types[BasicType::REAL] );
-        types[BasicType::LONGREAL] = addType("LONGREAL", BasicType::LONGREAL, 8 );
-        addTypeAlias("FLT64", types[BasicType::LONGREAL] );
-        types[BasicType::SET] = addType("SET", BasicType::SET, 4 );
+        addTypeAlias("U8", types[BasicType::UINT8] );
 
-        addTypeAlias("SHORTINT", types[BasicType::INT16] ); // TODO: variable type
+        types[BasicType::INT8] = addType("INT8", BasicType::INT8, 1 );
+        addTypeAlias("I8", types[BasicType::INT8] );
+
+        types[BasicType::INT16] = addType("INT16", BasicType::INT16, 2 );
+        addTypeAlias("SHORTINT", types[BasicType::INT16] );
+        addTypeAlias("I16", types[BasicType::INT16] );
+
+        types[BasicType::UINT16] = addType("UINT16", BasicType::UINT16, 2 );
+        addTypeAlias("U16", types[BasicType::UINT16] );
+
+        types[BasicType::INT32] = addType("INT32", BasicType::INT32, 4 );
         addTypeAlias("INTEGER", types[BasicType::INT32] );
+        addTypeAlias("I32", types[BasicType::INT32] );
+
+        types[BasicType::UINT32] = addType("UINT32", BasicType::UINT32, 4 );
+        addTypeAlias("U32", types[BasicType::UINT32] );
+
+        types[BasicType::INT64] = addType("INT64", BasicType::INT64, 8 );
         addTypeAlias("LONGINT", types[BasicType::INT64] );
+        addTypeAlias("I64", types[BasicType::INT64] );
+
+        types[BasicType::UINT64] = addType("UINT64", BasicType::UINT64, 8 );
+        addTypeAlias("U64", types[BasicType::UINT64] );
+
+        types[BasicType::FLT32] = addType("FLT32", BasicType::FLT32, 4 );
+        addTypeAlias("REAL", types[BasicType::FLT32] );
+
+        types[BasicType::FLT64] = addType("FLT64", BasicType::FLT64, 8 );
+        addTypeAlias("LONGREAL", types[BasicType::FLT64] );
+
+        types[BasicType::SET] = addType("SET", BasicType::SET, 4 );
 
         addBuiltin("ABS", Builtin::ABS);
         addBuiltin("CAP", Builtin::CAP);
@@ -149,8 +169,12 @@ Declaration*AstModel::addDecl(const QByteArray& name, bool* doublette)
     Declaration* scope = scopes.back();
     Declaration** obj = &scope->link;
 
-    while(*obj != 0 && (*obj)->name.constData() != name.constData() )
-        obj = &((*obj)->next);
+    if( !name.isEmpty() )
+        while(*obj != 0 && (*obj)->name.constData() != name.constData() )
+            obj = &((*obj)->next);
+    else // if there is no name, just add a decl to the end
+        while(*obj != 0 )
+            obj = &((*obj)->next);
     if((*obj) == 0 )
     {
         Declaration* decl = new Declaration();
@@ -329,7 +353,7 @@ QVariant BasicType::getMax(BasicType::Type t)
 {
     switch( t )
     {
-    case BOOLEAN:
+    case BOOL:
         return true;
     case CHAR:
     case UINT8:
@@ -350,9 +374,9 @@ QVariant BasicType::getMax(BasicType::Type t)
         return std::numeric_limits<qint32>::max();
     case INT64:
         return std::numeric_limits<qint64>::max();
-    case REAL:
+    case FLT32:
         return std::numeric_limits<float>::max();
-    case LONGREAL:
+    case FLT64:
         return std::numeric_limits<double>::max();
     }
     return QVariant();
@@ -362,7 +386,7 @@ QVariant BasicType::getMin(BasicType::Type t)
 {
     switch( t )
     {
-    case BOOLEAN:
+    case BOOL:
         return false;
     case CHAR:
     case UINT8:
@@ -383,9 +407,9 @@ QVariant BasicType::getMin(BasicType::Type t)
         return std::numeric_limits<qint32>::min();
     case INT64:
         return std::numeric_limits<qint64>::min();
-    case REAL:
+    case FLT32:
         return std::numeric_limits<float>::min();
-    case LONGREAL:
+    case FLT64:
         return std::numeric_limits<double>::min();
     }
     return QVariant();

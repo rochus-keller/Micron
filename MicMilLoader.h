@@ -60,7 +60,7 @@ public:
 
     void addField( const QByteArray& fieldName, // on top level or in class
                    const MilQuali& typeRef,
-                   bool isPublic = true );
+                   bool isPublic = true, quint8 bits = 0 );
 
     MilModule* getCurrentModule() const { return module; }
     MilType* getCurrentType() const { return type; }

@@ -60,6 +60,7 @@ namespace Mic {
         bool assigCompat(Type* lhs, Type* rhs) const;
     protected:
         Expression* number();
+        Expression* integer();
 
         typedef QPair<QByteArray,QByteArray> Quali;
         Quali qualident();

@@ -140,7 +140,7 @@ void InMemRenderer::addType(const QByteArray& name, bool isPublic, const MilQual
     module->order.append(qMakePair(MilModule::Type,module->types.size()-1));
 }
 
-void InMemRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic)
+void InMemRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic, quint8 bits)
 {
     Q_ASSERT(module);
     Q_ASSERT(type);
@@ -148,6 +148,7 @@ void InMemRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRe
     f.name = fieldName;
     f.type = typeRef;
     f.isPublic = isPublic;
+    f.bits = bits;
     type->fields.append(f);
 }
 

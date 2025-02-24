@@ -309,7 +309,7 @@ Token Lexer::number()
 {
     // number   = integer | real
     // integer  = digit {hexDigit|'_'} ['O'|'B'|'H'] ['U1'|'U2'|'U4'|'U8'|'I1'|'I2'|'I4'|'I8']
-    // real     = digit {digit|'_'} '.' {digit} [Exponent]
+    // real     = digit {digit|'_'} '.' {digit|'_'} [Exponent]
     // Exponent = ('E' | 'D' | 'F' ) ['+' | '-'] digit {digit}
     // hexDigit = digit | 'A' ... 'F'
     // digit    = '0' ... '9'
@@ -371,7 +371,7 @@ Token Lexer::number()
         while( true )
         {
             const char c = lookAhead(off);
-            if( !::isdigit(c) )
+            if( !::isdigit(c) && c != '_' )
                 break;
             else
                 off++;
@@ -414,11 +414,24 @@ Token Lexer::number()
         if( c == 'U' || c == 'u' || c == 'I' || c == 'i' )
         {
             const char c2 = lookAhead(off+1);
-            if( c2 == '1' || c2 == '2' || c2 == '4' || c2 == '8' )
+            if( c2 == '8' )
             {
                 off += 2;
                 suffix += 2;
-                byteWidth = c2 - '0';
+                byteWidth = 1;
+            }else if( c2 == '1' || c2 == '3' || c2 == '6' )
+            {
+                const char c3 = lookAhead(off+2);
+                off += 3;
+                suffix += 3;
+                if( c2 == '1' && c3 == '6')
+                    byteWidth = 2;
+                else if( c2 == '3' && c3 == '2')
+                    byteWidth = 4;
+                else if( c2 == '6' && c3 == '4')
+                    byteWidth = 8;
+                else
+                    return token( Tok_Invalid, off, "invalid integer suffix" );
             }else
             {
                 off += 1;

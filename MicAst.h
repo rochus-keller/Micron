@@ -33,11 +33,11 @@ namespace Mic
                String,
                Any,
                Nil,
-               BOOLEAN,
+               BOOL,
                CHAR,
                UINT8, UINT16, UINT32, UINT64,
                INT8, INT16, INT32, INT64,
-               REAL, LONGREAL,
+               FLT32, FLT64,
                SET,
                Max
              };
@@ -76,11 +76,11 @@ namespace Mic
 
         bool isUInt() const { return form >= BasicType::UINT8 && form <= BasicType::UINT64; }
         bool isInt() const { return form >= BasicType::INT8 && form <= BasicType::INT64; }
-        bool isNumber() const { return form >= BasicType::UINT8 && form <= BasicType::LONGREAL; }
-        bool isReal() const { return form == BasicType::LONGREAL || form == BasicType::REAL; }
+        bool isNumber() const { return form >= BasicType::UINT8 && form <= BasicType::FLT64; }
+        bool isReal() const { return form == BasicType::FLT64 || form == BasicType::FLT32; }
         bool isInteger() const { return form >= BasicType::UINT8 && form <= BasicType::INT64; }
         bool isSet() const { return form == BasicType::SET; }
-        bool isBoolean() const { return form == BasicType::BOOLEAN; }
+        bool isBoolean() const { return form == BasicType::BOOL; }
         bool isSimple() const { return form >= BasicType::String && form < BasicType::Max; }
         bool isText() const { return form == BasicType::String || form == BasicType::CHAR ||
                     ( form == Array && base && base->form == BasicType::CHAR ) ||
@@ -118,7 +118,7 @@ namespace Mic
         uint meta : 1;
         uint ownstype : 1;
         uint mode : 5;
-        uint id : 16; // used for built-in code and local/param number
+        uint id : 16; // used for built-in code and local/param number, and bit size of fields
         QVariant data; // value for Const and Enum, path for Import, name for Extern
         Declaration():next(0),link(0),type(0),row(0),col(0),id(0),mode(0),visi(0),ownstype(false),
             inline_(false),invar(false),extern_(false),meta(false),outer(0),alias(0){}

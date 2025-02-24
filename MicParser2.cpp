@@ -888,105 +888,140 @@ void Parser2::ForwardDeclaration()
 }
 
 Expression* Parser2::number() {
-    Expression* res = Expression::create(Expression::Literal,la.toRowCol());
+    Expression* res = 0;
 	if( la.d_type == Tok_integer ) {
-		expect(Tok_integer, false, "number");
-        QByteArray number = cur.d_val.toLower();
-        number.replace('_',"");
-        Type* type = 0;
-        bool signed_ = false;
-        if( number.size() > 1 && number[number.size()-1] == 'u' )
-            number.chop(1);
-        else if( number.size() > 1 && number[number.size()-1] == 'i' )
-        {
-            signed_ = true;
-            number.chop(1);
-        }else if( number.size() > 2 && number[number.size()-2] == 'u' )
-        {
-            switch(number[number.size()-1])
-            {
-            case '1':
-                type = mdl->getType(BasicType::UINT8);
-                break;
-            case '2':
-                type = mdl->getType(BasicType::UINT16);
-                break;
-            case '4':
-                type = mdl->getType(BasicType::UINT32);
-                break;
-            case '8':
-                type = mdl->getType(BasicType::UINT64);
-                break;
-            }
-            number.chop(2);
-        }else if( number.size() > 2 && number[number.size()-2] == 'i' )
-        {
-            signed_ = true;
-            switch(number[number.size()-1])
-            {
-            case '1':
-                type = mdl->getType(BasicType::INT8);
-                break;
-            case '2':
-                type = mdl->getType(BasicType::INT16);
-                break;
-            case '4':
-                type = mdl->getType(BasicType::INT32);
-                break;
-            case '8':
-                type = mdl->getType(BasicType::INT64);
-                break;
-            }
-            number.chop(2);
-        }
-        const char suffix = ( number.size() > 1 ? number[number.size()-1] : '0' );
-        if( !::isdigit(suffix) )
-            number.chop(1);
-        switch(suffix)
-        {
-        case 'o':
-            res->val = signed_ ? number.toLongLong(0,8) : number.toULongLong(0,8);
-            break;
-        case 'b':
-            res->val = signed_ ? number.toLongLong(0,2) : number.toULongLong(0,2);
-            break;
-        case 'h':
-            res->val = signed_ ? number.toLongLong(0,16) : number.toULongLong(0,16);
-            break;
-        default:
-            res->val = signed_ ? number.toLongLong() : number.toULongLong();
-            break;
-        }
-        Type* derived = signed_ ? ev->smallestIntType(res->val) : ev->smallestUIntType(res->val);
-        if( type == 0 )
-            type = derived;
-        else if( derived->form > type->form )
-            error(cur,"the given constant value cannot be represented by the given type");
-        res->type = type;
+        res = integer();
 	} else if( la.d_type == Tok_real ) {
-		expect(Tok_real, false, "number");
+        res = Expression::create(Expression::Literal,la.toRowCol());
+        expect(Tok_real, false, "number");
         QByteArray str = cur.d_val;
         str.replace('_',"");
         if( str.contains('d') || str.contains('D') )
         {
             str.replace('d','e');
             str.replace('D','E');
-            res->type = mdl->getType(BasicType::LONGREAL);
+            res->type = mdl->getType(BasicType::FLT64);
         }else if( str.contains('s') || str.contains('S') )
         {
             str.replace('f','e');
             str.replace('F','E');
-            res->type = mdl->getType(BasicType::REAL);
+            res->type = mdl->getType(BasicType::FLT32);
         }else
         {
             if( cur.d_double )
-                res->type = mdl->getType(BasicType::LONGREAL);
+                res->type = mdl->getType(BasicType::FLT64);
             else
-                res->type = mdl->getType(BasicType::REAL);
+                res->type = mdl->getType(BasicType::FLT32);
        }
         res->val = str.toDouble(); // we save double in any case
     } else
 		invalid("number");
+    return res;
+}
+
+Expression*Parser2::integer()
+{
+    Expression* res = Expression::create(Expression::Literal,la.toRowCol());
+    expect(Tok_integer, false, "number");
+    QByteArray number = cur.d_val.toLower();
+    number.replace('_',"");
+    Type* type = 0;
+    bool signed_ = false;
+    if( number.size() > 1 && number[number.size()-1] == 'u' )
+        number.chop(1);
+    else if( number.size() > 1 && number[number.size()-1] == 'i' )
+    {
+        signed_ = true;
+        number.chop(1);
+    }else if( number.size() > 2 && number[number.size()-2] == 'u' )
+    {
+        switch(number[number.size()-1])
+        {
+        case '8':
+            type = mdl->getType(BasicType::UINT8);
+            break;
+        default:
+            error(cur,QString("invalid integer suffix 'u%1'").arg(number[number.size()-1]));
+        }
+        number.chop(2);
+    }else if( number.size() > 3 && number[number.size()-3] == 'u' )
+    {
+        switch(number[number.size()-2])
+        {
+        case '1':
+            type = mdl->getType(BasicType::UINT16);
+            if(number[number.size()-1] != '6')
+                error(cur,QString("invalid integer suffix 'u1%1'").arg(number[number.size()-1]));
+            break;
+        case '3':
+            type = mdl->getType(BasicType::UINT32);
+            if(number[number.size()-1] != '2')
+                error(cur,QString("invalid integer suffix 'u1%1'").arg(number[number.size()-1]));
+            break;
+        case '6':
+            type = mdl->getType(BasicType::UINT64);
+            if(number[number.size()-1] != '4')
+                error(cur,QString("invalid integer suffix 'u1%1'").arg(number[number.size()-1]));
+            break;
+        }
+        number.chop(3);
+    }else if( number.size() > 2 && number[number.size()-2] == 'i' )
+    {
+        switch(number[number.size()-1])
+        {
+        case '8':
+            type = mdl->getType(BasicType::INT8);
+            break;
+        default:
+            error(cur,QString("invalid integer suffix 'i%1'").arg(number[number.size()-1]));
+        }
+        number.chop(2);
+    }else if( number.size() > 3 && number[number.size()-3] == 'i' )
+    {
+        switch(number[number.size()-2])
+        {
+        case '1':
+            type = mdl->getType(BasicType::INT16);
+            if(number[number.size()-1] != '6')
+                error(cur,QString("invalid integer suffix 'i1%1'").arg(number[number.size()-1]));
+            break;
+        case '3':
+            type = mdl->getType(BasicType::INT32);
+            if(number[number.size()-1] != '2')
+                error(cur,QString("invalid integer suffix 'i1%1'").arg(number[number.size()-1]));
+            break;
+        case '6':
+            type = mdl->getType(BasicType::INT64);
+            if(number[number.size()-1] != '4')
+                error(cur,QString("invalid integer suffix 'i1%1'").arg(number[number.size()-1]));
+            break;
+        }
+        number.chop(3);
+    }
+    const char suffix = ( number.size() > 1 ? number[number.size()-1] : '0' );
+    if( !::isdigit(suffix) )
+        number.chop(1);
+    switch(suffix)
+    {
+    case 'o':
+        res->val = signed_ ? number.toLongLong(0,8) : number.toULongLong(0,8);
+        break;
+    case 'b':
+        res->val = signed_ ? number.toLongLong(0,2) : number.toULongLong(0,2);
+        break;
+    case 'h':
+        res->val = signed_ ? number.toLongLong(0,16) : number.toULongLong(0,16);
+        break;
+    default:
+        res->val = signed_ ? number.toLongLong() : number.toULongLong();
+        break;
+    }
+    Type* derived = signed_ ? ev->smallestIntType(res->val) : ev->smallestUIntType(res->val);
+    if( type == 0 )
+        type = derived;
+    else if( derived->form > type->form )
+        error(cur,"the given constant value cannot be represented by the given type");
+    res->type = type;
     return res;
 }
 
@@ -1266,14 +1301,43 @@ void Parser2::FieldList() {
 		expect(Tok_Colon, false, "FieldList");
         const Token tok = la;
         Type* t = type();
+        quint8 bits = 0;
+        if( la.d_type == Tok_BITS ) {
+            expect(Tok_BITS, false, "FieldList");
+            const Token tok = la;
+            Expression* e = integer();
+            if( e )
+            {
+                const qint64 i = e->val.toULongLong();
+                if( i < 0 || i > 64 )
+                    error(tok, "invalid bit size");
+                else
+                    bits = i;
+            }
+        }
         openArrayError(tok,t);
         invalidTypeError(tok,t);
         for(int i = 0; i < l.size(); i++ )
         {
             Declaration* d = addDecl(l[i],Declaration::Field);
             d->type = t;
+            d->id = bits;
         }
-	} else if( FIRST_inline_(la.d_type) ) {
+    } else if( la.d_type == Tok_2Dot ) {
+        expect(Tok_2Dot, false, "FieldList");
+        expect(Tok_BITS, false, "FieldList");
+        const Token tok = la;
+        Declaration* d = addDecl(tok, 0,Declaration::Field);
+        Expression* e = integer();
+        if( e )
+        {
+            const qint64 i = e->val.toULongLong();
+            if( i < 0 || i > 64 )
+                error(tok, "invalid bit size");
+            else
+                d->id = i;
+        }
+    } else if( FIRST_inline_(la.d_type) ) {
 		inline_();
         const IdentDef id = identdef();
 		expect(Tok_Colon, false, "FieldList");
@@ -1478,7 +1542,7 @@ void Parser2::emitType(Type* t, const Quali& q)
             out->beginType(ev->toQuali(t).second,t->decl->isPublic(), !hasFixed ? MilEmitter::Union : MilEmitter::Struct );
             // TODO: record can have fixed and variable part which go to separate struct and union or embedded union
             foreach( Declaration* field, t->subs )
-                out->addField(field->name,ev->toQuali(field->type),field->isPublic());
+                out->addField(field->name,ev->toQuali(field->type),field->isPublic(),field->id);
         }else
         {
             out->beginType(ev->toQuali(t).second,t->decl->isPublic(), MilEmitter::ProcType );
@@ -2182,7 +2246,7 @@ Expression* Parser2::expression(Type* hint, bool lvalue) {
         const Token tok = la;
         Expression* tmp = Expression::createFromToken(relation(), tok.toRowCol());
         tmp->lhs = res;
-        tmp->type = mdl->getType(BasicType::BOOLEAN);
+        tmp->type = mdl->getType(BasicType::BOOL);
         res = tmp;
         res->rhs = SimpleExpression(0);
         if( res->rhs == 0 )
@@ -2333,12 +2397,12 @@ Expression* Parser2::literal() {
     } else if( la.d_type == Tok_TRUE ) {
 		expect(Tok_TRUE, true, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
-        res->type = mdl->getType(BasicType::BOOLEAN);
+        res->type = mdl->getType(BasicType::BOOL);
         res->val = true;
     } else if( la.d_type == Tok_FALSE ) {
 		expect(Tok_FALSE, true, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
-        res->type = mdl->getType(BasicType::BOOLEAN);
+        res->type = mdl->getType(BasicType::BOOL);
         res->val = false;
 	} else
 		invalid("literal");
@@ -2864,7 +2928,7 @@ void Parser2::WhileStatement() {
     Expression* res = expression(0);
     if( res && !ev->evaluate(res, true) )
         error(t, ev->getErr());
-    if( ev->top().type->form != BasicType::BOOLEAN )
+    if( ev->top().type->form != BasicType::BOOL )
         error(t,"expecting boolean expression");
     Expression::deleteAllExpressions();
     ev->pop();
@@ -2884,7 +2948,7 @@ void Parser2::RepeatStatement() {
     const Token t = la;
     if( !ev->evaluate(expression(0), true) )
         error(t, ev->getErr());
-    if( ev->top().type->form != BasicType::BOOLEAN )
+    if( ev->top().type->form != BasicType::BOOL )
         error(t,"expecting boolean expression");
     Expression::deleteAllExpressions();
     ev->pop();

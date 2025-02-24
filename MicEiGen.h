@@ -43,7 +43,7 @@ namespace Mic
 
         void addField( const QByteArray& fieldName,
                        const MilQuali& typeRef,
-                       bool isPublic = true );
+                       bool isPublic = true, quint8 bits = 0 );
     private:
         class Imp;
         Imp* imp;

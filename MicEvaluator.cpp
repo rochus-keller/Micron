@@ -211,7 +211,7 @@ bool Evaluator::assign()
 
     switch(lhs.type->form)
     {
-    case BasicType::BOOLEAN:
+    case BasicType::BOOL:
     case BasicType::CHAR:
     case BasicType::UINT8:
     case BasicType::INT8:
@@ -231,10 +231,10 @@ bool Evaluator::assign()
     case BasicType::INT64:
         out->stind_(MilEmitter::I8);
         break;
-    case BasicType::REAL:
+    case BasicType::FLT32:
         out->stind_(MilEmitter::R4);
         break;
-    case BasicType::LONGREAL:
+    case BasicType::FLT64:
         out->stind_(MilEmitter::R8);
         break;
     case BasicType::Nil:
@@ -292,7 +292,7 @@ bool Evaluator::derefValue()
     v.ref = false;
     switch(v.type->form)
     {
-    case BasicType::BOOLEAN:
+    case BasicType::BOOL:
     case BasicType::CHAR:
     case BasicType::UINT8:
         out->ldind_(MilEmitter::U1);
@@ -320,10 +320,10 @@ bool Evaluator::derefValue()
     case BasicType::INT64:
         out->ldind_(MilEmitter::I8);
         break;
-    case BasicType::REAL:
+    case BasicType::FLT32:
         out->ldind_(MilEmitter::R4);
         break;
-    case BasicType::LONGREAL:
+    case BasicType::FLT64:
         out->ldind_(MilEmitter::R8);
         break;
     case Type::Pointer:
@@ -563,7 +563,7 @@ bool Evaluator::castNum(Type* to)
         MilEmitter::Type tt;
         switch(to->form)
         {
-        case BasicType::BOOLEAN:
+        case BasicType::BOOL:
         case BasicType::CHAR:
         case BasicType::UINT8:
             tt = MilEmitter::U1;
@@ -590,10 +590,10 @@ bool Evaluator::castNum(Type* to)
         case BasicType::INT64:
             tt = MilEmitter::I8;
             break;
-        case BasicType::REAL:
+        case BasicType::FLT32:
             tt = MilEmitter::R4;
             break;
-        case BasicType::LONGREAL:
+        case BasicType::FLT64:
             tt = MilEmitter::R8;
             break;
         default:
@@ -714,7 +714,7 @@ bool Evaluator::pushMilStack(const Value& v)
             case BasicType::Nil:
                 out->ldnull_();
                 break;
-            case BasicType::BOOLEAN:
+            case BasicType::BOOL:
             case BasicType::CHAR:
             case BasicType::UINT8:
             case BasicType::UINT16:
@@ -734,10 +734,10 @@ bool Evaluator::pushMilStack(const Value& v)
             case BasicType::INT64:
                 out->ldc_i8(v.val.toLongLong());
                 break;
-            case BasicType::REAL:
+            case BasicType::FLT32:
                 out->ldc_r4(v.val.toFloat());
                 break;
-            case BasicType::LONGREAL:
+            case BasicType::FLT64:
                 out->ldc_r8(v.val.toDouble());
                 break;
             default:
@@ -842,7 +842,7 @@ void Evaluator::adjustNumType(Type* me, Type* other)
                  other->form == BasicType::UINT64 && me->form < BasicType::UINT64 )
             out->conv_(MilEmitter::U8);
         else if( me->isReal() && other->isReal() &&
-                 other->form == BasicType::LONGREAL && me->form < BasicType::LONGREAL )
+                 other->form == BasicType::FLT64 && me->form < BasicType::FLT64 )
             out->conv_(MilEmitter::R8);
     }
 }
@@ -1065,7 +1065,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
 {
     Value res;
     res.mode = Value::Val;
-    res.type = mdl->getType(BasicType::BOOLEAN);
+    res.type = mdl->getType(BasicType::BOOL);
 
     if( lhs.type == 0 || rhs.type == 0 )
         return res;
@@ -1321,7 +1321,7 @@ Value Evaluator::inOp(const Value& lhs, const Value& rhs)
 {
     Value res;
     res.mode = Value::Val;
-    res.type = mdl->getType(BasicType::BOOLEAN);
+    res.type = mdl->getType(BasicType::BOOL);
 
     if( lhs.type->isInteger() && rhs.type->isSet() )
     {
@@ -1439,7 +1439,7 @@ Qualident Evaluator::toQuali(Type* t)
         {
             symbols[BasicType::Any] = Token::getSymbol("any");
             symbols[BasicType::Nil] = Token::getSymbol("nil");
-            symbols[BasicType::BOOLEAN] = Token::getSymbol("bool");
+            symbols[BasicType::BOOL] = Token::getSymbol("bool");
             symbols[BasicType::CHAR] = Token::getSymbol("char");
             symbols[BasicType::UINT8] = Token::getSymbol("uint8");
             symbols[BasicType::UINT16] = Token::getSymbol("uint16");
@@ -1449,8 +1449,8 @@ Qualident Evaluator::toQuali(Type* t)
             symbols[BasicType::INT16] = Token::getSymbol("int16");
             symbols[BasicType::INT32] = Token::getSymbol("int32");
             symbols[BasicType::INT64] = Token::getSymbol("int64");
-            symbols[BasicType::REAL] = Token::getSymbol("float32");
-            symbols[BasicType::LONGREAL] = Token::getSymbol("float64");
+            symbols[BasicType::FLT32] = Token::getSymbol("float32");
+            symbols[BasicType::FLT64] = Token::getSymbol("float64");
         }
         return qMakePair(QByteArray(),symbols[t->form]);
     }else if( t->decl)

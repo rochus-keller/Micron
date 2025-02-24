@@ -138,10 +138,10 @@ void MilEmitter::addType(const QByteArray& name, bool isPublic, const MilQuali& 
     d_out->addType(name,isPublic,baseType,typeKind,len);
 }
 
-void MilEmitter::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic)
+void MilEmitter::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic, quint8 bits)
 {
     Q_ASSERT( d_typeKind == Struct || d_typeKind == Union );
-    d_out->addField(fieldName, typeRef, isPublic );
+    d_out->addField(fieldName, typeRef, isPublic, bits );
 }
 
 quint32 MilEmitter::addLocal(const MilQuali& typeRef, QByteArray name)
@@ -180,7 +180,7 @@ void MilEmitter::setVararg()
     d_proc.back().isVararg = true;
 }
 
-QByteArray MilEmitter::typeSymbol(Type t)
+QByteArray MilEmitter::typeSymbol1(Type t)
 {
     static QByteArray symbols[IntPtr];
     if( symbols[0].isEmpty() )
@@ -202,17 +202,40 @@ QByteArray MilEmitter::typeSymbol(Type t)
         return QByteArray();
 }
 
+QByteArray MilEmitter::typeSymbol2(Type t)
+{
+    static QByteArray symbols[IntPtr];
+    if( symbols[0].isEmpty() )
+    {
+        symbols[U1] = Token::getSymbol("u1");
+        symbols[U2] = Token::getSymbol("u2");
+        symbols[U4] = Token::getSymbol("u4");
+        symbols[U8] = Token::getSymbol("u8");
+        symbols[I1] = Token::getSymbol("i1");
+        symbols[I2] = Token::getSymbol("i2");
+        symbols[I4] = Token::getSymbol("i4");
+        symbols[I8] = Token::getSymbol("i8");
+        symbols[R4] = Token::getSymbol("r4");
+        symbols[R8] = Token::getSymbol("r8");
+    }
+    if( t < IntPtr )
+        return symbols[t];
+    else
+        return QByteArray();
+}
+
 MilEmitter::Type MilEmitter::fromSymbol(const QByteArray& name)
 {
     for( int i = I1; i <= IntPtr; i++ )
-        if( typeSymbol(Type(i)).constData() == name.constData() )
+        if( typeSymbol1(Type(i)).constData() == name.constData() ||
+                typeSymbol2(Type(i)).constData() == name.constData() )
             return Type(i);
     return Unknown;
 }
 
 bool MilEmitter::equals(const QByteArray& str, MilEmitter::Type t)
 {
-    return str.constData() == typeSymbol(t).constData();
+    return str.constData() == typeSymbol1(t).constData() || str.constData() == typeSymbol2(t).constData();
 }
 
 QByteArray MilEmitter::toString(const MilQuali& q)
@@ -1141,16 +1164,25 @@ void IlAsmRenderer::addType(const QByteArray& name, bool isPublic, const MilQual
     }
 }
 
-void IlAsmRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic)
+void IlAsmRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic, quint8 bits)
 {
     out << ws();
-    if( state == Module )
-        out << "var ";
-    out << fieldName;
-    if( isPublic )
-        out << "*";
+    if( fieldName.isEmpty() && state == Struct )
+    {
+        out << ".. " << bits;
+    }else
+    {
+        if( state == Module )
+            out << "var ";
+        out << fieldName;
+        if( isPublic )
+            out << "*";
 
-    out << ": " << MilEmitter::toString(typeRef) << endl;
+        out << ": " << MilEmitter::toString(typeRef);
+        if( bits && state == Struct )
+            out << " : " << bits;
+    }
+    out << endl;
 }
 
 static inline bool isAllPrintable(const QString& str)
@@ -1491,10 +1523,10 @@ void MilSplitter::addType(const QByteArray& name, bool isPublic, const MilQuali&
         r->addType(name,isPublic,baseType, typeKind, len);
 }
 
-void MilSplitter::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic)
+void MilSplitter::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic, quint8 bits)
 {
     foreach(MilRenderer* r, renderer)
-        r->addField(fieldName,typeRef,isPublic);
+        r->addField(fieldName,typeRef,isPublic, bits);
 }
 
 

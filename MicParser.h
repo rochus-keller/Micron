@@ -82,7 +82,6 @@ namespace Mic {
 		void ProcedureType();
 		void ProcedureDeclaration();
 		void ProcedureHeading();
-		void Receiver();
 		void block();
 		void ProcedureBody();
 		void DeclarationSequence();

@@ -169,9 +169,9 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         if( !args.first()->type->isInt() )
             throw "expecting signed integer argument";
         if( args.first()->type->form == BasicType::INT64 )
-            *ret = ev->mdl->getType(BasicType::LONGREAL);
+            *ret = ev->mdl->getType(BasicType::FLT64);
         else
-            *ret = ev->mdl->getType(BasicType::REAL);
+            *ret = ev->mdl->getType(BasicType::FLT32);
         break;
     case Builtin::GETENV:
         expectingNArgs(args,2);
@@ -479,7 +479,7 @@ void Builtins::doAbs()
         ev->out->dup_();
         if( v.type->form == BasicType::INT64 )
             ev->out->ldc_i8(0);
-        else if( v.type->form == BasicType::LONGREAL )
+        else if( v.type->form == BasicType::FLT64 )
             ev->out->ldc_r8(0);
         else if( v.type->isInt() )
             ev->out->ldc_i4(0);
@@ -500,14 +500,14 @@ void Builtins::doFlt()
     Q_ASSERT(v.type->isInt());
     if( v.type->form == BasicType::INT64 )
     {
-        v.type = ev->mdl->getType(BasicType::LONGREAL);
+        v.type = ev->mdl->getType(BasicType::FLT64);
         if( v.isConst() )
             v.val = (double)v.val.toLongLong();
         else
             ev->out->conv_(MilEmitter::R8);
     }else
     {
-        v.type = ev->mdl->getType(BasicType::REAL);
+        v.type = ev->mdl->getType(BasicType::FLT32);
         if( v.isConst() )
             v.val = (double)v.val.toLongLong();
         else
@@ -577,7 +577,7 @@ void Builtins::ASSERT(int nArgs)
         ev->pushMilStack(file);
 #endif
 
-    if( cond.type->form != BasicType::BOOLEAN )
+    if( cond.type->form != BasicType::BOOL )
     {
         ev->err = "expecting boolean first argument";
         return;
@@ -751,7 +751,7 @@ void Builtins::PRINT(int nArgs, bool ln)
         ev->out->call_(coreName("printU8"),1,false);
     }else if( ev->stack.back().type->isReal() )
     {
-        if( ev->stack.back().type->form != BasicType::LONGREAL )
+        if( ev->stack.back().type->form != BasicType::FLT64 )
             ev->out->conv_(MilEmitter::R8);
         ev->out->call_(coreName("printF8"),1,false);
     }else if( ev->stack.back().type->isText() )

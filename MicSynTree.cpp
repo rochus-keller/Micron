@@ -45,7 +45,6 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_ProcedureDeclaration: return "ProcedureDeclaration";
 		case R_ProcedureHeading: return "ProcedureHeading";
 		case R_ProcedureType: return "ProcedureType";
-		case R_Receiver: return "Receiver";
 		case R_RecordType: return "RecordType";
 		case R_RepeatStatement: return "RepeatStatement";
 		case R_ReturnStatement: return "ReturnStatement";
