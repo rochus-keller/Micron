@@ -428,7 +428,6 @@ Declaration::~Declaration()
         delete next;
     if( link
             && mode != Declaration::Import  // imports are just referenced, not owned
-            && !alias   // the original is deleted elswhere
             )
         delete link;
     if( type && ownstype )
@@ -437,7 +436,7 @@ Declaration::~Declaration()
 
 QList<Declaration*> Declaration::getParams() const
 {
-    Declaration* d = alias ? link->link : link;
+    Declaration* d = link;
     QList<Declaration*> res;
     while( d && d->mode == Declaration::ParamDecl )
     {

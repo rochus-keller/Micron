@@ -46,18 +46,6 @@ namespace Mic
         MilVariable(const MilQuali& type, const QByteArray& name):type(type),name(name),offset(0),isPublic(0),bits(0){}
     };
 
-    struct MilType
-    {
-        QByteArray name;
-        quint8 kind; // MilEmitter::TypeKind
-        bool isPublic;
-        MilQuali base; // for arrays, pointers and proctypes
-        quint32 len;
-        QList<MilVariable> fields; // also proctype params
-        int indexOf(const QByteArray& name) const;
-        const MilVariable* findField(const QByteArray& name) const;
-    };
-
     struct MilOperation
     {
         uint op : 8;
@@ -79,7 +67,7 @@ namespace Mic
 
     struct MilProcedure
     {
-        enum Kind { Invalid, Intrinsic, Normal, Extern, Inline, Invar, ModuleInit, ProcType };
+        enum Kind { Invalid, Intrinsic, Normal, Extern, Inline, Invar, ModuleInit, ProcType, MethType };
         uint kind : 3;
         uint isPublic : 1;
         uint isVararg : 1;
@@ -90,8 +78,22 @@ namespace Mic
         QList<MilVariable> params;
         QList<MilVariable> locals;
         MilQuali retType;
+        MilQuali receiver; // first: name, second: local class
         QByteArray origName; // extern
         MilProcedure():kind(Invalid),isPublic(0),isVararg(0),stackDepth(0),compiled(0) {}
+    };
+
+    struct MilType
+    {
+        QByteArray name;
+        quint8 kind; // MilEmitter::TypeKind
+        bool isPublic;
+        MilQuali base; // for arrays, pointers and proctypes
+        quint32 len;
+        QList<MilVariable> fields; // also proctype params
+        QList<MilProcedure> methods;
+        int indexOf(const QByteArray& name) const;
+        const MilVariable* findField(const QByteArray& name) const;
     };
 
     struct MilConst
@@ -137,9 +139,10 @@ namespace Mic
 
         virtual void addVariable( const MilQuali& typeRef, QByteArray name,  bool isPublic ) {}
         virtual void addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val ) {}
-        virtual void addProcedure(const MilProcedure& method ) {}
+        virtual void addProcedure(const MilProcedure& method ) {} // also ProcType
 
-        virtual void beginType(const QByteArray& name, bool isPublic, quint8 typeKind) {}
+        virtual void beginType(const QByteArray& name, bool isPublic, quint8 typeKind,
+                               const MilQuali& super = MilQuali() ) {} // only Struct, Union and Object
         virtual void endType() {}
         virtual void addType( const QByteArray& name, bool isPublic, const MilQuali& baseType,
                       quint8 typeKind, quint32 len = 0) {}
@@ -163,12 +166,14 @@ namespace Mic
 
         void addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val ); // always public
 
-        void beginProc(const QByteArray& procName, bool isPublic = true, quint8 kind = MilProcedure::Normal );
+        void beginProc(const QByteArray& procName, bool isPublic = true, quint8 kind = MilProcedure::Normal,
+                       const MilQuali& receiver = MilQuali() );
         void endProc();
 
-        enum TypeKind { Invalid, Struct, Union, ProcType, Alias, Pointer, Array, Generic, MaxType };
-        void beginType(const QByteArray& name, bool isPublic = true, quint8 typeKind = Struct );
-            // use for Struct, Union, ProcType
+        enum TypeKind { Invalid, Struct, Union, Object, ProcType, MethType, Alias, Pointer, Array, Generic, MaxType };
+        void beginType(const QByteArray& name, bool isPublic = true, quint8 typeKind = Struct,
+                       const MilQuali& super = MilQuali() );
+            // use for Struct, Union, ProcType, MethType
             // supports addField, addArgument, setReturnType, setVararg depending on typeKind
         void endType();
 
@@ -196,6 +201,7 @@ namespace Mic
         void and_();
         void call_( const MilQuali& methodRef, int argCount = 0, bool hasRet = false);
         void calli_( const MilQuali& methodRef, int argCount, bool hasRet = false );
+        void callvirt_( const MilQuali& methodRef, int argCount, bool hasRet = false );
         void case_(const CaseLabelList&);
         void castptr_(const MilQuali& typeRef);
         void ceq_();
@@ -226,6 +232,7 @@ namespace Mic
         void ldelema_(const MilQuali& typeRef);
         void ldfld_(const MilTrident& fieldRef);
         void ldflda_(const MilTrident& fieldRef);
+        void ldmeth_(const MilQuali& methodRef); // CIL ldvirtftn
         void ldproc_(const MilQuali& methodRef); // CIL ldftn
         void ldind_(Type);
         void ldloc_(quint16);
@@ -291,7 +298,7 @@ namespace Mic
         virtual void addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val );
         virtual void addProcedure(const MilProcedure& method );
 
-        virtual void beginType(const QByteArray& className, bool isPublic, quint8 classKind);
+        virtual void beginType(const QByteArray& className, bool isPublic, quint8 classKind,const MilQuali& super);
         virtual void endType();
         virtual void addType( const QByteArray& name, bool isPublic, const MilQuali& baseType,
                               quint8 typeKind, quint32 len = 0);
@@ -325,7 +332,7 @@ namespace Mic
         virtual void addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val );
         virtual void addProcedure(const MilProcedure& method );
 
-        virtual void beginType(const QByteArray& name, bool isPublic, quint8 typeKind);
+        virtual void beginType(const QByteArray& name, bool isPublic, quint8 typeKind,const MilQuali& super);
         virtual void endType();
         virtual void addType( const QByteArray& name, bool isPublic, const MilQuali& baseType,
                       quint8 typeKind, quint32 len = 0);

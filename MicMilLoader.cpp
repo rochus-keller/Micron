@@ -18,6 +18,7 @@
 */
 
 #include "MicMilLoader.h"
+#include <QtDebug>
 using namespace Mic;
 
 MilLoader::MilLoader()
@@ -88,12 +89,12 @@ void InMemRenderer::addConst(const MilQuali& typeRef, const QByteArray& name, co
 void InMemRenderer::addProcedure(const Mic::MilProcedure& method)
 {
     Q_ASSERT(module);
-    if( method.kind == Mic::MilProcedure::ProcType )
+    if( method.kind == Mic::MilProcedure::ProcType || method.kind == Mic::MilProcedure::MethType )
     {
         MilType t;
         t.name = method.name;
         t.isPublic = method.isPublic;
-        t.kind = MilEmitter::ProcType;
+        t.kind = method.kind == Mic::MilProcedure::ProcType ? MilEmitter::ProcType : MilEmitter::MethType;
         t.base = method.retType;
         t.fields = method.params;
         module->types.append(t);
@@ -101,19 +102,70 @@ void InMemRenderer::addProcedure(const Mic::MilProcedure& method)
         module->order.append(qMakePair(MilModule::Type,module->types.size()-1) );
     }else
     {
-        module->procs.append(method);
-        module->symbols[method.name.constData()] = qMakePair(MilModule::Proc,module->procs.size()-1);
-        module->order.append(qMakePair(MilModule::Proc,module->procs.size()-1) );
+        if( !method.receiver.second.isEmpty() )
+        {
+            QPair<MilModule::What,quint32> what = module->symbols.value(method.receiver.second.constData());
+            if( what.first != MilModule::Type )
+            {
+                qCritical() << "InMemRenderer::addProcedure: receiver type not found:" << method.receiver.second;
+                return;
+            }
+            MilType& type = module->types[what.second];
+            if( type.kind != MilEmitter::Object )
+            {
+                qCritical() << "InMemRenderer::addProcedure: only object types can be referenced as receivers:"
+                            << method.receiver.second << type.name;
+                return;
+            }
+            type.methods.append(method);
+        }else
+        {
+            module->procs.append(method);
+            module->symbols[method.name.constData()] = qMakePair(MilModule::Proc,module->procs.size()-1);
+            module->order.append(qMakePair(MilModule::Proc,module->procs.size()-1) );
+        }
     }
 }
 
-void InMemRenderer::beginType(const QByteArray& name, bool isPublic, quint8 typeKind)
+void InMemRenderer::beginType(const QByteArray& name, bool isPublic, quint8 typeKind, const MilQuali& super)
 {
     Q_ASSERT(module);
     MilType t;
     t.name = name;
     t.isPublic = isPublic;
     t.kind = typeKind;
+    if( !super.second.isEmpty() )
+    {
+        if( typeKind != MilEmitter::Object )
+        {
+            qCritical() << "InMemRenderer::beginType: only object types can have a super type:" << name;
+            return;
+        }
+        MilModule* m = module;
+        if( !super.first.isEmpty() )
+        {
+            m = loader->getModule(super.first);
+            if( m == 0 )
+            {
+                qCritical() << "InMemRenderer::beginType: module of super type not found:" << super.first;
+                return;
+            }
+        }
+        QPair<MilModule::What,quint32> what = m->symbols.value(super.second.constData());
+        if( what.first != MilModule::Type )
+        {
+            qCritical() << "InMemRenderer::beginType: super type not found:" << super.first << super.second;
+            return;
+        }
+        MilType& type = m->types[what.second];
+        if( type.kind != MilEmitter::Object )
+        {
+            qCritical() << "InMemRenderer::beginType: only object types can be referenced as super type:"
+                        << super.first << super.second;
+            return;
+        }
+        t.base = super;
+    }
     module->types.append(t);
     module->symbols[name.constData()] = qMakePair(MilModule::Type,module->types.size()-1);
     module->order.append(qMakePair(MilModule::Type,module->types.size()-1) );
@@ -158,11 +210,22 @@ static void render_(const MilType* t, MilRenderer* r)
     {
     case MilEmitter::Struct:
     case MilEmitter::Union:
-    case MilEmitter::ProcType:
-        r->beginType(t->name,t->isPublic,t->kind);
+        r->beginType(t->name,t->isPublic,t->kind, t->base);
         foreach( const MilVariable& v, t->fields )
-            r->addField(v.name,v.type,v.isPublic);
+            r->addField(v.name,v.type,v.isPublic,v.bits);
         r->endType();
+        break;
+    case MilEmitter::ProcType:
+    case MilEmitter::MethType:
+        {
+            Mic::MilProcedure proc;
+            proc.name = t->name;
+            proc.isPublic = t->isPublic;
+            proc.kind = t->kind == MilEmitter::ProcType ? Mic::MilProcedure::ProcType : Mic::MilProcedure::MethType;
+            proc.params = t->fields;
+            proc.retType = t->base;
+            r->addProcedure(proc);
+        }
         break;
     case MilEmitter::Alias:
     case MilEmitter::Pointer:

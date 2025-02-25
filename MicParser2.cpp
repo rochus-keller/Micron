@@ -1485,7 +1485,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
     case Declaration::Procedure:
     case Declaration::ForwardDecl:
         k = Expression::ProcDecl;
-        val = QVariant::fromValue(d->alias ? d->link : d);
+        val = QVariant::fromValue(d);
         break;
     case Declaration::ConstDecl:
         k = Expression::ConstDecl;
@@ -1571,7 +1571,8 @@ void Parser2::emitType(Type* t, const Quali& q)
                      t->form == Type::Pointer ? MilEmitter::Pointer : MilEmitter::Array, t->len );
     }else if( t->form == Type::ConstEnum )
     {
-        out->addType(ev->toQuali(t).second,t->decl->isPublic(),qMakePair(QByteArray(),Token::getSymbol("int32")), MilEmitter::Alias);
+        out->addType(ev->toQuali(t).second,t->decl->isPublic(),qMakePair(QByteArray(),Token::getSymbol("int32")),
+                     MilEmitter::Alias);
     }else
         Q_ASSERT(false);
 }
@@ -2169,22 +2170,6 @@ Declaration* Parser2::resolveQualident(Parser2::Quali* qq, bool allowUnresovedLo
 
     }
     return d;
-}
-
-void Parser2::ProcAlias()
-{
-    procedure();
-    const IdentDef id = identdef();
-    Declaration* procDecl = addDecl(id,Declaration::Procedure);
-    procDecl->alias = true;
-    expect(Tok_Eq, false, "ProcedureDeclaration");
-    const Token tok2 = la;
-    Declaration* otherProc = resolveQualident();
-    if( otherProc && otherProc->mode != Declaration::Procedure )
-        error(tok2, QString("qualident must reference a procedure declaration"));
-    else if( otherProc && otherProc->alias )
-        otherProc = otherProc->link; // always point to the original procedure
-    procDecl->link = otherProc;
 }
 
 DeclList Parser2::toList(Declaration* d)
@@ -3108,10 +3093,7 @@ Type* Parser2::ProcedureType() {
 void Parser2::ProcedureDeclaration() {
 	if( ( ( peek(1).d_type == Tok_PROC || peek(1).d_type == Tok_PROCEDURE ) && peek(2).d_type == Tok_Hat )  ) {
         ForwardDeclaration();
-    } else if( ( ( peek(1).d_type == Tok_PROCEDURE || peek(1).d_type == Tok_PROC ) &&
-                 ( peek(3).d_type == Tok_Eq || peek(4).d_type == Tok_Eq ) )  ) {
-        ProcAlias();
-	} else if( FIRST_ProcedureHeading(la.d_type) ) {
+    } else if( FIRST_ProcedureHeading(la.d_type) ) {
         // inlined ProcedureHeading();
         procedure();
 

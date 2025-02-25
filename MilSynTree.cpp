@@ -24,10 +24,12 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_ImportList: return "ImportList";
 		case R_LocalDeclaration: return "LocalDeclaration";
 		case R_Loop: return "Loop";
+		case R_MemberList: return "MemberList";
 		case R_MetaActuals: return "MetaActuals";
 		case R_MetaParams: return "MetaParams";
 		case R_Mil: return "Mil";
 		case R_NamedType: return "NamedType";
+		case R_ObjectType: return "ObjectType";
 		case R_PointerType: return "PointerType";
 		case R_ProcedureDeclaration: return "ProcedureDeclaration";
 		case R_ProcedureType: return "ProcedureType";

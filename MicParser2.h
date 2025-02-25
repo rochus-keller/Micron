@@ -156,7 +156,6 @@ namespace Mic {
         void ForwardDeclaration();
         Expression* maybeQualident();
         Declaration* resolveQualident(Quali* = 0, bool allowUnresovedLocal = false);
-        void ProcAlias();
         static DeclList toList(Declaration*);
         Declaration* addDecl(const Token& id, quint8 visi, quint8 mode, bool* doublette = 0);
         Declaration* addDecl(const IdentDef& id, quint8 mode, bool* doublette = 0);

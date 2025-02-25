@@ -20,7 +20,7 @@
 #include "MicRowCol.h"
 #include "MicMilEmitter.h"
 #include "MicMilOp.h"
-#include "MicToken.h" // TODO: move getSymbol to separate class
+#include "MicToken.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QtDebug>
@@ -81,7 +81,7 @@ void MilEmitter::addConst(const MilQuali& typeRef, const QByteArray& name, const
     d_out->addConst(typeRef, name, val);
 }
 
-void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kind)
+void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kind, const MilQuali& receiver)
 {
     Q_ASSERT( d_typeKind == 0 );
     Q_ASSERT(!procName.isEmpty());
@@ -90,6 +90,7 @@ void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kin
     d_proc.back().name = procName;
     d_proc.back().isPublic = isPublic;
     d_proc.back().kind = kind;
+    d_proc.back().receiver = receiver;
     d_stackDepth = 0;
     d_maxStackDepth = 0;
     d_proc.back().isVararg = false;
@@ -102,13 +103,13 @@ void MilEmitter::endProc()
     d_proc.pop_back();
 }
 
-void MilEmitter::beginType(const QByteArray& name, bool isPublic, quint8 typeKind)
+void MilEmitter::beginType(const QByteArray& name, bool isPublic, quint8 typeKind, const MilQuali& super)
 {
     Q_ASSERT( d_typeKind == 0 );
-    Q_ASSERT( typeKind == Struct || typeKind == Union || typeKind == ProcType);
+    Q_ASSERT( typeKind == Struct || typeKind == Union || typeKind == ProcType || d_typeKind == MethType);
     d_typeKind = typeKind;
     if( typeKind == Struct || typeKind == Union )
-        d_out->beginType(name,isPublic, typeKind);
+        d_out->beginType(name,isPublic, typeKind, super);
     else
     {
         d_proc.append(MilProcedure());
@@ -120,7 +121,7 @@ void MilEmitter::beginType(const QByteArray& name, bool isPublic, quint8 typeKin
 
 void MilEmitter::endType()
 {
-    Q_ASSERT( d_typeKind == Struct || d_typeKind == Union || d_typeKind == ProcType);
+    Q_ASSERT( d_typeKind == Struct || d_typeKind == Union || d_typeKind == ProcType || d_typeKind == MethType);
     if( d_typeKind == Struct || d_typeKind == Union )
         d_out->endType();
     else
@@ -154,7 +155,7 @@ quint32 MilEmitter::addLocal(const MilQuali& typeRef, QByteArray name)
 
 quint32 MilEmitter::addArgument(const MilQuali& typeRef, QByteArray name)
 {
-    Q_ASSERT( !d_proc.isEmpty() || d_typeKind == ProcType );
+    Q_ASSERT( !d_proc.isEmpty() || d_typeKind == ProcType || d_typeKind == MethType );
     if( typeRef.second.isEmpty() )
         return 0; // error reported elsewhere
     d_proc.back().params.append(MilVariable(typeRef,name));
@@ -163,7 +164,7 @@ quint32 MilEmitter::addArgument(const MilQuali& typeRef, QByteArray name)
 
 void MilEmitter::setReturnType(const MilQuali& typeRef)
 {
-    Q_ASSERT( !d_proc.isEmpty()  || d_typeKind == ProcType );
+    Q_ASSERT( !d_proc.isEmpty()  || d_typeKind == ProcType || d_typeKind == MethType );
     Q_ASSERT( d_proc.back().retType.second.isEmpty() );
     d_proc.back().retType = typeRef;
 }
@@ -176,7 +177,7 @@ void MilEmitter::setExtern(const QByteArray& origName)
 
 void MilEmitter::setVararg()
 {
-    Q_ASSERT( !d_proc.isEmpty() || d_typeKind == ProcType );
+    Q_ASSERT( !d_proc.isEmpty() || d_typeKind == ProcType || d_typeKind == MethType );
     d_proc.back().isVararg = true;
 }
 
@@ -279,6 +280,13 @@ void MilEmitter::calli_(const MilQuali& methodRef, int argCount, bool hasRet)
     Q_ASSERT( !d_proc.isEmpty() );
     d_proc.back().body.append(MilOperation(IL_calli,QVariant::fromValue(methodRef)) );
     delta(-argCount + (hasRet?1:0) );
+}
+
+void MilEmitter::callvirt_(const MilQuali& methodRef, int argCount, bool hasRet)
+{
+    Q_ASSERT( !d_proc.isEmpty() );
+    d_proc.back().body.append(MilOperation(IL_callvirt,QVariant::fromValue(methodRef)) );
+    delta(-argCount - 1 + (hasRet?1:0) ); // this + args
 }
 
 void MilEmitter::case_(const CaseLabelList& l)
@@ -620,6 +628,13 @@ void MilEmitter::ldflda_(const MilTrident& fieldRef)
 {
     Q_ASSERT( !d_proc.isEmpty() );
     d_proc.back().body.append(MilOperation(IL_ldflda,QVariant::fromValue(fieldRef)));
+    delta(-1+1);
+}
+
+void MilEmitter::ldmeth_(const MilQuali& methodRef)
+{
+    Q_ASSERT( !d_proc.isEmpty() );
+    d_proc.back().body.append(MilOperation(IL_ldmeth,QVariant::fromValue(methodRef)));
     delta(-1+1);
 }
 
@@ -1116,8 +1131,9 @@ void IlAsmRenderer::addProcedure(const MilProcedure& m)
     render(m);
 }
 
-void IlAsmRenderer::beginType(const QByteArray& className, bool isPublic, quint8 classKind)
+void IlAsmRenderer::beginType(const QByteArray& className, bool isPublic, quint8 classKind, const MilQuali& super)
 {
+    Q_ASSERT(classKind == MilEmitter::Union || classKind == MilEmitter::Struct);
     state = Struct;
     out << ws() << "type " << className;
     if( isPublic )
@@ -1126,6 +1142,18 @@ void IlAsmRenderer::beginType(const QByteArray& className, bool isPublic, quint8
     out << " = ";
     if( classKind == MilEmitter::Union )
         out << "union ";
+    else if( classKind == MilEmitter::Object )
+    {
+        out << "object ";
+        if( !super.first.isEmpty() || !super.second.isEmpty() )
+        {
+            out << "(";
+            if( !super.first.isEmpty() )
+                out << super.first << ".";
+            out << super.second;
+            out << ")";
+        }
+    }
     else
         out << "struct ";
 
@@ -1136,7 +1164,9 @@ void IlAsmRenderer::beginType(const QByteArray& className, bool isPublic, quint8
 void IlAsmRenderer::endType()
 {
     level--;
-    out << ws() << "end" << endl;
+    out << ws();
+    out << "end";
+    out << endl;
     state = Module;
 }
 
@@ -1505,10 +1535,10 @@ void MilSplitter::addProcedure(const MilProcedure& method)
         r->addProcedure(method);
 }
 
-void MilSplitter::beginType(const QByteArray& name, bool isPublic, quint8 typeKind)
+void MilSplitter::beginType(const QByteArray& name, bool isPublic, quint8 typeKind, const MilQuali& super)
 {
     foreach(MilRenderer* r, renderer)
-        r->beginType(name,isPublic,typeKind);
+        r->beginType(name,isPublic,typeKind, super);
 }
 
 void MilSplitter::endType()

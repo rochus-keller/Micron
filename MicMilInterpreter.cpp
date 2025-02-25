@@ -1456,6 +1456,7 @@ public:
                 makeCall(stack, lhs.pp);
                 pc++;
                 vmbreak;
+                // TODO callvirt
             vmcase(IL_castptr)
                 // NOP
                 if( stack.back().t != MemSlot::Pointer || stack.back().p == 0 )
@@ -1843,6 +1844,7 @@ public:
                 stack.push_back(locals.at(3));
                 pc++;
                 vmbreak;
+                // TODO ldmeth
             vmcase(IL_ldnull)
                 stack.push_back(MemSlot((MemSlot*)0));
                 pc++;

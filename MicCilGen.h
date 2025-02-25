@@ -36,7 +36,7 @@ namespace Mic
         void addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val );
         void addProcedure(const MilProcedure& method );
 
-        void beginType(const QByteArray& name, bool isPublic, quint8 typeKind);
+        void beginType(const QByteArray& name, bool isPublic, quint8 typeKind,const MilQuali& super);
         void endType();
         void addType( const QByteArray& name, bool isPublic, const MilQuali& baseType,
                       quint8 typeKind, quint32 len = 0);

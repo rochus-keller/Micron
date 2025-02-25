@@ -103,7 +103,7 @@ namespace Mic
                     Max };
         static const char* s_mode[];
         Declaration* next; // list of all declarations in outer scope
-        Declaration* link; // member list or alias proc or imported module decl
+        Declaration* link; // member list or imported module decl
         Declaration* outer; // the owning declaration to reconstruct the qualident
         Type* type;
         QByteArray name;
@@ -114,14 +114,13 @@ namespace Mic
         uint inline_ : 1;
         uint invar : 1;
         uint extern_ : 1; // extern name (if present) is in val
-        uint alias : 1; // the original is in link
         uint meta : 1;
         uint ownstype : 1;
         uint mode : 5;
         uint id : 16; // used for built-in code and local/param number, and bit size of fields
         QVariant data; // value for Const and Enum, path for Import, name for Extern
         Declaration():next(0),link(0),type(0),row(0),col(0),id(0),mode(0),visi(0),ownstype(false),
-            inline_(false),invar(false),extern_(false),meta(false),outer(0),alias(0){}
+            inline_(false),invar(false),extern_(false),meta(false),outer(0){}
         ~Declaration();
 
         QList<Declaration*> getParams() const;

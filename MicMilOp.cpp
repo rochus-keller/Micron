@@ -24,7 +24,7 @@ const char* s_opName[] =
 {
     "invalid",
     // expressions
-    "add", "and", "call", "calli", "castptr",
+    "add", "and", "call", "calli", "callvirt", "castptr",
     "ceq", "cgt", "cgt_un", "clt", "clt_un",
     "conv_i1", "conv_i2", "conv_i4", "conv_i8", "conv_r4", "conv_r8",
     "conv_u1", "conv_u2", "conv_u4", "conv_u8", "conv_ip",
@@ -42,7 +42,7 @@ const char* s_opName[] =
     "ldind_u4", "ldind_r4", "ldind_u8", "ldind_r8", "ldind_ip",
     "ldloc", "ldloc_s", "ldloca", "ldloca_s",
     "ldloc_0", "ldloc_1", "ldloc_2", "ldloc_3", "ldnull",
-    "ldobj", "ldproc", "ldstr",
+    "ldobj", "ldproc", "ldmeth", "ldstr",
     "ldvar", "ldvara", "mul", "neg",
     "newarr", "newvla", "newobj",
     "not", "or", "rem", "rem_un", "shl", "shr", "shr_un",

@@ -78,6 +78,7 @@ public:
             }
             break;
         case MilEmitter::ProcType:
+        case MilEmitter::MethType:
             break;
         case MilEmitter::Alias:
             // TODO: call recursively for resolved base
@@ -310,9 +311,9 @@ void CilGen::addProcedure(const MilProcedure& method)
     imp->imr.addProcedure(method);
 }
 
-void CilGen::beginType(const QByteArray& name, bool isPublic, quint8 typeKind)
+void CilGen::beginType(const QByteArray& name, bool isPublic, quint8 typeKind, const MilQuali& super)
 {
-    imp->imr.beginType(name, isPublic, typeKind);
+    imp->imr.beginType(name, isPublic, typeKind,super);
 }
 
 void CilGen::endType()

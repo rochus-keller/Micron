@@ -245,9 +245,9 @@ void EiGen::addProcedure(const MilProcedure& method)
 #endif
 }
 
-void EiGen::beginType(const QByteArray& name, bool isPublic, quint8 typeKind)
+void EiGen::beginType(const QByteArray& name, bool isPublic, quint8 typeKind, const MilQuali& super)
 {
-    imp->imr.beginType(name, isPublic, typeKind);
+    imp->imr.beginType(name, isPublic, typeKind, super);
 #if 0
     Q_ASSERT( typeKind == MilEmitter::Struct || typeKind == MilEmitter::Union );
     imp->fields.clear();

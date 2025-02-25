@@ -33,6 +33,7 @@ namespace Mil {
 			case Tok_BEGIN: return "BEGIN";
 			case Tok_CALL: return "CALL";
 			case Tok_CALLI: return "CALLI";
+			case Tok_CALLVIRT: return "CALLVIRT";
 			case Tok_CASE: return "CASE";
 			case Tok_CASTPTR: return "CASTPTR";
 			case Tok_CEQ: return "CEQ";
@@ -129,6 +130,7 @@ namespace Mil {
 			case Tok_LDLOC_2: return "LDLOC_2";
 			case Tok_LDLOC_3: return "LDLOC_3";
 			case Tok_LDLOC_S: return "LDLOC_S";
+			case Tok_LDMETH: return "LDMETH";
 			case Tok_LDNULL: return "LDNULL";
 			case Tok_LDOBJ: return "LDOBJ";
 			case Tok_LDPROC: return "LDPROC";
@@ -145,6 +147,7 @@ namespace Mil {
 			case Tok_NEWVLA: return "NEWVLA";
 			case Tok_NOP: return "NOP";
 			case Tok_NOT: return "NOT";
+			case Tok_OBJECT: return "OBJECT";
 			case Tok_OF: return "OF";
 			case Tok_OR: return "OR";
 			case Tok_POINTER: return "POINTER";
@@ -238,6 +241,7 @@ namespace Mil {
 			case Tok_BEGIN: return "Tok_BEGIN";
 			case Tok_CALL: return "Tok_CALL";
 			case Tok_CALLI: return "Tok_CALLI";
+			case Tok_CALLVIRT: return "Tok_CALLVIRT";
 			case Tok_CASE: return "Tok_CASE";
 			case Tok_CASTPTR: return "Tok_CASTPTR";
 			case Tok_CEQ: return "Tok_CEQ";
@@ -334,6 +338,7 @@ namespace Mil {
 			case Tok_LDLOC_2: return "Tok_LDLOC_2";
 			case Tok_LDLOC_3: return "Tok_LDLOC_3";
 			case Tok_LDLOC_S: return "Tok_LDLOC_S";
+			case Tok_LDMETH: return "Tok_LDMETH";
 			case Tok_LDNULL: return "Tok_LDNULL";
 			case Tok_LDOBJ: return "Tok_LDOBJ";
 			case Tok_LDPROC: return "Tok_LDPROC";
@@ -350,6 +355,7 @@ namespace Mil {
 			case Tok_NEWVLA: return "Tok_NEWVLA";
 			case Tok_NOP: return "Tok_NOP";
 			case Tok_NOT: return "Tok_NOT";
+			case Tok_OBJECT: return "Tok_OBJECT";
 			case Tok_OF: return "Tok_OF";
 			case Tok_OR: return "Tok_OR";
 			case Tok_POINTER: return "Tok_POINTER";
@@ -526,10 +532,22 @@ namespace Mil {
 				switch( at(str,len,i+2) ){
 				case 'L':
 					if( at(str,len,i+3) == 'L' ){
-						if( at(str,len,i+4) == 'I' ){
+						switch( at(str,len,i+4) ){
+						case 'I':
 							res = Tok_CALLI; i += 5;
-						} else {
+							break;
+						case 'V':
+							if( at(str,len,i+5) == 'I' ){
+								if( at(str,len,i+6) == 'R' ){
+									if( at(str,len,i+7) == 'T' ){
+										res = Tok_CALLVIRT; i += 8;
+									}
+								}
+							}
+							break;
+						default:
 							res = Tok_CALL; i += 4;
+							break;
 						}
 					}
 					break;
@@ -1084,6 +1102,15 @@ namespace Mil {
 						}
 					}
 					break;
+				case 'M':
+					if( at(str,len,i+3) == 'E' ){
+						if( at(str,len,i+4) == 'T' ){
+							if( at(str,len,i+5) == 'H' ){
+								res = Tok_LDMETH; i += 6;
+							}
+						}
+					}
+					break;
 				case 'N':
 					if( at(str,len,i+3) == 'U' ){
 						if( at(str,len,i+4) == 'L' ){
@@ -1213,6 +1240,17 @@ namespace Mil {
 			break;
 		case 'O':
 			switch( at(str,len,i+1) ){
+			case 'B':
+				if( at(str,len,i+2) == 'J' ){
+					if( at(str,len,i+3) == 'E' ){
+						if( at(str,len,i+4) == 'C' ){
+							if( at(str,len,i+5) == 'T' ){
+								res = Tok_OBJECT; i += 6;
+							}
+						}
+					}
+				}
+				break;
 			case 'F':
 				res = Tok_OF; i += 2;
 				break;
