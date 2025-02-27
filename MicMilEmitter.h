@@ -74,7 +74,7 @@ namespace Mic
         uint stackDepth: 16;
         uint compiled: 1;
         QByteArray name;
-        QList<MilOperation> body;
+        QList<MilOperation> body, finally;
         QList<MilVariable> params;
         QList<MilVariable> locals;
         MilQuali retType;
@@ -168,6 +168,7 @@ namespace Mic
 
         void beginProc(const QByteArray& procName, bool isPublic = true, quint8 kind = MilProcedure::Normal,
                        const MilQuali& receiver = MilQuali() );
+        void toFinallySection(bool);
         void endProc();
 
         enum TypeKind { Invalid, Struct, Union, Object, ProcType, MethType, Alias, Pointer, Array, Generic, MaxType };
@@ -280,6 +281,7 @@ namespace Mic
         quint16 d_stackDepth;
         quint16 d_maxStackDepth;
         QList<MilProcedure> d_proc; // proc stack
+        QList<MilOperation>* ops;
         QByteArray d_library, d_origName;
         MilRenderer* d_out;
     };

@@ -37,6 +37,8 @@ namespace Mic {
 		void ArrayType();
 		void length();
 		void RecordType();
+		void ObjectType();
+		void BaseType();
 		void inline_();
 		void VariantPart();
 		void FixedPart();
@@ -82,6 +84,7 @@ namespace Mic {
 		void ProcedureType();
 		void ProcedureDeclaration();
 		void ProcedureHeading();
+		void Receiver();
 		void block();
 		void ProcedureBody();
 		void DeclarationSequence();

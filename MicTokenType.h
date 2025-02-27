@@ -5,6 +5,9 @@
 
 #include <QByteArray>
 
+#define MIC_LEVEL1
+#define MIC_LEVEL3
+
 namespace Mic {
 	enum TokenType {
 		Tok_Invalid = 0,

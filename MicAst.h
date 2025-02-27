@@ -64,11 +64,12 @@ namespace Mic
     class Type
     {
     public:
-        enum Form { Pointer = BasicType::Max, Proc, Array, Record, ConstEnum, NameRef, Generic };
-        quint8 form;
-        bool deferred;
-        bool anonymous;
-        bool selfref;
+        enum Form { Pointer = BasicType::Max, Proc, Array, Record, Object, ConstEnum, NameRef, Generic };
+        uint form : 6;
+        uint deferred : 1;
+        uint anonymous : 1;
+        uint selfref : 1;
+        uint typebound : 1;
         quint32 len; // array length
         Type* base; // array/pointer base type, return type
         QList<Declaration*> subs; // list of record fields or enum elements, or params for proc type
@@ -85,12 +86,12 @@ namespace Mic
         bool isText() const { return form == BasicType::String || form == BasicType::CHAR ||
                     ( form == Array && base && base->form == BasicType::CHAR ) ||
                     ( form == Pointer && base && base->form == Array && base->base->form == BasicType::CHAR ); }
-        bool isStructured() const { return form == Array || form == Record; }
+        bool isStructured() const { return form == Array || form == Record || form == Object; }
 
-        Declaration* findField(const QByteArray& name) const;
+        Declaration* findSub(const QByteArray& name) const;
         QPair<int,int> getFieldCount() const; // fixed, variant
 
-        Type():form(0),len(0),base(0),decl(0),deferred(false),anonymous(false),selfref(false){}
+        Type():form(0),len(0),base(0),decl(0),deferred(false),anonymous(false),selfref(false),typebound(false){}
         ~Type();
     };
 
@@ -116,11 +117,12 @@ namespace Mic
         uint extern_ : 1; // extern name (if present) is in val
         uint meta : 1;
         uint ownstype : 1;
+        uint typebound : 1;
         uint mode : 5;
         uint id : 16; // used for built-in code and local/param number, and bit size of fields
         QVariant data; // value for Const and Enum, path for Import, name for Extern
         Declaration():next(0),link(0),type(0),row(0),col(0),id(0),mode(0),visi(0),ownstype(false),
-            inline_(false),invar(false),extern_(false),meta(false),outer(0){}
+            inline_(false),invar(false),extern_(false),meta(false),outer(0),typebound(0){}
         ~Declaration();
 
         QList<Declaration*> getParams() const;

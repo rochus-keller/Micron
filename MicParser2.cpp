@@ -118,6 +118,10 @@ static inline bool FIRST_RecordType(int tt) {
 	return tt == Tok_RECORD;
 }
 
+static inline bool FIRST_ObjectType(int tt) {
+    return tt == Tok_OBJECT;
+}
+
 static inline bool FIRST_inline_(int tt) {
 	return tt == Tok_IN || tt == Tok_INLINE;
 }
@@ -530,6 +534,10 @@ static inline bool FIRST_ProcedureHeading(int tt) {
 	return tt == Tok_PROCEDURE || tt == Tok_PROC;
 }
 
+static inline bool FIRST_Receiver(int tt) {
+    return tt == Tok_Lpar;
+}
+
 static inline bool FIRST_block(int tt) {
 	return tt == Tok_BEGIN;
 }
@@ -588,7 +596,8 @@ static inline bool FIRST_MetaSection(int tt) {
 }
 
 Parser2::Parser2(AstModel* m, Scanner2* s, MilEmitter* out, Importer* i):
-    mdl(m),scanner(s),out(out),imp(i),thisMod(0), thisDecl(0)
+    mdl(m),scanner(s),out(out),imp(i),thisMod(0),thisDecl(0),inFinally(false),
+    langLevel(2),haveExceptions(false)
 {
     ev = new Evaluator(m,out);
 }
@@ -1115,7 +1124,9 @@ Type* Parser2::type(bool deanonymize) {
         res = ArrayType();
 	} else if( FIRST_RecordType(la.d_type) ) {
         res = RecordType();
-	} else if( FIRST_PointerType(la.d_type) ) {
+    } else if( FIRST_ObjectType(la.d_type) ) {
+        res = ObjectType();
+    } else if( FIRST_PointerType(la.d_type) ) {
         res = PointerType();
 	} else if( FIRST_ProcedureType(la.d_type) ) {
         res = ProcedureType();
@@ -1242,6 +1253,46 @@ Type* Parser2::RecordType() {
         VariantPart();
 	}
 	expect(Tok_END, true, "RecordType");
+    rec->subs = toList(mdl->closeScope(true));
+    return rec;
+}
+
+Type* Parser2::ObjectType() {
+    expect(Tok_OBJECT, true, "ObjectType");
+    if( langLevel < 3 )
+        error(cur,"object types not available on current language level");
+    Type* rec = new Type();
+    rec->form = Type::Record;
+    mdl->openScope(0);
+    if( la.d_type == Tok_Lpar ) {
+        expect(Tok_Lpar, false, "ObjectType");
+        const Token tok = la;
+        Type* t = NamedType();
+        if( t && t->form == Type::Pointer )
+            t = t->base;
+        if( t && t->form != Type::Object )
+            error(tok, "base type must be an object type");
+        else
+            rec->base = t;
+        expect(Tok_Rpar, false, "ObjectType");
+    }
+    while( FIRST_IdentList(la.d_type) ) {
+        const IdentDefList l = IdentList();
+        expect(Tok_Colon, false, "ObjectType");
+        const Token tok = la;
+        Type* t = type();
+        if( la.d_type == Tok_Semi ) {
+            expect(Tok_Semi, false, "ObjectType");
+        }
+        openArrayError(tok,t);
+        invalidTypeError(tok,t);
+        for(int i = 0; i < l.size(); i++ )
+        {
+            Declaration* d = addDecl(l[i],Declaration::Field);
+            d->type = t;
+        }
+    }
+    expect(Tok_END, true, "ObjectType");
     rec->subs = toList(mdl->closeScope(true));
     return rec;
 }
@@ -1868,6 +1919,42 @@ void Parser2::checkRelOp(Expression* e)
         error(e->pos.d_row, e->pos.d_col, "operands not compatible with operator");
 }
 
+void Parser2::beginFinallyEnd(bool finally)
+{
+    Q_ASSERT(!inFinally);
+    inFinally = finally;
+    out->toFinallySection(inFinally);
+    labels.clear();
+    gotos.clear();
+    StatementSequence();
+    Gotos::const_iterator i;
+    for( i = gotos.begin(); i != gotos.end(); ++i )
+    {
+        Labels::iterator j = labels.find((*i).second.d_val.constData() );
+        if( j == labels.end() )
+            error((*i).second,"goto label not defined in this block");
+        else
+        {
+            j.value().used = true;
+            if( (*i).first.size() < j.value().depth.size() )
+                error((*i).second,"goto cannot jump into a structured statement");
+            else if( !(*i).first.isEmpty() && (*i).first.size() == j.value().depth.size() &&
+                     !((*i).first.last() == j.value().depth.last()) )
+                error((*i).second,"goto cannot jump into another structured statement");
+        }
+    }
+    Labels::const_iterator j;
+    for( j = labels.begin(); j != labels.end(); ++j )
+    {
+        if( !j.value().used )
+        {
+            error(j.value().tok,"goto label declared but not used");
+        }
+    }
+    inFinally = false;
+    out->toFinallySection(false);
+}
+
 static bool renderLvalue( Expression* proc, int arg )
 {
     if( proc->kind != Expression::Builtin )
@@ -1914,7 +2001,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             }
             if( res->type->form == Type::Record )
             {
-                Declaration* field = res->type->findField(cur.d_val);
+                Declaration* field = res->type->findSub(cur.d_val);
                 if( field == 0 ) {
                     error(cur,QString("the record doesn't have a field named '%1'").
                           arg(cur.d_val.constData()) );
@@ -2020,7 +2107,12 @@ Expression* Parser2::designator(bool needsLvalue) {
             else if( proc->kind == Expression::Builtin )
             {
                 Builtins bi(ev);
-                const QString err = bi.checkArgs(proc->val.toInt(), args, &retType, mdl);
+                const quint8 id = proc->val.toInt();
+                if( (langLevel < 2 && (id == Builtin::NEW || id == Builtin::DISPOSE)) ||
+                    ((langLevel < 2 || !haveExceptions) && (id == Builtin::PCALL || id == Builtin::RAISE)))
+                    error(lpar, QString("operation not supported on language level %1").arg(langLevel));
+
+                const QString err = bi.checkArgs(id, args, &retType, mdl);
                 if( !err.isEmpty() )
                     error(lpar,err);
             }else if( proc->type )
@@ -2256,7 +2348,11 @@ quint8 Parser2::relation() {
 		expect(Tok_Geq, false, "relation");
 	} else if( la.d_type == Tok_IN ) {
 		expect(Tok_IN, true, "relation");
-	} else
+    } else if( la.d_type == Tok_IS ) {
+        expect(Tok_IS, true, "relation");
+        if( langLevel < 3 )
+            error(cur,"operator not available on current language level");
+    } else
 		invalid("relation");
     return cur.d_type;
 }
@@ -2492,7 +2588,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
             error(cur, "named components only supported in record constructors");
             return 0;
         }
-        Declaration* field = constrType->findField(cur.d_val);
+        Declaration* field = constrType->findSub(cur.d_val);
         if( field == 0 )
         {
             error(cur, "field not known in record");
@@ -3078,6 +3174,19 @@ void Parser2::procedure() {
 
 Type* Parser2::ProcedureType() {
 	procedure();
+    bool bound = false;
+    if( la.d_type == Tok_Lpar && (peek(2).d_type == Tok_POINTER || peek(2).d_type == Tok_Hat) ) {
+        expect(Tok_Lpar, false, "ProcedureType");
+        if( langLevel < 3 )
+            error(cur,"bound procedure types not available on current language level");
+        if( la.d_type == Tok_POINTER ) {
+            expect(Tok_POINTER, false, "ProcedureType");
+        } else if( la.d_type == Tok_Hat ) {
+            expect(Tok_Hat, false, "ProcedureType");
+        }
+        expect(Tok_Rpar, false, "ProcedureType");
+        bound = true;
+    }
     mdl->openScope(0);
     Type* ret = 0;
 	if( FIRST_FormalParameters(la.d_type) ) {
@@ -3085,6 +3194,7 @@ Type* Parser2::ProcedureType() {
 	}
     Type* p = new Type();
     p->form = Type::Proc;
+    p->typebound = bound;
     p->subs = toList(mdl->closeScope(true));
     p->base = ret;
     return p;
@@ -3096,6 +3206,13 @@ void Parser2::ProcedureDeclaration() {
     } else if( FIRST_ProcedureHeading(la.d_type) ) {
         // inlined ProcedureHeading();
         procedure();
+
+        NameAndType receiver;
+        if( FIRST_Receiver(la.d_type) ) {
+            if( langLevel < 3 )
+                error(la, "type-bound procedures not available on current language level");
+            receiver = Receiver();
+        }
 
         const IdentDef id = identdef();
         if( !id.isValid() )
@@ -3110,9 +3227,25 @@ void Parser2::ProcedureDeclaration() {
         if( forward )
             forward->name.clear(); // so it doesn't intervene name lookup
 
+        if( receiver.t )
+            mdl->openScope(0);
         Declaration* procDecl = addDecl(id, Declaration::Procedure);
+        if( receiver.t )
+            mdl->closeScope(true);
 
         mdl->openScope(procDecl);
+
+        if( receiver.t )
+        {
+            // add the method to the object type
+            if( receiver.t->base->findSub(id.name.d_val) )
+                error(id.name, "method name not unique in object type");
+            receiver.t->base->subs.append(procDecl);
+            procDecl->typebound = true;
+            Declaration* param = addDecl(receiver.id, 0, Declaration::ParamDecl);
+            param->type = receiver.t;
+        }
+
         if( FIRST_FormalParameters(la.d_type) ) {
             procDecl->type = FormalParameters();
         }
@@ -3134,6 +3267,10 @@ void Parser2::ProcedureDeclaration() {
                 expect(Tok_Semi, false, "ProcedureDeclaration");
             }
             expect(Tok_EXTERN, true, "ProcedureDeclaration");
+            if( langLevel == 0 )
+                error(cur, "EXTERN not allowed in language level 0");
+            if( receiver.t )
+                error(cur, "EXTERN not supported for type-bound procedures");
             procDecl->extern_ = true;
             out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->mode == Declaration::Module &&
                            id.visi > 0, MilProcedure::Extern);
@@ -3151,7 +3288,9 @@ void Parser2::ProcedureDeclaration() {
             out->endProc();
         } else if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR ||
                    la.d_type == Tok_Semi || FIRST_ProcedureBody(la.d_type) ) {
-            quint8 kind = MilProcedure::Normal;
+            quint8 kind = langLevel == 0 ?
+                        MilProcedure::Inline // on langLevel 0 all procedures are implicitly inline
+                      : MilProcedure::Normal;
 			if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR ) {
 				if( la.d_type == Tok_INLINE ) {
 					expect(Tok_INLINE, true, "ProcedureDeclaration");
@@ -3163,6 +3302,8 @@ void Parser2::ProcedureDeclaration() {
                     kind = MilProcedure::Invar;
 				} else
 					invalid("ProcedureDeclaration");
+                if( receiver.t )
+                    error(cur, "INLINE and INVAR not supported for type-bound procedures");
 			}
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "ProcedureDeclaration");
@@ -3193,34 +3334,58 @@ void Parser2::ProcedureDeclaration() {
 		invalid("ProcedureDeclaration");
 }
 
+Parser2::NameAndType Parser2::Receiver() {
+    NameAndType res;
+    expect(Tok_Lpar, false, "Receiver");
+    expect(Tok_ident, false, "Receiver");
+    res.id = cur;
+    expect(Tok_Colon, false, "Receiver");
+    bool withPointer = false;
+    if( la.d_type == Tok_POINTER || la.d_type == Tok_Hat ) {
+        if( la.d_type == Tok_POINTER ) {
+            expect(Tok_POINTER, false, "Receiver");
+            expect(Tok_TO, false, "Receiver");
+        } else if( la.d_type == Tok_Hat ) {
+            expect(Tok_Hat, false, "Receiver");
+        } else
+            invalid("Receiver");
+        withPointer = true;
+    }
+    expect(Tok_ident, false, "Receiver");
+    const Token type = cur;
+    Declaration* d = mdl->findDecl(cur.d_val);
+    if( d == 0 || d->mode != Declaration::TypeDecl || d->type == 0 ||
+            (d->type->form != Type::Object && d->type->form != Type::Pointer ) ||
+            (d->type->form == Type::Pointer && withPointer) ||
+            (d->type->form == Type::Object && !withPointer ) ||
+            (d->type->form == Type::Pointer && ( d->type->base == 0 || d->type->base->form != Type::Object)))
+    {
+        error(type, "receiver must be a pointer to object type");
+        return res;
+    }else
+    {
+        if( withPointer )
+        {
+            Type* t = new Type();
+            t->form = Type::Pointer;
+            t->base = d->type;
+            addHelper(t);
+            res.t = t;
+        }else
+            res.t = d->type;
+    }
+    expect(Tok_Rpar, false, "Receiver");
+    return res;
+}
+
 void Parser2::block() {
 	expect(Tok_BEGIN, true, "block");
-    labels.clear();
-    gotos.clear();
-	StatementSequence();
-    Gotos::const_iterator i;
-    for( i = gotos.begin(); i != gotos.end(); ++i )
-    {
-        Labels::iterator j = labels.find((*i).second.d_val.constData() );
-        if( j == labels.end() )
-            error((*i).second,"goto label not defined in this block");
-        else
-        {
-            j.value().used = true;
-            if( (*i).first.size() < j.value().depth.size() )
-                error((*i).second,"goto cannot jump into a structured statement");
-            else if( !(*i).first.isEmpty() && (*i).first.size() == j.value().depth.size() &&
-                     !((*i).first.last() == j.value().depth.last()) )
-                error((*i).second,"goto cannot jump into another structured statement");
-        }
-    }
-    Labels::const_iterator j;
-    for( j = labels.begin(); j != labels.end(); ++j )
-    {
-        if( !j.value().used )
-        {
-            error(j.value().tok,"goto label declared but not used");
-        }
+    beginFinallyEnd(false);
+    if( la.d_type == Tok_FINALLY ) {
+        expect(Tok_FINALLY, false, "block");
+        if( langLevel < 1 )
+            error(cur,"FINALLY sections are not supported on language level 0");
+        beginFinallyEnd(true);
     }
 }
 
@@ -3266,7 +3431,9 @@ void Parser2::ReturnStatement() {
 	expect(Tok_RETURN, true, "ReturnStatement");
     if( mdl->getTopScope()->mode != Declaration::Procedure )
         error(cur,"return statement only supported in a procedure declaration");
-	if( FIRST_expression(la.d_type) ) {
+    if( inFinally )
+        error(cur,"return statement not allowed in FINALLY section");
+    if( FIRST_expression(la.d_type) ) {
         if( mdl->getTopScope()->type == 0 || mdl->getTopScope()->type->form == BasicType::NoType )
                 error(cur,"this return statement doesn't expect an expression");
         const Token tok = la;
@@ -3366,10 +3533,16 @@ void Parser2::FPSection() {
     Type* t = FormalType();
     for(int i = 0; i < l.size(); i++ )
     {
-        Declaration* d = addDecl(l[i], 0, Declaration::ParamDecl);
-        if( isConst )
-            d->visi = Declaration::ReadOnly;
-        d->type = t;
+        bool doublette = false;
+        Declaration* d = addDecl(l[i], 0, Declaration::ParamDecl, &doublette);
+        if( doublette )
+            error(l[i], "parameter name not unique");
+        else
+        {
+            if( isConst )
+                d->visi = Declaration::ReadOnly;
+            d->type = t;
+        }
     }
 }
 

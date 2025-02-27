@@ -314,7 +314,7 @@ void AstModel::addBuiltin(const QByteArray& name, Builtin::Type t)
     d->id = t;
 }
 
-Declaration*Type::findField(const QByteArray& name) const
+Declaration*Type::findSub(const QByteArray& name) const
 {
     // TODO: search also through inlined records
     foreach( Declaration* d, subs)

@@ -78,6 +78,7 @@ namespace Mic {
         Type* ArrayType();
         void length(quint32& len);
         Type* RecordType();
+        Type* ObjectType();
         bool inline_();
         void VariantPart();
         void FixedPart();
@@ -122,6 +123,12 @@ namespace Mic {
 		void procedure();
         Type* ProcedureType();
 		void ProcedureDeclaration();
+        struct NameAndType{
+            Token id;
+            Type* t;
+            NameAndType():t(0){}
+        };
+        NameAndType Receiver();
 		void block();
 		void DeclarationSequence();
 		void ReturnStatement();
@@ -173,6 +180,7 @@ namespace Mic {
         void checkArithOp(Expression*);
         void checkUnaryOp(Expression*);
         void checkRelOp(Expression*);
+        void beginFinallyEnd(bool finally);
 
     private:
         AstModel* mdl;
@@ -193,6 +201,9 @@ namespace Mic {
             bool used;
             Label(const Depth& d, const Token& t):depth(d),tok(t),used(false) {}
         };
+        bool inFinally;
+        quint8 langLevel;
+        bool haveExceptions;
 
         typedef QHash<const char*,Label> Labels;
         Labels labels;

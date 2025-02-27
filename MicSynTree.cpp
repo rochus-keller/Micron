@@ -12,6 +12,7 @@ const char* SynTree::rToStr( quint16 r ) {
 	switch(r) {
 		case R_AddOperator: return "AddOperator";
 		case R_ArrayType: return "ArrayType";
+		case R_BaseType: return "BaseType";
 		case R_Case: return "Case";
 		case R_CaseLabelList: return "CaseLabelList";
 		case R_CaseStatement: return "CaseStatement";
@@ -40,11 +41,13 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_Micron: return "Micron";
 		case R_MulOperator: return "MulOperator";
 		case R_NamedType: return "NamedType";
+		case R_ObjectType: return "ObjectType";
 		case R_PointerType: return "PointerType";
 		case R_ProcedureBody: return "ProcedureBody";
 		case R_ProcedureDeclaration: return "ProcedureDeclaration";
 		case R_ProcedureHeading: return "ProcedureHeading";
 		case R_ProcedureType: return "ProcedureType";
+		case R_Receiver: return "Receiver";
 		case R_RecordType: return "RecordType";
 		case R_RepeatStatement: return "RepeatStatement";
 		case R_ReturnStatement: return "ReturnStatement";
