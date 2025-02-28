@@ -28,9 +28,9 @@ AstModel::AstModel():helper(0),helperId(0)
 {
     openScope(&globalScope);
 
-    if( globalScope.mode == Declaration::NoMode )
+    if( globalScope.kind == Declaration::NoMode )
     {
-        globalScope.mode = Declaration::Scope;
+        globalScope.kind = Declaration::Scope;
         types[BasicType::Undefined] = newType(BasicType::Undefined,1);
         types[BasicType::NoType] = newType(BasicType::NoType,1);
         types[BasicType::String] = newType(BasicType::String,1);
@@ -136,8 +136,7 @@ void AstModel::openScope(Declaration* scope)
     if( scope == 0 )
     {
         scope = new Declaration();
-        scope->mode = Declaration::Scope;
-        scope->type = 0;
+        scope->kind = Declaration::Scope;
         scope->next = 0;
     }
     scopes.push_back(scope);
@@ -152,7 +151,7 @@ Declaration* AstModel::closeScope(bool takeMembers)
         res = scopes.back()->link;
         scopes.back()->link = 0;
         delete scopes.back();
-    }else if( scopes.back()->mode == Declaration::Module )
+    }else if( scopes.back()->kind == Declaration::Module )
     {
         Q_ASSERT(scopes.back()->next == 0);
         scopes.back()->next = helper;
@@ -181,7 +180,7 @@ Declaration*AstModel::addDecl(const QByteArray& name, bool* doublette)
         decl->link = 0;
         decl->next = 0;
         decl->name = name;
-        if( scope->mode != Declaration::Scope )
+        if( scope->kind != Declaration::Scope )
             decl->outer = scope;
         *obj = decl;
         return decl;
@@ -237,7 +236,7 @@ Declaration*AstModel::findDecl(Declaration* import, const QByteArray& id) const
 {
     if( import == 0 )
         return findDecl(id);
-    Q_ASSERT(import && import->mode == Declaration::Import);
+    Q_ASSERT(import && import->kind == Declaration::Import);
     Declaration* obj = import->link;
     while( obj != 0 && obj->name.constData() != id.constData() )
         obj = obj->next;
@@ -252,14 +251,14 @@ QByteArray AstModel::getTempName()
 Declaration*AstModel::getTopModule() const
 {
     for( int i = 0; i < scopes.size(); i++ )
-        if( scopes[i]->mode == Declaration::Module )
+        if( scopes[i]->kind == Declaration::Module )
             return scopes[i];
     return 0;
 }
 
 void AstModel::cleanupGlobals()
 {
-    if( globalScope.mode == Declaration::Scope )
+    if( globalScope.kind == Declaration::Scope )
     {
         if( globalScope.next )
             delete globalScope.next;
@@ -267,7 +266,7 @@ void AstModel::cleanupGlobals()
         if( globalScope.link )
             delete globalScope.link;
         globalScope.link = 0;
-        globalScope.mode = Declaration::NoMode;
+        globalScope.kind = Declaration::NoMode;
         for( int i = 0; i < BasicType::Max; i++ )
         {
             delete types[i];
@@ -279,7 +278,7 @@ void AstModel::cleanupGlobals()
 Type*AstModel::newType(int form, int size)
 {
     Type* t = new Type();
-    t->form = form;
+    t->kind = form;
     return t;
 }
 
@@ -293,24 +292,24 @@ Type*AstModel::addType(const QByteArray& name, int form, int size)
 void AstModel::addTypeAlias(const QByteArray& name, Type* t)
 {
     Declaration* d = addDecl(Token::getSymbol(name.toUpper()));
-    d->mode = Declaration::TypeDecl;
-    d->type = t;
+    d->kind = Declaration::TypeDecl;
+    d->setType(t);
     if( t->decl == 0 )
         t->decl = d;
     Declaration* d2 = addDecl(Token::getSymbol(name.toLower()));
-    d2->mode = Declaration::TypeDecl;
-    d2->type = t;
+    d2->kind = Declaration::TypeDecl;
+    d2->setType(t);
 }
 
 void AstModel::addBuiltin(const QByteArray& name, Builtin::Type t)
 {
     Declaration* d = addDecl(Token::getSymbol(name.toUpper()));
-    d->mode = Declaration::Builtin;
-    d->type = types[BasicType::NoType];
+    d->kind = Declaration::Builtin;
+    d->setType(types[BasicType::NoType]);
     d->id = t;
     d = addDecl(Token::getSymbol(name.toLower()));
-    d->mode = Declaration::Builtin;
-    d->type = types[BasicType::NoType];
+    d->kind = Declaration::Builtin;
+    d->setType(types[BasicType::NoType]);
     d->id = t;
 }
 
@@ -330,9 +329,9 @@ QPair<int, int> Type::getFieldCount() const
     QPair<int, int> res;
     foreach( Declaration* d, subs)
     {
-        if( d->mode == Declaration::Field )
+        if( d->kind == Declaration::Field )
             res.first++;
-        else if( d->mode == Declaration::Variant )
+        else if( d->kind == Declaration::Variant )
             res.second++;
         d = d->next;
     }
@@ -344,7 +343,7 @@ Type::~Type()
     // all anonymous types are resolved, therefore base is no longer owned by a type
     //if( base )
     //    delete base;
-    if( form != ConstEnum )
+    if( kind != ConstEnum )
         for( int i = 0; i < subs.size(); i++ )
             delete subs[i];
 }
@@ -427,7 +426,7 @@ Declaration::~Declaration()
     if( next )
         delete next;
     if( link
-            && mode != Declaration::Import  // imports are just referenced, not owned
+            && kind != Declaration::Import  // imports are just referenced, not owned
             )
         delete link;
     if( type && ownstype )
@@ -438,7 +437,7 @@ QList<Declaration*> Declaration::getParams() const
 {
     Declaration* d = link;
     QList<Declaration*> res;
-    while( d && d->mode == Declaration::ParamDecl )
+    while( d && d->kind == Declaration::ParamDecl )
     {
         res << d;
         d = d->next;
@@ -452,7 +451,7 @@ int Declaration::getIndexOf(Declaration* ref) const
     Declaration* d = link;
     while( d )
     {
-        if( d->mode == ref->mode )
+        if( d->kind == ref->kind )
             idx++;
         if( d == ref )
             return idx;
@@ -475,7 +474,7 @@ bool Value::isCallable() const
     case Declaration::VarDecl:
     case Declaration::LocalDecl:
     case Value::Val:
-        return type && type->form == Type::Proc;
+        return type && type->kind == Type::Proc;
 
     default:
         return false;
@@ -575,7 +574,7 @@ DeclList Expression::getFormals() const
 {
     if( kind == ProcDecl )
         return val.value<Declaration*>()->getParams();
-    else if( type && type->form == Type::Proc )
+    else if( type && type->kind == Type::Proc )
         return type->subs;
     else
         return DeclList();
@@ -703,4 +702,14 @@ void Expression::killArena()
     if( arena )
         delete arena;
     arena = 0;
+}
+
+Node::~Node()
+{
+    // TODO
+}
+
+void Node::setType(Type* t)
+{
+    type = t;
 }

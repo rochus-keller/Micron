@@ -597,7 +597,7 @@ static inline bool FIRST_MetaSection(int tt) {
 
 Parser2::Parser2(AstModel* m, Scanner2* s, MilEmitter* out, Importer* i):
     mdl(m),scanner(s),out(out),imp(i),thisMod(0),thisDecl(0),inFinally(false),
-    langLevel(2),haveExceptions(false)
+    langLevel(3),haveExceptions(false)
 {
     ev = new Evaluator(m,out);
 }
@@ -692,54 +692,54 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs) const
     if( (lhs->isInt() && rhs->isInt()) ||
             (lhs->isUInt() && rhs->isUInt()) ||
             (lhs->isReal() && rhs->isReal()) )
-        return lhs->form >= rhs->form;
+        return lhs->kind >= rhs->kind;
 
     // Te and Tv are pointer types and the pointers have equal base types;
-    if( lhs->form == Type::Pointer && rhs->form == Type::Pointer &&
-            equalTypes(lhs->base, rhs->base) )
+    if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer &&
+            equalTypes(lhs->getType(), rhs->getType()) )
         return true;
 
     // Te and Tv are non-open array types with the same length and have equal base types;
-    if( lhs->form == Type::Array && rhs->form == Type::Array && lhs->len != 0 && lhs->len == rhs->len &&
-            equalTypes(lhs->base, rhs->base) )
+    if( lhs->kind == Type::Array && rhs->kind == Type::Array && lhs->len != 0 && lhs->len == rhs->len &&
+            equalTypes(lhs->getType(), rhs->getType()) )
         return true;
 
     // Tv is a pointer or a procedure type and e is NIL;
-    if( ( lhs->form == Type::Pointer || lhs->form == Type::Proc ) && rhs->form == BasicType::Nil )
+    if( ( lhs->kind == Type::Pointer || lhs->kind == Type::Proc ) && rhs->kind == BasicType::Nil )
         return true;
 
     // Te and Tv are pointer types and Tv is a POINTER TO ANY;
-    if( lhs->form == Type::Pointer && rhs->form == Type::Pointer && lhs->base->form == BasicType::Any )
+    if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer && lhs->getType()->kind == BasicType::Any )
         return true;
 
     // Tv is a pointer to one dimensional open array, Te is a pointer to any one or more dimensional array,
     // and their element types are equal, or
-    if( lhs->form == Type::Pointer && lhs->base->form == Type::Array &&
-            lhs->base->len == 0 && lhs->base->base->form != Type::Array &&
-            rhs->form == Type::Pointer && rhs->base->form == Type::Array )
+    if( lhs->kind == Type::Pointer && lhs->getType()->kind == Type::Array &&
+            lhs->getType()->len == 0 && lhs->getType()->getType()->kind != Type::Array &&
+            rhs->kind == Type::Pointer && rhs->getType()->kind == Type::Array )
     {
-        Type* base = rhs->base->base;
-        while( base && base->form == Type::Array )
-            base = base->base;
-        return equalTypes( lhs->base->base, base ) ;
+        Type* base = rhs->getType()->getType();
+        while( base && base->kind == Type::Array )
+            base = base->getType();
+        return equalTypes( lhs->getType()->getType(), base ) ;
     }
 
     // Tv is a pointer to a record TR and Te is a pointer to a record the first field of which is of type TR, or
     // is again a record the first field of which is of type TR.
-    if( lhs->form == Type::Pointer && lhs->base->form == Type::Record &&
-            rhs->form == Type::Pointer && rhs->base->form == Type::Record )
+    if( lhs->kind == Type::Pointer && lhs->getType()->kind == Type::Record &&
+            rhs->kind == Type::Pointer && rhs->getType()->kind == Type::Record )
     {
-        Declaration* first = !rhs->base->subs.isEmpty() ? rhs->base->subs.first() : 0;
-        while(first && first->type->form == Type::Record)
+        Declaration* first = !rhs->getType()->subs.isEmpty() ? rhs->getType()->subs.first() : 0;
+        while(first && first->getType()->kind == Type::Record)
         {
-            if( sameType(lhs->base, first->type) )
+            if( sameType(lhs->getType(), first->getType()) )
                 return true;
-            first = !first->type->subs.isEmpty() ? first->type->subs.first() : 0;
+            first = !first->getType()->subs.isEmpty() ? first->getType()->subs.first() : 0;
         }
     }
 
-    if( lhs->form == Type::Proc && rhs->form == Type::Proc )
-        return matchFormals(lhs->subs, rhs->subs) && matchResultType(lhs->base,rhs->base);
+    if( lhs->kind == Type::Proc && rhs->kind == Type::Proc )
+        return matchFormals(lhs->subs, rhs->subs) && matchResultType(lhs->getType(),rhs->getType());
 
     return false;
 }
@@ -747,23 +747,23 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs) const
 bool Parser2::assigCompat(Type* lhs, Declaration* rhs) const
 {
     // Tv is a procedure type and e is the name of a procedure whose formal parameters match those of Tv.
-    if( rhs->mode == Declaration::Procedure )
+    if( rhs->kind == Declaration::Procedure )
     {
-        if( lhs->form == Type::Proc )
-            return matchFormals(lhs->subs, rhs->getParams()) && matchResultType(lhs->base,rhs->type);
+        if( lhs->kind == Type::Proc )
+            return matchFormals(lhs->subs, rhs->getParams()) && matchResultType(lhs->getType(),rhs->getType());
         else
             return false;
     }
 
     // Tv is an enumeration type and e is a valid element of the enumeration;
-    if( lhs->form == Type::ConstEnum )
+    if( lhs->kind == Type::ConstEnum )
         return lhs->subs.contains(rhs);
 
-    if( lhs->form == Type::Array && lhs->base->form == BasicType::CHAR && lhs->len > 0 &&
-            rhs->mode == Declaration::ConstDecl && rhs->type->form == BasicType::String )
+    if( lhs->kind == Type::Array && lhs->getType()->kind == BasicType::CHAR && lhs->len > 0 &&
+            rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == BasicType::String )
         return strlen(rhs->data.toByteArray().constData()) < lhs->len;
 
-    return assigCompat(lhs, rhs->type);
+    return assigCompat(lhs, rhs->getType());
 }
 
 bool Parser2::assigCompat(Type* lhs, const Expression* rhs) const
@@ -776,40 +776,40 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs) const
 
     // Tv is a signed integer and e is an unsigned integer constant, and Tv includes the
     // smallest integer type necessary to represent e.
-    if( lhs->isInt() && rhs->isConst() && rhs->type->isUInt() )
+    if( lhs->isInt() && rhs->isConst() && rhs->getType()->isUInt() )
         return assigCompat(lhs, ev->smallestIntType(rhs->val));
 
     if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl )
         return assigCompat(lhs, rhs->val.value<Declaration*>() );
 
-    if( lhs->form == Type::Array && lhs->base->form == BasicType::CHAR && lhs->len > 0 &&
-            rhs->isLiteral() && rhs->type->form == BasicType::String)
+    if( lhs->kind == Type::Array && lhs->getType()->kind == BasicType::CHAR && lhs->len > 0 &&
+            rhs->isLiteral() && rhs->getType()->kind == BasicType::String)
         return strlen(rhs->getLiteralValue().toByteArray().constData()) < lhs->len;
 
     // A string of length 1 can be used wherever a character constant is allowed and vice versa.
-    if( lhs->form == BasicType::CHAR && rhs->type->form == BasicType::String )
+    if( lhs->kind == BasicType::CHAR && rhs->getType()->kind == BasicType::String )
         return strlen(rhs->val.toByteArray().constData()) == 1;
 
-    return assigCompat(lhs, rhs->type);
+    return assigCompat(lhs, rhs->getType());
 }
 
 bool Parser2::paramCompat(Declaration* lhs, const Expression* rhs) const
 {
-    Q_ASSERT(lhs->mode == Declaration::ParamDecl);
+    Q_ASSERT(lhs->kind == Declaration::ParamDecl);
 
     // Tf is a pointer to an open array of CHAR, f is CONST, and a is string literal
-    if( lhs->visi == Declaration::ReadOnly && lhs->type->form == Type::Pointer &&
-            lhs->type->base->form == Type::Array && lhs->type->base->base->form == BasicType::CHAR &&
-            lhs->type->base->len == 0 && rhs->type->form == BasicType::String )
+    if( lhs->visi == Declaration::ReadOnly && lhs->getType()->kind == Type::Pointer &&
+            lhs->getType()->getType()->kind == Type::Array && lhs->getType()->getType()->getType()->kind == BasicType::CHAR &&
+            lhs->getType()->getType()->len == 0 && rhs->getType()->kind == BasicType::String )
         return true;
 
     if( rhs->kind == Expression::TypeDecl )
         return false;
     if( rhs->kind == Expression::ProcDecl )
-        return assigCompat(lhs->type,rhs);
+        return assigCompat(lhs->getType(),rhs);
 
     // Tf and Ta are equal types, or Ta is assignment compatible with Tf
-    return equalTypes(lhs->type,rhs->type) || assigCompat(lhs->type,rhs);
+    return equalTypes(lhs->getType(),rhs->getType()) || assigCompat(lhs->getType(),rhs);
 }
 
 bool Parser2::matchFormals(const QList<Declaration*>& a, const QList<Declaration*>& b) const
@@ -822,7 +822,7 @@ bool Parser2::matchFormals(const QList<Declaration*>& a, const QList<Declaration
             return false;
         if( a[i]->visi != b[i]->visi )
             return false;
-        if( !equalTypes(a[i]->type, b[i]->type) )
+        if( !equalTypes(a[i]->getType(), b[i]->getType()) )
             return false;
     }
     return true;
@@ -832,7 +832,7 @@ bool Parser2::matchResultType(Type* lhs, Type* rhs) const
 {
     if( lhs == 0 || rhs == 0 ) // TODO: is this a valid state?
         return false;
-    return equalTypes(lhs,rhs) || (lhs->form == BasicType::NoType && rhs->form == BasicType::NoType);
+    return equalTypes(lhs,rhs) || (lhs->kind == BasicType::NoType && rhs->kind == BasicType::NoType);
 }
 
 bool Parser2::sameType(Type* lhs, Type* rhs) const
@@ -850,19 +850,19 @@ bool Parser2::equalTypes(Type* lhs, Type* rhs) const
         return false;
 
     // Ta and Tb are pointer types with equal base types
-    if( lhs->form == Type::Pointer && rhs->form == Type::Pointer &&
-            equalTypes(lhs->base, rhs->base) )
+    if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer &&
+            equalTypes(lhs->getType(), rhs->getType()) )
         return true;
 
     // Ta and Tb are open array types with equal element types, or
     // Ta and Tb are non-open array types with same length and equal element types, or
-    if( lhs->form == Type::Array && rhs->form == Type::Array && lhs->len == rhs->len &&
-            equalTypes(lhs->base, rhs->base) )
+    if( lhs->kind == Type::Array && rhs->kind == Type::Array && lhs->len == rhs->len &&
+            equalTypes(lhs->getType(), rhs->getType()) )
         return true;
 
     // Ta and Tb are procedure types whose formal parameters match,
-    if( lhs->form == Type::Proc && rhs->form == Type::Proc && matchFormals(lhs->subs,rhs->subs) &&
-            matchResultType(lhs->base, rhs->base))
+    if( lhs->kind == Type::Proc && rhs->kind == Type::Proc && matchFormals(lhs->subs,rhs->subs) &&
+            matchResultType(lhs->getType(), rhs->getType()))
         return true;
 
     return false;
@@ -876,7 +876,7 @@ void Parser2::ForwardDeclaration()
     Declaration* forwardDecl = addDecl(id,Declaration::ForwardDecl);
     mdl->openScope(forwardDecl);
     if( FIRST_FormalParameters(la.d_type) ) {
-        forwardDecl->type = FormalParameters();
+        forwardDecl->setType(FormalParameters());
     }
 
     mdl->closeScope();
@@ -909,18 +909,18 @@ Expression* Parser2::number() {
         {
             str.replace('d','e');
             str.replace('D','E');
-            res->type = mdl->getType(BasicType::FLT64);
+            res->setType(mdl->getType(BasicType::FLT64));
         }else if( str.contains('s') || str.contains('S') )
         {
             str.replace('f','e');
             str.replace('F','E');
-            res->type = mdl->getType(BasicType::FLT32);
+            res->setType(mdl->getType(BasicType::FLT32));
         }else
         {
             if( cur.d_double )
-                res->type = mdl->getType(BasicType::FLT64);
+                res->setType(mdl->getType(BasicType::FLT64));
             else
-                res->type = mdl->getType(BasicType::FLT32);
+                res->setType(mdl->getType(BasicType::FLT32));
        }
         res->val = str.toDouble(); // we save double in any case
     } else
@@ -1028,9 +1028,9 @@ Expression*Parser2::integer()
     Type* derived = signed_ ? ev->smallestIntType(res->val) : ev->smallestUIntType(res->val);
     if( type == 0 )
         type = derived;
-    else if( derived->form > type->form )
+    else if( derived->kind > type->kind )
         error(cur,"the given constant value cannot be represented by the given type");
-    res->type = type;
+    res->setType(type);
     return res;
 }
 
@@ -1074,7 +1074,7 @@ void Parser2::ConstDeclaration() {
         error(t, ev->getErr());
     Value v = ev->pop();
     d->data = v.val;
-    d->type = v.type;
+    d->setType(v.type);
     Expression::deleteAllExpressions();
 }
 
@@ -1108,7 +1108,7 @@ void Parser2::TypeDeclaration() {
         t->decl = d;
         d->ownstype = true;
     }
-    d->type = t;
+    d->setType(t);
     resolveAndCheckType(d);
     thisDecl = 0;
     emitType(t, q);
@@ -1134,7 +1134,7 @@ Type* Parser2::type(bool deanonymize) {
         res = enumeration();
 	} else
 		invalid("type");
-    if( res && res->form != BasicType::Undefined && isNewType && deanonymize )
+    if( res && res->kind != BasicType::Undefined && isNewType && deanonymize )
         addHelper(res);
     return res;
 }
@@ -1145,17 +1145,17 @@ Type* Parser2::NamedType(Quali* qout,bool allowUnresovedLocal) {
     Declaration* d = resolveQualident(qout, allowUnresovedLocal);
     if( d == 0 )
         return 0;
-    Type* t = d->type;
+    Type* t = d->getType();
     if( thisDecl != 0 )
     {
         // we are in a type declaration; mark each named type by this intermediate object
         // which is then removed and replaced later
         t = new Type();
-        t->form = Type::NameRef;
+        t->kind = Type::NameRef;
         t->subs.append(d);
-        t->base = d->type;
+        t->setType(d->getType());
     }
-    if( d->mode != Declaration::TypeDecl )
+    if( d->kind != Declaration::TypeDecl )
         error(tok, QString("invalid type: %1").arg(d->name.constData()) );
     else if( d == thisDecl )
     {
@@ -1202,9 +1202,9 @@ Type* Parser2::ArrayType() {
     openArrayError(tok2,etype);
     invalidTypeError(tok2,etype);
     Type* arr = new Type();
-    arr->form = Type::Array;
+    arr->kind = Type::Array;
     arr->len = len;
-    arr->base = etype;
+    arr->setType(etype);
     return arr;
 }
 
@@ -1244,7 +1244,7 @@ void Parser2::length(quint32& len) {
 Type* Parser2::RecordType() {
 	expect(Tok_RECORD, true, "RecordType");
     Type* rec = new Type();
-    rec->form = Type::Record;
+    rec->kind = Type::Record;
     mdl->openScope(0);
 	if( FIRST_FixedPart(la.d_type) ) {
         FixedPart();
@@ -1262,18 +1262,18 @@ Type* Parser2::ObjectType() {
     if( langLevel < 3 )
         error(cur,"object types not available on current language level");
     Type* rec = new Type();
-    rec->form = Type::Record;
+    rec->kind = Type::Record;
     mdl->openScope(0);
     if( la.d_type == Tok_Lpar ) {
         expect(Tok_Lpar, false, "ObjectType");
         const Token tok = la;
         Type* t = NamedType();
-        if( t && t->form == Type::Pointer )
-            t = t->base;
-        if( t && t->form != Type::Object )
+        if( t && t->kind == Type::Pointer )
+            t = t->getType();
+        if( t && t->kind != Type::Object )
             error(tok, "base type must be an object type");
         else
-            rec->base = t;
+            rec->setType(t);
         expect(Tok_Rpar, false, "ObjectType");
     }
     while( FIRST_IdentList(la.d_type) ) {
@@ -1289,7 +1289,7 @@ Type* Parser2::ObjectType() {
         for(int i = 0; i < l.size(); i++ )
         {
             Declaration* d = addDecl(l[i],Declaration::Field);
-            d->type = t;
+            d->setType(t);
         }
     }
     expect(Tok_END, true, "ObjectType");
@@ -1329,7 +1329,7 @@ void Parser2::VariantPart() {
         invalidTypeError(tok,t);
         Declaration* d = addDecl(id,Declaration::Variant);
         d->inline_ = isInl;
-        d->type = t;
+        d->setType(t);
 	}
 }
 
@@ -1371,7 +1371,7 @@ void Parser2::FieldList() {
         for(int i = 0; i < l.size(); i++ )
         {
             Declaration* d = addDecl(l[i],Declaration::Field);
-            d->type = t;
+            d->setType(t);
             d->id = bits;
         }
     } else if( la.d_type == Tok_2Dot ) {
@@ -1398,7 +1398,7 @@ void Parser2::FieldList() {
         invalidTypeError(tok,t);
         Declaration* d = addDecl(id,Declaration::Field);
         d->inline_ = true;
-        d->type = t;
+        d->setType(t);
     } else
 		invalid("FieldList");
 }
@@ -1425,7 +1425,7 @@ Type* Parser2::PointerType() {
 		invalid("PointerType");
 
     Type* res = new Type();
-    res->form = Type::Pointer;
+    res->kind = Type::Pointer;
 
     if( FIRST_NamedType(la.d_type) ) {
         const Token tok = la;
@@ -1433,7 +1433,7 @@ Type* Parser2::PointerType() {
         Type* t = NamedType(&q, true);
         if( t == 0 )
         {
-            res->base = mdl->getType(BasicType::Undefined);
+            res->setType(mdl->getType(BasicType::Undefined));
             if( q.first.isEmpty() )
             {
                 // we're looking for a local declaration
@@ -1441,9 +1441,9 @@ Type* Parser2::PointerType() {
                 deferred << qMakePair(res,tok);
             } // else import error already reported
         }else
-            res->base = t;
+            res->setType(t);
     }else
-        res->base = type();
+        res->setType(type());
 
     return res;
 }
@@ -1454,8 +1454,8 @@ Type* Parser2::enumeration() {
     if( FIRST_constEnum(la.d_type) ) {
         res->subs = constEnum();
         foreach( Declaration* d, res->subs )
-            d->type = res;
-        res->form = Type::ConstEnum;
+            d->setType(res);
+        res->kind = Type::ConstEnum;
     } else
 		invalid("enumeration");
 	expect(Tok_Rpar, false, "enumeration");
@@ -1511,14 +1511,14 @@ void Parser2::VariableDeclaration() {
     Declaration* outer = mdl->getTopScope();
     foreach( const IdentDef& id, ids )
     {
-        Declaration* d = addDecl(id,outer->mode == Declaration::Module ?
+        Declaration* d = addDecl(id,outer->kind == Declaration::Module ?
                                      Declaration::VarDecl : Declaration::LocalDecl);
         d->outer = outer;
-        d->type = t;
-        if( d->mode == Declaration::VarDecl )
-            out->addVariable(ev->toQuali(d->type),d->name);
+        d->setType(t);
+        if( d->kind == Declaration::VarDecl )
+            out->addVariable(ev->toQuali(d->getType()),d->name);
         else
-            out->addLocal(ev->toQuali(d->type),d->name);
+            out->addLocal(ev->toQuali(d->getType()),d->name);
     }
 }
 
@@ -1527,7 +1527,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
     Expression::Kind k = Expression::Invalid;
     QVariant val;
 
-    switch( d->mode )
+    switch( d->kind )
     {
     case Declaration::Builtin:
         k = Expression::Builtin;
@@ -1551,7 +1551,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
         Q_ASSERT(d->outer);
         val = d->outer->getIndexOf(d);
         Q_ASSERT(val.toInt() != -1 );
-        k = d->mode == Declaration::LocalDecl ? Expression::LocalVar : Expression::Param;
+        k = d->kind == Declaration::LocalDecl ? Expression::LocalVar : Expression::Param;
         break;
     case Declaration::TypeDecl:
         k = Expression::TypeDecl;
@@ -1563,7 +1563,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
     }
     Expression* res = Expression::create(k,rc);
     res->val = val;
-    res->type = d->type;
+    res->setType(d->getType());
     res->visi = d->visi;
     return res;
 }
@@ -1576,34 +1576,34 @@ void Parser2::emitType(Type* t, const Quali& q)
     if( !q.second.isEmpty() )
     {
        out->addType(ev->toQuali(t).second,t->decl->isPublic(),q, MilEmitter::Alias);
-    }else if( t->form == Type::Record || t->form == Type::Proc )
+    }else if( t->kind == Type::Record || t->kind == Type::Proc )
     {
-        if( t->form == Type::Record )
+        if( t->kind == Type::Record )
         {
             bool hasFixed = false;
             bool hasVariant = false;
             foreach( Declaration* field, t->subs )
             {
-                if( field->mode == Declaration::Field )
+                if( field->kind == Declaration::Field )
                     hasFixed = true;
-                else if( field->mode == Declaration::Variant )
+                else if( field->kind == Declaration::Variant )
                     hasVariant = true;
             }
 
             out->beginType(ev->toQuali(t).second,t->decl->isPublic(), !hasFixed ? MilEmitter::Union : MilEmitter::Struct );
             // TODO: record can have fixed and variable part which go to separate struct and union or embedded union
             foreach( Declaration* field, t->subs )
-                out->addField(field->name,ev->toQuali(field->type),field->isPublic(),field->id);
+                out->addField(field->name,ev->toQuali(field->getType()),field->isPublic(),field->id);
         }else
         {
             out->beginType(ev->toQuali(t).second,t->decl->isPublic(), MilEmitter::ProcType );
             foreach( Declaration* param, t->subs )
-                out->addArgument(ev->toQuali(param->type), param->name);
-            if( t->base && t->base->form != BasicType::NoType )
-                out->setReturnType(ev->toQuali(t->base));
+                out->addArgument(ev->toQuali(param->getType()), param->name);
+            if( t->getType() && t->getType()->kind != BasicType::NoType )
+                out->setReturnType(ev->toQuali(t->getType()));
         }
         out->endType();
-    }else if( t->form == Type::Pointer || t->form == Type::Array )
+    }else if( t->kind == Type::Pointer || t->kind == Type::Array )
     {
         Qualident base;
         if( t->deferred )
@@ -1617,10 +1617,10 @@ void Parser2::emitType(Type* t, const Quali& q)
                 }
             }
         }else
-            base = t && t->base ? ev->toQuali(t->base) : Qualident();
+            base = t && t->getType() ? ev->toQuali(t->getType()) : Qualident();
         out->addType(ev->toQuali(t).second,t->decl->isPublic(),base,
-                     t->form == Type::Pointer ? MilEmitter::Pointer : MilEmitter::Array, t->len );
-    }else if( t->form == Type::ConstEnum )
+                     t->kind == Type::Pointer ? MilEmitter::Pointer : MilEmitter::Array, t->len );
+    }else if( t->kind == Type::ConstEnum )
     {
         out->addType(ev->toQuali(t).second,t->decl->isPublic(),qMakePair(QByteArray(),Token::getSymbol("int32")),
                      MilEmitter::Alias);
@@ -1632,8 +1632,8 @@ Declaration*Parser2::addHelper(Type* t)
 {
     Declaration* decl = mdl->addHelper();
     // we need these syntetic declarations because emitter doesn't support anonymous types
-    decl->mode = Declaration::TypeDecl;
-    decl->type = t;
+    decl->kind = Declaration::TypeDecl;
+    decl->setType(t);
     decl->ownstype = true;
     decl->outer = thisMod;
     t->decl = decl;
@@ -1645,8 +1645,8 @@ Declaration*Parser2::addHelper(Type* t)
 Declaration*Parser2::addTemp(Type* t)
 {
     Declaration* decl = mdl->addDecl(mdl->getTempName());
-    decl->mode = Declaration::LocalDecl;
-    decl->type = t;
+    decl->kind = Declaration::LocalDecl;
+    decl->setType(t);
     decl->outer = mdl->getTopScope();
     decl->id = out->addLocal(ev->toQuali(t),decl->name);
     return decl;
@@ -1654,13 +1654,13 @@ Declaration*Parser2::addTemp(Type* t)
 
 void Parser2::openArrayError(const Token& tok, Type* t)
 {
-    if( t && t->form == Type::Array && t->len == 0)
+    if( t && t->kind == Type::Array && t->len == 0)
         error(tok,"open array cannot be used here");
 }
 
 void Parser2::invalidTypeError(const Token& tok, Type* t)
 {
-    if( t && t->form == BasicType::Any )
+    if( t && t->kind == BasicType::Any )
         error(tok,"this type cannot be used here");
 }
 
@@ -1678,15 +1678,15 @@ void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
 
 void Parser2::resolveAndCheckType(Declaration* d)
 {
-    if( d == 0 || d->type == 0 )
+    if( d == 0 || d->getType() == 0 )
         return; // already reported
-    if( d->type->selfref )
-        error(d->row, d->col, "circular type declaration");
-    d->type = resolveAndCheckType(d->type, false);
+    if( d->getType()->selfref )
+        error(d->pos, "circular type declaration");
+    d->setType(resolveAndCheckType(d->getType(), false));
     foreach( Type* t, deferDeleteNamedType )
     {
         t->subs.clear();
-        t->base = 0;
+        t->setType(0);
         delete t;
     }
     deferDeleteNamedType.clear();
@@ -1694,36 +1694,36 @@ void Parser2::resolveAndCheckType(Declaration* d)
 
 Type*Parser2::resolveAndCheckType(Type* t, bool selfRefBroken)
 {
-    if( t == 0 || t->form < BasicType::Max || t->form == Type::ConstEnum )
+    if( t == 0 || t->kind < BasicType::Max || t->kind == Type::ConstEnum )
         return t;
     Type* res = t;
-    switch( t->form )
+    switch( t->kind )
     {
     case Type::Pointer:
-        t->base = resolveAndCheckType(t->base, true);
+        t->setType(resolveAndCheckType(t->getType(), true));
         break;
     case Type::Proc:
-        t->base = resolveAndCheckType(t->base, true);
+        t->setType(resolveAndCheckType(t->getType(), true));
         for( int i = 0; i < t->subs.size(); i++ )
-            t->subs[i]->type = resolveAndCheckType(t->subs[i]->type, true);
+            t->subs[i]->setType(resolveAndCheckType(t->subs[i]->getType(), true));
         break;
     case Type::Array:
-        if( !selfRefBroken && t->base->selfref )
-            error(t->base->subs.first()->row, t->base->subs.first()->col,"a structured type cannot contain itself");
-        t->base = resolveAndCheckType(t->base, selfRefBroken);
+        if( !selfRefBroken && t->getType()->selfref )
+            error(t->getType()->subs.first()->pos,"a structured type cannot contain itself");
+        t->setType(resolveAndCheckType(t->getType(), selfRefBroken));
         break;
     case Type::Record:
         for( int i = 0; i < t->subs.size(); i++ )
         {
-            if( !selfRefBroken && t->subs[i]->type && t->subs[i]->type->selfref )
-                error(t->subs[i]->row, t->subs[i]->col,"a structured type cannot contain itself");
-            t->subs[i]->type = resolveAndCheckType(t->subs[i]->type, selfRefBroken);
+            if( !selfRefBroken && t->subs[i]->getType() && t->subs[i]->getType()->selfref )
+                error(t->subs[i]->pos,"a structured type cannot contain itself");
+            t->subs[i]->setType(resolveAndCheckType(t->subs[i]->getType(), selfRefBroken));
         }
         break;
     case Type::NameRef:
-        res = t->base;
+        res = t->getType();
         if( t->selfref )
-            res = t->subs.first()->type;
+            res = t->subs.first()->getType();
         deferDeleteNamedType.insert(t); // because more than one field can point to same type
         // stop at named refs
         break;
@@ -1733,7 +1733,7 @@ Type*Parser2::resolveAndCheckType(Type* t, bool selfRefBroken)
 
 static inline Type* maxType(Type* lhs, Type* rhs)
 {
-    if( lhs->form >= rhs->form )
+    if( lhs->kind >= rhs->kind )
         return lhs;
     else
         return rhs;
@@ -1742,41 +1742,41 @@ static inline Type* maxType(Type* lhs, Type* rhs)
 static Expression* createAutoCast(Expression* e, Type* t)
 {
     Expression* tmp = Expression::create(Expression::AutoCast,e->pos);
-    tmp->type = t;
+    tmp->setType(t);
     tmp->lhs = e;
     return tmp;
 }
 
 static void castArithOp(Expression* e)
 {
-    e->type = maxType(e->lhs->type,e->rhs->type);
-    if( e->type != e->lhs->type )
-        e->lhs = createAutoCast(e->lhs,e->type);
-    if( e->type != e->rhs->type )
-        e->rhs = createAutoCast(e->rhs,e->type);
+    e->setType(maxType(e->lhs->getType(),e->rhs->getType()));
+    if( e->getType() != e->lhs->getType() )
+        e->lhs = createAutoCast(e->lhs,e->getType());
+    if( e->getType() != e->rhs->getType() )
+        e->rhs = createAutoCast(e->rhs,e->getType());
 }
 
 static void castUintToInt(Expression* e, Expression* other, Evaluator* ev)
 {
     // If one of the operands is an unsigned integer constant and the other operand is of type integer,
     // the unsigned integer constant is converted to the smallest integer type which includes the constant value.
-    if( e->type->isUInt() && other->type->isInt() && e->isLiteral() )
+    if( e->getType()->isUInt() && other->getType()->isInt() && e->isLiteral() )
     {
         QVariant val = e->getLiteralValue();
-        e->type = ev->smallestIntType(val);
+        e->setType(ev->smallestIntType(val));
     }
 }
 
 void Parser2::checkArithOp(Expression* e)
 {
-    if( e->lhs == 0 || e->lhs->type == 0 || e->rhs == 0 || e->rhs->type == 0 )
+    if( e->lhs == 0 || e->lhs->getType() == 0 || e->rhs == 0 || e->rhs->getType() == 0 )
         return; // already reported?
-    if( e->lhs->type->isNumber() && e->rhs->type->isNumber() )
+    if( e->lhs->getType()->isNumber() && e->rhs->getType()->isNumber() )
     {
         castUintToInt(e->lhs, e->rhs, ev);
         castUintToInt(e->rhs, e->lhs, ev);
-        if( e->lhs->type->isInt() && e->rhs->type->isInt() ||
-                e->lhs->type->isUInt() && e->rhs->type->isUInt() )
+        if( e->lhs->getType()->isInt() && e->rhs->getType()->isInt() ||
+                e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt() )
             switch(e->kind)
             {
             case Expression::Mul:
@@ -1790,7 +1790,7 @@ void Parser2::checkArithOp(Expression* e)
                 error(e->pos.d_row, e->pos.d_col,"operator not supported for integer operands");
                 break;
             }
-        else if( e->lhs->type->isReal() && e->rhs->type->isReal() )
+        else if( e->lhs->getType()->isReal() && e->rhs->getType()->isReal() )
             switch(e->kind)
             {
             case Expression::Mul:
@@ -1805,7 +1805,7 @@ void Parser2::checkArithOp(Expression* e)
             }
         else
             error(e->pos.d_row, e->pos.d_col,"operands are not of the same type");
-    }else if( e->lhs->type->isSet() && e->rhs->type->isSet() )
+    }else if( e->lhs->getType()->isSet() && e->rhs->getType()->isSet() )
     {
         switch(e->kind)
         {
@@ -1813,27 +1813,27 @@ void Parser2::checkArithOp(Expression* e)
         case Expression::Div:
         case Expression::Add:
         case Expression::Sub:
-            e->type = e->lhs->type;
+            e->setType(e->lhs->getType());
             break;
         default:
             error(e->pos.d_row, e->pos.d_col,"operator not supported for set operands");
             break;
         }
-    }else if(e->lhs->type->isBoolean() && e->rhs->type->isBoolean())
+    }else if(e->lhs->getType()->isBoolean() && e->rhs->getType()->isBoolean())
     {
         if( e->kind == Expression::And || e->kind == Expression::Or )
-            e->type = e->lhs->type;
+            e->setType(e->lhs->getType());
         else
             error(e->pos.d_row, e->pos.d_col,"operator not supported for boolean operands");
-    }else if((e->lhs->type->form == BasicType::String || e->lhs->type->form == BasicType::CHAR) &&
-             (e->rhs->type->form == BasicType::String || e->rhs->type->form == BasicType::CHAR))
+    }else if((e->lhs->getType()->kind == BasicType::String || e->lhs->getType()->kind == BasicType::CHAR) &&
+             (e->rhs->getType()->kind == BasicType::String || e->rhs->getType()->kind == BasicType::CHAR))
     {
         if( e->kind != Expression::Add )
             error(e->pos.d_row, e->pos.d_col,"only the '+' operator can be applied to string and char literals");
         else if( !e->isConst() )
             error(e->pos.d_row, e->pos.d_col,"operation is only available for string and char literals");
         else
-            e->type = mdl->getType(BasicType::String);
+            e->setType(mdl->getType(BasicType::String));
     }else
         error(e->pos.d_row, e->pos.d_col,"operands not compatible with operator");
 }
@@ -1842,9 +1842,9 @@ void Parser2::checkUnaryOp(Expression* e)
 {
     if( e->kind == Expression::Plus || e->kind == Expression::Minus )
     {
-        if( e->lhs->type->isNumber() )
+        if( e->lhs->getType()->isNumber() )
         {
-            switch(e->type->form)
+            switch(e->getType()->kind)
             {
             case BasicType::UINT8:
                 e->lhs = createAutoCast(e->lhs, mdl->getType(BasicType::INT16));
@@ -1859,8 +1859,8 @@ void Parser2::checkUnaryOp(Expression* e)
                 error(e->pos.d_row, e->pos.d_col, "unary + operator is not applicable to operands of UINT64 type");
                 break;
             }
-            e->type = e->lhs->type;
-        }else if ( e->kind == Expression::Minus && e->type->isSet() )
+            e->setType(e->lhs->getType());
+        }else if ( e->kind == Expression::Minus && e->getType()->isSet() )
         {
             // NOP
         }else
@@ -1868,50 +1868,50 @@ void Parser2::checkUnaryOp(Expression* e)
 
     }else if( e->kind == Expression::Not )
     {
-        if( !e->type->isBoolean() )
+        if( !e->getType()->isBoolean() )
             error(e->pos.d_row, e->pos.d_col, "unary '~' or 'NOT' not applicable to this type");
     }
 }
 
 void Parser2::checkRelOp(Expression* e)
 {
-    if( e->lhs == 0 || e->lhs->type == 0 || e->rhs == 0 || e->rhs->type == 0 )
+    if( e->lhs == 0 || e->lhs->getType() == 0 || e->rhs == 0 || e->rhs->getType() == 0 )
         return; // already reported
 
-    if( e->lhs->type->isNumber() && e->rhs->type->isNumber() )
+    if( e->lhs->getType()->isNumber() && e->rhs->getType()->isNumber() )
     {
         castUintToInt(e->lhs, e->rhs, ev);
         castUintToInt(e->rhs, e->lhs, ev);
-        if( e->lhs->type->isInt() && e->rhs->type->isInt() ||
-                e->lhs->type->isUInt() && e->rhs->type->isUInt() ||
-                e->lhs->type->isReal() && e->rhs->type->isReal() )
+        if( e->lhs->getType()->isInt() && e->rhs->getType()->isInt() ||
+                e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt() ||
+                e->lhs->getType()->isReal() && e->rhs->getType()->isReal() )
         {
-            Type* mt = maxType(e->lhs->type,e->rhs->type);
-            if( mt != e->lhs->type )
+            Type* mt = maxType(e->lhs->getType(),e->rhs->getType());
+            if( mt != e->lhs->getType() )
                 e->lhs = createAutoCast(e->lhs,mt);
-            if( mt != e->rhs->type )
+            if( mt != e->rhs->getType() )
                 e->rhs = createAutoCast(e->rhs,mt);
         }else
             error(e->pos.d_row, e->pos.d_col, "operands are not of the same type");
-    }else if( e->lhs->type->isText() && e->rhs->type->isText() ||
-              e->lhs->type->form == Type::Pointer && e->rhs->type->form == Type::Pointer ||
-              e->lhs->type->form == Type::Pointer && e->rhs->type->form == BasicType::Nil ||
-              e->lhs->type->form == BasicType::Nil && e->rhs->type->form == Type::Pointer ||
-              e->lhs->type->form == BasicType::Nil && e->rhs->type->form == BasicType::Nil ||
-              e->lhs->type->form == Type::ConstEnum  && e->rhs->type->form == Type::ConstEnum ||
-              e->lhs->type->form == Type::Proc && e->rhs->type->form == Type::Proc ||
-              e->lhs->type->form == Type::Proc && e->rhs->type->form == BasicType::Nil ||
-              e->lhs->type->form == BasicType::Nil && e->rhs->type->form == Type::Proc )
+    }else if( e->lhs->getType()->isText() && e->rhs->getType()->isText() ||
+              e->lhs->getType()->kind == Type::Pointer && e->rhs->getType()->kind == Type::Pointer ||
+              e->lhs->getType()->kind == Type::Pointer && e->rhs->getType()->kind == BasicType::Nil ||
+              e->lhs->getType()->kind == BasicType::Nil && e->rhs->getType()->kind == Type::Pointer ||
+              e->lhs->getType()->kind == BasicType::Nil && e->rhs->getType()->kind == BasicType::Nil ||
+              e->lhs->getType()->kind == Type::ConstEnum  && e->rhs->getType()->kind == Type::ConstEnum ||
+              e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Proc ||
+              e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == BasicType::Nil ||
+              e->lhs->getType()->kind == BasicType::Nil && e->rhs->getType()->kind == Type::Proc )
     {
-        if( e->lhs->type->form == Type::ConstEnum  && e->rhs->type->form == Type::ConstEnum &&
-                e->lhs->type != e->rhs->type )
+        if( e->lhs->getType()->kind == Type::ConstEnum  && e->rhs->getType()->kind == Type::ConstEnum &&
+                e->lhs->getType() != e->rhs->getType() )
             error(e->pos.d_row, e->pos.d_col, "cannot compare the elements of different enumeration types");
-    }else if( ( e->lhs->type->isSet() && e->rhs->type->isSet() ) ||
-              (e->lhs->type->isBoolean() && e->rhs->type->isBoolean()) )
+    }else if( ( e->lhs->getType()->isSet() && e->rhs->getType()->isSet() ) ||
+              (e->lhs->getType()->isBoolean() && e->rhs->getType()->isBoolean()) )
     {
         if( e->kind != Expression::Eq && e->kind != Expression::Neq )
             error(e->pos.d_row, e->pos.d_col, "operation not supported for given operands");
-    }else if( e->lhs->type->isInteger() && e->rhs->type->isSet() )
+    }else if( e->lhs->getType()->isInteger() && e->rhs->getType()->isSet() )
     {
         if( e->kind != Expression::In )
             error(e->pos.d_row, e->pos.d_col, "operation not supported for given operands");
@@ -1984,24 +1984,24 @@ Expression* Parser2::designator(bool needsLvalue) {
     while( FIRST_selector(la.d_type) ) {
         // inlined selector
 
-        if( res->type == 0 )
+        if( res->getType() == 0 )
             break; // error already reported
 
         if( la.d_type == Tok_Dot ) {
             tok = la;
             expect(Tok_Dot, false, "selector");
             expect(Tok_ident, false, "selector");
-            if( res->type->form == Type::Pointer )
+            if( res->getType()->kind == Type::Pointer )
             {
                 res->setByVal();
                 Expression* tmp = Expression::create(Expression::Deref, tok.toRowCol() );
                 tmp->lhs = res;
-                tmp->type = res->type->base;
+                tmp->setType(res->getType()->getType());
                 res = tmp;
             }
-            if( res->type->form == Type::Record )
+            if( res->getType()->kind == Type::Record )
             {
-                Declaration* field = res->type->findSub(cur.d_val);
+                Declaration* field = res->getType()->findSub(cur.d_val);
                 if( field == 0 ) {
                     error(cur,QString("the record doesn't have a field named '%1'").
                           arg(cur.d_val.constData()) );
@@ -2011,7 +2011,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                     Expression* tmp = Expression::create(Expression::Select, tok.toRowCol() );
                     tmp->val = QVariant::fromValue(field);
                     tmp->lhs = res;
-                    tmp->type = field->type;
+                    tmp->setType(field->getType());
                     res = tmp;
                 }
             }else
@@ -2021,27 +2021,27 @@ Expression* Parser2::designator(bool needsLvalue) {
             }
         } else if( la.d_type == Tok_Lbrack ) {
             expect(Tok_Lbrack, false, "selector");
-            if( res->type->form == Type::Pointer )
+            if( res->getType()->kind == Type::Pointer )
             {
                 res->setByVal();
                 Expression* tmp = Expression::create(Expression::Deref, tok.toRowCol() );
                 tmp->lhs = res;
-                tmp->type = res->type->base;
+                tmp->setType(res->getType()->getType());
                 res = tmp;
             }
-            if( res->type->form != Type::Array )
+            if( res->getType()->kind != Type::Array )
             {
                 error(cur,QString("cannot index an element in given type") );
                 return 0;
             }
             Expression* tmp = Expression::create(Expression::Index, cur.toRowCol() );
             tmp->lhs = res;
-            tmp->type = res->type->base;
+            tmp->setType(res->getType()->getType());
             res = tmp;
             tok = la;
             res->rhs = expression(0);
             expect(Tok_Rbrack, false, "selector");
-            if( res->rhs && !res->rhs->type->isInteger())
+            if( res->rhs && !res->rhs->getType()->isInteger())
             {
                 error(cur,QString("expecting an index of integer type") );
                 return 0;
@@ -2049,7 +2049,7 @@ Expression* Parser2::designator(bool needsLvalue) {
         } else if( la.d_type == Tok_Hat ) {
             tok = la;
             expect(Tok_Hat, false, "selector");
-            if( res->type->form != Type::Pointer )
+            if( res->getType()->kind != Type::Pointer )
             {
                 error(tok,"only a pointer type can be dereferenced");
                 return 0;
@@ -2057,7 +2057,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             res->setByVal();
             Expression* tmp = Expression::create(Expression::Deref, tok.toRowCol() );
             tmp->lhs = res;
-            tmp->type = res->type->base;
+            tmp->setType(res->getType()->getType());
             res = tmp;
         } else if( la.d_type == Tok_Lpar ) {
             expect(Tok_Lpar, false, "selector");
@@ -2072,7 +2072,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             if( FIRST_expression(la.d_type) ) {
                 // inlined ExpList
                 tok = la;
-                Type* pt = formals.isEmpty() ? 0 : formals.first()->type;
+                Type* pt = formals.isEmpty() ? 0 : formals.first()->getType();
 
                 Expression* arg = expression(pt, renderLvalue(proc,args.size()));
                 if( arg == 0 )
@@ -2085,7 +2085,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                     if( la.d_type == Tok_Comma )
                         expect(Tok_Comma, false, "ExpList");
                     tok = la;
-                    Type* pt = args.size() < formals.size() ? formals[args.size()]->type : 0;
+                    Type* pt = args.size() < formals.size() ? formals[args.size()]->getType() : 0;
 
                     Expression* arg = expression(pt, renderLvalue(proc,args.size()));
                     if( arg == 0 )
@@ -2101,9 +2101,9 @@ Expression* Parser2::designator(bool needsLvalue) {
 
             Type* retType;
             if( isTypeCast )
-                retType = args.first()->type;
+                retType = args.first()->getType();
             else if( proc->kind == Expression::ProcDecl )
-                retType = proc->type;
+                retType = proc->getType();
             else if( proc->kind == Expression::Builtin )
             {
                 Builtins bi(ev);
@@ -2115,18 +2115,18 @@ Expression* Parser2::designator(bool needsLvalue) {
                 const QString err = bi.checkArgs(id, args, &retType, mdl);
                 if( !err.isEmpty() )
                     error(lpar,err);
-            }else if( proc->type )
-                retType = proc->type->base;
+            }else if( proc->getType() )
+                retType = proc->getType()->getType();
 
 
             if( proc->kind == Expression::Builtin && proc->val.toInt() == Builtin::ASSERT )
             {
                 Expression* e = Expression::create(Expression::Literal,lpar.toRowCol());
-                e->type = mdl->getType(BasicType::UINT32);
+                e->setType(mdl->getType(BasicType::UINT32));
                 e->val = lpar.d_lineNr;
                 args << e;
                 e = Expression::create(Expression::Literal,lpar.toRowCol());
-                e->type = mdl->getType(BasicType::String);
+                e->setType(mdl->getType(BasicType::String));
                 e->val = lpar.d_sourcePath.toUtf8();
                 args << e;
             }
@@ -2138,7 +2138,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 {
                     error(lpar,"type guard requires a single argument");
                     hasError = true;
-                }else if( proc->type->form != Type::Pointer )
+                }else if( proc->getType()->kind != Type::Pointer )
                 {
                     error(lpar,"type guard only applicable to pointer types");
                     // TODO: avoid casting records on the stack by value
@@ -2147,10 +2147,11 @@ Expression* Parser2::designator(bool needsLvalue) {
 
                 Expression* tmp = Expression::create(Expression::Cast, lpar.toRowCol() );
                 tmp->lhs = proc;
-                tmp->type = new Type();
-                tmp->type->form = Type::Pointer;
-                tmp->type->base = retType;
-                addHelper(tmp->type);
+                Type* t = new Type();
+                t->kind = Type::Pointer;
+                t->setType(retType);
+                tmp->setType(t);
+                addHelper(tmp->getType());
                 res = tmp;
 #if 0
                 else if( !ev->cast() )
@@ -2164,7 +2165,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 Expression* tmp = Expression::create(Expression::Call, lpar.toRowCol() );
                 tmp->lhs = proc;
                 tmp->val = QVariant::fromValue(args);
-                tmp->type = retType;
+                tmp->setType(retType);
                 res = tmp;
             }
         } else
@@ -2186,7 +2187,7 @@ Expression* Parser2::maybeQualident()
     if( d )
     {
         quint8 visi = Declaration::NA; // symbol is local, no read/write restriction
-        if( la.d_type == Tok_Dot && d->mode == Declaration::Import )
+        if( la.d_type == Tok_Dot && d->kind == Declaration::Import )
         {
             // this is the one and only qualident case
             expect(Tok_Dot, false, "selector");
@@ -2230,7 +2231,7 @@ Declaration* Parser2::resolveQualident(Parser2::Quali* qq, bool allowUnresovedLo
         {
             error(tok, QString("cannot find import declaration: %1").arg(q.first.constData()) );
             return 0;
-        }else if( d->mode != Declaration::Import )
+        }else if( d->kind != Declaration::Import )
         {
             error(tok, QString("identifier doesn't refer to an import declaration: %1").arg(q.first.constData()) );
             return 0;
@@ -2285,10 +2286,9 @@ Declaration*Parser2::addDecl(const Token& id, quint8 visi, quint8 mode, bool* do
         *doublette = collision;
     if(!collision)
     {
-        d->mode = mode;
+        d->kind = mode;
         d->visi = visi;
-        d->row = id.d_lineNr;
-        d->col = id.d_colNr;
+        d->pos = id.toRowCol();
     }else
         error(id, QString("name is not unique: %1").arg(id.d_val.constData()));
     return d;
@@ -2306,11 +2306,11 @@ void Parser2::resolveDeferreds()
     for(int i = 0; i < deferred.size(); i++ )
     {
         Declaration* d = mdl->findDecl(deferred[i].second.d_val);
-        if( d == 0 || d->type == 0 || d->mode != Declaration::TypeDecl )
+        if( d == 0 || d->getType() == 0 || d->kind != Declaration::TypeDecl )
         {
             error(deferred[i].second, QString("invalid type: %1").arg(deferred[i].second.d_val.constData()) );
         }else
-            deferred[i].first->base = d->type;
+            deferred[i].first->setType(d->getType());
     }
     deferred.clear();
 }
@@ -2323,7 +2323,7 @@ Expression* Parser2::expression(Type* hint, bool lvalue) {
         const Token tok = la;
         Expression* tmp = Expression::createFromToken(relation(), tok.toRowCol());
         tmp->lhs = res;
-        tmp->type = mdl->getType(BasicType::BOOL);
+        tmp->setType(mdl->getType(BasicType::BOOL));
         res = tmp;
         res->rhs = SimpleExpression(0);
         if( res->rhs == 0 )
@@ -2376,7 +2376,7 @@ Expression* Parser2::SimpleExpression(Type* hint, bool lvalue) {
     if( op != 0 ) {
         Expression* tmp = Expression::create(op == Tok_Plus ? Expression::Plus : Expression::Minus, tok.toRowCol());
         tmp->lhs = res;
-        tmp->type = res->type;
+        tmp->setType(res->getType());
         res = tmp;
         checkUnaryOp(res);
     }
@@ -2447,7 +2447,7 @@ Expression* Parser2::literal() {
 	} else if( la.d_type == Tok_string ) {
 		expect(Tok_string, false, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
-        res->type = mdl->getType(BasicType::String);
+        res->setType(mdl->getType(BasicType::String));
         res->val = ev->dequote(cur.d_val);
         // string literal: byte array latin-1 with type BasicType::String
     }else if( la.d_type == Tok_hexstring ) {
@@ -2456,34 +2456,34 @@ Expression* Parser2::literal() {
         res = Expression::create(Expression::Literal,cur.toRowCol());
         const QByteArray bytes = QByteArray::fromHex(cur.d_val); // already comes without quotes
         Type* arr = new Type();
-        arr->base = mdl->getType(BasicType::UINT8);
-        arr->form = Type::Array;
+        arr->setType(mdl->getType(BasicType::UINT8));
+        arr->kind = Type::Array;
         arr->len = bytes.size();
         addHelper(arr);
-        res->type = arr;
+        res->setType(arr);
         res->val = bytes;
         // byte array literal: byte array with type array of uint8
     } else if( la.d_type == Tok_hexchar ) {
 		expect(Tok_hexchar, false, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
-        res->type = mdl->getType(BasicType::CHAR);
+        res->setType(mdl->getType(BasicType::CHAR));
         QByteArray tmp = cur.d_val;
         tmp.chop(1); // remove X postfix
         res->val = QVariant::fromValue((char)(quint8)tmp.toUInt(0,16));
     } else if( la.d_type == Tok_NIL ) {
 		expect(Tok_NIL, true, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
-        res->type = mdl->getType(BasicType::Nil);
+        res->setType(mdl->getType(BasicType::Nil));
         res->val = QVariant();
     } else if( la.d_type == Tok_TRUE ) {
 		expect(Tok_TRUE, true, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
-        res->type = mdl->getType(BasicType::BOOL);
+        res->setType(mdl->getType(BasicType::BOOL));
         res->val = true;
     } else if( la.d_type == Tok_FALSE ) {
 		expect(Tok_FALSE, true, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
-        res->type = mdl->getType(BasicType::BOOL);
+        res->setType(mdl->getType(BasicType::BOOL));
         res->val = false;
 	} else
 		invalid("literal");
@@ -2494,18 +2494,18 @@ Expression* Parser2::constructor(Type* hint) {
     const Token t = la;
     Expression* res = Expression::create(Expression::Constructor, t.toRowCol());
     if( FIRST_NamedType(t.d_type) ) {
-        res->type = NamedType();
+        res->setType(NamedType());
     }else if( hint )
-        res->type = hint;
+        res->setType(hint);
     else
-        res->type = mdl->getType(BasicType::SET);
+        res->setType(mdl->getType(BasicType::SET));
 
-    if( res->type == 0 )
+    if( res->getType() == 0 )
     {
         error(t,"constructor type cannot be inferred");
         return 0;
-    }else if( res->type->form != Type::Record && res->type->form != Type::Array &&
-              res->type->form != BasicType::SET && res->type->form != Type::Pointer )
+    }else if( res->getType()->kind != Type::Record && res->getType()->kind != Type::Array &&
+              res->getType()->kind != BasicType::SET && res->getType()->kind != Type::Pointer )
     {
         error(t,"constructors only supported for record, array, set and pointer types");
         return 0;
@@ -2514,7 +2514,7 @@ Expression* Parser2::constructor(Type* hint) {
     expect(Tok_Lbrace, false, "constructor");
     int index = 0;
     if( FIRST_component(la.d_type) ) {
-        Expression* e = component(res->type, index);
+        Expression* e = component(res->getType(), index);
         if( e == 0 )
             return 0;
         res->appendRhs(e);
@@ -2522,7 +2522,7 @@ Expression* Parser2::constructor(Type* hint) {
             if( la.d_type == Tok_Comma ) {
                 expect(Tok_Comma, false, "constructor");
             }
-            Expression* e = component(res->type, index);
+            Expression* e = component(res->getType(), index);
             if( e == 0 )
                 return 0;
             res->appendRhs(e);
@@ -2530,7 +2530,7 @@ Expression* Parser2::constructor(Type* hint) {
     }
     expect(Tok_Rbrace, false, "constructor");
 
-    if( res->type->form == Type::Record )
+    if( res->getType()->kind == Type::Record )
     {
         QSet<Declaration*> test;
         Expression* c = res->rhs;
@@ -2545,7 +2545,7 @@ Expression* Parser2::constructor(Type* hint) {
         }
         // TODO: If the record type has a variant part, only named component can be used, and
         // only one option of the variant part can be initialized in the constructor.
-    }else if( res->type->form == Type::Array && res->type->len == 0 )
+    }else if( res->getType()->kind == Type::Array && res->getType()->len == 0 )
     {
         QSet<qint64> test; qint64 maxIndex = 0;
         Expression* c = res->rhs;
@@ -2566,12 +2566,12 @@ Expression* Parser2::constructor(Type* hint) {
             return 0;
         }
         Type* a = new Type();
-        a->form = Type::Array;
+        a->kind = Type::Array;
         a->len = maxIndex + 1;
-        a->base = res->type->base;
+        a->setType(res->getType()->getType());
         addHelper(a);
-        res->type = a;
-    }else if( res->type->form == Type::Pointer )
+        res->setType(a);
+    }else if( res->getType()->kind == Type::Pointer )
     {
         if( res->rhs == 0 || res->rhs->next != 0 )
             error(res->pos, "pointer constructor requires exactly one component");
@@ -2583,7 +2583,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
     Expression* res;
     if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Colon )  ) {
         expect(Tok_ident, false, "component");
-        if( constrType->form != Type::Record )
+        if( constrType->kind != Type::Record )
         {
             error(cur, "named components only supported in record constructors");
             return 0;
@@ -2602,12 +2602,12 @@ Expression* Parser2::component(Type* constrType, int& index) {
         res = Expression::create(Expression::NameValue, colon.toRowCol());
         res->val = QVariant::fromValue(field);
         res->rhs = rhs;
-        if( !assigCompat(field->type, rhs ) )
+        if( !assigCompat(field->getType(), rhs ) )
             error(rhs->pos, "incompatible value");
         index = constrType->subs.indexOf(field);
     } else if( la.d_type == Tok_Lbrack ) {
         expect(Tok_Lbrack, false, "component");
-        if( constrType->form != Type::Array )
+        if( constrType->kind != Type::Array )
         {
             error(cur, "indexed components only supported in array constructors");
             return 0;
@@ -2615,7 +2615,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
         Expression* lhs = ConstExpression(0);
         if( lhs == 0 )
             return 0;
-        if( !lhs->type->isInteger() || lhs->val.toLongLong() < 0 )
+        if( !lhs->getType()->isInteger() || lhs->val.toLongLong() < 0 )
             error(lhs->pos, "expecting positive integer type index");
         expect(Tok_Rbrack, false, "component");
         expect(Tok_Colon, false, "component");
@@ -2629,10 +2629,10 @@ Expression* Parser2::component(Type* constrType, int& index) {
         res->val = ev->pop().val;
         index = res->val.toLongLong();
         res->rhs = rhs;
-        if( !assigCompat(constrType->base, rhs ) )
+        if( !assigCompat(constrType->getType(), rhs ) )
             error(rhs->pos, "incompatible value");
     } else if( FIRST_expression(la.d_type) ) {
-        if( constrType->form == Type::Pointer )
+        if( constrType->kind == Type::Pointer )
         {
             res = ConstExpression(0);
             if( res )
@@ -2649,7 +2649,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
         if( la.d_type == Tok_2Dot ) {
             expect(Tok_2Dot, false, "component");
             const Token t = cur;
-            if( constrType->form != BasicType::SET )
+            if( constrType->kind != BasicType::SET )
             {
                 error(cur, "range components only supported in set constructors");
                 return 0;
@@ -2657,7 +2657,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
             Expression* rhs = expression(0);
             if( rhs == 0 )
                 return 0;
-            if( !res->type->isInteger() || !rhs->type->isInteger() )
+            if( !res->getType()->isInteger() || !rhs->getType()->isInteger() )
             {
                 error(cur, "range expects integer boundaries");
                 return 0;
@@ -2666,7 +2666,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
             range->lhs = res;
             range->rhs = rhs;
             res = range;
-        }else if( constrType->form == Type::Record)
+        }else if( constrType->kind == Type::Record)
         {
             if( index < 0 || index >= constrType->subs.size() )
             {
@@ -2676,22 +2676,22 @@ Expression* Parser2::component(Type* constrType, int& index) {
             Expression* res2 = Expression::create(Expression::NameValue, res->pos);
             res2->val = QVariant::fromValue(constrType->subs[index]);
             res2->rhs = res;
-            if( !assigCompat(constrType->subs[index]->type, res ) )
+            if( !assigCompat(constrType->subs[index]->getType(), res ) )
                 error(res->pos, "incompatible value");
             res = res2;
-        }else if( constrType->form == Type::Array)
+        }else if( constrType->kind == Type::Array)
         {
             if( constrType->len && index >= constrType->len || index < 0 )
                 error(res->pos, "component is out of range of the array");
             Expression* res2 = Expression::create(Expression::IndexValue, res->pos);
             res2->val = index;
             res2->rhs = res;
-            if( !assigCompat(constrType->base, res ) )
+            if( !assigCompat(constrType->getType(), res ) )
                 error(res->pos, "incompatible value");
             res = res2;
-        }else if( constrType->form == Type::Pointer)
+        }else if( constrType->kind == Type::Pointer)
         {
-            if( !res->type->isUInt() )
+            if( !res->getType()->isUInt() )
                 error(res->pos, "expecting unsigned integer to initialize pointer");
         }
         index++;
@@ -2724,7 +2724,7 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
 
         res = Expression::create(Expression::Not, cur.toRowCol());
         res->lhs = tmp;
-        res->type = res->lhs->type;
+        res->setType(res->lhs->getType());
 
         checkUnaryOp(res);
 
@@ -2741,10 +2741,10 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
         res = Expression::create(Expression::Addr, cur.toRowCol());
         res->lhs = tmp;
         Type* ptr = new Type();
-        ptr->base = res->lhs->type;
-        ptr->form = Type::Pointer;
+        ptr->setType(res->lhs->getType());
+        ptr->kind = Type::Pointer;
         addHelper(ptr);
-        res->type = ptr;
+        res->setType(ptr);
     } else
         invalid("factor");
     return res;
@@ -2803,18 +2803,18 @@ void Parser2::assignmentOrProcedureCall() {
 		expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
         if( !ev->evaluate(lhs) )
             error(t, ev->getErr());
-        Expression* rhs = expression(lhs->type);
+        Expression* rhs = expression(lhs->getType());
         if( rhs && !ev->evaluate(rhs) )
             error(tok, ev->getErr());         // value is pushed in ev->assign
         // TODO: avoid assigning to structured return values of functions on left side
-        if( rhs && !assigCompat( lhs->type, rhs ) )
+        if( rhs && !assigCompat( lhs->getType(), rhs ) )
             error(tok, "right side is not assignment compatible with left side");
         else if( rhs && !ev->assign() )
             error(tok, ev->getErr() );
         Expression::deleteAllExpressions();
     }else
     {
-        if( lhs->kind == Expression::ProcDecl || lhs->type && lhs->type->form == Type::Proc )
+        if( lhs->kind == Expression::ProcDecl || lhs->getType() && lhs->getType()->kind == Type::Proc )
         {
             // call procedure without ()
             const DeclList formals = lhs->getFormals();
@@ -2823,9 +2823,9 @@ void Parser2::assignmentOrProcedureCall() {
             Expression* tmp = Expression::create(Expression::Call, lhs->pos);
             tmp->lhs = lhs;
             if( lhs->kind == Expression::ProcDecl )
-                tmp->type = lhs->type;
+                tmp->setType(lhs->getType());
             else
-                tmp->type = lhs->type->base;
+                tmp->setType(lhs->getType()->getType());
             lhs = tmp;
         }
         if( !ev->evaluate(lhs) )
@@ -2916,7 +2916,7 @@ void Parser2::CaseStatement() {
     Type* t = ev->top().type;
     Expression::deleteAllExpressions();
     ev->pop();
-    if( !t->isInteger() && t->form != BasicType::CHAR && t->form != Type::ConstEnum )
+    if( !t->isInteger() && t->kind != BasicType::CHAR && t->kind != Type::ConstEnum )
         error(tok, "case expression must be of integer, char or constant enumeration type");
     expect(Tok_OF, true, "CaseStatement");
     CaseLabels l;
@@ -3009,7 +3009,7 @@ void Parser2::WhileStatement() {
     Expression* res = expression(0);
     if( res && !ev->evaluate(res, true) )
         error(t, ev->getErr());
-    if( ev->top().type->form != BasicType::BOOL )
+    if( ev->top().type->kind != BasicType::BOOL )
         error(t,"expecting boolean expression");
     Expression::deleteAllExpressions();
     ev->pop();
@@ -3029,7 +3029,7 @@ void Parser2::RepeatStatement() {
     const Token t = la;
     if( !ev->evaluate(expression(0), true) )
         error(t, ev->getErr());
-    if( ev->top().type->form != BasicType::BOOL )
+    if( ev->top().type->kind != BasicType::BOOL )
         error(t,"expecting boolean expression");
     Expression::deleteAllExpressions();
     ev->pop();
@@ -3045,7 +3045,7 @@ void Parser2::ForStatement() {
         error(cur,"identifier must reference a variable or parameter");
         return;
     }
-    if( idxvar->type == 0 || !idxvar->type->isInteger() )
+    if( idxvar->getType() == 0 || !idxvar->getType()->isInteger() )
     {
         error(cur,"control variable must be of integer type");
         return;
@@ -3067,7 +3067,7 @@ void Parser2::ForStatement() {
 
     expect(Tok_TO, true, "ForStatement");
     tok = cur;
-    Declaration* to = addTemp(idxvar->type);
+    Declaration* to = addTemp(idxvar->getType());
     {
         // to := end
         Expression* lhs = toExpr(to, tok.toRowCol());
@@ -3088,7 +3088,7 @@ void Parser2::ForStatement() {
         if( !ev->evaluate(e) )
             error(tok, ev->getErr());
         Value v = ev->pop();
-        if( idxvar && !assigCompat(idxvar->type, e) )
+        if( idxvar && !assigCompat(idxvar->getType(), e) )
             error(tok,"constant expression is not compatible with control variable");
         else
             by = v.val.toInt();
@@ -3109,7 +3109,7 @@ void Parser2::ForStatement() {
         Expression* op = Expression::create(by > 0 ? Expression::Leq : Expression::Geq, tok.toRowCol());
         op->lhs = lhs;
         op->rhs = rhs;
-        op->type = lhs->type;
+        op->setType(lhs->getType());
         if( !ev->evaluate(op) )
             error(tok, ev->getErr());
         ev->pop();
@@ -3128,13 +3128,13 @@ void Parser2::ForStatement() {
         l->byVal = true;
 
         Expression* r = Expression::create(Expression::Literal, tok.toRowCol());
-        r->type = idxvar->type;
+        r->setType(idxvar->getType());
         r->val = by;
 
         Expression* rhs = Expression::create(Expression::Add, tok.toRowCol());
         rhs->lhs = l;
         rhs->rhs = r;
-        rhs->type = idxvar->type;
+        rhs->setType(idxvar->getType());
         if( !ev->evaluate(rhs) )
             error(tok, ev->getErr());
 
@@ -3193,10 +3193,10 @@ Type* Parser2::ProcedureType() {
         ret = FormalParameters();
 	}
     Type* p = new Type();
-    p->form = Type::Proc;
+    p->kind = Type::Proc;
     p->typebound = bound;
     p->subs = toList(mdl->closeScope(true));
-    p->base = ret;
+    p->setType(ret);
     return p;
 }
 
@@ -3219,7 +3219,7 @@ void Parser2::ProcedureDeclaration() {
             return; // invalid syntax
 
         Declaration* forward = mdl->findDecl(id.name.d_val,false);
-        if( forward && forward->mode != Declaration::ForwardDecl )
+        if( forward && forward->kind != Declaration::ForwardDecl )
         {
             error(id.name, QString("procedure name is not unique: %1").arg(id.name.d_val.constData()) );
             return;
@@ -3238,22 +3238,22 @@ void Parser2::ProcedureDeclaration() {
         if( receiver.t )
         {
             // add the method to the object type
-            if( receiver.t->base->findSub(id.name.d_val) )
+            if( receiver.t->getType()->findSub(id.name.d_val) )
                 error(id.name, "method name not unique in object type");
-            receiver.t->base->subs.append(procDecl);
+            receiver.t->getType()->subs.append(procDecl);
             procDecl->typebound = true;
             Declaration* param = addDecl(receiver.id, 0, Declaration::ParamDecl);
-            param->type = receiver.t;
+            param->setType(receiver.t);
         }
 
         if( FIRST_FormalParameters(la.d_type) ) {
-            procDecl->type = FormalParameters();
+            procDecl->setType(FormalParameters());
         }
 
         if( forward )
         {
             if( !matchFormals(forward->getParams(), procDecl->getParams() ) ||
-                    !matchResultType(forward->type, procDecl->type) ||
+                    !matchResultType(forward->getType(), procDecl->getType()) ||
                     forward->extern_ != procDecl->extern_ ||
                     forward->inline_ != procDecl->inline_ ||
                     forward->invar != procDecl->invar ||
@@ -3272,14 +3272,14 @@ void Parser2::ProcedureDeclaration() {
             if( receiver.t )
                 error(cur, "EXTERN not supported for type-bound procedures");
             procDecl->extern_ = true;
-            out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->mode == Declaration::Module &&
+            out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
                            id.visi > 0, MilProcedure::Extern);
 
             const QList<Declaration*> params = procDecl->getParams();
             foreach( Declaration* p, params )
-                out->addArgument(ev->toQuali(p->type),p->name);
-            if( procDecl->type && procDecl->type->form != BasicType::NoType )
-                out->setReturnType(ev->toQuali(procDecl->type));
+                out->addArgument(ev->toQuali(p->getType()),p->name);
+            if( procDecl->getType() && procDecl->getType()->kind != BasicType::NoType )
+                out->setReturnType(ev->toQuali(procDecl->getType()));
 
             if( la.d_type == Tok_ident ) {
                 expect(Tok_ident, false, "ProcedureDeclaration");
@@ -3308,14 +3308,14 @@ void Parser2::ProcedureDeclaration() {
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "ProcedureDeclaration");
 			}
-            out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->mode == Declaration::Module &&
+            out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
                            id.visi > 0, kind);
 
             const QList<Declaration*> params = procDecl->getParams();
             foreach( Declaration* p, params )
-                out->addArgument(ev->toQuali(p->type),p->name);
-            if( procDecl->type && procDecl->type->form != BasicType::NoType )
-                out->setReturnType(ev->toQuali(procDecl->type));
+                out->addArgument(ev->toQuali(p->getType()),p->name);
+            if( procDecl->getType() && procDecl->getType()->kind != BasicType::NoType )
+                out->setReturnType(ev->toQuali(procDecl->getType()));
 
             // inlined ProcedureBody();
             DeclarationSequence();
@@ -3354,11 +3354,11 @@ Parser2::NameAndType Parser2::Receiver() {
     expect(Tok_ident, false, "Receiver");
     const Token type = cur;
     Declaration* d = mdl->findDecl(cur.d_val);
-    if( d == 0 || d->mode != Declaration::TypeDecl || d->type == 0 ||
-            (d->type->form != Type::Object && d->type->form != Type::Pointer ) ||
-            (d->type->form == Type::Pointer && withPointer) ||
-            (d->type->form == Type::Object && !withPointer ) ||
-            (d->type->form == Type::Pointer && ( d->type->base == 0 || d->type->base->form != Type::Object)))
+    if( d == 0 || d->kind != Declaration::TypeDecl || d->getType() == 0 ||
+            (d->getType()->kind != Type::Object && d->getType()->kind != Type::Pointer ) ||
+            (d->getType()->kind == Type::Pointer && withPointer) ||
+            (d->getType()->kind == Type::Object && !withPointer ) ||
+            (d->getType()->kind == Type::Pointer && ( d->getType()->getType() == 0 || d->getType()->getType()->kind != Type::Object)))
     {
         error(type, "receiver must be a pointer to object type");
         return res;
@@ -3367,12 +3367,12 @@ Parser2::NameAndType Parser2::Receiver() {
         if( withPointer )
         {
             Type* t = new Type();
-            t->form = Type::Pointer;
-            t->base = d->type;
+            t->kind = Type::Pointer;
+            t->setType(d->getType());
             addHelper(t);
             res.t = t;
         }else
-            res.t = d->type;
+            res.t = d->getType();
     }
     expect(Tok_Rpar, false, "Receiver");
     return res;
@@ -3429,24 +3429,24 @@ void Parser2::DeclarationSequence() {
 
 void Parser2::ReturnStatement() {
 	expect(Tok_RETURN, true, "ReturnStatement");
-    if( mdl->getTopScope()->mode != Declaration::Procedure )
+    if( mdl->getTopScope()->kind != Declaration::Procedure )
         error(cur,"return statement only supported in a procedure declaration");
     if( inFinally )
         error(cur,"return statement not allowed in FINALLY section");
     if( FIRST_expression(la.d_type) ) {
-        if( mdl->getTopScope()->type == 0 || mdl->getTopScope()->type->form == BasicType::NoType )
+        if( mdl->getTopScope()->getType() == 0 || mdl->getTopScope()->getType()->kind == BasicType::NoType )
                 error(cur,"this return statement doesn't expect an expression");
         const Token tok = la;
-        Expression* e = expression(mdl->getTopScope()->type);
+        Expression* e = expression(mdl->getTopScope()->getType());
         if( e && !ev->evaluate(e) )
             error(tok, ev->getErr()); // value is pushed on stack by prepareRhs
-        if( !assigCompat( mdl->getTopScope()->type, e ) )
+        if( !assigCompat( mdl->getTopScope()->getType(), e ) )
             error(tok,"expression is not compatible with the return type");
-        if( !ev->prepareRhs(mdl->getTopScope()->type) )
+        if( !ev->prepareRhs(mdl->getTopScope()->getType()) )
             error(tok, ev->getErr());
         out->ret_(true);
         Expression::deleteAllExpressions();
-    }else if( mdl->getTopScope()->type != 0 && mdl->getTopScope()->type->form != BasicType::NoType )
+    }else if( mdl->getTopScope()->getType() != 0 && mdl->getTopScope()->getType()->kind != BasicType::NoType )
         error(cur,"this return statement requires an expression");
     else
         out->ret_(false);
@@ -3472,7 +3472,7 @@ Type* Parser2::FormalParameters() {
             cur.d_val = Token::getSymbol("..");
             Declaration* d = addDecl(cur,0,Declaration::ParamDecl);
             d->outer = mdl->getTopScope();
-            d->type = mdl->getType(BasicType::NoType);
+            d->setType(mdl->getType(BasicType::NoType));
         }
 	}
 	expect(Tok_Rpar, false, "FormalParameters");
@@ -3503,8 +3503,8 @@ Type* Parser2::ReturnType() {
     if( ptr )
     {
         Type* res = new Type();
-        res->base = t;
-        res->form = Type::Pointer;
+        res->setType(t);
+        res->kind = Type::Pointer;
         t = res;
 
         addHelper(res);
@@ -3541,7 +3541,7 @@ void Parser2::FPSection() {
         {
             if( isConst )
                 d->visi = Declaration::ReadOnly;
-            d->type = t;
+            d->setType(t);
         }
     }
 }
@@ -3563,7 +3563,7 @@ void Parser2::module() {
         return;
     }
     Declaration* m = new Declaration();
-    m->mode = Declaration::Module;
+    m->kind = Declaration::Module;
     if( thisMod )
         delete thisMod;
     thisMod = m;
@@ -3597,24 +3597,24 @@ void Parser2::module() {
                 {
                     MilMetaParam m;
                     m.name = mp[i]->name;
-                    if( metaActuals[i].isConst() && mp[i]->mode != Declaration::ConstDecl ||
-                            !metaActuals[i].isConst() && mp[i]->mode == Declaration::ConstDecl )
+                    if( metaActuals[i].isConst() && mp[i]->kind != Declaration::ConstDecl ||
+                            !metaActuals[i].isConst() && mp[i]->kind == Declaration::ConstDecl )
                         error(cur,QString("formal and actual meta parameter %1 not compatible").arg(i+1));
-                    if( metaActuals[i].type->form == Type::Generic )
+                    if( metaActuals[i].type->kind == Type::Generic )
                     {
                         m.isGeneric = true;
-                        m.isConst = mp[i]->mode == Declaration::ConstDecl;
+                        m.isConst = mp[i]->kind == Declaration::ConstDecl;
                     }else
                     {
-                        m.type = ev->toQuali(mp[i]->type);
-                        delete mp[i]->type;
+                        m.type = ev->toQuali(mp[i]->getType());
+                        delete mp[i]->getType();
                         mp[i]->ownstype = false;
-                        if( mp[i]->mode == Declaration::TypeDecl )
+                        if( mp[i]->kind == Declaration::TypeDecl )
                         {
-                            mp[i]->type = metaActuals[i].type;
-                        }else if( mp[i]->mode == Declaration::ConstDecl )
+                            mp[i]->setType(metaActuals[i].type);
+                        }else if( mp[i]->kind == Declaration::ConstDecl )
                         {
-                            mp[i]->type = metaActuals[i].type;
+                            mp[i]->setType(metaActuals[i].type);
                             mp[i]->data = metaActuals[i].val;
                             m.isConst = true;
                             // TODO: check declaration type as soon as corresponding CONST appears
@@ -3641,7 +3641,7 @@ void Parser2::module() {
                 MilMetaParam m;
                 m.name = mp[i]->name;
                 m.isGeneric = true;
-                m.isConst = mp[i]->mode == Declaration::ConstDecl;
+                m.isConst = mp[i]->kind == Declaration::ConstDecl;
                 mps << m;
             }
         }
@@ -3659,7 +3659,7 @@ void Parser2::module() {
     for( int i = 0; i < metaActuals.size(); i++ )
     {
         const Value& ma = metaActuals[i];
-        if( ma.type->form == Type::Generic )
+        if( ma.type->kind == Type::Generic )
             continue;
         if( ma.mode == Value::Const )
         {
@@ -3823,7 +3823,7 @@ MetaParamList Parser2::MetaSection(bool& isType) {
     expect(Tok_ident, false, "MetaSection");
 
     Declaration* decl = addDecl(cur, 0, isType ? Declaration::TypeDecl : Declaration::ConstDecl);
-    decl->meta = true;
+    decl->generic = true;
     res << decl;
 
     while( ( ( peek(1).d_type == Tok_Comma && peek(2).d_type == Tok_ident ) || peek(1).d_type == Tok_ident )  ) {
@@ -3833,7 +3833,7 @@ MetaParamList Parser2::MetaSection(bool& isType) {
         expect(Tok_ident, false, "MetaSection");
 
         Declaration* decl = addDecl(cur, 0, isType ? Declaration::TypeDecl : Declaration::ConstDecl);
-        decl->meta = true;
+        decl->generic = true;
         res << decl;
     }
     Type* t = 0;
@@ -3845,14 +3845,15 @@ MetaParamList Parser2::MetaSection(bool& isType) {
     for( int i = 0; i < res.size(); i++ )
     {
         if( t )
-            res[i]->type = t;
+            res[i]->setType(t);
         else
         {
             // don't share the type between the section items because it's not a variable
             // but a type declaration
-            res[i]->type = new Type();
-            res[i]->type->form = Type::Generic;
-            res[i]->ownstype = true;
+            Type* t = new Type();
+            t->kind = Type::Generic;
+            t->ownstype = true;
+            res[i]->setType(t);
         }
     }
 

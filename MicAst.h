@@ -61,44 +61,83 @@ namespace Mic
         };
     };
 
-    class Type
+    class Type;
+
+    class Node
     {
     public:
-        enum Form { Pointer = BasicType::Max, Proc, Array, Record, Object, ConstEnum, NameRef, Generic };
-        uint form : 6;
+        Node():kind(0),meta(0),deferred(false),anonymous(false),selfref(false),typebound(false),
+            ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
+            owned(false),type(0){}
+        ~Node();
+
+        enum Meta { Inval, T, D, E };
+        enum Visi { NA, Private, ReadOnly, ReadWrite };
+
+        uint kind : 6;
+        uint meta : 2;
+
+        uint typebound : 1; // Type, Declaration
+        uint ownstype : 1; // all
+        uint visi : 2; // Declaration
+
+        // Type
         uint deferred : 1;
         uint anonymous : 1;
         uint selfref : 1;
-        uint typebound : 1;
+        uint owned : 1;
+
+        // Declaration:
+        uint inline_ : 1;
+        uint invar : 1;
+        uint extern_ : 1; // extern name (if present) is in val
+        uint generic : 1;
+
+        // Expression
+        uint byVal : 1; // option for LocalVar, Param, ModuleVar, Select, Index
+
+        RowCol pos; // Declaration, Expression
+
+        void setType(Type*t);
+        Type* getType() const { return type; }
+
+    protected:
+        Type* type;
+    };
+
+    class Type : public Node
+    {
+    public:
+        enum Kind { Pointer = BasicType::Max, Proc, Array, Record, Object, ConstEnum, NameRef, Generic };
         quint32 len; // array length
-        Type* base; // array/pointer base type, return type
+        // type: array/pointer base type, return type
         QList<Declaration*> subs; // list of record fields or enum elements, or params for proc type
         Declaration* decl;
 
-        bool isUInt() const { return form >= BasicType::UINT8 && form <= BasicType::UINT64; }
-        bool isInt() const { return form >= BasicType::INT8 && form <= BasicType::INT64; }
-        bool isNumber() const { return form >= BasicType::UINT8 && form <= BasicType::FLT64; }
-        bool isReal() const { return form == BasicType::FLT64 || form == BasicType::FLT32; }
-        bool isInteger() const { return form >= BasicType::UINT8 && form <= BasicType::INT64; }
-        bool isSet() const { return form == BasicType::SET; }
-        bool isBoolean() const { return form == BasicType::BOOL; }
-        bool isSimple() const { return form >= BasicType::String && form < BasicType::Max; }
-        bool isText() const { return form == BasicType::String || form == BasicType::CHAR ||
-                    ( form == Array && base && base->form == BasicType::CHAR ) ||
-                    ( form == Pointer && base && base->form == Array && base->base->form == BasicType::CHAR ); }
-        bool isStructured() const { return form == Array || form == Record || form == Object; }
+        bool isUInt() const { return kind >= BasicType::UINT8 && kind <= BasicType::UINT64; }
+        bool isInt() const { return kind >= BasicType::INT8 && kind <= BasicType::INT64; }
+        bool isNumber() const { return kind >= BasicType::UINT8 && kind <= BasicType::FLT64; }
+        bool isReal() const { return kind == BasicType::FLT64 || kind == BasicType::FLT32; }
+        bool isInteger() const { return kind >= BasicType::UINT8 && kind <= BasicType::INT64; }
+        bool isSet() const { return kind == BasicType::SET; }
+        bool isBoolean() const { return kind == BasicType::BOOL; }
+        bool isSimple() const { return kind >= BasicType::String && kind < BasicType::Max; }
+        bool isText() const { return kind == BasicType::String || kind == BasicType::CHAR ||
+                    ( kind == Array && type && type->kind == BasicType::CHAR ) ||
+                    ( kind == Pointer && type && type->kind == Array && type->type->kind == BasicType::CHAR ); }
+        bool isStructured() const { return kind == Array || kind == Record || kind == Object; }
 
         Declaration* findSub(const QByteArray& name) const;
         QPair<int,int> getFieldCount() const; // fixed, variant
 
-        Type():form(0),len(0),base(0),decl(0),deferred(false),anonymous(false),selfref(false),typebound(false){}
+        Type():len(0),decl(0){meta = T;}
         ~Type();
     };
 
-    class Declaration
+    class Declaration : public Node
     {
     public:
-        enum Mode { NoMode, Scope, Module, TypeDecl, Builtin, ConstDecl, Import, Field, Variant,
+        enum Kind { NoMode, Scope, Module, TypeDecl, Builtin, ConstDecl, Import, Field, Variant,
                     VarDecl, LocalDecl,
                     Procedure, ForwardDecl, ParamDecl,
                     Max };
@@ -106,33 +145,21 @@ namespace Mic
         Declaration* next; // list of all declarations in outer scope
         Declaration* link; // member list or imported module decl
         Declaration* outer; // the owning declaration to reconstruct the qualident
-        Type* type;
         QByteArray name;
-        uint row : RowCol::ROW_BIT_LEN; // supports 524k lines
-        uint col : RowCol::COL_BIT_LEN; // supports 4k chars per line
-        enum Visi { NA, Private, ReadOnly, ReadWrite };
-        uint visi : 2;
-        uint inline_ : 1;
-        uint invar : 1;
-        uint extern_ : 1; // extern name (if present) is in val
-        uint meta : 1;
-        uint ownstype : 1;
-        uint typebound : 1;
-        uint mode : 5;
-        uint id : 16; // used for built-in code and local/param number, and bit size of fields
+        quint16 id; // used for built-in code and local/param number, and bit size of fields
         QVariant data; // value for Const and Enum, path for Import, name for Extern
-        Declaration():next(0),link(0),type(0),row(0),col(0),id(0),mode(0),visi(0),ownstype(false),
-            inline_(false),invar(false),extern_(false),meta(false),outer(0),typebound(0){}
+        Declaration():next(0),link(0),id(0),outer(0){meta=D;}
         ~Declaration();
 
         QList<Declaration*> getParams() const;
         int getIndexOf(Declaration*) const;
-        bool isLvalue() const { return mode == VarDecl || mode == LocalDecl || mode == ParamDecl; }
+        bool isLvalue() const { return kind == VarDecl || kind == LocalDecl || kind == ParamDecl; }
         bool isPublic() const { return visi >= ReadOnly; }
     };
     typedef QList<Declaration*> DeclList;
 
-    class Expression {
+    class Expression : public Node
+    {
     public:
         enum Kind {
             Invalid,
@@ -153,15 +180,6 @@ namespace Mic
             Super,   // ^ supercall
             MAX
         };
-#ifdef _DEBUG
-        Kind kind;
-#else
-        quint8 kind;
-#endif
-        bool byVal; // option for LocalVar, Param, ModuleVar, Select, Index
-        quint8 visi;
-        RowCol pos;
-        Type* type;
         QVariant val; // set elements and call args are ExpList embedded in val
         Expression* lhs; // for unary and binary ops
         Expression* rhs; // for binary ops
@@ -183,8 +201,8 @@ namespace Mic
         struct Arena;
         static Arena* arena;
         static quint32 used;
-        Expression(Kind k = Invalid, const RowCol& rc = RowCol()):kind(k),type(0),lhs(0),rhs(0),next(0),
-            pos(rc),byVal(false),visi(0){}
+        Expression(Kind k = Invalid, const RowCol& rc = RowCol()):lhs(0),rhs(0),next(0)
+            {meta = E; kind = k; pos = rc;}
         ~Expression() {}
     };
     typedef QList<Expression*> ExpList;

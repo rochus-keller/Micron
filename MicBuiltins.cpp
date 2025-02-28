@@ -43,7 +43,7 @@ static inline void expectingNMArgs(const ExpList& args,int n, int m)
 static inline Expression* createAutoCast(Expression* e, Type* t)
 {
     Expression* tmp = Expression::create(Expression::AutoCast,e->pos);
-    tmp->type = t;
+    tmp->setType(t);
     tmp->lhs = e;
     return tmp;
 }
@@ -51,25 +51,25 @@ static inline Expression* createAutoCast(Expression* e, Type* t)
 static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl)
 {
     expectingNArgs(args,2);
-    if( !args[0]->type->isUInt() )
+    if( !args[0]->getType()->isUInt() )
         throw QString("expecing unsigned first argument");
-    if( !args[1]->type->isUInt() )
+    if( !args[1]->getType()->isUInt() )
         throw QString("expecing unsigned second argument");
-    Type* lhs = args[0]->type;
-    Type* rhs = args[1]->type;
-    if( lhs->form < BasicType::UINT32 )
+    Type* lhs = args[0]->getType();
+    Type* rhs = args[1]->getType();
+    if( lhs->kind < BasicType::UINT32 )
         lhs = mdl->getType(BasicType::UINT32);
-    if( rhs->form < BasicType::UINT32 )
+    if( rhs->kind < BasicType::UINT32 )
         rhs = mdl->getType(BasicType::UINT32);
-    if( lhs->form < rhs->form )
+    if( lhs->kind < rhs->kind )
         lhs = rhs;
-    else if( lhs->form > rhs->form )
+    else if( lhs->kind > rhs->kind )
         rhs = lhs;
-    if( lhs != args[0]->type )
+    if( lhs != args[0]->getType() )
         args[0] = createAutoCast(args[0], lhs);
-    if( rhs != args[1]->type )
+    if( rhs != args[1]->getType() )
         args[1] = createAutoCast(args[1], rhs);
-    *ret = args[0]->type;
+    *ret = args[0]->getType();
 }
 
 static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl)
@@ -77,29 +77,29 @@ static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* m
     expectingNArgs(args,2);
     if( builtin == Builtin::BITASR )
     {
-        if( !args[0]->type->isInt() )
+        if( !args[0]->getType()->isInt() )
             throw QString("expecing unsigned first argument");
     }else
     {
-        if( !args[0]->type->isUInt() )
+        if( !args[0]->getType()->isUInt() )
             throw QString("expecing unsigned first argument");
     }
-    if( !args[1]->type->isUInt() )
+    if( !args[1]->getType()->isUInt() )
         throw QString("expecing unsigned second argument");
 
     if( builtin == Builtin::BITASR )
     {
-        if( args[0]->type->form < BasicType::INT32 )
+        if( args[0]->getType()->kind < BasicType::INT32 )
             args[0] = createAutoCast(args[0], mdl->getType(BasicType::INT32) );
     }else
     {
-        if( args[0]->type->form < BasicType::UINT32 )
+        if( args[0]->getType()->kind < BasicType::UINT32 )
             args[0] = createAutoCast(args[0], mdl->getType(BasicType::UINT32) );
     }
-    if( args[1]->type->form < BasicType::UINT32 )
+    if( args[1]->getType()->kind < BasicType::UINT32 )
         args[1] = createAutoCast(args[1], mdl->getType(BasicType::UINT32) );
 
-    *ret = args[0]->type;
+    *ret = args[0]->getType();
 }
 
 QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl)
@@ -116,9 +116,9 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     // functions:
     case Builtin::ABS:
         expectingNArgs(args,1);
-        if( !args.first()->type->isNumber() )
+        if( !args.first()->getType()->isNumber() )
             throw "expecting numeric argument";
-        *ret = args.first()->type;
+        *ret = args.first()->getType();
         break;
     case Builtin::CAP:
         expectingNArgs(args,1);
@@ -131,11 +131,11 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::BITNOT:
         expectingNArgs(args,1);
-        if( !args.first()->type->isUInt() )
+        if( !args.first()->getType()->isUInt() )
             throw "expecting unsigned integer";
-        if( args.first()->type->form < BasicType::UINT32 )
+        if( args.first()->getType()->kind < BasicType::UINT32 )
             args[0] = createAutoCast(args[0], mdl->getType(BasicType::UINT32) );
-        *ret = args[0]->type;
+        *ret = args[0]->getType();
         break;
     case Builtin::BITOR:
         checkBitArith(builtin, args, ret, mdl);
@@ -166,9 +166,9 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::FLT:
         expectingNArgs(args,1);
-        if( !args.first()->type->isInt() )
+        if( !args.first()->getType()->isInt() )
             throw "expecting signed integer argument";
-        if( args.first()->type->form == BasicType::INT64 )
+        if( args.first()->getType()->kind == BasicType::INT64 )
             *ret = ev->mdl->getType(BasicType::FLT64);
         else
             *ret = ev->mdl->getType(BasicType::FLT32);
@@ -200,7 +200,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::SIGNED:
         expectingNArgs(args,1);
-        switch(args.first()->type->form)
+        switch(args.first()->getType()->kind)
         {
         case BasicType::UINT8:
             *ret = ev->mdl->getType(BasicType::INT8);
@@ -226,7 +226,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::UNSIGNED:
         expectingNArgs(args,1);
-        switch(args.first()->type->form)
+        switch(args.first()->getType()->kind)
         {
         case BasicType::INT8:
             *ret = ev->mdl->getType(BasicType::UINT8);
@@ -343,7 +343,7 @@ void Builtins::bitarith(int op)
             res.val = lhs.val.toULongLong() | rhs.val.toULongLong();
             break;
         case Builtin::BITXOR:
-            if( lhs.type->form = BasicType::UINT32 )
+            if( lhs.type->kind = BasicType::UINT32 )
                 res.val = lhs.val.toUInt() ^ rhs.val.toUInt();
             else
                 res.val = lhs.val.toULongLong() ^ rhs.val.toULongLong();
@@ -386,7 +386,7 @@ void Builtins::bitnot()
 
     if( v.isConst() )
     {
-        if( v.type->form == BasicType::UINT32 )
+        if( v.type->kind == BasicType::UINT32 )
             v.val = ~v.val.toUInt();
         else
             v.val = ~v.val.toULongLong();
@@ -403,7 +403,7 @@ void Builtins::doSigned()
     Value v = ev->stack.takeLast();
     Type* t;
     MilEmitter::Type tt;
-    switch(v.type->form)
+    switch(v.type->kind)
     {
     case BasicType::UINT8:
         t = ev->mdl->getType(BasicType::INT8);
@@ -436,7 +436,7 @@ void Builtins::doUnsigned()
     Value v = ev->stack.takeLast();
     Type* t;
     MilEmitter::Type tt;
-    switch(v.type->form)
+    switch(v.type->kind)
     {
     case BasicType::INT8:
         t = ev->mdl->getType(BasicType::UINT8);
@@ -477,9 +477,9 @@ void Builtins::doAbs()
     }else if( v.type->isInt() || v.type->isReal() )
     {
         ev->out->dup_();
-        if( v.type->form == BasicType::INT64 )
+        if( v.type->kind == BasicType::INT64 )
             ev->out->ldc_i8(0);
-        else if( v.type->form == BasicType::FLT64 )
+        else if( v.type->kind == BasicType::FLT64 )
             ev->out->ldc_r8(0);
         else if( v.type->isInt() )
             ev->out->ldc_i4(0);
@@ -498,7 +498,7 @@ void Builtins::doFlt()
 {
     Value v = ev->stack.takeLast();
     Q_ASSERT(v.type->isInt());
-    if( v.type->form == BasicType::INT64 )
+    if( v.type->kind == BasicType::INT64 )
     {
         v.type = ev->mdl->getType(BasicType::FLT64);
         if( v.isConst() )
@@ -577,7 +577,7 @@ void Builtins::ASSERT(int nArgs)
         ev->pushMilStack(file);
 #endif
 
-    if( cond.type->form != BasicType::BOOL )
+    if( cond.type->kind != BasicType::BOOL )
     {
         ev->err = "expecting boolean first argument";
         return;
@@ -624,10 +624,10 @@ void Builtins::incdec(int nArgs, bool inc)
 
     if( what.type->isInteger() )
     {
-        if( what.type->form == BasicType::UINT64 || what.type->form == BasicType::INT64 )
+        if( what.type->kind == BasicType::UINT64 || what.type->kind == BasicType::INT64 )
         {
             ev->out->dup_();
-            ev->out->ldind_(what.type->form == BasicType::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
+            ev->out->ldind_(what.type->kind == BasicType::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
             if( nArgs == 2 )
             {
                 if( step.isConst() )
@@ -643,7 +643,7 @@ void Builtins::incdec(int nArgs, bool inc)
                 ev->out->add_();
             else
                 ev->out->sub_();
-            ev->out->stind_(what.type->form == BasicType::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
+            ev->out->stind_(what.type->kind == BasicType::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
         }else
         {
             ev->out->dup_();
@@ -662,7 +662,7 @@ void Builtins::incdec(int nArgs, bool inc)
                 ev->out->sub_();
             ev->out->stind_(what.type->isUInt() ? MilEmitter::U4 : MilEmitter::I4);
         }
-    }else if( what.type->form == Type::ConstEnum )
+    }else if( what.type->kind == Type::ConstEnum )
     {
         if( nArgs == 2 )
         {
@@ -679,7 +679,7 @@ void Builtins::incdec(int nArgs, bool inc)
         ev->out->stind_(MilEmitter::I4);
         // TODO: check overflow and halt?
         // TODO: do we expect more enums than fit in I4?
-    }else if( what.type->form == Type::Pointer )
+    }else if( what.type->kind == Type::Pointer )
     {
         ev->out->dup_();
         ev->out->ldind_(MilEmitter::IntPtr);
@@ -690,7 +690,7 @@ void Builtins::incdec(int nArgs, bool inc)
             else
                 ev->out->ldloc_(tmp);
         }
-        ev->out->ptroff_(ev->toQuali(what.type->base));
+        ev->out->ptroff_(ev->toQuali(what.type->getType()));
         ev->out->stind_(MilEmitter::IntPtr);
     }else
         ev->err = "invalid argument types";
@@ -712,9 +712,9 @@ void Builtins::LEN(int nArgs)
     if( !what.isConst() )
         ev->out->pop_();
     Type* arr = what.type;
-    if( arr->form == Type::Pointer )
-        arr = arr->base;
-    if( arr->form != Type::Array || arr->len == 0 )
+    if( arr->kind == Type::Pointer )
+        arr = arr->getType();
+    if( arr->kind != Type::Array || arr->len == 0 )
     {
         ev->err = "function only applicable to non-open arrays";
         return;
@@ -735,29 +735,29 @@ void Builtins::PRINT(int nArgs, bool ln)
         ev->err = "expecting one argument of basic or char array type";
         return;
     }
-    if( ev->stack.back().type->form == Type::ConstEnum )
+    if( ev->stack.back().type->kind == Type::ConstEnum )
     {
         ev->out->conv_(MilEmitter::I8);
         ev->out->call_(coreName("printI8"),1,false);
     }else if( ev->stack.back().type->isInt() )
     {
-        if( ev->stack.back().type->form != BasicType::INT64 )
+        if( ev->stack.back().type->kind != BasicType::INT64 )
             ev->out->conv_(MilEmitter::I8);
         ev->out->call_(coreName("printI8"),1,false);
     }else if( ev->stack.back().type->isUInt() )
     {
-        if( ev->stack.back().type->form != BasicType::UINT64 )
+        if( ev->stack.back().type->kind != BasicType::UINT64 )
             ev->out->conv_(MilEmitter::U8);
         ev->out->call_(coreName("printU8"),1,false);
     }else if( ev->stack.back().type->isReal() )
     {
-        if( ev->stack.back().type->form != BasicType::FLT64 )
+        if( ev->stack.back().type->kind != BasicType::FLT64 )
             ev->out->conv_(MilEmitter::R8);
         ev->out->call_(coreName("printF8"),1,false);
     }else if( ev->stack.back().type->isText() )
     {
         // TODO: do we really accept array of string by value?
-        if( ev->stack.back().type->form != BasicType::CHAR )
+        if( ev->stack.back().type->kind != BasicType::CHAR )
             ev->out->call_(coreName("printStr"),1,false);
         else
             ev->out->call_(coreName("printCh"),1,false);
@@ -781,11 +781,11 @@ void Builtins::NEW(int nArgs)
         len = ev->stack.takeLast();
     Value what = ev->stack.takeLast();
 
-    if( what.type == 0 || what.type->base == 0 )
+    if( what.type == 0 || what.type->getType() == 0 )
         return; // already reported
 
-    if( what.type->form != Type::Pointer &&
-            !(what.type->base->form == Type::Record || what.type->base->form == Type::Array) )
+    if( what.type->kind != Type::Pointer &&
+            !(what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Array) )
     {
         ev->err = "first argument must be a pointer to record or array";
         return;
@@ -795,19 +795,19 @@ void Builtins::NEW(int nArgs)
         ev->err = "cannot write to first argument";
         return;
     }
-    if( what.type->base->form == Type::Record )
+    if( what.type->getType()->kind == Type::Record )
     {
-        ev->out->newobj_(ev->toQuali(what.type->base));
+        ev->out->newobj_(ev->toQuali(what.type->getType()));
         ev->out->stind_(MilEmitter::IntPtr);
-    }else if( what.type->base->len > 0 ) // fixed size array
+    }else if( what.type->getType()->len > 0 ) // fixed size array
     {
         if( nArgs > 1 )
         {
             ev->err = "cannot dynamically set array length for non-open array";
             return;
         }
-        ev->out->ldc_i4(what.type->base->len);
-        ev->out->newarr_(ev->toQuali(what.type->base->base));
+        ev->out->ldc_i4(what.type->getType()->len);
+        ev->out->newarr_(ev->toQuali(what.type->getType()->getType()));
         ev->out->stind_(MilEmitter::IntPtr);
     }else // open array
     {
@@ -816,7 +816,7 @@ void Builtins::NEW(int nArgs)
             ev->err = "expecting two arguments, the second as the explicit length";
             return;
         }
-        ev->out->newarr_(ev->toQuali(what.type->base->base));
+        ev->out->newarr_(ev->toQuali(what.type->getType()->getType()));
         ev->out->stind_(MilEmitter::IntPtr);
     }
 }
@@ -824,8 +824,8 @@ void Builtins::NEW(int nArgs)
 void Builtins::DISPOSE(int nArgs)
 {
     Value what = ev->stack.takeLast();
-    if( what.type->form != Type::Pointer &&
-            !(what.type->base->form == Type::Record || what.type->base->form == Type::Array) )
+    if( what.type->kind != Type::Pointer &&
+            !(what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Array) )
     {
         ev->err = "argument must be a pointer to record or array";
         return;
@@ -944,10 +944,10 @@ int Builtins::addIncDecTmp()
     Declaration* decl = ev->mdl->addDecl(Token::getSymbol("$incdec"),&doublette);
     if( !doublette )
     {
-        decl->mode = Declaration::LocalDecl;
-        decl->type = ev->mdl->getType(BasicType::INT32);
+        decl->kind = Declaration::LocalDecl;
+        decl->setType(ev->mdl->getType(BasicType::INT32));
         decl->outer = ev->mdl->getTopScope();
-        decl->id = ev->out->addLocal(ev->toQuali(decl->type),decl->name);
+        decl->id = ev->out->addLocal(ev->toQuali(decl->getType()),decl->name);
     }
     return decl->id;
 }

@@ -149,16 +149,16 @@ bool Evaluator::prepareRhs(Type* lhs)
     }
 
     // make sure also a string literal is put on the stack by value
-    if( lhs && lhs->form == Type::Array && lhs->base->form == BasicType::CHAR &&
-            rhs.type->form == BasicType::String )
+    if( lhs && lhs->kind == Type::Array && lhs->getType()->kind == BasicType::CHAR &&
+            rhs.type->kind == BasicType::String )
     {   // NOTE: already checked that lhs is large enough for rhs
         Q_ASSERT( lhs->len >= quint32(dequote(rhs.val.toByteArray()).size()) );
         assureTopOnMilStack();
         out->ldobj_(MilQuali());
-    }else if( lhs && lhs->form == BasicType::CHAR &&
-              rhs.type->form == BasicType::String )
+    }else if( lhs && lhs->kind == BasicType::CHAR &&
+              rhs.type->kind == BasicType::String )
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
-    else if( lhs && lhs->form == Type::Proc &&
+    else if( lhs && lhs->kind == Type::Proc &&
              rhs.mode == Value::Procedure )
         out->ldproc_(toQuali(rhs.val.value<Declaration*>()));
     else
@@ -195,12 +195,12 @@ bool Evaluator::assign()
 
     adjustNumType(rhs.type,lhs.type);
 
-    if( lhs.type->form == Type::Array )
+    if( lhs.type->kind == Type::Array )
     {
-        if( lhs.type->base->form == BasicType::CHAR )
+        if( lhs.type->getType()->kind == BasicType::CHAR )
         {
             // special case both sides char arrays, just copy up to and including zero
-            if( rhs.type->form == Type::Array && rhs.type->base->form == BasicType::CHAR )
+            if( rhs.type->kind == Type::Array && rhs.type->getType()->kind == BasicType::CHAR )
             {
                 Q_ASSERT(rhs.ref);
                 out->call_(coreName("strcopy"),2);
@@ -209,7 +209,7 @@ bool Evaluator::assign()
         } // else copy memory block TODO
     }
 
-    switch(lhs.type->form)
+    switch(lhs.type->kind)
     {
     case BasicType::BOOL:
     case BasicType::CHAR:
@@ -266,9 +266,9 @@ bool Evaluator::derefPointer()
     assureTopIsValue();
     Value v = stack.takeLast();
 
-    Q_ASSERT( v.type && v.type->form == Type::Pointer && !v.ref );
+    Q_ASSERT( v.type && v.type->kind == Type::Pointer && !v.ref );
 
-    v.type = v.type->base;
+    v.type = v.type->getType();
     v.ref = true;
 
     stack.push_back(v);
@@ -290,7 +290,7 @@ bool Evaluator::derefValue()
     Q_ASSERT(!v.isConst());
     Q_ASSERT(v.ref && v.type);
     v.ref = false;
-    switch(v.type->form)
+    switch(v.type->kind)
     {
     case BasicType::BOOL:
     case BasicType::CHAR:
@@ -364,7 +364,7 @@ bool Evaluator::desigField(Declaration* field, bool byVal)
 
     // TODO: desig const record
 
-    Q_ASSERT(lhs.ref && lhs.type && lhs.type->form == Type::Record);
+    Q_ASSERT(lhs.ref && lhs.type && lhs.type->kind == Type::Record);
 
     Q_ASSERT(field);
     const MilTrident desig = qMakePair(toQuali(lhs.type),field->name);
@@ -375,7 +375,7 @@ bool Evaluator::desigField(Declaration* field, bool byVal)
 
     Value res;
     res.ref = !byVal;
-    res.type = field->type;
+    res.type = field->getType();
     res.visi = 0;
     res.mode = Value::Val;
     stack.push_back(res);
@@ -437,9 +437,9 @@ bool Evaluator::desigIndex(bool byVal)
     Value rhs = stack.takeLast(); // index
     Value lhs = stack.takeLast(); // array reference
 
-    if( !lhs.ref || lhs.type == 0 || lhs.type->form != Type::Array)
+    if( !lhs.ref || lhs.type == 0 || lhs.type->kind != Type::Array)
         return false;
-    Q_ASSERT(lhs.ref && lhs.type && lhs.type->form == Type::Array);
+    Q_ASSERT(lhs.ref && lhs.type && lhs.type->kind == Type::Array);
 
     if( rhs.isConst() )
     {
@@ -452,7 +452,7 @@ bool Evaluator::desigIndex(bool byVal)
         pushMilStack(rhs);
     }
 
-    const Qualident elemType = toQuali(lhs.type->base);
+    const Qualident elemType = toQuali(lhs.type->getType());
     if( byVal )
         out->ldelem_(elemType);
     else
@@ -460,7 +460,7 @@ bool Evaluator::desigIndex(bool byVal)
 
     Value res;
     res.ref = !byVal;
-    res.type = lhs.type->base;
+    res.type = lhs.type->getType();
     res.visi = 0;
     res.mode = Value::Val;
     stack.push_back(res);
@@ -495,7 +495,7 @@ bool Evaluator::call(int nArgs)
         {
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
-            ret = proc->type;
+            ret = proc->getType();
             out->call_(toQuali(proc),nArgs, ret != 0); // TODO: desig in imported module
         }
         break;
@@ -503,8 +503,8 @@ bool Evaluator::call(int nArgs)
     case Value::LocalDecl:
     case Value::ParamDecl:
     case Value::Val:
-        ret = callee.type->base;
-        if( callee.type->form == Type::Proc )
+        ret = callee.type->getType();
+        if( callee.type->kind == Type::Proc )
         {
             out->calli_(toQuali(callee.type), nArgs, ret != 0);
             break;
@@ -539,8 +539,8 @@ bool Evaluator::castPtr(Type* to)
     }
     Value lhs = stack.takeLast(); // object
     // TODO
-    Q_ASSERT(to && to->form == Type::Pointer);
-    out->castptr_(toQuali(to->base));
+    Q_ASSERT(to && to->kind == Type::Pointer);
+    out->castptr_(toQuali(to->getType()));
     // TODO restrict to pointers, add to MIL
     lhs.type = to;
     stack.push_back(lhs);
@@ -561,7 +561,7 @@ bool Evaluator::castNum(Type* to)
     else
     {
         MilEmitter::Type tt;
-        switch(to->form)
+        switch(to->kind)
         {
         case BasicType::BOOL:
         case BasicType::CHAR:
@@ -704,9 +704,9 @@ bool Evaluator::pushMilStack(const Value& v)
     switch( v.mode )
     {
     case Value::Const:
-        if( v.type->isSimple() || v.type->form == Type::ConstEnum )
+        if( v.type->isSimple() || v.type->kind == Type::ConstEnum )
         {
-            switch( v.type->form )
+            switch( v.type->kind )
             {
             case BasicType::String:
                 out->ldstr_( v.val.toByteArray() );
@@ -836,13 +836,13 @@ void Evaluator::adjustNumType(Type* me, Type* other)
     if( me && me->isNumber() && other && other->isNumber() )
     {
         if( me->isInt() && other->isInt() &&
-                other->form == BasicType::INT64 && me->form < BasicType::INT64 )
+                other->kind == BasicType::INT64 && me->kind < BasicType::INT64 )
             out->conv_(MilEmitter::I8);
         else if( me->isUInt() && other->isUInt() &&
-                 other->form == BasicType::UINT64 && me->form < BasicType::UINT64 )
+                 other->kind == BasicType::UINT64 && me->kind < BasicType::UINT64 )
             out->conv_(MilEmitter::U8);
         else if( me->isReal() && other->isReal() &&
-                 other->form == BasicType::FLT64 && me->form < BasicType::FLT64 )
+                 other->kind == BasicType::FLT64 && me->kind < BasicType::FLT64 )
             out->conv_(MilEmitter::R8);
     }
 }
@@ -890,7 +890,7 @@ Value Evaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs)
 
 static inline Type* maxType(Type* lhs, Type* rhs)
 {
-    if( lhs->form >= rhs->form )
+    if( lhs->kind >= rhs->kind )
         return lhs;
     else
         return rhs;
@@ -938,7 +938,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 }
             }else
             {
-                emitArithOp(op,false, res.type->form == BasicType::INT64 );
+                emitArithOp(op,false, res.type->kind == BasicType::INT64 );
             }
         }else if( lhs.type->isUInt() && rhs.type->isUInt() )
         {
@@ -970,7 +970,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 }
             }else
             {
-                emitArithOp(op,true, res.type->form == BasicType::UINT64);
+                emitArithOp(op,true, res.type->kind == BasicType::UINT64);
             }
         }else if( lhs.type->isReal() && rhs.type->isReal() )
         {
@@ -1047,8 +1047,8 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 break;
             }
         }
-    }else if( (lhs.type->form == BasicType::String || lhs.type->form == BasicType::CHAR) &&
-              (rhs.type->form == BasicType::String || rhs.type->form == BasicType::CHAR) )
+    }else if( (lhs.type->kind == BasicType::String || lhs.type->kind == BasicType::CHAR) &&
+              (rhs.type->kind == BasicType::String || rhs.type->kind == BasicType::CHAR) )
     {
         // + only
         res.type = mdl->getType(BasicType::String);
@@ -1199,18 +1199,18 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             return res; // Q_ASSERT(false);
             break;
         }
-        if( lhs.type->form == BasicType::CHAR && rhs.type->form == BasicType::CHAR )
+        if( lhs.type->kind == BasicType::CHAR && rhs.type->kind == BasicType::CHAR )
             out->call_(coreName("relop4"),3,true);
-        else if( lhs.type->form == BasicType::CHAR )
+        else if( lhs.type->kind == BasicType::CHAR )
             out->call_(coreName("relop3"),3,true);
-        else if( rhs.type->form == BasicType::CHAR )
+        else if( rhs.type->kind == BasicType::CHAR )
             out->call_(coreName("relop2"),3,true);
         else
             out->call_(coreName("relop1"),3,true);
-    }else if( lhs.type->form == Type::Pointer && rhs.type->form == Type::Pointer ||
-              lhs.type->form == Type::Pointer && rhs.type->form == BasicType::Nil ||
-              lhs.type->form == BasicType::Nil && rhs.type->form == Type::Pointer ||
-              lhs.type->form == BasicType::Nil && rhs.type->form == BasicType::Nil )
+    }else if( lhs.type->kind == Type::Pointer && rhs.type->kind == Type::Pointer ||
+              lhs.type->kind == Type::Pointer && rhs.type->kind == BasicType::Nil ||
+              lhs.type->kind == BasicType::Nil && rhs.type->kind == Type::Pointer ||
+              lhs.type->kind == BasicType::Nil && rhs.type->kind == BasicType::Nil )
     {
         if( lhs.isConst() && rhs.isConst() )
         {
@@ -1244,7 +1244,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
         {
             emitRelOp(op,true);
         }
-    }else if( lhs.type->form == Type::ConstEnum  && rhs.type->form == Type::ConstEnum )
+    }else if( lhs.type->kind == Type::ConstEnum  && rhs.type->kind == Type::ConstEnum )
     {
         // Q_ASSERT( lhs.type == rhs.type );
         if( lhs.isConst() && rhs.isConst() )
@@ -1299,9 +1299,9 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
         {
             emitRelOp(op,true);
         }
-    }else if( lhs.type->form == Type::Proc && rhs.type->form == Type::Proc ||
-              lhs.type->form == Type::Proc && rhs.type->form == BasicType::Nil ||
-              lhs.type->form == BasicType::Nil && rhs.type->form == Type::Proc )
+    }else if( lhs.type->kind == Type::Proc && rhs.type->kind == Type::Proc ||
+              lhs.type->kind == Type::Proc && rhs.type->kind == BasicType::Nil ||
+              lhs.type->kind == BasicType::Nil && rhs.type->kind == Type::Proc )
     {
         if( lhs.isConst() && rhs.isConst() )
         {
@@ -1356,7 +1356,7 @@ void Evaluator::unaryMinusOp(Value& v)
                 v.val = -v.val.toLongLong();
             else
             {
-                if( v.type->form == BasicType::INT32 )
+                if( v.type->kind == BasicType::INT32 )
                     out->conv_(MilEmitter::I4);
                 else
                     out->conv_(MilEmitter::I8);
@@ -1393,19 +1393,19 @@ void Evaluator::unaryPlusOp(Value& v)
 
 Qualident Evaluator::toQuali(Declaration* d)
 {
-    Q_ASSERT( d && d->mode != Declaration::Field ); // use toTriple for fields
+    Q_ASSERT( d && d->kind != Declaration::Field ); // use toTriple for fields
 
     QByteArray desig;
     Declaration* last = 0;
     bool doSymbol = false;
-    while( d && d->mode != Declaration::Module )
+    while( d && d->kind != Declaration::Module )
     {
-        Q_ASSERT(d->mode != Declaration::Field);
-        if( d->mode == Declaration::LocalDecl ||
-                d->mode == Declaration::ParamDecl )
+        Q_ASSERT(d->kind != Declaration::Field);
+        if( d->kind == Declaration::LocalDecl ||
+                d->kind == Declaration::ParamDecl )
             return qMakePair(QByteArray(),d->name); // locals and params have no desig
         if( d->outer == 0 && last == 0 )
-            return toQuali(d->type); // this is a built-in type
+            return toQuali(d->getType()); // this is a built-in type
         if( !desig.isEmpty() )
         {
             desig = "$" + desig;
@@ -1418,7 +1418,7 @@ Qualident Evaluator::toQuali(Declaration* d)
     if( doSymbol )
         desig = Token::getSymbol(desig);
 
-    Q_ASSERT( d && d->mode == Declaration::Module );
+    Q_ASSERT( d && d->kind == Declaration::Module );
     if( d == mdl->getTopModule() )
         return qMakePair(QByteArray(),desig); // local symbol
     // else imported symbol
@@ -1452,12 +1452,12 @@ Qualident Evaluator::toQuali(Type* t)
             symbols[BasicType::FLT32] = Token::getSymbol("float32");
             symbols[BasicType::FLT64] = Token::getSymbol("float64");
         }
-        return qMakePair(QByteArray(),symbols[t->form]);
+        return qMakePair(QByteArray(),symbols[t->kind]);
     }else if( t->decl)
     {
         Q_ASSERT( t && t->decl );
         return toQuali(t->decl);
-    }else if( t->form == Type::NameRef )
+    }else if( t->kind == Type::NameRef )
         return toQuali(t->subs.first());
     return Qualident();
 }
@@ -1532,12 +1532,12 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Cast:
         if( !recursiveRun(e->lhs) )
             return false;
-        castPtr(e->type);
+        castPtr(e->getType());
         break;
     case Expression::AutoCast:
         if( !recursiveRun(e->lhs) )
             return false;
-        castNum(e->type);
+        castNum(e->getType());
         break;
     case Expression::Deref:
         if( !recursiveRun(e->lhs) )
@@ -1548,40 +1548,40 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Addr:
         if( !recursiveRun(e->lhs) )
             return false;
-        stack.back().type = e->type; // NOP otherwise
+        stack.back().type = e->getType(); // NOP otherwise
         break;
     case Expression::Literal:
-        stack.push_back(Value(e->type,e->val,Value::Const));
+        stack.push_back(Value(e->getType(),e->val,Value::Const));
         break;
     case Expression::LocalVar:
-        stack.push_back(Value(e->type,e->val,Value::LocalDecl));
+        stack.push_back(Value(e->getType(),e->val,Value::LocalDecl));
         desigVar(e->byVal);
         break;
     case Expression::Param:
-        stack.push_back(Value(e->type,e->val,Value::ParamDecl));
+        stack.push_back(Value(e->getType(),e->val,Value::ParamDecl));
         desigVar(e->byVal);
         break;
     case Expression::ModuleVar:
-        stack.push_back(Value(e->type,e->val,Value::VarDecl));
+        stack.push_back(Value(e->getType(),e->val,Value::VarDecl));
         desigVar(e->byVal);
         break;
     case Expression::ProcDecl:
-        stack.push_back(Value(e->type,e->val,Value::Procedure));
+        stack.push_back(Value(e->getType(),e->val,Value::Procedure));
         break;
     case Expression::Builtin:
-        stack.push_back(Value(e->type,e->val,Value::Builtin));
+        stack.push_back(Value(e->getType(),e->val,Value::Builtin));
         break;
     case Expression::ConstDecl:
         {
             Value tmp;
             tmp.mode = Value::Const;
             tmp.val = e->val.value<Declaration*>()->data;
-            tmp.type = e->type;
+            tmp.type = e->getType();
             stack.push_back(tmp);
         }
         break;
     case Expression::TypeDecl:
-        stack.push_back(Value(e->type,e->val,Value::TypeDecl)); // for import meta actuals or cast(type,v)
+        stack.push_back(Value(e->getType(),e->val,Value::TypeDecl)); // for import meta actuals or cast(type,v)
         break;
     case Expression::Call:
         {
@@ -1592,7 +1592,7 @@ bool Evaluator::recursiveRun(Expression* e)
                 if( !recursiveRun(args[i]) )
                     return false;
                 if( i < formals.size() )
-                    prepareRhs(formals[i]->type);
+                    prepareRhs(formals[i]->getType());
                 else
                     assureTopOnMilStack(); // effects builtin args and variable args
             }
@@ -1631,7 +1631,7 @@ void Evaluator::constructor(Expression* e)
 
 void Evaluator::recurseConstConstructor(Expression* e)
 {
-    switch( e->type->form )
+    switch( e->getType()->kind )
     {
     case Type::Record: {
             MilRecordLiteral rec;
@@ -1649,13 +1649,13 @@ void Evaluator::recurseConstConstructor(Expression* e)
             Value v;
             v.mode = Value::Const;
             v.val = QVariant::fromValue(rec);
-            v.type = e->type;
+            v.type = e->getType();
             stack.push_back(v);
             break;
         }
     case Type::Array: {
-            Q_ASSERT( e->type->len > 0 );
-            QVector<QVariant> arr(e->type->len);
+            Q_ASSERT( e->getType()->len > 0 );
+            QVector<QVariant> arr(e->getType()->len);
             Expression* c = e->rhs;
             while( c )
             {
@@ -1670,7 +1670,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             Value v;
             v.mode = Value::Const;
             v.val = QVariant::fromValue(arr.toList());
-            v.type = e->type;
+            v.type = e->getType();
             stack.push_back(v);
             break;
         }
@@ -1679,7 +1679,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             Value v;
             v.mode = Value::Const;
             v.val = e->rhs->val;
-            v.type = e->type;
+            v.type = e->getType();
             stack.push_back(v);
             break;
         }
@@ -1748,7 +1748,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             Value v;
             v.mode = Value::Const;
             v.val = set.to_ullong();
-            v.type = e->type;
+            v.type = e->getType();
             stack.push_back(v);
             break;
         }
