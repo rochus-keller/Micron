@@ -57,10 +57,10 @@ static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* m
         throw QString("expecing unsigned second argument");
     Type* lhs = args[0]->getType();
     Type* rhs = args[1]->getType();
-    if( lhs->kind < BasicType::UINT32 )
-        lhs = mdl->getType(BasicType::UINT32);
-    if( rhs->kind < BasicType::UINT32 )
-        rhs = mdl->getType(BasicType::UINT32);
+    if( lhs->kind < Type::UINT32 )
+        lhs = mdl->getType(Type::UINT32);
+    if( rhs->kind < Type::UINT32 )
+        rhs = mdl->getType(Type::UINT32);
     if( lhs->kind < rhs->kind )
         lhs = rhs;
     else if( lhs->kind > rhs->kind )
@@ -89,15 +89,15 @@ static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* m
 
     if( builtin == Builtin::BITASR )
     {
-        if( args[0]->getType()->kind < BasicType::INT32 )
-            args[0] = createAutoCast(args[0], mdl->getType(BasicType::INT32) );
+        if( args[0]->getType()->kind < Type::INT32 )
+            args[0] = createAutoCast(args[0], mdl->getType(Type::INT32) );
     }else
     {
-        if( args[0]->getType()->kind < BasicType::UINT32 )
-            args[0] = createAutoCast(args[0], mdl->getType(BasicType::UINT32) );
+        if( args[0]->getType()->kind < Type::UINT32 )
+            args[0] = createAutoCast(args[0], mdl->getType(Type::UINT32) );
     }
-    if( args[1]->getType()->kind < BasicType::UINT32 )
-        args[1] = createAutoCast(args[1], mdl->getType(BasicType::UINT32) );
+    if( args[1]->getType()->kind < Type::UINT32 )
+        args[1] = createAutoCast(args[1], mdl->getType(Type::UINT32) );
 
     *ret = args[0]->getType();
 }
@@ -106,7 +106,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
 {
     Q_ASSERT(ret);
 
-    *ret = mdl->getType(BasicType::NoType);
+    *ret = mdl->getType(Type::NoType);
 
     // TODO:
     try
@@ -133,8 +133,8 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,1);
         if( !args.first()->getType()->isUInt() )
             throw "expecting unsigned integer";
-        if( args.first()->getType()->kind < BasicType::UINT32 )
-            args[0] = createAutoCast(args[0], mdl->getType(BasicType::UINT32) );
+        if( args.first()->getType()->kind < Type::UINT32 )
+            args[0] = createAutoCast(args[0], mdl->getType(Type::UINT32) );
         *ret = args[0]->getType();
         break;
     case Builtin::BITOR:
@@ -168,17 +168,17 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,1);
         if( !args.first()->getType()->isInt() )
             throw "expecting signed integer argument";
-        if( args.first()->getType()->kind == BasicType::INT64 )
-            *ret = ev->mdl->getType(BasicType::FLT64);
+        if( args.first()->getType()->kind == Type::INT64 )
+            *ret = ev->mdl->getType(Type::FLT64);
         else
-            *ret = ev->mdl->getType(BasicType::FLT32);
+            *ret = ev->mdl->getType(Type::FLT32);
         break;
     case Builtin::GETENV:
         expectingNArgs(args,2);
         break;
     case Builtin::LEN:
         expectingNArgs(args,1);
-        *ret = mdl->getType(BasicType::UINT32);
+        *ret = mdl->getType(Type::UINT32);
         break;
     case Builtin::LONG:
         expectingNArgs(args,1);
@@ -202,17 +202,17 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,1);
         switch(args.first()->getType()->kind)
         {
-        case BasicType::UINT8:
-            *ret = ev->mdl->getType(BasicType::INT8);
+        case Type::UINT8:
+            *ret = ev->mdl->getType(Type::INT8);
             break;
-        case BasicType::UINT16:
-            *ret = ev->mdl->getType(BasicType::INT16);
+        case Type::UINT16:
+            *ret = ev->mdl->getType(Type::INT16);
             break;
-        case BasicType::UINT32:
-            *ret = ev->mdl->getType(BasicType::INT32);
+        case Type::UINT32:
+            *ret = ev->mdl->getType(Type::INT32);
             break;
-        case BasicType::UINT64:
-            *ret = ev->mdl->getType(BasicType::INT64);
+        case Type::UINT64:
+            *ret = ev->mdl->getType(Type::INT64);
             break;
         default:
             throw "expecting unsigned integer";
@@ -228,17 +228,17 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,1);
         switch(args.first()->getType()->kind)
         {
-        case BasicType::INT8:
-            *ret = ev->mdl->getType(BasicType::UINT8);
+        case Type::INT8:
+            *ret = ev->mdl->getType(Type::UINT8);
             break;
-        case BasicType::INT16:
-            *ret = ev->mdl->getType(BasicType::UINT16);
+        case Type::INT16:
+            *ret = ev->mdl->getType(Type::UINT16);
             break;
-        case BasicType::INT32:
-            *ret = ev->mdl->getType(BasicType::UINT32);
+        case Type::INT32:
+            *ret = ev->mdl->getType(Type::UINT32);
             break;
-        case BasicType::INT64:
-            *ret = ev->mdl->getType(BasicType::UINT64);
+        case Type::INT64:
+            *ret = ev->mdl->getType(Type::UINT64);
             break;
         default:
             throw "expecting signed integer";
@@ -343,7 +343,7 @@ void Builtins::bitarith(int op)
             res.val = lhs.val.toULongLong() | rhs.val.toULongLong();
             break;
         case Builtin::BITXOR:
-            if( lhs.type->kind = BasicType::UINT32 )
+            if( lhs.type->kind = Type::UINT32 )
                 res.val = lhs.val.toUInt() ^ rhs.val.toUInt();
             else
                 res.val = lhs.val.toULongLong() ^ rhs.val.toULongLong();
@@ -386,7 +386,7 @@ void Builtins::bitnot()
 
     if( v.isConst() )
     {
-        if( v.type->kind == BasicType::UINT32 )
+        if( v.type->kind == Type::UINT32 )
             v.val = ~v.val.toUInt();
         else
             v.val = ~v.val.toULongLong();
@@ -405,21 +405,21 @@ void Builtins::doSigned()
     MilEmitter::Type tt;
     switch(v.type->kind)
     {
-    case BasicType::UINT8:
-        t = ev->mdl->getType(BasicType::INT8);
+    case Type::UINT8:
+        t = ev->mdl->getType(Type::INT8);
         tt = MilEmitter::I1;
         break;
-    case BasicType::UINT16:
-        t = ev->mdl->getType(BasicType::INT16);
+    case Type::UINT16:
+        t = ev->mdl->getType(Type::INT16);
         tt = MilEmitter::I2;
         break;
-    case BasicType::UINT32:
+    case Type::UINT32:
     default:
-        t = ev->mdl->getType(BasicType::INT32);
+        t = ev->mdl->getType(Type::INT32);
         tt = MilEmitter::I4;
         break;
-    case BasicType::UINT64:
-        t = ev->mdl->getType(BasicType::INT64);
+    case Type::UINT64:
+        t = ev->mdl->getType(Type::INT64);
         tt = MilEmitter::I8;
         break;
     }
@@ -438,21 +438,21 @@ void Builtins::doUnsigned()
     MilEmitter::Type tt;
     switch(v.type->kind)
     {
-    case BasicType::INT8:
-        t = ev->mdl->getType(BasicType::UINT8);
+    case Type::INT8:
+        t = ev->mdl->getType(Type::UINT8);
         tt = MilEmitter::U1;
         break;
-    case BasicType::INT16:
-        t = ev->mdl->getType(BasicType::UINT16);
+    case Type::INT16:
+        t = ev->mdl->getType(Type::UINT16);
         tt = MilEmitter::U2;
         break;
-    case BasicType::INT32:
+    case Type::INT32:
     default:
-        t = ev->mdl->getType(BasicType::UINT32);
+        t = ev->mdl->getType(Type::UINT32);
         tt = MilEmitter::U4;
         break;
-    case BasicType::INT64:
-        t = ev->mdl->getType(BasicType::UINT64);
+    case Type::INT64:
+        t = ev->mdl->getType(Type::UINT64);
         tt = MilEmitter::U8;
         break;
     }
@@ -477,9 +477,9 @@ void Builtins::doAbs()
     }else if( v.type->isInt() || v.type->isReal() )
     {
         ev->out->dup_();
-        if( v.type->kind == BasicType::INT64 )
+        if( v.type->kind == Type::INT64 )
             ev->out->ldc_i8(0);
-        else if( v.type->kind == BasicType::FLT64 )
+        else if( v.type->kind == Type::FLT64 )
             ev->out->ldc_r8(0);
         else if( v.type->isInt() )
             ev->out->ldc_i4(0);
@@ -498,16 +498,16 @@ void Builtins::doFlt()
 {
     Value v = ev->stack.takeLast();
     Q_ASSERT(v.type->isInt());
-    if( v.type->kind == BasicType::INT64 )
+    if( v.type->kind == Type::INT64 )
     {
-        v.type = ev->mdl->getType(BasicType::FLT64);
+        v.type = ev->mdl->getType(Type::FLT64);
         if( v.isConst() )
             v.val = (double)v.val.toLongLong();
         else
             ev->out->conv_(MilEmitter::R8);
     }else
     {
-        v.type = ev->mdl->getType(BasicType::FLT32);
+        v.type = ev->mdl->getType(Type::FLT32);
         if( v.isConst() )
             v.val = (double)v.val.toLongLong();
         else
@@ -577,7 +577,7 @@ void Builtins::ASSERT(int nArgs)
         ev->pushMilStack(file);
 #endif
 
-    if( cond.type->kind != BasicType::BOOL )
+    if( cond.type->kind != Type::BOOL )
     {
         ev->err = "expecting boolean first argument";
         return;
@@ -597,7 +597,7 @@ void Builtins::ASSERT(int nArgs)
 
     Value res;
     res.mode = Value::Val;
-    res.type = ev->mdl->getType(BasicType::NoType);
+    res.type = ev->mdl->getType(Type::NoType);
     ev->stack.push_back(res);
 }
 
@@ -624,10 +624,10 @@ void Builtins::incdec(int nArgs, bool inc)
 
     if( what.type->isInteger() )
     {
-        if( what.type->kind == BasicType::UINT64 || what.type->kind == BasicType::INT64 )
+        if( what.type->kind == Type::UINT64 || what.type->kind == Type::INT64 )
         {
             ev->out->dup_();
-            ev->out->ldind_(what.type->kind == BasicType::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
+            ev->out->ldind_(what.type->kind == Type::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
             if( nArgs == 2 )
             {
                 if( step.isConst() )
@@ -643,7 +643,7 @@ void Builtins::incdec(int nArgs, bool inc)
                 ev->out->add_();
             else
                 ev->out->sub_();
-            ev->out->stind_(what.type->kind == BasicType::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
+            ev->out->stind_(what.type->kind == Type::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
         }else
         {
             ev->out->dup_();
@@ -722,7 +722,7 @@ void Builtins::LEN(int nArgs)
     //ev->out->ldc_i4(arr->len);
     Value res;
     res.mode = Value::Const;
-    res.type = ev->mdl->getType(BasicType::UINT32);
+    res.type = ev->mdl->getType(Type::UINT32);
     res.val = arr->len;
     ev->stack.push_back(res);
 }
@@ -741,23 +741,23 @@ void Builtins::PRINT(int nArgs, bool ln)
         ev->out->call_(coreName("printI8"),1,false);
     }else if( ev->stack.back().type->isInt() )
     {
-        if( ev->stack.back().type->kind != BasicType::INT64 )
+        if( ev->stack.back().type->kind != Type::INT64 )
             ev->out->conv_(MilEmitter::I8);
         ev->out->call_(coreName("printI8"),1,false);
     }else if( ev->stack.back().type->isUInt() )
     {
-        if( ev->stack.back().type->kind != BasicType::UINT64 )
+        if( ev->stack.back().type->kind != Type::UINT64 )
             ev->out->conv_(MilEmitter::U8);
         ev->out->call_(coreName("printU8"),1,false);
     }else if( ev->stack.back().type->isReal() )
     {
-        if( ev->stack.back().type->kind != BasicType::FLT64 )
+        if( ev->stack.back().type->kind != Type::FLT64 )
             ev->out->conv_(MilEmitter::R8);
         ev->out->call_(coreName("printF8"),1,false);
     }else if( ev->stack.back().type->isText() )
     {
         // TODO: do we really accept array of string by value?
-        if( ev->stack.back().type->kind != BasicType::CHAR )
+        if( ev->stack.back().type->kind != Type::CHAR )
             ev->out->call_(coreName("printStr"),1,false);
         else
             ev->out->call_(coreName("printCh"),1,false);
@@ -839,7 +839,7 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs)
 {
     Value ret;
     ret.mode = Value::Val;
-    ret.type = ev->mdl->getType(BasicType::NoType);
+    ret.type = ev->mdl->getType(Type::NoType);
     bool handleStack = true;
     try
     {
@@ -945,7 +945,7 @@ int Builtins::addIncDecTmp()
     if( !doublette )
     {
         decl->kind = Declaration::LocalDecl;
-        decl->setType(ev->mdl->getType(BasicType::INT32));
+        decl->setType(ev->mdl->getType(Type::INT32));
         decl->outer = ev->mdl->getTopScope();
         decl->id = ev->out->addLocal(ev->toQuali(decl->getType()),decl->name);
     }

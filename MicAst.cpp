@@ -21,7 +21,7 @@
 using namespace Mic;
 
 Declaration AstModel::globalScope;
-Type* AstModel::types[BasicType::Max] = {0};
+Type* AstModel::types[Type::MaxBasicType] = {0};
 
 
 AstModel::AstModel():helper(0),helperId(0)
@@ -31,52 +31,52 @@ AstModel::AstModel():helper(0),helperId(0)
     if( globalScope.kind == Declaration::NoMode )
     {
         globalScope.kind = Declaration::Scope;
-        types[BasicType::Undefined] = newType(BasicType::Undefined,1);
-        types[BasicType::NoType] = newType(BasicType::NoType,1);
-        types[BasicType::String] = newType(BasicType::String,1);
-        types[BasicType::Nil] = newType(BasicType::Nil,1);
-        types[BasicType::Any] = addType("ANY", BasicType::Any,1);
+        types[Type::Undefined] = newType(Type::Undefined,1);
+        types[Type::NoType] = newType(Type::NoType,1);
+        types[Type::String] = newType(Type::String,1);
+        types[Type::Nil] = newType(Type::Nil,1);
+        types[Type::Any] = addType("ANY", Type::Any,1);
 
-        types[BasicType::BOOL] = addType("BOOL", BasicType::BOOL, 1 );
-        addTypeAlias("BOOLEAN", types[BasicType::BOOL] );
+        types[Type::BOOL] = addType("BOOL", Type::BOOL, 1 );
+        addTypeAlias("BOOLEAN", types[Type::BOOL] );
 
-        types[BasicType::CHAR] = addType("CHAR", BasicType::CHAR, 1 );
+        types[Type::CHAR] = addType("CHAR", Type::CHAR, 1 );
 
-        types[BasicType::UINT8] = addType("UINT8", BasicType::UINT8, 1 );
-        addTypeAlias("BYTE", types[BasicType::UINT8] );
-        addTypeAlias("U8", types[BasicType::UINT8] );
+        types[Type::UINT8] = addType("UINT8", Type::UINT8, 1 );
+        addTypeAlias("BYTE", types[Type::UINT8] );
+        addTypeAlias("U8", types[Type::UINT8] );
 
-        types[BasicType::INT8] = addType("INT8", BasicType::INT8, 1 );
-        addTypeAlias("I8", types[BasicType::INT8] );
+        types[Type::INT8] = addType("INT8", Type::INT8, 1 );
+        addTypeAlias("I8", types[Type::INT8] );
 
-        types[BasicType::INT16] = addType("INT16", BasicType::INT16, 2 );
-        addTypeAlias("SHORTINT", types[BasicType::INT16] );
-        addTypeAlias("I16", types[BasicType::INT16] );
+        types[Type::INT16] = addType("INT16", Type::INT16, 2 );
+        addTypeAlias("SHORTINT", types[Type::INT16] );
+        addTypeAlias("I16", types[Type::INT16] );
 
-        types[BasicType::UINT16] = addType("UINT16", BasicType::UINT16, 2 );
-        addTypeAlias("U16", types[BasicType::UINT16] );
+        types[Type::UINT16] = addType("UINT16", Type::UINT16, 2 );
+        addTypeAlias("U16", types[Type::UINT16] );
 
-        types[BasicType::INT32] = addType("INT32", BasicType::INT32, 4 );
-        addTypeAlias("INTEGER", types[BasicType::INT32] );
-        addTypeAlias("I32", types[BasicType::INT32] );
+        types[Type::INT32] = addType("INT32", Type::INT32, 4 );
+        addTypeAlias("INTEGER", types[Type::INT32] );
+        addTypeAlias("I32", types[Type::INT32] );
 
-        types[BasicType::UINT32] = addType("UINT32", BasicType::UINT32, 4 );
-        addTypeAlias("U32", types[BasicType::UINT32] );
+        types[Type::UINT32] = addType("UINT32", Type::UINT32, 4 );
+        addTypeAlias("U32", types[Type::UINT32] );
 
-        types[BasicType::INT64] = addType("INT64", BasicType::INT64, 8 );
-        addTypeAlias("LONGINT", types[BasicType::INT64] );
-        addTypeAlias("I64", types[BasicType::INT64] );
+        types[Type::INT64] = addType("INT64", Type::INT64, 8 );
+        addTypeAlias("LONGINT", types[Type::INT64] );
+        addTypeAlias("I64", types[Type::INT64] );
 
-        types[BasicType::UINT64] = addType("UINT64", BasicType::UINT64, 8 );
-        addTypeAlias("U64", types[BasicType::UINT64] );
+        types[Type::UINT64] = addType("UINT64", Type::UINT64, 8 );
+        addTypeAlias("U64", types[Type::UINT64] );
 
-        types[BasicType::FLT32] = addType("FLT32", BasicType::FLT32, 4 );
-        addTypeAlias("REAL", types[BasicType::FLT32] );
+        types[Type::FLT32] = addType("FLT32", Type::FLT32, 4 );
+        addTypeAlias("REAL", types[Type::FLT32] );
 
-        types[BasicType::FLT64] = addType("FLT64", BasicType::FLT64, 8 );
-        addTypeAlias("LONGREAL", types[BasicType::FLT64] );
+        types[Type::FLT64] = addType("FLT64", Type::FLT64, 8 );
+        addTypeAlias("LONGREAL", types[Type::FLT64] );
 
-        types[BasicType::SET] = addType("SET", BasicType::SET, 4 );
+        types[Type::SET] = addType("SET", Type::SET, 4 );
 
         addBuiltin("ABS", Builtin::ABS);
         addBuiltin("CAP", Builtin::CAP);
@@ -267,7 +267,7 @@ void AstModel::cleanupGlobals()
             delete globalScope.link;
         globalScope.link = 0;
         globalScope.kind = Declaration::NoMode;
-        for( int i = 0; i < BasicType::Max; i++ )
+        for( int i = 0; i < Type::MaxBasicType; i++ )
         {
             delete types[i];
             types[i] = 0;
@@ -305,11 +305,11 @@ void AstModel::addBuiltin(const QByteArray& name, Builtin::Type t)
 {
     Declaration* d = addDecl(Token::getSymbol(name.toUpper()));
     d->kind = Declaration::Builtin;
-    d->setType(types[BasicType::NoType]);
+    d->setType(types[Type::NoType]);
     d->id = t;
     d = addDecl(Token::getSymbol(name.toLower()));
     d->kind = Declaration::Builtin;
-    d->setType(types[BasicType::NoType]);
+    d->setType(types[Type::NoType]);
     d->id = t;
 }
 
@@ -348,7 +348,7 @@ Type::~Type()
             delete subs[i];
 }
 
-QVariant BasicType::getMax(BasicType::Type t)
+QVariant Type::getMax(Kind t)
 {
     switch( t )
     {
@@ -381,7 +381,7 @@ QVariant BasicType::getMax(BasicType::Type t)
     return QVariant();
 }
 
-QVariant BasicType::getMin(BasicType::Type t)
+QVariant Type::getMin(Kind t)
 {
     switch( t )
     {

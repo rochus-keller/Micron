@@ -25,27 +25,6 @@ namespace Mic
 {
     class Declaration;
 
-    struct BasicType
-    {
-        enum Type {
-               Undefined,
-               NoType,
-               String,
-               Any,
-               Nil,
-               BOOL,
-               CHAR,
-               UINT8, UINT16, UINT32, UINT64,
-               INT8, INT16, INT32, INT64,
-               FLT32, FLT64,
-               SET,
-               Max
-             };
-
-        static QVariant getMax(Type);
-        static QVariant getMin(Type);
-    };
-
     struct Builtin
     {
         enum Type {
@@ -108,27 +87,43 @@ namespace Mic
     class Type : public Node
     {
     public:
-        enum Kind { Pointer = BasicType::Max, Proc, Array, Record, Object, ConstEnum, NameRef, Generic };
+        enum Kind {
+            Undefined,
+            NoType,
+            String,
+            Any,
+            Nil,
+            BOOL,
+            CHAR,
+            UINT8, UINT16, UINT32, UINT64,
+            INT8, INT16, INT32, INT64,
+            FLT32, FLT64,
+            SET,
+            MaxBasicType,
+            Pointer, Proc, Array, Record, Object, ConstEnum, NameRef, Generic };
         quint32 len; // array length
         // type: array/pointer base type, return type
         QList<Declaration*> subs; // list of record fields or enum elements, or params for proc type
         Declaration* decl;
 
-        bool isUInt() const { return kind >= BasicType::UINT8 && kind <= BasicType::UINT64; }
-        bool isInt() const { return kind >= BasicType::INT8 && kind <= BasicType::INT64; }
-        bool isNumber() const { return kind >= BasicType::UINT8 && kind <= BasicType::FLT64; }
-        bool isReal() const { return kind == BasicType::FLT64 || kind == BasicType::FLT32; }
-        bool isInteger() const { return kind >= BasicType::UINT8 && kind <= BasicType::INT64; }
-        bool isSet() const { return kind == BasicType::SET; }
-        bool isBoolean() const { return kind == BasicType::BOOL; }
-        bool isSimple() const { return kind >= BasicType::String && kind < BasicType::Max; }
-        bool isText() const { return kind == BasicType::String || kind == BasicType::CHAR ||
-                    ( kind == Array && type && type->kind == BasicType::CHAR ) ||
-                    ( kind == Pointer && type && type->kind == Array && type->type->kind == BasicType::CHAR ); }
+        bool isUInt() const { return kind >= Type::UINT8 && kind <= Type::UINT64; }
+        bool isInt() const { return kind >= Type::INT8 && kind <= Type::INT64; }
+        bool isNumber() const { return kind >= Type::UINT8 && kind <= Type::FLT64; }
+        bool isReal() const { return kind == Type::FLT64 || kind == Type::FLT32; }
+        bool isInteger() const { return kind >= Type::UINT8 && kind <= Type::INT64; }
+        bool isSet() const { return kind == Type::SET; }
+        bool isBoolean() const { return kind == Type::BOOL; }
+        bool isSimple() const { return kind >= Type::String && kind < Type::MaxBasicType; }
+        bool isText() const { return kind == Type::String || kind == Type::CHAR ||
+                    ( kind == Array && type && type->kind == Type::CHAR ) ||
+                    ( kind == Pointer && type && type->kind == Array && type->type->kind == Type::CHAR ); }
         bool isStructured() const { return kind == Array || kind == Record || kind == Object; }
 
         Declaration* findSub(const QByteArray& name) const;
         QPair<int,int> getFieldCount() const; // fixed, variant
+
+        static QVariant getMax(Kind);
+        static QVariant getMin(Kind);
 
         Type():len(0),decl(0){meta = T;}
         ~Type();
@@ -270,7 +265,7 @@ namespace Mic
         Declaration* helper;
         quint32 helperId;
         static Declaration globalScope;
-        static Type* types[BasicType::Max];
+        static Type* types[Type::MaxBasicType];
 
     };
 }

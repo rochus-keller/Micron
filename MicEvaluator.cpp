@@ -65,27 +65,27 @@ bool Evaluator::unaryOp(quint8 op)
 Type*Evaluator::smallestUIntType(const QVariant& v) const
 {
     const quint64 u = v.toULongLong();
-    if( u <= BasicType::getMax(BasicType::UINT8).toULongLong() )
-        return mdl->getType(BasicType::UINT8);
-    else if( u <= BasicType::getMax(BasicType::UINT16).toULongLong() )
-        return mdl->getType(BasicType::UINT16);
-    else if( u <= BasicType::getMax(BasicType::UINT32).toULongLong() )
-        return mdl->getType(BasicType::UINT32);
+    if( u <= Type::getMax(Type::UINT8).toULongLong() )
+        return mdl->getType(Type::UINT8);
+    else if( u <= Type::getMax(Type::UINT16).toULongLong() )
+        return mdl->getType(Type::UINT16);
+    else if( u <= Type::getMax(Type::UINT32).toULongLong() )
+        return mdl->getType(Type::UINT32);
     else
-        return mdl->getType(BasicType::UINT64);
+        return mdl->getType(Type::UINT64);
 }
 
 Type*Evaluator::smallestIntType(const QVariant& v) const
 {
     const qint64 i = v.toLongLong();
-    if( i >= BasicType::getMin(BasicType::INT8).toLongLong() && i <= BasicType::getMax(BasicType::INT8).toLongLong() )
-        return mdl->getType(BasicType::INT8);
-    else if( i >= BasicType::getMin(BasicType::INT16).toLongLong() && i <= BasicType::getMax(BasicType::INT16).toLongLong() )
-        return mdl->getType(BasicType::INT16);
-    else if( i >= BasicType::getMin(BasicType::INT32).toLongLong() && i <= BasicType::getMax(BasicType::INT32).toLongLong() )
-        return mdl->getType(BasicType::INT32);
+    if( i >= Type::getMin(Type::INT8).toLongLong() && i <= Type::getMax(Type::INT8).toLongLong() )
+        return mdl->getType(Type::INT8);
+    else if( i >= Type::getMin(Type::INT16).toLongLong() && i <= Type::getMax(Type::INT16).toLongLong() )
+        return mdl->getType(Type::INT16);
+    else if( i >= Type::getMin(Type::INT32).toLongLong() && i <= Type::getMax(Type::INT32).toLongLong() )
+        return mdl->getType(Type::INT32);
     else
-        return mdl->getType(BasicType::INT64);
+        return mdl->getType(Type::INT64);
 }
 
 bool Evaluator::binaryOp(quint8 op)
@@ -149,14 +149,14 @@ bool Evaluator::prepareRhs(Type* lhs)
     }
 
     // make sure also a string literal is put on the stack by value
-    if( lhs && lhs->kind == Type::Array && lhs->getType()->kind == BasicType::CHAR &&
-            rhs.type->kind == BasicType::String )
+    if( lhs && lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR &&
+            rhs.type->kind == Type::String )
     {   // NOTE: already checked that lhs is large enough for rhs
         Q_ASSERT( lhs->len >= quint32(dequote(rhs.val.toByteArray()).size()) );
         assureTopOnMilStack();
         out->ldobj_(MilQuali());
-    }else if( lhs && lhs->kind == BasicType::CHAR &&
-              rhs.type->kind == BasicType::String )
+    }else if( lhs && lhs->kind == Type::CHAR &&
+              rhs.type->kind == Type::String )
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
     else if( lhs && lhs->kind == Type::Proc &&
              rhs.mode == Value::Procedure )
@@ -197,10 +197,10 @@ bool Evaluator::assign()
 
     if( lhs.type->kind == Type::Array )
     {
-        if( lhs.type->getType()->kind == BasicType::CHAR )
+        if( lhs.type->getType()->kind == Type::CHAR )
         {
             // special case both sides char arrays, just copy up to and including zero
-            if( rhs.type->kind == Type::Array && rhs.type->getType()->kind == BasicType::CHAR )
+            if( rhs.type->kind == Type::Array && rhs.type->getType()->kind == Type::CHAR )
             {
                 Q_ASSERT(rhs.ref);
                 out->call_(coreName("strcopy"),2);
@@ -211,34 +211,34 @@ bool Evaluator::assign()
 
     switch(lhs.type->kind)
     {
-    case BasicType::BOOL:
-    case BasicType::CHAR:
-    case BasicType::UINT8:
-    case BasicType::INT8:
+    case Type::BOOL:
+    case Type::CHAR:
+    case Type::UINT8:
+    case Type::INT8:
         out->stind_(MilEmitter::I1);
         break;
-    case BasicType::UINT16:
-    case BasicType::INT16:
+    case Type::UINT16:
+    case Type::INT16:
         out->stind_(MilEmitter::I2);
         break;
-    case BasicType::UINT32:
-    case BasicType::INT32:
-    case BasicType::SET:
+    case Type::UINT32:
+    case Type::INT32:
+    case Type::SET:
     case Type::ConstEnum:
         out->stind_(MilEmitter::I4);
         break;
-    case BasicType::UINT64:
-    case BasicType::INT64:
+    case Type::UINT64:
+    case Type::INT64:
         out->stind_(MilEmitter::I8);
         break;
-    case BasicType::FLT32:
+    case Type::FLT32:
         out->stind_(MilEmitter::R4);
         break;
-    case BasicType::FLT64:
+    case Type::FLT64:
         out->stind_(MilEmitter::R8);
         break;
-    case BasicType::Nil:
-    case BasicType::String:
+    case Type::Nil:
+    case Type::String:
     case Type::Pointer:
     case Type::Proc:
         out->stind_(MilEmitter::IntPtr);
@@ -292,38 +292,38 @@ bool Evaluator::derefValue()
     v.ref = false;
     switch(v.type->kind)
     {
-    case BasicType::BOOL:
-    case BasicType::CHAR:
-    case BasicType::UINT8:
+    case Type::BOOL:
+    case Type::CHAR:
+    case Type::UINT8:
         out->ldind_(MilEmitter::U1);
         break;
-    case BasicType::UINT16:
+    case Type::UINT16:
         out->ldind_(MilEmitter::U2);
         break;
-    case BasicType::UINT32:
-    case BasicType::SET:
+    case Type::UINT32:
+    case Type::SET:
         out->ldind_(MilEmitter::U4);
         break;
-    case BasicType::UINT64:
+    case Type::UINT64:
         out->ldind_(MilEmitter::U8);
         break;
-    case BasicType::INT8:
+    case Type::INT8:
         out->ldind_(MilEmitter::I1);
         break;
-    case BasicType::INT16:
+    case Type::INT16:
         out->ldind_(MilEmitter::I2);
         break;
-    case BasicType::INT32:
+    case Type::INT32:
     case Type::ConstEnum:
         out->ldind_(MilEmitter::I4);
         break;
-    case BasicType::INT64:
+    case Type::INT64:
         out->ldind_(MilEmitter::I8);
         break;
-    case BasicType::FLT32:
+    case Type::FLT32:
         out->ldind_(MilEmitter::R4);
         break;
-    case BasicType::FLT64:
+    case Type::FLT64:
         out->ldind_(MilEmitter::R8);
         break;
     case Type::Pointer:
@@ -479,7 +479,7 @@ bool Evaluator::call(int nArgs)
 
     Value callee = stack.takeLast();
     if( callee.type == 0 )
-        callee.type = mdl->getType(BasicType::NoType);
+        callee.type = mdl->getType(Type::NoType);
 
     Type* ret = 0;
     switch( callee.mode )
@@ -523,7 +523,7 @@ bool Evaluator::call(int nArgs)
     if( ret )
         tmp.type = ret;
     else
-        tmp.type = mdl->getType(BasicType::NoType);
+        tmp.type = mdl->getType(Type::NoType);
     stack.push_back(tmp);
 
     return err.isEmpty();
@@ -563,37 +563,37 @@ bool Evaluator::castNum(Type* to)
         MilEmitter::Type tt;
         switch(to->kind)
         {
-        case BasicType::BOOL:
-        case BasicType::CHAR:
-        case BasicType::UINT8:
+        case Type::BOOL:
+        case Type::CHAR:
+        case Type::UINT8:
             tt = MilEmitter::U1;
             break;
-        case BasicType::UINT16:
+        case Type::UINT16:
             tt = MilEmitter::U2;
             break;
-        case BasicType::UINT32:
-        case BasicType::SET:
+        case Type::UINT32:
+        case Type::SET:
             tt = MilEmitter::U4;
             break;
-        case BasicType::UINT64:
+        case Type::UINT64:
             tt = MilEmitter::U8;
             break;
-        case BasicType::INT8:
+        case Type::INT8:
             tt = MilEmitter::I1;
             break;
-        case BasicType::INT16:
+        case Type::INT16:
             tt = MilEmitter::I2;
             break;
-        case BasicType::INT32:
+        case Type::INT32:
             tt = MilEmitter::I4;
             break;
-        case BasicType::INT64:
+        case Type::INT64:
             tt = MilEmitter::I8;
             break;
-        case BasicType::FLT32:
+        case Type::FLT32:
             tt = MilEmitter::R4;
             break;
-        case BasicType::FLT64:
+        case Type::FLT64:
             tt = MilEmitter::R8;
             break;
         default:
@@ -708,36 +708,36 @@ bool Evaluator::pushMilStack(const Value& v)
         {
             switch( v.type->kind )
             {
-            case BasicType::String:
+            case Type::String:
                 out->ldstr_( v.val.toByteArray() );
                 break;
-            case BasicType::Nil:
+            case Type::Nil:
                 out->ldnull_();
                 break;
-            case BasicType::BOOL:
-            case BasicType::CHAR:
-            case BasicType::UINT8:
-            case BasicType::UINT16:
-            case BasicType::UINT32:
-            case BasicType::SET:
+            case Type::BOOL:
+            case Type::CHAR:
+            case Type::UINT8:
+            case Type::UINT16:
+            case Type::UINT32:
+            case Type::SET:
                 out->ldc_i4(v.val.toUInt());
                 break;
-            case BasicType::UINT64:
+            case Type::UINT64:
                 out->ldc_i8(v.val.toULongLong());
                 break;
-            case BasicType::INT8:
-            case BasicType::INT16:
-            case BasicType::INT32:
+            case Type::INT8:
+            case Type::INT16:
+            case Type::INT32:
             case Type::ConstEnum:
                 out->ldc_i4(v.val.toInt());
                 break;
-            case BasicType::INT64:
+            case Type::INT64:
                 out->ldc_i8(v.val.toLongLong());
                 break;
-            case BasicType::FLT32:
+            case Type::FLT32:
                 out->ldc_r4(v.val.toFloat());
                 break;
-            case BasicType::FLT64:
+            case Type::FLT64:
                 out->ldc_r8(v.val.toDouble());
                 break;
             default:
@@ -836,13 +836,13 @@ void Evaluator::adjustNumType(Type* me, Type* other)
     if( me && me->isNumber() && other && other->isNumber() )
     {
         if( me->isInt() && other->isInt() &&
-                other->kind == BasicType::INT64 && me->kind < BasicType::INT64 )
+                other->kind == Type::INT64 && me->kind < Type::INT64 )
             out->conv_(MilEmitter::I8);
         else if( me->isUInt() && other->isUInt() &&
-                 other->kind == BasicType::UINT64 && me->kind < BasicType::UINT64 )
+                 other->kind == Type::UINT64 && me->kind < Type::UINT64 )
             out->conv_(MilEmitter::U8);
         else if( me->isReal() && other->isReal() &&
-                 other->kind == BasicType::FLT64 && me->kind < BasicType::FLT64 )
+                 other->kind == Type::FLT64 && me->kind < Type::FLT64 )
             out->conv_(MilEmitter::R8);
     }
 }
@@ -938,7 +938,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 }
             }else
             {
-                emitArithOp(op,false, res.type->kind == BasicType::INT64 );
+                emitArithOp(op,false, res.type->kind == Type::INT64 );
             }
         }else if( lhs.type->isUInt() && rhs.type->isUInt() )
         {
@@ -970,7 +970,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 }
             }else
             {
-                emitArithOp(op,true, res.type->kind == BasicType::UINT64);
+                emitArithOp(op,true, res.type->kind == Type::UINT64);
             }
         }else if( lhs.type->isReal() && rhs.type->isReal() )
         {
@@ -1047,11 +1047,11 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 break;
             }
         }
-    }else if( (lhs.type->kind == BasicType::String || lhs.type->kind == BasicType::CHAR) &&
-              (rhs.type->kind == BasicType::String || rhs.type->kind == BasicType::CHAR) )
+    }else if( (lhs.type->kind == Type::String || lhs.type->kind == Type::CHAR) &&
+              (rhs.type->kind == Type::String || rhs.type->kind == Type::CHAR) )
     {
         // + only
-        res.type = mdl->getType(BasicType::String);
+        res.type = mdl->getType(Type::String);
         Q_ASSERT( op == Expression::Add );
         Q_ASSERT( lhs.isConst() && rhs.isConst() );
         res.val = lhs.val.toByteArray() + rhs.val.toByteArray();
@@ -1065,7 +1065,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
 {
     Value res;
     res.mode = Value::Val;
-    res.type = mdl->getType(BasicType::BOOL);
+    res.type = mdl->getType(Type::BOOL);
 
     if( lhs.type == 0 || rhs.type == 0 )
         return res;
@@ -1199,18 +1199,18 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             return res; // Q_ASSERT(false);
             break;
         }
-        if( lhs.type->kind == BasicType::CHAR && rhs.type->kind == BasicType::CHAR )
+        if( lhs.type->kind == Type::CHAR && rhs.type->kind == Type::CHAR )
             out->call_(coreName("relop4"),3,true);
-        else if( lhs.type->kind == BasicType::CHAR )
+        else if( lhs.type->kind == Type::CHAR )
             out->call_(coreName("relop3"),3,true);
-        else if( rhs.type->kind == BasicType::CHAR )
+        else if( rhs.type->kind == Type::CHAR )
             out->call_(coreName("relop2"),3,true);
         else
             out->call_(coreName("relop1"),3,true);
     }else if( lhs.type->kind == Type::Pointer && rhs.type->kind == Type::Pointer ||
-              lhs.type->kind == Type::Pointer && rhs.type->kind == BasicType::Nil ||
-              lhs.type->kind == BasicType::Nil && rhs.type->kind == Type::Pointer ||
-              lhs.type->kind == BasicType::Nil && rhs.type->kind == BasicType::Nil )
+              lhs.type->kind == Type::Pointer && rhs.type->kind == Type::Nil ||
+              lhs.type->kind == Type::Nil && rhs.type->kind == Type::Pointer ||
+              lhs.type->kind == Type::Nil && rhs.type->kind == Type::Nil )
     {
         if( lhs.isConst() && rhs.isConst() )
         {
@@ -1300,8 +1300,8 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             emitRelOp(op,true);
         }
     }else if( lhs.type->kind == Type::Proc && rhs.type->kind == Type::Proc ||
-              lhs.type->kind == Type::Proc && rhs.type->kind == BasicType::Nil ||
-              lhs.type->kind == BasicType::Nil && rhs.type->kind == Type::Proc )
+              lhs.type->kind == Type::Proc && rhs.type->kind == Type::Nil ||
+              lhs.type->kind == Type::Nil && rhs.type->kind == Type::Proc )
     {
         if( lhs.isConst() && rhs.isConst() )
         {
@@ -1321,7 +1321,7 @@ Value Evaluator::inOp(const Value& lhs, const Value& rhs)
 {
     Value res;
     res.mode = Value::Val;
-    res.type = mdl->getType(BasicType::BOOL);
+    res.type = mdl->getType(Type::BOOL);
 
     if( lhs.type->isInteger() && rhs.type->isSet() )
     {
@@ -1356,7 +1356,7 @@ void Evaluator::unaryMinusOp(Value& v)
                 v.val = -v.val.toLongLong();
             else
             {
-                if( v.type->kind == BasicType::INT32 )
+                if( v.type->kind == Type::INT32 )
                     out->conv_(MilEmitter::I4);
                 else
                     out->conv_(MilEmitter::I8);
@@ -1428,29 +1428,29 @@ Qualident Evaluator::toQuali(Declaration* d)
 
 Qualident Evaluator::toQuali(Type* t)
 {
-    static QByteArray symbols[BasicType::Max];
+    static QByteArray symbols[Type::MaxBasicType];
 
     if( t == 0 )
         return Qualident();
 
     if( t->isSimple() )
     {
-        if( symbols[BasicType::Any].isEmpty() )
+        if( symbols[Type::Any].isEmpty() )
         {
-            symbols[BasicType::Any] = Token::getSymbol("any");
-            symbols[BasicType::Nil] = Token::getSymbol("nil");
-            symbols[BasicType::BOOL] = Token::getSymbol("bool");
-            symbols[BasicType::CHAR] = Token::getSymbol("char");
-            symbols[BasicType::UINT8] = Token::getSymbol("uint8");
-            symbols[BasicType::UINT16] = Token::getSymbol("uint16");
-            symbols[BasicType::UINT32] = symbols[BasicType::SET] = Token::getSymbol("uint32");
-            symbols[BasicType::UINT64] = Token::getSymbol("uint64");
-            symbols[BasicType::INT8] = Token::getSymbol("int8");
-            symbols[BasicType::INT16] = Token::getSymbol("int16");
-            symbols[BasicType::INT32] = Token::getSymbol("int32");
-            symbols[BasicType::INT64] = Token::getSymbol("int64");
-            symbols[BasicType::FLT32] = Token::getSymbol("float32");
-            symbols[BasicType::FLT64] = Token::getSymbol("float64");
+            symbols[Type::Any] = Token::getSymbol("any");
+            symbols[Type::Nil] = Token::getSymbol("nil");
+            symbols[Type::BOOL] = Token::getSymbol("bool");
+            symbols[Type::CHAR] = Token::getSymbol("char");
+            symbols[Type::UINT8] = Token::getSymbol("uint8");
+            symbols[Type::UINT16] = Token::getSymbol("uint16");
+            symbols[Type::UINT32] = symbols[Type::SET] = Token::getSymbol("uint32");
+            symbols[Type::UINT64] = Token::getSymbol("uint64");
+            symbols[Type::INT8] = Token::getSymbol("int8");
+            symbols[Type::INT16] = Token::getSymbol("int16");
+            symbols[Type::INT32] = Token::getSymbol("int32");
+            symbols[Type::INT64] = Token::getSymbol("int64");
+            symbols[Type::FLT32] = Token::getSymbol("float32");
+            symbols[Type::FLT64] = Token::getSymbol("float64");
         }
         return qMakePair(QByteArray(),symbols[t->kind]);
     }else if( t->decl)
@@ -1683,7 +1683,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             stack.push_back(v);
             break;
         }
-    case BasicType::SET: {
+    case Type::SET: {
             std::bitset<32> set;
             Expression* c = e->rhs;
             while( c )
