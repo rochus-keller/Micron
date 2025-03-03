@@ -117,9 +117,10 @@ void MilEmitter::endProc()
 void MilEmitter::beginType(const QByteArray& name, bool isPublic, quint8 typeKind, const MilQuali& super)
 {
     Q_ASSERT( d_typeKind == 0 );
-    Q_ASSERT( typeKind == Struct || typeKind == Union || typeKind == ProcType || d_typeKind == MethType);
+    Q_ASSERT( typeKind == Struct || typeKind == Union || typeKind == Object ||
+              typeKind == ProcType || d_typeKind == MethType);
     d_typeKind = typeKind;
-    if( typeKind == Struct || typeKind == Union )
+    if( typeKind == Struct || typeKind == Union || typeKind == Object )
         d_out->beginType(name,isPublic, typeKind, super);
     else
     {
@@ -133,8 +134,9 @@ void MilEmitter::beginType(const QByteArray& name, bool isPublic, quint8 typeKin
 
 void MilEmitter::endType()
 {
-    Q_ASSERT( d_typeKind == Struct || d_typeKind == Union || d_typeKind == ProcType || d_typeKind == MethType);
-    if( d_typeKind == Struct || d_typeKind == Union )
+    Q_ASSERT( d_typeKind == Struct || d_typeKind == Union || d_typeKind == Object ||
+              d_typeKind == ProcType || d_typeKind == MethType);
+    if( d_typeKind == Struct || d_typeKind == Union || d_typeKind == Object )
         d_out->endType();
     else
     {
@@ -153,7 +155,7 @@ void MilEmitter::addType(const QByteArray& name, bool isPublic, const MilQuali& 
 
 void MilEmitter::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic, quint8 bits)
 {
-    Q_ASSERT( d_typeKind == Struct || d_typeKind == Union );
+    Q_ASSERT( d_typeKind == Struct || d_typeKind == Union || d_typeKind == Object );
     d_out->addField(fieldName, typeRef, isPublic, bits );
 }
 
@@ -294,7 +296,14 @@ void MilEmitter::calli_(const MilQuali& methodRef, int argCount, bool hasRet)
     delta(-argCount + (hasRet?1:0) );
 }
 
-void MilEmitter::callvirt_(const MilQuali& methodRef, int argCount, bool hasRet)
+void MilEmitter::callvi_(const MilTrident& methodRef, int argCount, bool hasRet)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(MilOperation(IL_callvi,QVariant::fromValue(methodRef)) );
+    delta(-argCount + (hasRet?1:0) );
+}
+
+void MilEmitter::callvirt_(const MilTrident& methodRef, int argCount, bool hasRet)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
     ops->append(MilOperation(IL_callvirt,QVariant::fromValue(methodRef)) );
@@ -475,6 +484,13 @@ void MilEmitter::initobj(const MilQuali& typeRef)
     delta(0);
 }
 
+void MilEmitter::isinst_(const MilQuali& typeRef)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(MilOperation(IL_isinst,QVariant::fromValue(typeRef)));
+    delta(0);
+}
+
 void MilEmitter::label_(const QByteArray& name)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
@@ -643,7 +659,7 @@ void MilEmitter::ldflda_(const MilTrident& fieldRef)
     delta(-1+1);
 }
 
-void MilEmitter::ldmeth_(const MilQuali& methodRef)
+void MilEmitter::ldmeth_(const MilTrident& methodRef)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
     ops->append(MilOperation(IL_ldmeth,QVariant::fromValue(methodRef)));
@@ -1145,7 +1161,7 @@ void IlAsmRenderer::addProcedure(const MilProcedure& m)
 
 void IlAsmRenderer::beginType(const QByteArray& className, bool isPublic, quint8 classKind, const MilQuali& super)
 {
-    Q_ASSERT(classKind == MilEmitter::Union || classKind == MilEmitter::Struct);
+    Q_ASSERT(classKind == MilEmitter::Union || classKind == MilEmitter::Struct || classKind == MilEmitter::Object);
     state = Struct;
     out << ws() << "type " << className;
     if( isPublic )

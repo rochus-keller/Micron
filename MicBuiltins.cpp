@@ -785,7 +785,8 @@ void Builtins::NEW(int nArgs)
         return; // already reported
 
     if( what.type->kind != Type::Pointer &&
-            !(what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Array) )
+            !(what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Object ||
+              what.type->getType()->kind == Type::Array) )
     {
         ev->err = "first argument must be a pointer to record or array";
         return;
@@ -795,7 +796,7 @@ void Builtins::NEW(int nArgs)
         ev->err = "cannot write to first argument";
         return;
     }
-    if( what.type->getType()->kind == Type::Record )
+    if( what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Object )
     {
         ev->out->newobj_(ev->toQuali(what.type->getType()));
         ev->out->stind_(MilEmitter::IntPtr);
@@ -825,7 +826,8 @@ void Builtins::DISPOSE(int nArgs)
 {
     Value what = ev->stack.takeLast();
     if( what.type->kind != Type::Pointer &&
-            !(what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Array) )
+            !(what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Object ||
+              what.type->getType()->kind == Type::Array) )
     {
         ev->err = "argument must be a pointer to record or array";
         return;

@@ -73,7 +73,7 @@ namespace Mic {
 		void ConstDeclaration();
         Expression* ConstExpression(Type* hint);
 		void TypeDeclaration();
-        Type* type(bool deanonymize = true);
+        Type* type(bool needsHelperDecl = true);
         Type* NamedType(Quali* = 0, bool allowUnresovedLocal = false);
         Type* ArrayType();
         void length(quint32& len);
@@ -114,6 +114,7 @@ namespace Mic {
         void Case(Type* t, CaseLabels& ll);
         void CaseLabelList(Type* t, CaseLabels&);
         void LabelRange(Type* t,CaseLabels&);
+        void TypeCase(Expression*);
         Value label(Type* t);
 		void WhileStatement();
 		void RepeatStatement();
@@ -129,7 +130,8 @@ namespace Mic {
             NameAndType():t(0){}
         };
         NameAndType Receiver();
-		void block();
+        NameAndType Receiver2();
+        void block();
 		void DeclarationSequence();
 		void ReturnStatement();
         Type* FormalParameters();
@@ -211,6 +213,7 @@ namespace Mic {
         Gotos gotos;
         QSet<Type*> deferDeleteNamedType;
         MetaActualList metaActuals;
+        QByteArray self, SELF;
 	};
 }
 

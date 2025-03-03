@@ -77,6 +77,8 @@ public:
                                                                      Thing::Struct : Thing::Union,t));
             }
             break;
+        case MilEmitter::Object:
+            break; // TODO
         case MilEmitter::ProcType:
         case MilEmitter::MethType:
             break;

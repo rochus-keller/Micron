@@ -413,6 +413,7 @@ public:
         {
         // TODO Alias
         case MilEmitter::Struct:
+        case MilEmitter::Object:
             s.clear();
             s.t = MemSlot::Record;
             s.p = createSequence(t->fields.size());
@@ -584,7 +585,7 @@ public:
         FlattenedType& ft = flattened[type];
         if( ft.type == 0 )
         {
-            if( type->kind == MilEmitter::Struct )
+            if( type->kind == MilEmitter::Struct || type->kind == MilEmitter::Object )
             {
                 for( int i = 0; i < type->fields.size(); i++ )
                 {
@@ -1456,6 +1457,7 @@ public:
                 makeCall(stack, lhs.pp);
                 pc++;
                 vmbreak;
+                // TODO callvi
                 // TODO callvirt
             vmcase(IL_castptr)
                 // NOP
@@ -1584,6 +1586,9 @@ public:
                 lhs = stack.takeLast();
                 if( lhs.t != MemSlot::Pointer || lhs.p == 0 )
                     execError(module, proc, pc, "top of stack is not a pointer");
+                pc++;
+                vmbreak;
+            vmcase(IL_isinst) // TODO
                 pc++;
                 vmbreak;
             vmcase(IL_ldarg)
@@ -1871,7 +1876,8 @@ public:
                         if( ty == 0 )
                             execError(module, proc, pc, "invalid type");
                         stack.push_back(MemSlot());
-                        if( ty->type->kind == MilEmitter::Struct || ty->type->kind == MilEmitter::Union )
+                        if( ty->type->kind == MilEmitter::Struct || ty->type->kind == MilEmitter::Union
+                                || ty->type->kind == MilEmitter::Object)
                             stack.back().copyOf(lhs.p, 0, ty->fields.size(), true );
                         else
                         {
@@ -1967,7 +1973,8 @@ public:
                     if( ty == 0 )
                         execError(module, proc, pc, QString("unknown type '%1'").
                                   arg(MilEmitter::toString(q).constData()));
-                    if( ty->type->kind != MilEmitter::Struct && ty->type->kind != MilEmitter::Union )
+                    if( ty->type->kind != MilEmitter::Struct && ty->type->kind != MilEmitter::Union
+                            && ty->type->kind != MilEmitter::Object)
                         execError(module, proc, pc, "operation not available for given type");
                     MemSlot* record = createSequence(ty->fields.size()); // use the flattened version of the record or union
                     initFields(module, record, ty->fields);
@@ -2386,8 +2393,7 @@ public:
                 pc++;
                 vmbreak;
             default:
-                qCritical() << s_opName[op.op] << "not implemented";
-                Q_ASSERT(false);
+                throw QString("operator not implemnted: %1").arg(s_opName[op.op]);
             }
         }
     }
@@ -2462,7 +2468,9 @@ void MilInterpreter::run(const QByteArray& module)
 {
     try
     {
-        imp->loadModule(module);
+        ModuleData* m = imp->loadModule(module);
+        if( m == 0 )
+            qCritical() << "module" << module << "not found";
     }catch(const QString& str)
     {
         qCritical() << str;

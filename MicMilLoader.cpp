@@ -210,6 +210,7 @@ static void render_(const MilType* t, MilRenderer* r)
     {
     case MilEmitter::Struct:
     case MilEmitter::Union:
+    case MilEmitter::Object:
         r->beginType(t->name,t->isPublic,t->kind, t->base);
         foreach( const MilVariable& v, t->fields )
             r->addField(v.name,v.type,v.isPublic,v.bits);

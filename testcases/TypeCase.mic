@@ -1,17 +1,33 @@
-MODULE Test;
+MODULE TypeCase;
    TYPE
       T0 = POINTER TO OBJECT END;
       T1 = POINTER TO OBJECT(T0) i: INTEGER END;
+  
+   PROC (this: T0) test0()
+   BEGIN
+     PRINTLN("hello from test0")
+   END test0
+    
+   PROC T1.test1(str: ^ARRAY OF CHAR)
+   BEGIN
+     PRINT("hello from test1 ")
+     PRINTLN(SELF.i)
+   END test1
+   
    VAR t : T1; v: T0;
 BEGIN
   PRINTLN(v IS T1) // FALSE because v is NIL
 
   NEW(t);
   v := t;
+  t.i := 33
   CASE v OF
   | T0: PRINTLN("T0")
   | T1: PRINTLN("T1")
+  | NIL: PRINTLN("NIL")
   ELSE
-    PRINTLN("NIL")
+    PRINTLN("Nothing")
   END
-END Test.
+  t.test0()
+  t.test1()
+END TypeCase.

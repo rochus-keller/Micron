@@ -127,6 +127,11 @@ bool Evaluator::binaryOp(quint8 op)
     case Expression::In:
         stack.push_back(inOp(lhs,rhs));
         break;
+    case Expression::Is:
+        stack.push_back(isOp(lhs,rhs));
+        break;
+    default:
+        Q_ASSERT(false);
     }
     return err.isEmpty();
 }
@@ -161,6 +166,7 @@ bool Evaluator::prepareRhs(Type* lhs)
     else if( lhs && lhs->kind == Type::Proc &&
              rhs.mode == Value::Procedure )
         out->ldproc_(toQuali(rhs.val.value<Declaration*>()));
+    // TODO prepare instance method assignment
     else
         assureTopOnMilStack();
 
@@ -244,6 +250,7 @@ bool Evaluator::assign()
         out->stind_(MilEmitter::IntPtr);
         break;
     case Type::Record:
+    case Type::Object:
     case Type::Array:
     case Type::Generic:
         out->stobj_(toQuali(lhs.type));
@@ -331,6 +338,7 @@ bool Evaluator::derefValue()
         out->ldind_(MilEmitter::IntPtr);
         break;
     case Type::Record:
+    case Type::Object:
     case Type::Array:
     case Type::Generic:
         out->ldobj_(toQuali(v.type));
@@ -364,7 +372,7 @@ bool Evaluator::desigField(Declaration* field, bool byVal)
 
     // TODO: desig const record
 
-    Q_ASSERT(lhs.ref && lhs.type && lhs.type->kind == Type::Record);
+    Q_ASSERT(lhs.ref && lhs.type && (lhs.type->kind == Type::Record || lhs.type->kind == Type::Object));
 
     Q_ASSERT(field);
     const MilTrident desig = qMakePair(toQuali(lhs.type),field->name);
@@ -497,6 +505,16 @@ bool Evaluator::call(int nArgs)
             Q_ASSERT(proc);
             ret = proc->getType();
             out->call_(toQuali(proc),nArgs, ret != 0); // TODO: desig in imported module
+        }
+        break;
+    case Value::Method:
+        {
+            Declaration* proc = callee.val.value<Declaration*>();
+            Q_ASSERT(proc);
+            ret = proc->getType();
+            const MilTrident trident = qMakePair(toQuali(proc->outer),proc->name);
+            out->callvirt_(trident,nArgs, ret != 0);
+
         }
         break;
     case Value::VarDecl:
@@ -1346,6 +1364,27 @@ Value Evaluator::inOp(const Value& lhs, const Value& rhs)
     return res;
 }
 
+Value Evaluator::isOp(const Value& lhs, const Value& rhs)
+{
+    Value res;
+    res.mode = Value::Val;
+    res.type = mdl->getType(Type::BOOL);
+
+
+    if( lhs.type->kind == Type::Pointer && lhs.type->getType() && lhs.type->getType()->kind == Type::Object
+            && ( rhs.type->kind == Type::Object ||
+                (rhs.type->kind == Type::Pointer && rhs.type->getType() && rhs.type->getType()->kind == Type::Object) ) )
+    {
+        Type* t = rhs.type;
+        if( t->kind == Type::Pointer )
+            t = t->getType();
+        const Qualident type = toQuali(t);
+        out->isinst_(type);
+    }else
+        err = "operation not compatible with given operands";
+    return res;
+}
+
 void Evaluator::unaryMinusOp(Value& v)
 {
     if( v.type->isNumber() )
@@ -1404,7 +1443,9 @@ Qualident Evaluator::toQuali(Declaration* d)
         if( d->kind == Declaration::LocalDecl ||
                 d->kind == Declaration::ParamDecl )
             return qMakePair(QByteArray(),d->name); // locals and params have no desig
-        if( d->outer == 0 && last == 0 )
+        if( d->kind == Declaration::Procedure && d->typebound )
+            return qMakePair(QByteArray(),d->name); // bound procs are in the namespace of the type
+        if( d->kind == Declaration::TypeDecl && d->outer == 0 && last == 0 )
             return toQuali(d->getType()); // this is a built-in type
         if( !desig.isEmpty() )
         {
@@ -1494,6 +1535,7 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Leq:
     case Expression::Gt:
     case Expression::Geq:
+    case Expression::Is:
     case Expression::In: // Relation
     case Expression::Add:
     case Expression::Sub: // AddOp
@@ -1568,6 +1610,11 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::ProcDecl:
         stack.push_back(Value(e->getType(),e->val,Value::Procedure));
         break;
+    case Expression::MethDecl:
+        if( !recursiveRun(e->lhs) )
+            return false;
+        stack.push_back(Value(e->getType(),e->val,Value::Method));
+        break;
     case Expression::Builtin:
         stack.push_back(Value(e->getType(),e->val,Value::Builtin));
         break;
@@ -1610,6 +1657,7 @@ bool Evaluator::recursiveRun(Expression* e)
         constructor(e);
         break;
 
+    default:
     case Expression::Invalid:
         Q_ASSERT(false);
         break;
@@ -1633,7 +1681,8 @@ void Evaluator::recurseConstConstructor(Expression* e)
 {
     switch( e->getType()->kind )
     {
-    case Type::Record: {
+    case Type::Record:
+    case Type::Object: {
             MilRecordLiteral rec;
             Expression* c = e->rhs;
             while( c )

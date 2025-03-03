@@ -202,7 +202,8 @@ namespace Mic
         void and_();
         void call_( const MilQuali& methodRef, int argCount = 0, bool hasRet = false);
         void calli_( const MilQuali& methodRef, int argCount, bool hasRet = false );
-        void callvirt_( const MilQuali& methodRef, int argCount, bool hasRet = false );
+        void callvi_( const MilTrident& methodRef, int argCount, bool hasRet = false );
+        void callvirt_( const MilTrident& methodRef, int argCount, bool hasRet = false );
         void case_(const CaseLabelList&);
         void castptr_(const MilQuali& typeRef);
         void ceq_();
@@ -221,6 +222,7 @@ namespace Mic
         void if_();
         void iif_();
         void initobj(const MilQuali& typeRef);
+        void isinst_(const MilQuali& typeRef);
         void label_(const QByteArray& name);
         void ldarg_(quint16 arg);
         void ldarga_(quint16 arg);
@@ -233,7 +235,7 @@ namespace Mic
         void ldelema_(const MilQuali& typeRef);
         void ldfld_(const MilTrident& fieldRef);
         void ldflda_(const MilTrident& fieldRef);
-        void ldmeth_(const MilQuali& methodRef); // CIL ldvirtftn
+        void ldmeth_(const MilTrident& methodRef); // CIL ldvirtftn, returns methref
         void ldproc_(const MilQuali& methodRef); // CIL ldftn
         void ldind_(Type);
         void ldloc_(quint16);

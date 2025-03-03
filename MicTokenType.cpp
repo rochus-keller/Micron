@@ -27,6 +27,7 @@ namespace Mic {
 			case Tok_Lt: return "<";
 			case Tok_LtStar: return "<*";
 			case Tok_Leq: return "<=";
+			case Tok_LtGt: return "<>";
 			case Tok_Eq: return "=";
 			case Tok_Gt: return ">";
 			case Tok_Geq: return ">=";
@@ -121,6 +122,7 @@ namespace Mic {
 			case Tok_Lt: return "Tok_Lt";
 			case Tok_LtStar: return "Tok_LtStar";
 			case Tok_Leq: return "Tok_Leq";
+			case Tok_LtGt: return "Tok_LtGt";
 			case Tok_Eq: return "Tok_Eq";
 			case Tok_Gt: return "Tok_Gt";
 			case Tok_Geq: return "Tok_Geq";
@@ -281,6 +283,9 @@ namespace Mic {
 				break;
 			case '=':
 				res = Tok_Leq; i += 2;
+				break;
+			case '>':
+				res = Tok_LtGt; i += 2;
 				break;
 			default:
 				res = Tok_Lt; i += 1;

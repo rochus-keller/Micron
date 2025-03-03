@@ -75,6 +75,7 @@ protected:
     Value arithOp(quint8 op, const Value& lhs, const Value& rhs);
     Value relationOp(quint8 op, const Value& lhs, const Value& rhs);
     Value inOp(const Value& lhs, const Value& rhs);
+    Value isOp(const Value& lhs, const Value& rhs);
     void unaryMinusOp(Value&);
     void unaryPlusOp(Value&);
     bool pushMilStack(const Value&);

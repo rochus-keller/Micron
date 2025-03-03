@@ -279,6 +279,7 @@ Type*AstModel::newType(int form, int size)
 {
     Type* t = new Type();
     t->kind = form;
+    t->owned = true; // avoid that someone takes ownership
     return t;
 }
 
@@ -294,8 +295,7 @@ void AstModel::addTypeAlias(const QByteArray& name, Type* t)
     Declaration* d = addDecl(Token::getSymbol(name.toUpper()));
     d->kind = Declaration::TypeDecl;
     d->setType(t);
-    if( t->decl == 0 )
-        t->decl = d;
+    t->decl = d;
     Declaration* d2 = addDecl(Token::getSymbol(name.toLower()));
     d2->kind = Declaration::TypeDecl;
     d2->setType(t);
@@ -322,6 +322,14 @@ Declaration*Type::findSub(const QByteArray& name) const
             return d;
     }
     return 0;
+}
+
+Declaration*Type::findMember(const QByteArray& name, bool recurseSuper) const
+{
+    Declaration* res = findSub(name);
+    if( type && res == 0 && recurseSuper )
+        res = type->findSub(name);
+    return res;
 }
 
 QPair<int, int> Type::getFieldCount() const
@@ -412,6 +420,17 @@ QVariant Type::getMin(Kind t)
         return std::numeric_limits<double>::min();
     }
     return QVariant();
+}
+
+bool Type::isSubtype(Type* super, Type* sub)
+{
+    if( super == 0 || sub == 0 )
+        return false;
+    while( sub && super != sub )
+    {
+        sub = sub->type;
+    }
+    return super == sub;
 }
 
 const char* Declaration::s_mode[] = {
@@ -618,12 +637,22 @@ void Expression::append(Expression* list, Expression* elem)
     }
 }
 
+void Expression::lockArena()
+{
+    lock++;
+}
+
+void Expression::unlockArena()
+{
+    lock--;
+}
+
 Expression*Expression::createFromToken(quint16 tt, const RowCol& rc)
 {
     Kind k = Invalid;
     if( tt == Tok_Eq ) {
         k = Eq;
-    } else if( tt == Tok_Hash ) {
+    } else if( tt == Tok_Hash || tt == Tok_LtGt ) {
         k = Neq;
     } else if( tt == Tok_Lt ) {
         k = Lt;
@@ -635,7 +664,9 @@ Expression*Expression::createFromToken(quint16 tt, const RowCol& rc)
         k = Geq;
     } else if( tt == Tok_IN ) {
         k = In;
-    }	else if( tt == Tok_Plus ) {
+    }else if( tt == Tok_IS ) {
+        k = Is;
+    }else if( tt == Tok_Plus ) {
         k = Add;
     } else if( tt == Tok_Minus ) {
         k = Sub;
@@ -667,6 +698,7 @@ struct Expression::Arena {
 
 Expression::Arena* Expression::arena = 0;
 quint32 Expression::used = 0;
+quint32 Expression::lock = 0;
 
 Expression* Expression::create(Expression::Kind k, const RowCol& rc)
 {
@@ -694,11 +726,15 @@ Expression* Expression::create(Expression::Kind k, const RowCol& rc)
 
 void Expression::deleteAllExpressions()
 {
+    if(lock)
+        return;
     used = 0;
 }
 
 void Expression::killArena()
 {
+    if( lock )
+        return;
     if( arena )
         delete arena;
     arena = 0;
@@ -706,10 +742,26 @@ void Expression::killArena()
 
 Node::~Node()
 {
-    // TODO
+    if( type && ownstype && meta == T )
+    {
+        // never called
+        Q_ASSERT(meta!=E);
+        delete type;
+    }
 }
 
 void Node::setType(Type* t)
 {
-    type = t;
+    if( type == t )
+        return;
+    // Q_ASSERT(type==0 || type->kind == Type::NameRef); // happens during resolveAndCheckType when NameRef is replaced by true type
+    // can be violated e.g. by exchanging int by smallestIntType
+    ownstype = false;
+    if( t && !t->owned )
+    {
+        ownstype = true;
+        t->owned = true;
+        type = t;
+    }else
+        type = t;
 }

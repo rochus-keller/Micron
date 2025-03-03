@@ -195,8 +195,9 @@ static inline bool FIRST_relation(int tt) {
 	case Tok_IN:
 	case Tok_Eq:
 	case Tok_Leq:
-    //case Tok_IS:
+    case Tok_IS:
     case Tok_Hash:
+    case Tok_LtGt:
 	case Tok_Lt:
 		return true;
 	default: return false;
@@ -600,6 +601,8 @@ Parser2::Parser2(AstModel* m, Scanner2* s, MilEmitter* out, Importer* i):
     langLevel(3),haveExceptions(false)
 {
     ev = new Evaluator(m,out);
+    self = Token::getSymbol("self");
+    SELF = Token::getSymbol("SELF");
 }
 
 Parser2::~Parser2()
@@ -726,17 +729,26 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs) const
 
     // Tv is a pointer to a record TR and Te is a pointer to a record the first field of which is of type TR, or
     // is again a record the first field of which is of type TR.
-    if( lhs->kind == Type::Pointer && lhs->getType()->kind == Type::Record &&
-            rhs->kind == Type::Pointer && rhs->getType()->kind == Type::Record )
+    if( lhs->kind == Type::Pointer && (lhs->getType()->kind == Type::Record || lhs->getType()->kind == Type::Object) &&
+            rhs->kind == Type::Pointer && (rhs->getType()->kind == Type::Record || rhs->getType()->kind == Type::Object) )
     {
+        // TODO: limited Object assignment
         Declaration* first = !rhs->getType()->subs.isEmpty() ? rhs->getType()->subs.first() : 0;
-        while(first && first->getType()->kind == Type::Record)
+        while(first && (first->getType()->kind == Type::Record || first->getType()->kind == Type::Object))
         {
             if( sameType(lhs->getType(), first->getType()) )
                 return true;
             first = !first->getType()->subs.isEmpty() ? first->getType()->subs.first() : 0;
         }
     }
+
+    if( lhs->kind == Type::Pointer && lhs->getType() && lhs->getType()->kind == Type::Object &&
+            rhs->kind == Type::Pointer && rhs->getType() && rhs->getType()->kind == Type::Object &&
+                Type::isSubtype(lhs->getType(),rhs->getType()) )
+        return true;
+
+    if( lhs->kind == Type::Object && rhs->kind == Type::Object && Type::isSubtype(lhs,rhs) )
+        return true;
 
     if( lhs->kind == Type::Proc && rhs->kind == Type::Proc )
         return matchFormals(lhs->subs, rhs->subs) && matchResultType(lhs->getType(),rhs->getType());
@@ -779,7 +791,7 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs) const
     if( lhs->isInt() && rhs->isConst() && rhs->getType()->isUInt() )
         return assigCompat(lhs, ev->smallestIntType(rhs->val));
 
-    if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl )
+    if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl || rhs->kind == Expression::MethDecl )
         return assigCompat(lhs, rhs->val.value<Declaration*>() );
 
     if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
@@ -805,7 +817,7 @@ bool Parser2::paramCompat(Declaration* lhs, const Expression* rhs) const
 
     if( rhs->kind == Expression::TypeDecl )
         return false;
-    if( rhs->kind == Expression::ProcDecl )
+    if( rhs->kind == Expression::ProcDecl || rhs->kind == Expression::MethDecl )
         return assigCompat(lhs->getType(),rhs);
 
     // Tf and Ta are equal types, or Ta is assignment compatible with Tf
@@ -1114,12 +1126,12 @@ void Parser2::TypeDeclaration() {
     emitType(t, q);
 }
 
-Type* Parser2::type(bool deanonymize) {
+Type* Parser2::type(bool needsHelperDecl) {
     Type* res = mdl->getType(Type::Undefined);
     bool isNewType = true;
 	if( FIRST_NamedType(la.d_type) ) {
         res = NamedType();
-        isNewType = false;
+        isNewType = false; // this is just a (temporary) reference to an pre-existing type
 	} else if( FIRST_ArrayType(la.d_type) ) {
         res = ArrayType();
 	} else if( FIRST_RecordType(la.d_type) ) {
@@ -1134,8 +1146,11 @@ Type* Parser2::type(bool deanonymize) {
         res = enumeration();
 	} else
 		invalid("type");
-    if( res && res->kind != Type::Undefined && isNewType && deanonymize )
+    if( res && res->kind != Type::Undefined && isNewType && needsHelperDecl )
         addHelper(res);
+        // if the type is not directly owned by a declaration (because it is declared in place and anonymously)
+        // we need a helper declaration with a artificial ident so we can refer to it in the IR, which doesn't
+        // support in-place type declarations.
     return res;
 }
 
@@ -1154,6 +1169,7 @@ Type* Parser2::NamedType(Quali* qout,bool allowUnresovedLocal) {
         t->kind = Type::NameRef;
         t->subs.append(d);
         t->setType(d->getType());
+        // no addHelper here because we get rid of NameRefs asap
     }
     if( d->kind != Declaration::TypeDecl )
         error(tok, QString("invalid type: %1").arg(d->name.constData()) );
@@ -1262,18 +1278,24 @@ Type* Parser2::ObjectType() {
     if( langLevel < 3 )
         error(cur,"object types not available on current language level");
     Type* rec = new Type();
-    rec->kind = Type::Record;
+    rec->kind = Type::Object;
     mdl->openScope(0);
     if( la.d_type == Tok_Lpar ) {
         expect(Tok_Lpar, false, "ObjectType");
         const Token tok = la;
-        Type* t = NamedType();
-        if( t && t->kind == Type::Pointer )
-            t = t->getType();
-        if( t && t->kind != Type::Object )
-            error(tok, "base type must be an object type");
+        Declaration* d = resolveQualident();
+        if( d == 0 || d->kind != Declaration::TypeDecl )
+            error(tok, "base type reference is not a type declaration");
         else
-            rec->setType(t);
+        {
+            Type* t = d->getType();
+            if( t && t->kind == Type::Pointer )
+                t = t->getType();
+            if( t == 0 || t->kind != Type::Object )
+                error(tok, "base type must be an object type");
+            else
+                rec->setType(t);
+        }
         expect(Tok_Rpar, false, "ObjectType");
     }
     while( FIRST_IdentList(la.d_type) ) {
@@ -1576,7 +1598,7 @@ void Parser2::emitType(Type* t, const Quali& q)
     if( !q.second.isEmpty() )
     {
        out->addType(ev->toQuali(t).second,t->decl->isPublic(),q, MilEmitter::Alias);
-    }else if( t->kind == Type::Record || t->kind == Type::Proc )
+    }else if( t->kind == Type::Record || t->kind == Type::Object || t->kind == Type::Proc )
     {
         if( t->kind == Type::Record )
         {
@@ -1592,6 +1614,11 @@ void Parser2::emitType(Type* t, const Quali& q)
 
             out->beginType(ev->toQuali(t).second,t->decl->isPublic(), !hasFixed ? MilEmitter::Union : MilEmitter::Struct );
             // TODO: record can have fixed and variable part which go to separate struct and union or embedded union
+            foreach( Declaration* field, t->subs )
+                out->addField(field->name,ev->toQuali(field->getType()),field->isPublic(),field->id);
+        }else if( t->kind == Type::Object )
+        {
+            out->beginType(ev->toQuali(t).second,t->decl->isPublic(), MilEmitter::Object );
             foreach( Declaration* field, t->subs )
                 out->addField(field->name,ev->toQuali(field->getType()),field->isPublic(),field->id);
         }else
@@ -1686,7 +1713,6 @@ void Parser2::resolveAndCheckType(Declaration* d)
     foreach( Type* t, deferDeleteNamedType )
     {
         t->subs.clear();
-        t->setType(0);
         delete t;
     }
     deferDeleteNamedType.clear();
@@ -1713,6 +1739,7 @@ Type*Parser2::resolveAndCheckType(Type* t, bool selfRefBroken)
         t->setType(resolveAndCheckType(t->getType(), selfRefBroken));
         break;
     case Type::Record:
+    case Type::Object:
         for( int i = 0; i < t->subs.size(); i++ )
         {
             if( !selfRefBroken && t->subs[i]->getType() && t->subs[i]->getType()->selfref )
@@ -1999,16 +2026,17 @@ Expression* Parser2::designator(bool needsLvalue) {
                 tmp->setType(res->getType()->getType());
                 res = tmp;
             }
-            if( res->getType()->kind == Type::Record )
+            if( res->getType()->kind == Type::Record || res->getType()->kind == Type::Object )
             {
-                Declaration* field = res->getType()->findSub(cur.d_val);
+                Declaration* field = res->getType()->findMember(cur.d_val,res->getType()->kind == Type::Object);
                 if( field == 0 ) {
                     error(cur,QString("the record doesn't have a field named '%1'").
                           arg(cur.d_val.constData()) );
                     return 0;
                 }else
                 {    
-                    Expression* tmp = Expression::create(Expression::Select, tok.toRowCol() );
+                    Expression* tmp = Expression::create(field->kind == Declaration::Procedure ?
+                                                             Expression::MethDecl : Expression::Select, tok.toRowCol() );
                     tmp->val = QVariant::fromValue(field);
                     tmp->lhs = res;
                     tmp->setType(field->getType());
@@ -2102,7 +2130,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             Type* retType;
             if( isTypeCast )
                 retType = args.first()->getType();
-            else if( proc->kind == Expression::ProcDecl )
+            else if( proc->kind == Expression::ProcDecl || proc->kind == Expression::MethDecl )
                 retType = proc->getType();
             else if( proc->kind == Expression::Builtin )
             {
@@ -2183,6 +2211,12 @@ Expression* Parser2::maybeQualident()
 {
     expect(Tok_ident, false, "designator");
     Token tok = cur;
+
+    if( langLevel >= 3 && cur.d_val.constData() == self.constData() &&
+            mdl->getTopScope()->kind == Declaration::Procedure &&
+            mdl->getTopScope()->typebound && mdl->getTopScope()->autoself )
+        cur.d_val = SELF;
+
     Declaration* d = mdl->findDecl(cur.d_val);
     if( d )
     {
@@ -2338,7 +2372,9 @@ quint8 Parser2::relation() {
 		expect(Tok_Eq, false, "relation");
 	} else if( la.d_type == Tok_Hash ) {
 		expect(Tok_Hash, false, "relation");
-	} else if( la.d_type == Tok_Lt ) {
+    } else if( la.d_type == Tok_LtGt ) {
+        expect(Tok_LtGt, false, "relation");
+    } else if( la.d_type == Tok_Lt ) {
 		expect(Tok_Lt, false, "relation");
 	} else if( la.d_type == Tok_Leq ) {
 		expect(Tok_Leq, false, "relation");
@@ -2504,10 +2540,11 @@ Expression* Parser2::constructor(Type* hint) {
     {
         error(t,"constructor type cannot be inferred");
         return 0;
-    }else if( res->getType()->kind != Type::Record && res->getType()->kind != Type::Array &&
+    }else if( res->getType()->kind != Type::Record && res->getType()->kind != Type::Object &&
+              res->getType()->kind != Type::Array &&
               res->getType()->kind != Type::SET && res->getType()->kind != Type::Pointer )
     {
-        error(t,"constructors only supported for record, array, set and pointer types");
+        error(t,"constructors only supported for record, object, array, set and pointer types");
         return 0;
     }
 
@@ -2530,7 +2567,7 @@ Expression* Parser2::constructor(Type* hint) {
     }
     expect(Tok_Rbrace, false, "constructor");
 
-    if( res->getType()->kind == Type::Record )
+    if( res->getType()->kind == Type::Record || res->getType()->kind == Type::Object)
     {
         QSet<Declaration*> test;
         Expression* c = res->rhs;
@@ -2583,7 +2620,8 @@ Expression* Parser2::component(Type* constrType, int& index) {
     Expression* res;
     if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Colon )  ) {
         expect(Tok_ident, false, "component");
-        if( constrType->kind != Type::Record )
+        // TODO: limited access for Object inherited fields
+        if( constrType->kind != Type::Record  && constrType->kind != Type::Object)
         {
             error(cur, "named components only supported in record constructors");
             return 0;
@@ -2666,8 +2704,9 @@ Expression* Parser2::component(Type* constrType, int& index) {
             range->lhs = res;
             range->rhs = rhs;
             res = range;
-        }else if( constrType->kind == Type::Record)
+        }else if( constrType->kind == Type::Record || constrType->kind == Type::Object)
         {
+            // TODO: limited access for Object inherited fields
             if( index < 0 || index >= constrType->subs.size() )
             {
                 error(res->pos, "component cannot be associated with record field");
@@ -2814,7 +2853,8 @@ void Parser2::assignmentOrProcedureCall() {
         Expression::deleteAllExpressions();
     }else
     {
-        if( lhs->kind == Expression::ProcDecl || lhs->getType() && lhs->getType()->kind == Type::Proc )
+        if( lhs->kind == Expression::ProcDecl || lhs->kind == Expression::MethDecl ||
+                lhs->getType() && lhs->getType()->kind == Type::Proc )
         {
             // call procedure without ()
             const DeclList formals = lhs->getFormals();
@@ -2822,7 +2862,7 @@ void Parser2::assignmentOrProcedureCall() {
                 error(t,"expecting actual parameters to call this procedure");
             Expression* tmp = Expression::create(Expression::Call, lhs->pos);
             tmp->lhs = lhs;
-            if( lhs->kind == Expression::ProcDecl )
+            if( lhs->kind == Expression::ProcDecl || lhs->kind == Expression::MethDecl )
                 tmp->setType(lhs->getType());
             else
                 tmp->setType(lhs->getType()->getType());
@@ -2909,31 +2949,65 @@ void Parser2::IfStatement() {
 
 void Parser2::CaseStatement() {
 	expect(Tok_CASE, true, "CaseStatement");
-    out->switch_();
     Token tok = la;
-    if( !ev->evaluate(expression(0), true) )
-        error(tok, ev->getErr());
-    Type* t = ev->top().type;
-    Expression::deleteAllExpressions();
-    ev->pop();
-    if( !t->isInteger() && t->kind != Type::CHAR && t->kind != Type::ConstEnum )
-        error(tok, "case expression must be of integer, char or constant enumeration type");
-    expect(Tok_OF, true, "CaseStatement");
-    CaseLabels l;
-	if( FIRST_Case(la.d_type) ) {
-        Case(t, l);
-	}
-	while( la.d_type == Tok_Bar ) {
-		expect(Tok_Bar, false, "CaseStatement");
-        Case(t, l);
-	}
-	if( la.d_type == Tok_ELSE ) {
-		expect(Tok_ELSE, true, "CaseStatement");
-        out->else_();
-		StatementSequence();
-	}
-	expect(Tok_END, true, "CaseStatement");
-    out->end_();
+    Expression* e = expression(0);
+    const bool typeCase = e->getType() && e->getType()->kind == Type::Pointer &&
+                                 e->getType()->getType() && e->getType()->getType()->kind == Type::Object;
+    if( typeCase )
+    {
+        Expression::lockArena();
+        expect(Tok_OF, true, "CaseStatement");
+        out->if_();
+        if( la.d_type == Tok_Bar )
+            expect(Tok_Bar, false, "CaseStatement");
+        TypeCase(e); // evaluates e and typename, emits then_, emits statements
+        int level = 0;
+        while( la.d_type == Tok_Bar )
+        {
+            expect(Tok_Bar, false, "CaseStatement");
+            out->else_();
+            out->if_();
+            TypeCase(e);
+            level++;
+        }
+        for( int i = 0; i < level; i++ )
+            out->end_();
+        if( la.d_type == Tok_ELSE ) {
+            expect(Tok_ELSE, true, "CaseStatement");
+            out->else_();
+            StatementSequence();
+        }
+        expect(Tok_END, true, "CaseStatement");
+        out->end_();
+        Expression::unlockArena();
+        Expression::deleteAllExpressions();
+    }else
+    {
+        out->switch_();
+        if( !ev->evaluate(e, true) )
+            error(tok, ev->getErr());
+        Type* t = ev->top().type;
+        Expression::deleteAllExpressions();
+        ev->pop();
+        if( !t->isInteger() && t->kind != Type::CHAR && t->kind != Type::ConstEnum )
+            error(tok, "case expression must be of integer, char or constant enumeration type");
+        expect(Tok_OF, true, "CaseStatement");
+        CaseLabels l;
+        if( FIRST_Case(la.d_type) ) {
+            Case(t, l);
+        }
+        while( la.d_type == Tok_Bar ) {
+            expect(Tok_Bar, false, "CaseStatement");
+            Case(t, l);
+        }
+        if( la.d_type == Tok_ELSE ) {
+            expect(Tok_ELSE, true, "CaseStatement");
+            out->else_();
+            StatementSequence();
+        }
+        expect(Tok_END, true, "CaseStatement");
+        out->end_();
+    }
 }
 
 void Parser2::Case(Type* t, CaseLabels& ll) {
@@ -2988,6 +3062,33 @@ void Parser2::LabelRange(Type* t, CaseLabels& l) {
             }while(++lhs < rhs);
     }else
         l.insert(lhs);
+}
+
+void Parser2::TypeCase(Expression* e)
+{
+    if( !ev->evaluate(e, true) )
+        error(e->pos, ev->getErr());
+
+    Expression* t = ConstExpression(0);
+    if( t == 0 )
+        return;
+    if( !ev->evaluate(t) )
+        error(t->pos, ev->getErr());
+    if( t->getType()->kind == Type::Nil )
+        out->ldnull_();
+    else
+        ev->pop();
+    if( !assigCompat(e->getType(), t->getType()) )
+        error(t->pos,"label has incompatible type");
+
+    if( t->getType()->kind == Type::Nil )
+        out->ceq_();
+    else
+        out->isinst_(ev->toQuali(t->getType()));
+    expect(Tok_Colon, false, "Case");
+    out->then_();
+    // TODO: take care that e is a variable or field, and that the type of it is t during the sequence
+    StatementSequence();
 }
 
 Value Parser2::label(Type* t) {
@@ -3208,10 +3309,17 @@ void Parser2::ProcedureDeclaration() {
         procedure();
 
         NameAndType receiver;
+        bool autoself = false;
         if( FIRST_Receiver(la.d_type) ) {
             if( langLevel < 3 )
                 error(la, "type-bound procedures not available on current language level");
             receiver = Receiver();
+        }else if( la.d_type == Tok_ident && peek(2).d_type == Tok_Dot )
+        {
+            if( langLevel < 3 )
+                error(la, "type-bound procedures not available on current language level");
+            receiver = Receiver2();
+            autoself = true;
         }
 
         const IdentDef id = identdef();
@@ -3238,12 +3346,29 @@ void Parser2::ProcedureDeclaration() {
         if( receiver.t )
         {
             // add the method to the object type
-            if( receiver.t->getType()->findSub(id.name.d_val) )
+            Type* objectType = receiver.t;
+            if( objectType->kind == Type::Pointer )
+                objectType = objectType->getType();
+            if( objectType->findSub(id.name.d_val) )
                 error(id.name, "method name not unique in object type");
-            receiver.t->getType()->subs.append(procDecl);
+            objectType->subs.append(procDecl);
+            Q_ASSERT(procDecl->outer == 0);
+            procDecl->outer = objectType->decl;
             procDecl->typebound = true;
+            procDecl->autoself = autoself;
             Declaration* param = addDecl(receiver.id, 0, Declaration::ParamDecl);
-            param->setType(receiver.t);
+            if( receiver.t->kind == Type::Pointer )
+                param->setType(receiver.t);
+            else
+            {
+                // Take care that the hidden "self" parameter is always pointer to T
+                Type* ptr = new Type();
+                ptr->kind = Type::Pointer;
+                ptr->setType(receiver.t);
+                addHelper(ptr);
+                param->setType(ptr);
+            }
+            receiver.t = objectType;
         }
 
         if( FIRST_FormalParameters(la.d_type) ) {
@@ -3308,8 +3433,14 @@ void Parser2::ProcedureDeclaration() {
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "ProcedureDeclaration");
 			}
+            MilQuali r;
+            if( receiver.t )
+            {
+                r.first = receiver.id.d_val;
+                r.second = ev->toQuali(receiver.t).second;
+            }
             out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
-                           id.visi > 0, kind);
+                           id.visi > 0, kind, r);
 
             const QList<Declaration*> params = procDecl->getParams();
             foreach( Declaration* p, params )
@@ -3340,41 +3471,40 @@ Parser2::NameAndType Parser2::Receiver() {
     expect(Tok_ident, false, "Receiver");
     res.id = cur;
     expect(Tok_Colon, false, "Receiver");
-    bool withPointer = false;
-    if( la.d_type == Tok_POINTER || la.d_type == Tok_Hat ) {
-        if( la.d_type == Tok_POINTER ) {
-            expect(Tok_POINTER, false, "Receiver");
-            expect(Tok_TO, false, "Receiver");
-        } else if( la.d_type == Tok_Hat ) {
-            expect(Tok_Hat, false, "Receiver");
-        } else
-            invalid("Receiver");
-        withPointer = true;
-    }
     expect(Tok_ident, false, "Receiver");
     const Token type = cur;
     Declaration* d = mdl->findDecl(cur.d_val);
     if( d == 0 || d->kind != Declaration::TypeDecl || d->getType() == 0 ||
             (d->getType()->kind != Type::Object && d->getType()->kind != Type::Pointer ) ||
-            (d->getType()->kind == Type::Pointer && withPointer) ||
-            (d->getType()->kind == Type::Object && !withPointer ) ||
-            (d->getType()->kind == Type::Pointer && ( d->getType()->getType() == 0 || d->getType()->getType()->kind != Type::Object)))
+            (d->getType()->kind == Type::Pointer && ( d->getType()->getType() == 0 ||
+                                                      d->getType()->getType()->kind != Type::Object)))
     {
-        error(type, "receiver must be a pointer to object type");
+        error(type, "receiver must be an object or pointer to object type");
         return res;
     }else
-    {
-        if( withPointer )
-        {
-            Type* t = new Type();
-            t->kind = Type::Pointer;
-            t->setType(d->getType());
-            addHelper(t);
-            res.t = t;
-        }else
-            res.t = d->getType();
-    }
+        res.t = d->getType(); // res is an object or pointer to object
     expect(Tok_Rpar, false, "Receiver");
+    return res;
+}
+
+Parser2::NameAndType Parser2::Receiver2()
+{
+    NameAndType res;
+    res.id = la;
+    res.id.d_val = SELF;
+    expect(Tok_ident, false, "Receiver");
+    const Token type = cur;
+    Declaration* d = mdl->findDecl(cur.d_val);
+    if( d == 0 || d->kind != Declaration::TypeDecl || d->getType() == 0 ||
+            (d->getType()->kind != Type::Object && d->getType()->kind != Type::Pointer ) ||
+            (d->getType()->kind == Type::Pointer && ( d->getType()->getType() == 0 ||
+                                                      d->getType()->getType()->kind != Type::Object)))
+    {
+        error(type, "receiver must be an object or pointer to object type");
+        return res;
+    }else
+        res.t = d->getType(); // res is an object or pointer to object
+    expect(Tok_Dot, false, "Receiver");
     return res;
 }
 

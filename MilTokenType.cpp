@@ -33,6 +33,7 @@ namespace Mil {
 			case Tok_BEGIN: return "BEGIN";
 			case Tok_CALL: return "CALL";
 			case Tok_CALLI: return "CALLI";
+			case Tok_CALLVI: return "CALLVI";
 			case Tok_CALLVIRT: return "CALLVIRT";
 			case Tok_CASE: return "CASE";
 			case Tok_CASTPTR: return "CASTPTR";
@@ -71,6 +72,7 @@ namespace Mil {
 			case Tok_INITOBJ: return "INITOBJ";
 			case Tok_INLINE: return "INLINE";
 			case Tok_INVAR: return "INVAR";
+			case Tok_ISINST: return "ISINST";
 			case Tok_LABEL: return "LABEL";
 			case Tok_LDARG: return "LDARG";
 			case Tok_LDARGA: return "LDARGA";
@@ -241,6 +243,7 @@ namespace Mil {
 			case Tok_BEGIN: return "Tok_BEGIN";
 			case Tok_CALL: return "Tok_CALL";
 			case Tok_CALLI: return "Tok_CALLI";
+			case Tok_CALLVI: return "Tok_CALLVI";
 			case Tok_CALLVIRT: return "Tok_CALLVIRT";
 			case Tok_CASE: return "Tok_CASE";
 			case Tok_CASTPTR: return "Tok_CASTPTR";
@@ -279,6 +282,7 @@ namespace Mil {
 			case Tok_INITOBJ: return "Tok_INITOBJ";
 			case Tok_INLINE: return "Tok_INLINE";
 			case Tok_INVAR: return "Tok_INVAR";
+			case Tok_ISINST: return "Tok_ISINST";
 			case Tok_LABEL: return "Tok_LABEL";
 			case Tok_LDARG: return "Tok_LDARG";
 			case Tok_LDARGA: return "Tok_LDARGA";
@@ -542,6 +546,8 @@ namespace Mil {
 									if( at(str,len,i+7) == 'T' ){
 										res = Tok_CALLVIRT; i += 8;
 									}
+								} else {
+									res = Tok_CALLVI; i += 6;
 								}
 							}
 							break;
@@ -803,6 +809,17 @@ namespace Mil {
 						}
 					}
 					break;
+				}
+				break;
+			case 'S':
+				if( at(str,len,i+2) == 'I' ){
+					if( at(str,len,i+3) == 'N' ){
+						if( at(str,len,i+4) == 'S' ){
+							if( at(str,len,i+5) == 'T' ){
+								res = Tok_ISINST; i += 6;
+							}
+						}
+					}
 				}
 				break;
 			}

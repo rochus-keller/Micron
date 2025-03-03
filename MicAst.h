@@ -45,9 +45,9 @@ namespace Mic
     class Node
     {
     public:
-        Node():kind(0),meta(0),deferred(false),anonymous(false),selfref(false),typebound(false),
+        Node(quint8 m):kind(0),meta(m),deferred(false),anonymous(false),selfref(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
-            owned(false),type(0){}
+            owned(false),type(0),autoself(0){}
         ~Node();
 
         enum Meta { Inval, T, D, E };
@@ -71,6 +71,7 @@ namespace Mic
         uint invar : 1;
         uint extern_ : 1; // extern name (if present) is in val
         uint generic : 1;
+        uint autoself : 1;
 
         // Expression
         uint byVal : 1; // option for LocalVar, Param, ModuleVar, Select, Index
@@ -120,12 +121,14 @@ namespace Mic
         bool isStructured() const { return kind == Array || kind == Record || kind == Object; }
 
         Declaration* findSub(const QByteArray& name) const;
+        Declaration* findMember(const QByteArray& name, bool recurseSuper = false) const;
         QPair<int,int> getFieldCount() const; // fixed, variant
 
         static QVariant getMax(Kind);
         static QVariant getMin(Kind);
+        static bool isSubtype(Type* super, Type* sub);
 
-        Type():len(0),decl(0){meta = T;}
+        Type():Node(T),len(0),decl(0){}
         ~Type();
     };
 
@@ -143,7 +146,7 @@ namespace Mic
         QByteArray name;
         quint16 id; // used for built-in code and local/param number, and bit size of fields
         QVariant data; // value for Const and Enum, path for Import, name for Extern
-        Declaration():next(0),link(0),id(0),outer(0){meta=D;}
+        Declaration():Node(D),next(0),link(0),id(0),outer(0){}
         ~Declaration();
 
         QList<Declaration*> getParams() const;
@@ -159,7 +162,7 @@ namespace Mic
         enum Kind {
             Invalid,
             Plus, Minus, Not, // Unary
-            Eq, Neq, Lt, Leq, Gt, Geq, In, // Relation
+            Eq, Neq, Lt, Leq, Gt, Geq, In, Is, // Relation
             Add, Sub, Or, // AddOp
             Mul, Fdiv, Div, Mod, And, // MulOp
             Addr, // @, requires a ref to type and converts it to a pointer value to type
@@ -167,6 +170,7 @@ namespace Mic
             LocalVar, Param, Builtin, // val is index of local or param or builtin
             ModuleVar, ProcDecl, ConstDecl, TypeDecl, // val is declaration
             Select, // f.g, val is field declaration
+            MethDecl, // obj.proc, val is procedure declaration
             Index, // a[i]
             Cast, AutoCast,
             Call,
@@ -190,20 +194,23 @@ namespace Mic
         static Expression* createFromToken(quint16,const RowCol&);
         static Expression* create(Kind k = Invalid, const RowCol& rc = RowCol());
         static void append(Expression* list, Expression* elem);
+        static void lockArena();
+        static void unlockArena();
         static void deleteAllExpressions();
         static void killArena();
     private:
         struct Arena;
         static Arena* arena;
         static quint32 used;
-        Expression(Kind k = Invalid, const RowCol& rc = RowCol()):lhs(0),rhs(0),next(0)
-            {meta = E; kind = k; pos = rc;}
+        static quint32 lock;
+        Expression(Kind k = Invalid, const RowCol& rc = RowCol()):Node(E),lhs(0),rhs(0),next(0)
+            {kind = k; pos = rc;}
         ~Expression() {}
     };
     typedef QList<Expression*> ExpList;
 
     struct Value {
-        enum Mode { None, Val, Const, Builtin, Procedure, VarDecl, LocalDecl, ParamDecl, TypeDecl };
+        enum Mode { None, Val, Const, Builtin, Procedure, Method, VarDecl, LocalDecl, ParamDecl, TypeDecl };
         quint8 mode;
         quint8 visi;
         bool ref; // the value is a reference to the type
