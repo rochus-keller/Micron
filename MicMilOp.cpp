@@ -39,7 +39,7 @@ const char* s_opName[] =
     "ldelem_u4", "ldelem_u8", "ldelem_r4", "ldelem_r8", "ldelem_ip",
     "ldfld", "ldflda",
     "ldind_i1", "ldind_i2", "ldind_i4", "ldind_i8", "ldind_u1", "ldind_u2",
-    "ldind_u4", "ldind_r4", "ldind_u8", "ldind_r8", "ldind_ip",
+    "ldind_u4", "ldind_r4", "ldind_u8", "ldind_r8", "ldind_ip", "ldind_ipp",
     "ldloc", "ldloc_s", "ldloca", "ldloca_s",
     "ldloc_0", "ldloc_1", "ldloc_2", "ldloc_3", "ldnull",
     "ldobj", "ldproc", "ldmeth", "ldstr",
@@ -54,7 +54,7 @@ const char* s_opName[] =
     "starg", "starg_s",
     "stelem", "stelem_i1", "stelem_i2", "stelem_i4", "stelem_i8",
     "stelem_r4", "stelem_r8", "stelem_ip", "stfld",
-    "stind_i1", "stind_i2", "stind_i4", "stind_i8", "stind_r4", "stind_r8", "stind_ip",
+    "stind_i1", "stind_i2", "stind_i4", "stind_i8", "stind_r4", "stind_r8", "stind_ip", "stind_ipp",
     "stloc", "stloc_s", "stloc_0", "stloc_1", "stloc_2", "stloc_3",
     "stobj", "stvar", "switch", "case", "while", "do"
 };

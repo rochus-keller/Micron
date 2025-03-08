@@ -11,6 +11,7 @@ SynTree::SynTree(quint16 r, const Token& t ):d_tok(r){
 const char* SynTree::rToStr( quint16 r ) {
 	switch(r) {
 		case R_ArrayType: return "ArrayType";
+		case R_Binding: return "Binding";
 		case R_CondOp: return "CondOp";
 		case R_ConstDeclaration: return "ConstDeclaration";
 		case R_ConstExpression: return "ConstExpression";

@@ -163,11 +163,15 @@ bool Evaluator::prepareRhs(Type* lhs)
     }else if( lhs && lhs->kind == Type::CHAR &&
               rhs.type->kind == Type::String )
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
-    else if( lhs && lhs->kind == Type::Proc &&
-             rhs.mode == Value::Procedure )
+    else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Procedure )
         out->ldproc_(toQuali(rhs.val.value<Declaration*>()));
-    // TODO prepare instance method assignment
-    else
+    else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Method )
+    {
+        Declaration* proc = rhs.val.value<Declaration*>();
+        Q_ASSERT(proc);
+        const MilTrident trident = qMakePair(toQuali(proc->outer),proc->name);
+        out->ldmeth_(trident);
+    }else
         assureTopOnMilStack();
 
     return true;
@@ -246,8 +250,13 @@ bool Evaluator::assign()
     case Type::Nil:
     case Type::String:
     case Type::Pointer:
-    case Type::Proc:
         out->stind_(MilEmitter::IntPtr);
+        break;
+    case Type::Proc:
+        if( lhs.type->typebound )
+            out->stind_(MilEmitter::IPP);
+        else
+            out->stind_(MilEmitter::IntPtr);
         break;
     case Type::Record:
     case Type::Object:
@@ -334,8 +343,13 @@ bool Evaluator::derefValue()
         out->ldind_(MilEmitter::R8);
         break;
     case Type::Pointer:
-    case Type::Proc:
         out->ldind_(MilEmitter::IntPtr);
+        break;
+    case Type::Proc:
+        if( v.type->typebound )
+            out->ldind_(MilEmitter::IPP);
+        else
+            out->ldind_(MilEmitter::IntPtr);
         break;
     case Type::Record:
     case Type::Object:
@@ -524,7 +538,10 @@ bool Evaluator::call(int nArgs)
         ret = callee.type->getType();
         if( callee.type->kind == Type::Proc )
         {
-            out->calli_(toQuali(callee.type), nArgs, ret != 0);
+            if( callee.type->typebound )
+                out->callvi_(toQuali(callee.type), nArgs, ret != 0);
+            else
+                out->calli_(toQuali(callee.type), nArgs, ret != 0);
             break;
         }
         // else fall through
@@ -1611,8 +1628,16 @@ bool Evaluator::recursiveRun(Expression* e)
         stack.push_back(Value(e->getType(),e->val,Value::Procedure));
         break;
     case Expression::MethDecl:
-        if( !recursiveRun(e->lhs) )
-            return false;
+        if( e->lhs )
+        {
+            // e->lhs for a call is evaluated in the call op before the arguments;
+            // here we evaluate in case of pointer to method assignment
+            if( !recursiveRun(e->lhs) )
+                return false;
+            stack.pop_back();
+            // we have to remove it here, otherwise prepareRhs sees the wrong stack element;
+            // logically removing this element would be a concern of out->ldmeth_
+        }
         stack.push_back(Value(e->getType(),e->val,Value::Method));
         break;
     case Expression::Builtin:
@@ -1632,8 +1657,16 @@ bool Evaluator::recursiveRun(Expression* e)
         break;
     case Expression::Call:
         {
+            if( e->lhs->lhs )
+            {
+                // assure that in a call via designator like a.b(), 'a' is evaluated before the args
+                if( !recursiveRun(e->lhs->lhs) )
+                    return false;
+                e->lhs->lhs = 0;
+            }
+
             ExpList args = e->val.value<ExpList>();
-            const DeclList formals = e->lhs->getFormals();
+            const DeclList formals = e->lhs->getFormals(); // no receiver here because args doesn't include it
             for(int i = 0; i < args.size(); i++ )
             {
                 if( !recursiveRun(args[i]) )
@@ -1643,7 +1676,7 @@ bool Evaluator::recursiveRun(Expression* e)
                 else
                     assureTopOnMilStack(); // effects builtin args and variable args
             }
-            if( !recursiveRun(e->lhs) )
+            if( !recursiveRun(e->lhs) ) // here 'b' of "a.b()" is evaluated in case of proc type calls
                 return false;
             call(args.size());
         }

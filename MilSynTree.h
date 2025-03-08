@@ -12,6 +12,7 @@ namespace Mil {
 		enum ParserRule {
 			R_First = TT_Max + 1,
 			R_ArrayType,
+			R_Binding,
 			R_CondOp,
 			R_ConstDeclaration,
 			R_ConstExpression,

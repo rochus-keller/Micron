@@ -68,19 +68,20 @@ namespace Mic
     struct MilProcedure
     {
         enum Kind { Invalid, Intrinsic, Normal, Extern, Inline, Invar, ModuleInit, ProcType, MethType };
-        uint kind : 3;
+        uint kind : 4;
         uint isPublic : 1;
         uint isVararg : 1;
-        uint stackDepth: 16;
+        uint stackDepth: 12;
         uint compiled: 1;
+        uint offset : 12;
         QByteArray name;
         QList<MilOperation> body, finally;
         QList<MilVariable> params;
         QList<MilVariable> locals;
         MilQuali retType;
-        MilQuali receiver; // first: name, second: local class
+        QByteArray binding; // if not empty, the first param is receiver
         QByteArray origName; // extern
-        MilProcedure():kind(Invalid),isPublic(0),isVararg(0),stackDepth(0),compiled(0) {}
+        MilProcedure():kind(Invalid),isPublic(0),isVararg(0),stackDepth(0),compiled(0),offset(0) {}
     };
 
     struct MilType
@@ -92,7 +93,7 @@ namespace Mic
         quint32 len;
         QList<MilVariable> fields; // also proctype params
         QList<MilProcedure> methods;
-        int indexOf(const QByteArray& name) const;
+        int indexOfField(const QByteArray& name) const;
         const MilVariable* findField(const QByteArray& name) const;
     };
 
@@ -167,7 +168,7 @@ namespace Mic
         void addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val ); // always public
 
         void beginProc(const QByteArray& procName, bool isPublic = true, quint8 kind = MilProcedure::Normal,
-                       const MilQuali& receiver = MilQuali() );
+                       const QByteArray& objectType = QByteArray() );
         void toFinallySection(bool);
         void endProc();
 
@@ -190,7 +191,7 @@ namespace Mic
         void setExtern( const QByteArray& origName = QByteArray() );
         void setVararg();
 
-        enum Type { Unknown, I1, I2, I4, I8, R4, R8, U1, U2, U4, U8, IntPtr };
+        enum Type { Unknown, I1, I2, I4, I8, R4, R8, U1, U2, U4, U8, IntPtr, IPP };
         static QByteArray typeSymbol1(Type); // MilEmitter::Type
         static QByteArray typeSymbol2(Type); // MilEmitter::Type
         static Type fromSymbol(const QByteArray&);
@@ -202,7 +203,7 @@ namespace Mic
         void and_();
         void call_( const MilQuali& methodRef, int argCount = 0, bool hasRet = false);
         void calli_( const MilQuali& methodRef, int argCount, bool hasRet = false );
-        void callvi_( const MilTrident& methodRef, int argCount, bool hasRet = false );
+        void callvi_(const MilQuali& methodRef, int argCount, bool hasRet = false );
         void callvirt_( const MilTrident& methodRef, int argCount, bool hasRet = false );
         void case_(const CaseLabelList&);
         void castptr_(const MilQuali& typeRef);

@@ -81,7 +81,7 @@ void MilEmitter::addConst(const MilQuali& typeRef, const QByteArray& name, const
     d_out->addConst(typeRef, name, val);
 }
 
-void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kind, const MilQuali& receiver)
+void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kind, const QByteArray& objectType)
 {
     Q_ASSERT( d_typeKind == 0 );
     Q_ASSERT(!procName.isEmpty());
@@ -90,7 +90,7 @@ void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kin
     d_proc.back().name = procName;
     d_proc.back().isPublic = isPublic;
     d_proc.back().kind = kind;
-    d_proc.back().receiver = receiver;
+    d_proc.back().binding = objectType;
     d_stackDepth = 0;
     d_maxStackDepth = 0;
     d_proc.back().isVararg = false;
@@ -118,7 +118,7 @@ void MilEmitter::beginType(const QByteArray& name, bool isPublic, quint8 typeKin
 {
     Q_ASSERT( d_typeKind == 0 );
     Q_ASSERT( typeKind == Struct || typeKind == Union || typeKind == Object ||
-              typeKind == ProcType || d_typeKind == MethType);
+              typeKind == ProcType || typeKind == MethType);
     d_typeKind = typeKind;
     if( typeKind == Struct || typeKind == Union || typeKind == Object )
         d_out->beginType(name,isPublic, typeKind, super);
@@ -296,7 +296,7 @@ void MilEmitter::calli_(const MilQuali& methodRef, int argCount, bool hasRet)
     delta(-argCount + (hasRet?1:0) );
 }
 
-void MilEmitter::callvi_(const MilTrident& methodRef, int argCount, bool hasRet)
+void MilEmitter::callvi_(const MilQuali& methodRef, int argCount, bool hasRet)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
     ops->append(MilOperation(IL_callvi,QVariant::fromValue(methodRef)) );
@@ -712,6 +712,9 @@ void MilEmitter::ldind_(MilEmitter::Type t)
     case IntPtr:
         i = IL_ldind_ip;
         break;
+    case IPP:
+        i = IL_ldind_ipp;
+        break;
     default:
         Q_ASSERT( false );
     }
@@ -993,6 +996,9 @@ void MilEmitter::stind_(MilEmitter::Type t)
         break;
     case IntPtr:
         i = IL_stind_ip;
+        break;
+    case IPP:
+        i = IL_stind_ipp;
         break;
     default:
         Q_ASSERT( false );
@@ -1317,15 +1323,20 @@ void IlAsmRenderer::render(const MilProcedure& m)
 {
     State old = state;
 
-    if( m.kind == MilProcedure::ProcType || m.kind == MilProcedure::Extern )
+    if( m.kind == MilProcedure::ProcType || m.kind == MilProcedure::MethType || m.kind == MilProcedure::Extern )
     {
         out << ws() << "type " << m.name;
         if( m.isPublic )
             out << "*";
         out << " = proc";
+        if( m.kind == MilProcedure::MethType )
+            out << "^";
     }else
     {
-        out << ws() << "procedure " << m.name;
+        out << ws() << "procedure ";
+        if( !m.binding.isEmpty() )
+            out << m.binding << ".";
+        out << m.name;
         state = Proc;
         if( m.isPublic )
             out << "* ";
@@ -1368,7 +1379,7 @@ void IlAsmRenderer::render(const MilProcedure& m)
 
     out << endl;
 
-    if(m.kind == MilProcedure::ProcType || m.kind == MilProcedure::Extern )
+    if(m.kind == MilProcedure::ProcType || m.kind == MilProcedure::MethType || m.kind == MilProcedure::Extern )
         return;
 
     if( !m.locals.isEmpty() )
@@ -1588,7 +1599,7 @@ void MilSplitter::addField(const QByteArray& fieldName, const MilQuali& typeRef,
 }
 
 
-int MilType::indexOf(const QByteArray& name) const
+int MilType::indexOfField(const QByteArray& name) const
 {
     for( int i = 0; i < fields.size(); i++ )
     {

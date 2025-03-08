@@ -452,13 +452,14 @@ Declaration::~Declaration()
         delete type;
 }
 
-QList<Declaration*> Declaration::getParams() const
+QList<Declaration*> Declaration::getParams(bool includeReceiver) const
 {
     Declaration* d = link;
     QList<Declaration*> res;
     while( d && d->kind == Declaration::ParamDecl )
     {
-        res << d;
+        if( !d->typebound || includeReceiver )
+            res << d;
         d = d->next;
     }
     return res;
@@ -589,12 +590,12 @@ QVariant Expression::getLiteralValue() const
         return QVariant();
 }
 
-DeclList Expression::getFormals() const
+DeclList Expression::getFormals(bool includeReceiver) const
 {
     if( kind == ProcDecl )
-        return val.value<Declaration*>()->getParams();
+        return val.value<Declaration*>()->getParams(includeReceiver);
     else if( type && type->kind == Type::Proc )
-        return type->subs;
+        return type->subs; // subs doesn't include a receiver by definition
     else
         return DeclList();
 }
@@ -605,7 +606,8 @@ bool Expression::isLvalue() const
     //if( byVal )
     //    return false;
     return kind == LocalVar || kind == Param || kind == ModuleVar ||
-            kind == Select || kind == Index || kind == Deref;
+            kind == Select || kind == MethDecl || // Select and MethDecl are equivalent here, both require the address
+            kind == Index || kind == Deref;
 }
 
 void Expression::setByVal()

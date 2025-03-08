@@ -45,6 +45,7 @@ namespace Mil {
 		void ProcedureType(SynTree*);
 		void VariableDeclaration(SynTree*);
 		void ProcedureDeclaration(SynTree*);
+		void Binding(SynTree*);
 		void ProcedureBody(SynTree*);
 		void LocalDeclaration(SynTree*);
 		void FormalParameters(SynTree*);

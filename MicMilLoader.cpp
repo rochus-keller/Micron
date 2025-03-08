@@ -102,19 +102,19 @@ void InMemRenderer::addProcedure(const Mic::MilProcedure& method)
         module->order.append(qMakePair(MilModule::Type,module->types.size()-1) );
     }else
     {
-        if( !method.receiver.second.isEmpty() )
+        if( !method.binding.isEmpty() )
         {
-            QPair<MilModule::What,quint32> what = module->symbols.value(method.receiver.second.constData());
+            QPair<MilModule::What,quint32> what = module->symbols.value(method.binding.constData());
             if( what.first != MilModule::Type )
             {
-                qCritical() << "InMemRenderer::addProcedure: receiver type not found:" << method.receiver.second;
+                qCritical() << "InMemRenderer::addProcedure: receiver type not found:" << method.binding;
                 return;
             }
             MilType& type = module->types[what.second];
             if( type.kind != MilEmitter::Object )
             {
                 qCritical() << "InMemRenderer::addProcedure: only object types can be referenced as receivers:"
-                            << method.receiver.second << type.name;
+                            << method.binding << type.name;
                 return;
             }
             type.methods.append(method);
@@ -215,6 +215,10 @@ static void render_(const MilType* t, MilRenderer* r)
         foreach( const MilVariable& v, t->fields )
             r->addField(v.name,v.type,v.isPublic,v.bits);
         r->endType();
+        foreach( const MilProcedure& p, t->methods )
+        {
+            r->addProcedure(p);
+        }
         break;
     case MilEmitter::ProcType:
     case MilEmitter::MethType:
@@ -249,7 +253,6 @@ static void render_(const MilProcedure* p, MilRenderer* r)
 bool MilLoader::render(MilRenderer* r, const MilModule* m)
 {
     Q_ASSERT(r);
-   // MilEmitter e(r);
 
     r->beginModule(m->fullName,"", m->metaParams);
     foreach( const MilModule::Order& i, m->order )

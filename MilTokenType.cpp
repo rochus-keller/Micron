@@ -118,6 +118,7 @@ namespace Mil {
 			case Tok_LDIND_I4: return "LDIND_I4";
 			case Tok_LDIND_I8: return "LDIND_I8";
 			case Tok_LDIND_IP: return "LDIND_IP";
+			case Tok_LDIND_IPP: return "LDIND_IPP";
 			case Tok_LDIND_R4: return "LDIND_R4";
 			case Tok_LDIND_R8: return "LDIND_R8";
 			case Tok_LDIND_U1: return "LDIND_U1";
@@ -181,6 +182,7 @@ namespace Mil {
 			case Tok_STIND_I4: return "STIND_I4";
 			case Tok_STIND_I8: return "STIND_I8";
 			case Tok_STIND_IP: return "STIND_IP";
+			case Tok_STIND_IPP: return "STIND_IPP";
 			case Tok_STIND_R4: return "STIND_R4";
 			case Tok_STIND_R8: return "STIND_R8";
 			case Tok_STLOC: return "STLOC";
@@ -328,6 +330,7 @@ namespace Mil {
 			case Tok_LDIND_I4: return "Tok_LDIND_I4";
 			case Tok_LDIND_I8: return "Tok_LDIND_I8";
 			case Tok_LDIND_IP: return "Tok_LDIND_IP";
+			case Tok_LDIND_IPP: return "Tok_LDIND_IPP";
 			case Tok_LDIND_R4: return "Tok_LDIND_R4";
 			case Tok_LDIND_R8: return "Tok_LDIND_R8";
 			case Tok_LDIND_U1: return "Tok_LDIND_U1";
@@ -391,6 +394,7 @@ namespace Mil {
 			case Tok_STIND_I4: return "Tok_STIND_I4";
 			case Tok_STIND_I8: return "Tok_STIND_I8";
 			case Tok_STIND_IP: return "Tok_STIND_IP";
+			case Tok_STIND_IPP: return "Tok_STIND_IPP";
 			case Tok_STIND_R4: return "Tok_STIND_R4";
 			case Tok_STIND_R8: return "Tok_STIND_R8";
 			case Tok_STLOC: return "Tok_STLOC";
@@ -1045,7 +1049,11 @@ namespace Mil {
 										res = Tok_LDIND_I8; i += 8;
 										break;
 									case 'P':
-										res = Tok_LDIND_IP; i += 8;
+										if( at(str,len,i+8) == 'P' ){
+											res = Tok_LDIND_IPP; i += 9;
+										} else {
+											res = Tok_LDIND_IP; i += 8;
+										}
 										break;
 									}
 									break;
@@ -1473,7 +1481,11 @@ namespace Mil {
 										res = Tok_STIND_I8; i += 8;
 										break;
 									case 'P':
-										res = Tok_STIND_IP; i += 8;
+										if( at(str,len,i+8) == 'P' ){
+											res = Tok_STIND_IPP; i += 9;
+										} else {
+											res = Tok_STIND_IP; i += 8;
+										}
 										break;
 									}
 									break;

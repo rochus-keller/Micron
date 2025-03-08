@@ -1,0 +1,39 @@
+module BoundProcs
+
+type
+	T0 = object end
+	T1 = object(T0) i: integer end
+	TT = object end
+	
+proc T0.hello(const str: ^array of char)
+begin
+	print(str)
+	println(" from T0")
+end hello
+
+proc T1.hello(const str: ^array of char)
+begin
+	print(str)
+	println(" from T1")
+end hello
+
+var p: proc (^)(const str: ^array of char)
+	t0: T0
+	t1: T1
+	tp: ^T0
+
+begin
+
+t1.i := 33
+println(t1.i)
+
+p := t0.hello
+p("hello")
+p := t1.hello
+p("bonjour")
+
+tp := @t1
+p := tp.hello
+p("ave") // correctly calls T1.hello
+
+end BoundProcs

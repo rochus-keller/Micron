@@ -10,7 +10,8 @@ MODULE TypeCase;
     
    PROC T1.test1(str: ^ARRAY OF CHAR)
    BEGIN
-     PRINT("hello from test1 ")
+   	 PRINT(str)
+     PRINT(" from test1 ")
      PRINTLN(SELF.i)
    END test1
    
@@ -20,14 +21,18 @@ BEGIN
 
   NEW(t);
   v := t;
+  
+  PRINTLN(v IS T1) 
+  
   t.i := 33
   CASE v OF
-  | T0: PRINTLN("T0")
-  | T1: PRINTLN("T1")
-  | NIL: PRINTLN("NIL")
+  | T0: PRINTLN("found T0")
+  | T1: PRINTLN("found T1")
+  | NIL: PRINTLN("found NIL")
   ELSE
-    PRINTLN("Nothing")
+    PRINTLN("found nothing")
   END
+  
   t.test0()
-  t.test1()
+  t.test1("Cheers")
 END TypeCase.

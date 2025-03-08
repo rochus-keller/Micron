@@ -149,7 +149,7 @@ namespace Mic
         Declaration():Node(D),next(0),link(0),id(0),outer(0){}
         ~Declaration();
 
-        QList<Declaration*> getParams() const;
+        QList<Declaration*> getParams(bool includeReceiver = false) const;
         int getIndexOf(Declaration*) const;
         bool isLvalue() const { return kind == VarDecl || kind == LocalDecl || kind == ParamDecl; }
         bool isPublic() const { return visi >= ReadOnly; }
@@ -187,7 +187,7 @@ namespace Mic
         bool isConst() const;
         bool isLiteral() const;
         QVariant getLiteralValue() const;
-        DeclList getFormals() const;
+        DeclList getFormals(bool includeReceiver = false) const;
         bool isLvalue() const; // true if result of expression is usually a ref to type; can be changed with byVal
         void setByVal();
         void appendRhs(Expression*);

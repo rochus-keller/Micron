@@ -1,0 +1,23 @@
+module NestedIfs
+
+var a,b,c: boolean
+
+begin
+	a:=false
+	b:=false
+	c:=false
+
+	if a then
+		println("a")
+	else
+		if b then
+			println("b")
+		else
+			if c then
+				println("c")
+			else
+				println("nothing")
+			end
+		end
+	end	
+end NestedIfs

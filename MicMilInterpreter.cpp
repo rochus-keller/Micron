@@ -73,6 +73,44 @@ struct ProcData
     ProcData(MilProcedure* p, ModuleData* m):proc(p),module(m) {}
 };
 
+struct FlattenedType
+{
+    const MilType* type;
+    quint32 len : 31; // flattened multi-dim-arrays
+    quint32 flattened : 1;
+    QList<MilVariable*> fields;
+    QList<ProcData> vtable;
+    ModuleData* module;
+    FlattenedType():type(0),len(0),flattened(0),module(0) {}
+    int lastIndexOfField(const QByteArray& name)
+    {
+        for( int i = fields.size()-1; i >= 0; i-- )
+        {
+            if( fields[i]->name.constData() == name.constData() )
+                return i;
+        }
+        return -1;
+    }
+    int lastIndexOfMethod(const QByteArray& name)
+    {
+        for( int i = vtable.size()-1; i >= 0; i-- )
+        {
+            if( vtable[i].proc->name.constData() == name.constData() )
+                return i;
+        }
+        return -1;
+    }
+};
+
+struct MemSlot;
+
+struct MethRef
+{
+    MemSlot* obj; // points to a MemSlot::Record slot
+    ProcData* proc;
+    MethRef():obj(0),proc(0){}
+};
+
 // NOTE: replaced original design based on MemSlots(QVector) by MemSlot[] and integrated
 // all embedded arrays and structs into the same MemSlot[] so that constructs like
 // struct Permute { Benchmark base; int count; } (from Permute.c) can be represented.
@@ -85,11 +123,15 @@ struct MemSlot
         double f;
         MemSlot* p;
         ProcData* pp;
+        FlattenedType* tt;
+        MethRef* m;
     };
     enum Type { Invalid, I, U, F,
-                Record, Array,  // pointer to sequence of MemSlot, owned
-                Pointer, // pointer to MemSlot (sequence, variable, parameter, field, element), not owned
+                Record, Array,  // value semantics, as a pointer to sequence of MemSlot, owned
+                Pointer, // ref semantics, as pointer to MemSlot (sequence, variable, parameter, field, element), not owned
                 Procedure, // pointer to procedure/module, not owned
+                TypeTag,  // pointer to FlattenedType, tt, not owned
+                Method,   // MethRef, m, owned
                 Header // the header slot of a record or array; the pointer points to the next slot; u is size
               };
 #ifdef _DEBUG
@@ -107,7 +149,9 @@ struct MemSlot
     MemSlot(double d,bool h):f(d),t(F),hw(h),embedded(false) {}
     MemSlot(MemSlot* s):p(s),t(Pointer), hw(false),embedded(false) {}
     MemSlot(ProcData* p):pp(p),t(Procedure),hw(false),embedded(false) {}
+    MemSlot(FlattenedType* tt):tt(tt),t(TypeTag), hw(false),embedded(false) {}
     MemSlot(const MemSlot& rhs):t(Invalid),u(0),embedded(false) { *this = rhs; }
+    MemSlot(MethRef* m):m(m),t(Method), hw(false),embedded(false) {}
     ~MemSlot();
     void clear();
     MemSlot& operator=(const MemSlot& rhs);
@@ -177,6 +221,11 @@ MemSlot& MemSlot::operator=(const MemSlot& rhs)
         u = rhs.u;
         t = rhs.t;
         hw = rhs.hw;
+        if( rhs.t == Method )
+        {
+            m = new MethRef();
+            *m = *rhs.m;
+        }
     }
     return *this;
 }
@@ -188,7 +237,7 @@ void MemSlot::move( MemSlot& rhs )
     t = rhs.t;
     hw = rhs.hw;
     embedded = rhs.embedded;
-    if( rhs.t == Record || rhs.t == Array )
+    if( rhs.t == Record || rhs.t == Array || rhs.t == Method )
         rhs.p = 0;
 }
 
@@ -196,6 +245,8 @@ void MemSlot::clear()
 {
     if( t == Record || t == Array )
         dispose(p);
+    else if( t == Method )
+        delete m;
     t = Invalid;
     u = 0;
     hw = 0;
@@ -247,14 +298,6 @@ public:
     MilLoader* loader;
 
     QHash<const char*, ModuleData*> modules; // moduleFullName -> data
-    struct FlattenedType
-    {
-        const MilType* type;
-        quint32 len : 31; // flattened multi-dim-arrays
-        quint32 flattened : 1;
-        QList<MilVariable*> fields;
-        FlattenedType():type(0),len(0),flattened(0) {}
-    };
     QHash<const MilType*,FlattenedType> flattened;
     typedef QList< QList<int> > LoopStack;
     struct MilLabel
@@ -416,8 +459,10 @@ public:
         case MilEmitter::Object:
             s.clear();
             s.t = MemSlot::Record;
-            s.p = createSequence(t->fields.size());
+            s.p = createSequence(t->fields.size() + (t->type->kind == MilEmitter::Object ? 1 : 0));
             initFields(module, s.p, t->fields);
+            if( t->type->kind == MilEmitter::Object )
+                s.p[0] = t;
             break;
         case MilEmitter::Array:
             s.clear();
@@ -469,7 +514,7 @@ public:
             //if( t == 0 || t->type->kind != MilEmitter::Array )
                 // skip embedded structs/unions since they were flattened already
             //    continue;
-            initSlot(module, ss[i], types[i]->type);
+            initSlot(module, ss[types[i]->offset], types[i]->type);
         }
     }
 
@@ -564,70 +609,118 @@ public:
             .arg(proc->name.constData()).arg(msg);
     }
 
-    MilType* getType(ModuleData* module, const MilQuali& q)
+    QPair<MilType*,ModuleData*> getType(ModuleData* module, const MilQuali& q)
     {
         // this is only for custom types defined with Emitter::addType or begin/endType, not for intrinsic types
-        MilModule* m = q.first.isEmpty() ? module->module : loader->getModule(q.first);
+        ModuleData* m = q.first.isEmpty() ? module : loadModule(q.first);
         if( m == 0 )
-            return 0;
-        QPair<MilModule::What,quint32> what = m->symbols.value(q.second.constData());
+            return QPair<MilType*,ModuleData*>();
+        QPair<MilModule::What,quint32> what = m->module->symbols.value(q.second.constData());
         if( what.first == MilModule::Type )
-            return &m->types[what.second];
+            return qMakePair(&m->module->types[what.second], m);
         // else
-        return 0;
+        return QPair<MilType*,ModuleData*>();
+    }
+
+    bool isA( ModuleData* module, FlattenedType* sub, FlattenedType* super )
+    {
+        if( sub == 0 || super == 0 )
+            return false;
+        while(sub)
+        {
+            if( sub == super )
+                return true;
+            sub = getFlattenedType(module, sub->type->base );
+        }
+        return false;
     }
 
     FlattenedType* getFlattenedType(ModuleData* module, const MilQuali& q)
     {
-        MilType* type = getType(module,q);
-        if( type == 0 )
+        // we mostly need flattened types because of embedded structs (which are resolved to slots)
+        // and objects (where inherited fields and methods are linearized).
+        QPair<MilType*,ModuleData*> mt = getType(module,q);
+        if( mt.first == 0 )
             return 0;
-        FlattenedType& ft = flattened[type];
-        if( ft.type == 0 )
+        MilType* ty = mt.first;
+        FlattenedType& out = flattened[ty];
+        if( out.type == 0 )
         {
-            if( type->kind == MilEmitter::Struct || type->kind == MilEmitter::Object )
+            out.module = mt.second;
+            if( ty->kind == MilEmitter::Struct || ty->kind == MilEmitter::Object )
             {
-                for( int i = 0; i < type->fields.size(); i++ )
+                if( ty->kind == MilEmitter::Object )
                 {
-                    FlattenedType* fieldType = getFlattenedType(module, type->fields[i].type);
+                    FlattenedType* baseType = getFlattenedType(module, ty->base);
+                    if( baseType )
+                    {
+                        out.fields << baseType->fields;
+                        out.vtable = baseType->vtable;
+                    }
+                }
+                for( int i = 0; i < ty->fields.size(); i++ )
+                {
+                    FlattenedType* fieldType = getFlattenedType(module, ty->fields[i].type);
                     // fieldType is null e.g. in case of int32
-                    type->fields[i].offset = ft.fields.size();
+                    ty->fields[i].offset = out.fields.size();
+                    if( ty->kind == MilEmitter::Object )
+                        ty->fields[i].offset++; // make room for the vtable pointer in index 0
                     if( fieldType && !fieldType->fields.isEmpty() )
                     {
                         // field is itself a struct or union, use the flattened fields
-                        ft.fields << fieldType->fields;
-                        ft.flattened = true;
+                        out.fields << fieldType->fields;
+                        out.flattened = true;
                     }else
-                        ft.fields << &type->fields[i]; // scalars, arrays, and fieldless structs or unions
+                        out.fields << &ty->fields[i]; // scalars, arrays, and fieldless structs or unions
                 }
-            }else if( type->kind == MilEmitter::Union )
-            {
-                for( int i = 0; i < type->fields.size(); i++ )
+                for( int i = 0; i < ty->methods.size(); i++ )
                 {
-                    FlattenedType* fieldType = getFlattenedType(module, type->fields[i].type);
-                    type->fields[i].offset = 0;
+                    const char* name = ty->methods[i].name.constData();
+                    ty->methods[i].offset = out.vtable.size();
+                    bool found = false;
+                    for(int j = 0; j < out.vtable.size(); j++ )
+                    {
+                        // look up the method in the inherited vtable and replace it there if it's an override
+                        if( out.vtable[j].proc->name.constData() == name )
+                        {
+                            out.vtable[j].proc = &ty->methods[i];
+                            out.vtable[j].module = mt.second;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if( !found )
+                        // otherwise it's a new method, append it to the vtable
+                        out.vtable << ProcData(&ty->methods[i], mt.second);
+                }
+            }else if( ty->kind == MilEmitter::Union )
+            {
+                for( int i = 0; i < ty->fields.size(); i++ )
+                {
+                    FlattenedType* fieldType = getFlattenedType(module, ty->fields[i].type);
+                    ty->fields[i].offset = 0;
                     if( fieldType && !fieldType->fields.isEmpty() )
                     {
                         // field is itself a struct or union, use the flattened fields
-                        if( ft.fields.size() < fieldType->fields.size() )
-                            ft.fields = fieldType->fields; // use the largest field set
-                        ft.flattened = true;
-                    }else if( ft.fields.isEmpty() )
-                        ft.fields << &type->fields[i]; // scalars, arrays, and fieldless structs or unions
+                        if( out.fields.size() < fieldType->fields.size() )
+                            out.fields = fieldType->fields; // use the largest field set
+                        out.flattened = true;
+                    }else if( out.fields.isEmpty() )
+                        out.fields << &ty->fields[i]; // scalars, arrays, and fieldless structs or unions
                 }
-            }else if( type->kind == MilEmitter::Array )
+            }else if( ty->kind == MilEmitter::Array )
             {
-                FlattenedType* elemType = getFlattenedType(module, type->base);
-                ft.len = type->len ? type->len : 1;
+                FlattenedType* elemType = getFlattenedType(module, ty->base);
+                out.len = ty->len ? ty->len : 1;
                 if( elemType && elemType->type->kind == MilEmitter::Array )
                 {
-                    ft.len *= elemType->len;
-                    ft.flattened = true;
+                    out.len *= elemType->len;
+                    out.flattened = true;
                 }
             }
-            ft.type = type;
+            out.type = ty;
         }
-        return &ft;
+        return &out;
     }
 
     ProcData* getProc(ModuleData* module, const MilQuali& q)
@@ -821,10 +914,24 @@ public:
                 if( ty == 0 )
                     execError(module, proc, pc, QString("unknown type '%1'").
                               arg(MilEmitter::toString(td.first).constData()));
-                const int idx = ty->type->indexOf(td.second);
+                const int idx = ty->type->indexOfField(td.second);
                 if( idx < 0 )
                     break; // error?
-                ops[pc].index = ty->type->fields[idx].offset;
+                ops[pc].index = ty->type->fields[idx].offset;;
+            }
+            pc++;
+            break;
+        case IL_ldmeth:
+            {
+                MilTrident td = ops[pc].arg.value<MilTrident>();
+                FlattenedType* ty = getFlattenedType(module, td.first);
+                if( ty == 0 )
+                    execError(module, proc, pc, QString("unknown type '%1'").
+                              arg(MilEmitter::toString(td.first).constData()));
+                const int idx = ty->lastIndexOfMethod(td.second); // TODO
+                if( idx < 0 )
+                    break; // error?
+                ops[pc].index = ty->vtable[idx].proc->offset;
             }
             pc++;
             break;
@@ -996,20 +1103,27 @@ public:
         }
     }
 
-    inline void makeCall(QList<MemSlot>& stack, ProcData* proc)
+    inline void makeCall(QList<MemSlot>& stack, MilProcedure* proc, ModuleData* md, MemSlot* self = 0)
     {
         // TODO: support varargs
-        MemSlotList args(proc->proc->params.size());
-        for( int i = proc->proc->params.size()-1; i >= 0; i-- )
+        MemSlotList args(proc->params.size());
+        for( int i = proc->params.size()-1; i >= 0; i-- )
         {
+            if(self && i == 0)
+            {
+                // NOTE: a bound proc comes with receiver as explicit first param
+                Q_ASSERT(!proc->binding.isEmpty());
+                args[i] = MemSlot(self);
+                break;
+            }
             if( stack.isEmpty() )
-                execError(proc->module,proc->proc,"not enough actual parameters");
+                execError(md,proc,"not enough actual parameters");
             args[i].move(stack.back());
             stack.pop_back();
         }
         MemSlot ret;
-        execute(proc->module, proc->proc, args, ret);
-        if( !proc->proc->retType.second.isEmpty() )
+        execute(md, proc, args, ret);
+        if( !proc->retType.second.isEmpty() )
         {
             stack.push_back(MemSlot());
             stack.back().move(ret);
@@ -1131,7 +1245,7 @@ public:
 
     void callIntrinsic(MilProcedure* proc, MemSlotList& args, MemSlot& ret)
     {
-        switch(proc->stackDepth)
+        switch(proc->offset)
         {
         case 1: // relop1
             Q_ASSERT(args.size()==3);
@@ -1446,7 +1560,7 @@ public:
                     if( pd == 0 )
                         execError(module, proc, pc, QString("cannot resolve procedure %1").
                                   arg(MilEmitter::toString(op.arg.value<MilQuali>()).constData()));
-                    makeCall(stack, pd);
+                    makeCall(stack, pd->proc, pd->module);
                 }
                 pc++;
                 vmbreak;
@@ -1454,11 +1568,34 @@ public:
                 lhs = stack.takeLast();
                 if( lhs.t != MemSlot::Procedure || lhs.pp == 0 )
                     execError(module, proc, pc, "top of stack is not a procedure");
-                makeCall(stack, lhs.pp);
+                makeCall(stack, lhs.pp->proc, lhs.pp->module);
                 pc++;
                 vmbreak;
-                // TODO callvi
-                // TODO callvirt
+            vmcase(IL_callvi)
+                lhs = stack.takeLast();
+                if( lhs.t != MemSlot::Method || lhs.m == 0 || lhs.m->proc == 0 ||
+                        lhs.m->obj == 0 || lhs.m->obj->t != MemSlot::Record )
+                    execError(module, proc, pc, "top of stack is not a valid methref");
+                makeCall(stack, lhs.m->proc->proc, lhs.m->proc->module, lhs.m->obj);
+                pc++;
+                vmbreak;
+            vmcase(IL_callvirt)
+                {
+                    MilTrident tri = op.arg.value<MilTrident>();
+                    FlattenedType* rec = getFlattenedType(module, tri.first);
+                    if( rec == 0 )
+                        execError(module, proc, pc, "invalid object type");
+                    const int midx = rec->lastIndexOfMethod(tri.second);
+                    if( midx < 0 )
+                        execError(module, proc, pc, "unknown method");
+                    else
+                    {
+                        MilProcedure* proc = rec->vtable[midx].proc;
+                        makeCall(stack, proc, rec->module);
+                    }
+                }
+                pc++;
+                vmbreak;
             vmcase(IL_castptr)
                 // NOP
                 if( stack.back().t != MemSlot::Pointer || stack.back().p == 0 )
@@ -1588,7 +1725,23 @@ public:
                     execError(module, proc, pc, "top of stack is not a pointer");
                 pc++;
                 vmbreak;
-            vmcase(IL_isinst) // TODO
+            vmcase(IL_isinst) {
+                    lhs.move(stack.back());
+                    stack.pop_back();
+                    if( (lhs.t != MemSlot::Pointer) )
+                        execError(module, proc, pc, "invalid pointer");
+                    if( lhs.p == 0 )
+                        stack.push_back(MemSlot(0)); // IS of null is false
+                    else
+                    {
+                        MilQuali q = op.arg.value<MilQuali>();
+                        FlattenedType* reftype = getFlattenedType(module, q);
+                        if( reftype == 0 )
+                            execError(module, proc, pc, "invalid reference object type");
+                        const bool res = isA(module, lhs.p[0].tt, reftype);
+                        stack.push_back(MemSlot(res));
+                    }
+                }
                 pc++;
                 vmbreak;
             vmcase(IL_ldarg)
@@ -1815,6 +1968,7 @@ public:
             vmcase(IL_ldind_r4)
             vmcase(IL_ldind_r8)
             vmcase(IL_ldind_ip)
+            vmcase(IL_ldind_ipp)
                 lhs = stack.takeLast();
                 if( lhs.p == 0 || lhs.t != MemSlot::Pointer)
                     execError(module, proc, pc, "invalid pointer on stack");
@@ -1849,7 +2003,22 @@ public:
                 stack.push_back(locals.at(3));
                 pc++;
                 vmbreak;
-                // TODO ldmeth
+            vmcase(IL_ldmeth) {
+                    lhs.move(stack.back());
+                    stack.pop_back();
+                    if( (lhs.t != MemSlot::Pointer) || lhs.p == 0 )
+                        execError(module, proc, pc, "invalid pointer to object");
+                    if( (lhs.p->t != MemSlot::Record) || lhs.p->p == 0 || lhs.p->p->t != MemSlot::TypeTag )
+                        execError(module, proc, pc, "invalid record");
+                    if( op.index >= lhs.p->p->tt->vtable.size() )
+                        execError(module, proc, pc, "invalid vtable index");
+                    MethRef* m = new MethRef();
+                    m->obj = lhs.p;
+                    m->proc = &lhs.p->p->tt->vtable[op.index];
+                    stack.push_back(MemSlot(m));
+                }
+                pc++;
+                vmbreak;
             vmcase(IL_ldnull)
                 stack.push_back(MemSlot((MemSlot*)0));
                 pc++;
@@ -1976,8 +2145,13 @@ public:
                     if( ty->type->kind != MilEmitter::Struct && ty->type->kind != MilEmitter::Union
                             && ty->type->kind != MilEmitter::Object)
                         execError(module, proc, pc, "operation not available for given type");
-                    MemSlot* record = createSequence(ty->fields.size()); // use the flattened version of the record or union
+                    int size = ty->fields.size();
+                    if( ty->type->kind == MilEmitter::Object )
+                        size++;
+                    MemSlot* record = createSequence(size); // use the flattened version of the record or union
                     initFields(module, record, ty->fields);
+                    if( ty->type->kind == MilEmitter::Object )
+                        record[0] = ty;
                     stack.push_back(MemSlot( record ) );
                 }
                 pc++;
@@ -2296,11 +2470,12 @@ public:
             vmcase(IL_stind_r4)
             vmcase(IL_stind_r8)
             vmcase(IL_stind_ip)
+            vmcase(IL_stind_ipp)
                 rhs.move(stack.back());
                 stack.pop_back();
                 // TODO: default scalar value it t == 0
                 if( rhs.t != MemSlot::I && rhs.t != MemSlot::U && rhs.t != MemSlot::F
-                        && rhs.t != MemSlot::Pointer && rhs.t != MemSlot::Procedure )
+                        && rhs.t != MemSlot::Pointer && rhs.t != MemSlot::Procedure && rhs.t != MemSlot::Method )
                     execError(module, proc, pc, "incompatible value");
                 lhs = stack.takeLast();
                 if( lhs.t != MemSlot::Pointer || lhs.p == 0 )
@@ -2393,7 +2568,7 @@ public:
                 pc++;
                 vmbreak;
             default:
-                throw QString("operator not implemnted: %1").arg(s_opName[op.op]);
+                throw QString("operator not implemented: %1").arg(s_opName[op.op]);
             }
         }
     }
@@ -2404,7 +2579,7 @@ static inline MilProcedure createIntrinsic(const QByteArray& name, int code, int
     MilProcedure p;
     p.name = name;
     p.kind = MilProcedure::Intrinsic;
-    p.stackDepth = code;
+    p.offset = code;
     if(ret)
         p.retType.second = "?";
     for( int i = 0; i < pars; i++ )

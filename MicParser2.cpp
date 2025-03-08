@@ -762,8 +762,11 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs) const
     if( rhs->kind == Declaration::Procedure )
     {
         if( lhs->kind == Type::Proc )
-            return matchFormals(lhs->subs, rhs->getParams()) && matchResultType(lhs->getType(),rhs->getType());
-        else
+        {
+            if( lhs->typebound != rhs->typebound )
+                return false;
+            return matchFormals(lhs->subs, rhs->getParams(false)) && matchResultType(lhs->getType(),rhs->getType());
+        }else
             return false;
     }
 
@@ -1623,7 +1626,8 @@ void Parser2::emitType(Type* t, const Quali& q)
                 out->addField(field->name,ev->toQuali(field->getType()),field->isPublic(),field->id);
         }else
         {
-            out->beginType(ev->toQuali(t).second,t->decl->isPublic(), MilEmitter::ProcType );
+            out->beginType(ev->toQuali(t).second,t->decl->isPublic(),
+                           t->typebound ? MilEmitter::MethType : MilEmitter::ProcType );
             foreach( Declaration* param, t->subs )
                 out->addArgument(ev->toQuali(param->getType()), param->name);
             if( t->getType() && t->getType()->kind != Type::NoType )
@@ -2839,7 +2843,7 @@ void Parser2::assignmentOrProcedureCall() {
         return;
     if( la.d_type == Tok_ColonEq ) {
         const Token tok = la;
-		expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
+        expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
         if( !ev->evaluate(lhs) )
             error(t, ev->getErr());
         Expression* rhs = expression(lhs->getType());
@@ -2970,13 +2974,13 @@ void Parser2::CaseStatement() {
             TypeCase(e);
             level++;
         }
-        for( int i = 0; i < level; i++ )
-            out->end_();
         if( la.d_type == Tok_ELSE ) {
             expect(Tok_ELSE, true, "CaseStatement");
             out->else_();
             StatementSequence();
         }
+        for( int i = 0; i < level; i++ )
+            out->end_();
         expect(Tok_END, true, "CaseStatement");
         out->end_();
         Expression::unlockArena();
@@ -3069,22 +3073,27 @@ void Parser2::TypeCase(Expression* e)
     if( !ev->evaluate(e, true) )
         error(e->pos, ev->getErr());
 
-    Expression* t = ConstExpression(0);
-    if( t == 0 )
+    Expression* tyname = ConstExpression(0);
+    if( tyname == 0 )
         return;
-    if( !ev->evaluate(t) )
-        error(t->pos, ev->getErr());
-    if( t->getType()->kind == Type::Nil )
+    if( !ev->evaluate(tyname) )
+        error(tyname->pos, ev->getErr());
+    if( tyname->getType()->kind == Type::Nil )
         out->ldnull_();
     else
         ev->pop();
-    if( !assigCompat(e->getType(), t->getType()) )
-        error(t->pos,"label has incompatible type");
+    if( !assigCompat(e->getType(), tyname->getType()) )
+        error(tyname->pos,"label has incompatible type");
 
-    if( t->getType()->kind == Type::Nil )
+    if( tyname->getType()->kind == Type::Nil )
         out->ceq_();
     else
-        out->isinst_(ev->toQuali(t->getType()));
+    {
+        Type* t = tyname->getType();
+        if( t->kind == Type::Pointer )
+            t = t->getType();
+        out->isinst_(ev->toQuali(t));
+    }
     expect(Tok_Colon, false, "Case");
     out->then_();
     // TODO: take care that e is a variable or field, and that the type of it is t during the sequence
@@ -3357,6 +3366,7 @@ void Parser2::ProcedureDeclaration() {
             procDecl->typebound = true;
             procDecl->autoself = autoself;
             Declaration* param = addDecl(receiver.id, 0, Declaration::ParamDecl);
+            param->typebound = true;
             if( receiver.t->kind == Type::Pointer )
                 param->setType(receiver.t);
             else
@@ -3377,7 +3387,7 @@ void Parser2::ProcedureDeclaration() {
 
         if( forward )
         {
-            if( !matchFormals(forward->getParams(), procDecl->getParams() ) ||
+            if( !matchFormals(forward->getParams(), procDecl->getParams(true) ) ||
                     !matchResultType(forward->getType(), procDecl->getType()) ||
                     forward->extern_ != procDecl->extern_ ||
                     forward->inline_ != procDecl->inline_ ||
@@ -3400,7 +3410,7 @@ void Parser2::ProcedureDeclaration() {
             out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
                            id.visi > 0, MilProcedure::Extern);
 
-            const QList<Declaration*> params = procDecl->getParams();
+            const QList<Declaration*> params = procDecl->getParams(true);
             foreach( Declaration* p, params )
                 out->addArgument(ev->toQuali(p->getType()),p->name);
             if( procDecl->getType() && procDecl->getType()->kind != Type::NoType )
@@ -3433,18 +3443,15 @@ void Parser2::ProcedureDeclaration() {
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "ProcedureDeclaration");
 			}
-            MilQuali r;
+            QByteArray binding;
             if( receiver.t )
-            {
-                r.first = receiver.id.d_val;
-                r.second = ev->toQuali(receiver.t).second;
-            }
+                binding = ev->toQuali(receiver.t).second;
             out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
-                           id.visi > 0, kind, r);
+                           id.visi > 0, kind, binding);
 
-            const QList<Declaration*> params = procDecl->getParams();
+            const QList<Declaration*> params = procDecl->getParams(true);
             foreach( Declaration* p, params )
-                out->addArgument(ev->toQuali(p->getType()),p->name);
+                out->addArgument(ev->toQuali(p->getType()),p->name); // the SELF param is explicit
             if( procDecl->getType() && procDecl->getType()->kind != Type::NoType )
                 out->setReturnType(ev->toQuali(procDecl->getType()));
 
