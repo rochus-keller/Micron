@@ -1657,9 +1657,9 @@ bool Evaluator::recursiveRun(Expression* e)
         break;
     case Expression::Call:
         {
-            if( e->lhs->lhs )
+            if( e->lhs->lhs && e->lhs->kind == Expression::MethDecl )
             {
-                // assure that in a call via designator like a.b(), 'a' is evaluated before the args
+                // assure that in a virtual call via designator like a.b(), 'a' is evaluated before the args
                 if( !recursiveRun(e->lhs->lhs) )
                     return false;
                 e->lhs->lhs = 0;
