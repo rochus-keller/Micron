@@ -36,7 +36,7 @@ enum IL_op
     IL_ldarga, IL_ldarga_s,
     IL_ldc_i4, IL_ldc_i8, IL_ldc_i4_s, IL_ldc_r4, IL_ldc_r8,
     IL_ldc_i4_0, IL_ldc_i4_1, IL_ldc_i4_2, IL_ldc_i4_3, IL_ldc_i4_4, IL_ldc_i4_5,
-    IL_ldc_i4_6, IL_ldc_i4_7, IL_ldc_i4_8, IL_ldc_i4_m1, IL_ldc_obj,
+    IL_ldc_i4_6, IL_ldc_i4_7, IL_ldc_i4_8, IL_ldc_i4_m1, IL_ldobj,
     IL_ldelem, IL_ldelema, IL_ldelem_i1, IL_ldelem_i2,
     IL_ldelem_i4, IL_ldelem_i8, IL_ldelem_u1, IL_ldelem_u2,
     IL_ldelem_u4, IL_ldelem_u8, IL_ldelem_r4, IL_ldelem_r8, IL_ldelem_ip,
@@ -45,7 +45,7 @@ enum IL_op
     IL_ldind_u4, IL_ldind_r4, IL_ldind_u8, IL_ldind_r8, IL_ldind_ip, IL_ldind_ipp,
     IL_ldloc, IL_ldloc_s, IL_ldloca, IL_ldloca_s,
     IL_ldloc_0, IL_ldloc_1, IL_ldloc_2, IL_ldloc_3, IL_ldnull,
-    IL_ldobj, IL_ldproc, IL_ldmeth, IL_ldstr,
+    IL_ldind, IL_ldproc, IL_ldmeth, IL_ldstr,
     IL_ldvar, IL_ldvara, IL_mul, IL_neg,
     IL_newarr, IL_newvla, IL_newobj,
     IL_not, IL_or, IL_rem, IL_rem_un, IL_shl, IL_shr, IL_shr_un,
@@ -59,7 +59,7 @@ enum IL_op
     IL_stelem_r4, IL_stelem_r8, IL_stelem_ip, IL_stfld,
     IL_stind_i1, IL_stind_i2, IL_stind_i4, IL_stind_i8, IL_stind_r4, IL_stind_r8, IL_stind_ip, IL_stind_ipp,
     IL_stloc, IL_stloc_s, IL_stloc_0, IL_stloc_1, IL_stloc_2, IL_stloc_3,
-    IL_stobj, IL_stvar, IL_switch, IL_case, IL_while, IL_do,
+    IL_stind, IL_stvar, IL_switch, IL_case, IL_while, IL_do,
     IL_NUM_OF_OPS
 }; // Update s_opName !!!
 

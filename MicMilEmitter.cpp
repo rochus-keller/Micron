@@ -599,10 +599,10 @@ void MilEmitter::ldc_r8(double v)
     delta(+1);
 }
 
-void MilEmitter::ldc_obj(const MilObject& v)
+void MilEmitter::ldobj(const MilObject& v)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    ops->append(MilOperation(IL_ldc_obj,QVariant::fromValue(v) ));
+    ops->append(MilOperation(IL_ldobj,QVariant::fromValue(v) ));
     delta(+1);
 }
 
@@ -765,10 +765,10 @@ void MilEmitter::ldnull_()
     delta(+1);
 }
 
-void MilEmitter::ldobj_(const MilQuali& typeRef)
+void MilEmitter::ldind_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    ops->append(MilOperation(IL_ldobj,QVariant::fromValue(typeRef)));
+    ops->append(MilOperation(IL_ldind,QVariant::fromValue(typeRef)));
     delta(-1+1);
 }
 
@@ -1033,10 +1033,10 @@ void MilEmitter::stloc_(quint16 loc)
     delta(-1);
 }
 
-void MilEmitter::stobj_(const MilQuali& typeRef)
+void MilEmitter::stind_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    ops->append(MilOperation(IL_stobj,QVariant::fromValue(typeRef)) );
+    ops->append(MilOperation(IL_stind,QVariant::fromValue(typeRef)) );
     delta(-2);
 }
 
@@ -1249,6 +1249,23 @@ void IlAsmRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRe
     out << endl;
 }
 
+QString IlAsmRenderer::formatDouble(const QVariant& v)
+{
+    QString tmp = v.toString();
+    const int eidx = tmp.indexOf('e', 0, Qt::CaseInsensitive);
+    if( eidx != -1 )
+    {
+        if( eidx == 0 ) // e-5
+            tmp.prepend("0.0");
+        else if( !tmp.left(eidx).contains('.')  // 3e-5
+                 || tmp[eidx-1] == '.' )        // 3.e-5
+            tmp = tmp.left(eidx) + QString(".0") + tmp.mid(eidx);
+        if( tmp[0] == '.' ) // .0e-5, .e-5
+            tmp.prepend("0");
+    }
+    return tmp;
+}
+
 static inline bool isAllPrintable(const QString& str)
 {
     for( int i = 0; i < str.size(); i++ )
@@ -1312,7 +1329,7 @@ static void renderComponents( QTextStream& out, const QVariant& data )
         out << data.toULongLong();
         break;
     case QVariant::Double:
-        out << data.toDouble();
+        out << IlAsmRenderer::formatDouble(data);
         break;
     default:
         Q_ASSERT(false);
@@ -1449,7 +1466,7 @@ void IlAsmRenderer::render(const MilProcedure& m)
                 out << i << " ";
             out << endl;
             break;
-        case IL_ldc_obj:
+        case IL_ldobj:
             {
                 const MilObject obj = op.arg.value<MilObject>();
                 out << ws() << s_opName[op.op] << " ";
@@ -1490,6 +1507,10 @@ void IlAsmRenderer::render(const MilProcedure& m)
                 }
                 out << endl;
             }
+            break;
+        case IL_ldc_r4:
+        case IL_ldc_r8:
+            out << ws() << s_opName[op.op] << " " << IlAsmRenderer::formatDouble(op.arg) << endl;
             break;
         default:
             out << ws() << s_opName[op.op];

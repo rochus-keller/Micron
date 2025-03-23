@@ -159,7 +159,7 @@ bool Evaluator::prepareRhs(Type* lhs)
     {   // NOTE: already checked that lhs is large enough for rhs
         Q_ASSERT( lhs->len >= quint32(dequote(rhs.val.toByteArray()).size()) );
         assureTopOnMilStack();
-        out->ldobj_(MilQuali());
+        out->ldind_(MilQuali());
     }else if( lhs && lhs->kind == Type::CHAR &&
               rhs.type->kind == Type::String )
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
@@ -262,7 +262,7 @@ bool Evaluator::assign()
     case Type::Object:
     case Type::Array:
     case Type::Generic:
-        out->stobj_(toQuali(lhs.type));
+        out->stind_(toQuali(lhs.type));
         break;
     default:
         Q_ASSERT( false );
@@ -355,7 +355,7 @@ bool Evaluator::derefValue()
     case Type::Object:
     case Type::Array:
     case Type::Generic:
-        out->ldobj_(toQuali(v.type));
+        out->ldind_(toQuali(v.type));
         break;
     default:
         return false;
@@ -783,7 +783,7 @@ bool Evaluator::pushMilStack(const Value& v)
             MilObject obj;
             obj.typeRef = toQuali(v.type);
             obj.data = v.val;
-            out->ldc_obj(obj);
+            out->ldobj(obj);
         }
         break;
     case Value::VarDecl:

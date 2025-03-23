@@ -95,7 +95,6 @@ namespace Mil {
 			case Tok_LDC_I4_M1: return "LDC_I4_M1";
 			case Tok_LDC_I4_S: return "LDC_I4_S";
 			case Tok_LDC_I8: return "LDC_I8";
-			case Tok_LDC_OBJ: return "LDC_OBJ";
 			case Tok_LDC_R4: return "LDC_R4";
 			case Tok_LDC_R8: return "LDC_R8";
 			case Tok_LDELEM: return "LDELEM";
@@ -113,6 +112,7 @@ namespace Mil {
 			case Tok_LDELEM_U8: return "LDELEM_U8";
 			case Tok_LDFLD: return "LDFLD";
 			case Tok_LDFLDA: return "LDFLDA";
+			case Tok_LDIND: return "LDIND";
 			case Tok_LDIND_I1: return "LDIND_I1";
 			case Tok_LDIND_I2: return "LDIND_I2";
 			case Tok_LDIND_I4: return "LDIND_I4";
@@ -177,6 +177,7 @@ namespace Mil {
 			case Tok_STELEM_R4: return "STELEM_R4";
 			case Tok_STELEM_R8: return "STELEM_R8";
 			case Tok_STFLD: return "STFLD";
+			case Tok_STIND: return "STIND";
 			case Tok_STIND_I1: return "STIND_I1";
 			case Tok_STIND_I2: return "STIND_I2";
 			case Tok_STIND_I4: return "STIND_I4";
@@ -191,7 +192,6 @@ namespace Mil {
 			case Tok_STLOC_2: return "STLOC_2";
 			case Tok_STLOC_3: return "STLOC_3";
 			case Tok_STLOC_S: return "STLOC_S";
-			case Tok_STOBJ: return "STOBJ";
 			case Tok_STRUCT: return "STRUCT";
 			case Tok_STVAR: return "STVAR";
 			case Tok_SUB: return "SUB";
@@ -206,7 +206,7 @@ namespace Mil {
 			case Tok_XOR: return "XOR";
 			case Tok_ident: return "ident";
 			case Tok_unsigned: return "unsigned";
-			case Tok_real: return "real";
+			case Tok_float: return "float";
 			case Tok_string: return "string";
 			case Tok_hexstring: return "hexstring";
 			case Tok_Comment: return "Comment";
@@ -307,7 +307,6 @@ namespace Mil {
 			case Tok_LDC_I4_M1: return "Tok_LDC_I4_M1";
 			case Tok_LDC_I4_S: return "Tok_LDC_I4_S";
 			case Tok_LDC_I8: return "Tok_LDC_I8";
-			case Tok_LDC_OBJ: return "Tok_LDC_OBJ";
 			case Tok_LDC_R4: return "Tok_LDC_R4";
 			case Tok_LDC_R8: return "Tok_LDC_R8";
 			case Tok_LDELEM: return "Tok_LDELEM";
@@ -325,6 +324,7 @@ namespace Mil {
 			case Tok_LDELEM_U8: return "Tok_LDELEM_U8";
 			case Tok_LDFLD: return "Tok_LDFLD";
 			case Tok_LDFLDA: return "Tok_LDFLDA";
+			case Tok_LDIND: return "Tok_LDIND";
 			case Tok_LDIND_I1: return "Tok_LDIND_I1";
 			case Tok_LDIND_I2: return "Tok_LDIND_I2";
 			case Tok_LDIND_I4: return "Tok_LDIND_I4";
@@ -389,6 +389,7 @@ namespace Mil {
 			case Tok_STELEM_R4: return "Tok_STELEM_R4";
 			case Tok_STELEM_R8: return "Tok_STELEM_R8";
 			case Tok_STFLD: return "Tok_STFLD";
+			case Tok_STIND: return "Tok_STIND";
 			case Tok_STIND_I1: return "Tok_STIND_I1";
 			case Tok_STIND_I2: return "Tok_STIND_I2";
 			case Tok_STIND_I4: return "Tok_STIND_I4";
@@ -403,7 +404,6 @@ namespace Mil {
 			case Tok_STLOC_2: return "Tok_STLOC_2";
 			case Tok_STLOC_3: return "Tok_STLOC_3";
 			case Tok_STLOC_S: return "Tok_STLOC_S";
-			case Tok_STOBJ: return "Tok_STOBJ";
 			case Tok_STRUCT: return "Tok_STRUCT";
 			case Tok_STVAR: return "Tok_STVAR";
 			case Tok_SUB: return "Tok_SUB";
@@ -418,7 +418,7 @@ namespace Mil {
 			case Tok_XOR: return "Tok_XOR";
 			case Tok_ident: return "Tok_ident";
 			case Tok_unsigned: return "Tok_unsigned";
-			case Tok_real: return "Tok_real";
+			case Tok_float: return "Tok_float";
 			case Tok_string: return "Tok_string";
 			case Tok_hexstring: return "Tok_hexstring";
 			case Tok_Comment: return "Tok_Comment";
@@ -933,13 +933,6 @@ namespace Mil {
 								break;
 							}
 							break;
-						case 'O':
-							if( at(str,len,i+5) == 'B' ){
-								if( at(str,len,i+6) == 'J' ){
-									res = Tok_LDC_OBJ; i += 7;
-								}
-							}
-							break;
 						case 'R':
 							switch( at(str,len,i+5) ){
 							case '4':
@@ -1084,6 +1077,8 @@ namespace Mil {
 									}
 									break;
 								}
+							} else {
+								res = Tok_LDIND; i += 5;
 							}
 						}
 					}
@@ -1500,6 +1495,8 @@ namespace Mil {
 									}
 									break;
 								}
+							} else {
+								res = Tok_STIND; i += 5;
 							}
 						}
 					}
@@ -1528,13 +1525,6 @@ namespace Mil {
 							} else {
 								res = Tok_STLOC; i += 5;
 							}
-						}
-					}
-					break;
-				case 'O':
-					if( at(str,len,i+3) == 'B' ){
-						if( at(str,len,i+4) == 'J' ){
-							res = Tok_STOBJ; i += 5;
 						}
 					}
 					break;

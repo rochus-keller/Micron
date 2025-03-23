@@ -1827,7 +1827,7 @@ public:
                 stack.push_back(MemSlot(-1));
                 pc++;
                 vmbreak;
-            vmcase(IL_ldc_obj)
+            vmcase(IL_ldobj)
                 mo = op.arg.value<MilObject>();
                 convert(lhs, mo.data);
                 stack.push_back(MemSlot());
@@ -2023,7 +2023,7 @@ public:
                 stack.push_back(MemSlot((MemSlot*)0));
                 pc++;
                 vmbreak;
-            vmcase(IL_ldobj)
+            vmcase(IL_ldind)
                 lhs.move(stack.back());
                 stack.pop_back();
                 if( lhs.t != MemSlot::Pointer || lhs.p == 0 )
@@ -2509,7 +2509,7 @@ public:
                 stack.pop_back();
                pc++;
                 vmbreak;
-            vmcase(IL_stobj)
+            vmcase(IL_stind)
                 Q_ASSERT( stack.size() >= 2 );
                 rhs.move(stack.back());
                 stack.pop_back();

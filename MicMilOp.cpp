@@ -33,7 +33,7 @@ const char* s_opName[] =
     "ldarga", "ldarga_s",
     "ldc_i4", "ldc_i8", "ldc_i4_s", "ldc_r4", "ldc_r8",
     "ldc_i4_0", "ldc_i4_1", "ldc_i4_2", "ldc_i4_3", "ldc_i4_4", "ldc_i4_5",
-    "ldc_i4_6", "ldc_i4_7", "ldc_i4_8", "ldc_i4_m1", "ldc_obj",
+    "ldc_i4_6", "ldc_i4_7", "ldc_i4_8", "ldc_i4_m1", "ldobj",
     "ldelem", "ldelema", "ldelem_i1", "ldelem_i2",
     "ldelem_i4", "ldelem_i8", "ldelem_u1", "ldelem_u2",
     "ldelem_u4", "ldelem_u8", "ldelem_r4", "ldelem_r8", "ldelem_ip",
@@ -42,7 +42,7 @@ const char* s_opName[] =
     "ldind_u4", "ldind_r4", "ldind_u8", "ldind_r8", "ldind_ip", "ldind_ipp",
     "ldloc", "ldloc_s", "ldloca", "ldloca_s",
     "ldloc_0", "ldloc_1", "ldloc_2", "ldloc_3", "ldnull",
-    "ldobj", "ldproc", "ldmeth", "ldstr",
+    "ldind", "ldproc", "ldmeth", "ldstr",
     "ldvar", "ldvara", "mul", "neg",
     "newarr", "newvla", "newobj",
     "not", "or", "rem", "rem_un", "shl", "shr", "shr_un",
@@ -56,6 +56,6 @@ const char* s_opName[] =
     "stelem_r4", "stelem_r8", "stelem_ip", "stfld",
     "stind_i1", "stind_i2", "stind_i4", "stind_i8", "stind_r4", "stind_r8", "stind_ip", "stind_ipp",
     "stloc", "stloc_s", "stloc_0", "stloc_1", "stloc_2", "stloc_3",
-    "stobj", "stvar", "switch", "case", "while", "do"
+    "stind", "stvar", "switch", "case", "while", "do"
 };
 }

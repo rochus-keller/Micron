@@ -52,6 +52,7 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_integer: return "integer";
 		case R_length: return "length";
 		case R_module: return "module";
+		case R_number: return "number";
 		case R_qualident: return "qualident";
 		case R_trident: return "trident";
 		case R_type: return "type";

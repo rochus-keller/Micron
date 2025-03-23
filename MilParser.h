@@ -27,6 +27,7 @@ namespace Mil {
 	protected:
 		void Mil(SynTree*);
 		void integer(SynTree*);
+		void number(SynTree*);
 		void qualident(SynTree*);
 		void trident(SynTree*);
 		void identdef(SynTree*);

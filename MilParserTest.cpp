@@ -123,7 +123,7 @@ static void checkParser(const QStringList& files)
         dump(s,&p.root,0);
 #else
         QTextStream s(stdout);
-        dump(s,&p.root,0);
+       // dump(s,&p.root,0);
 #endif
     }
     qDebug() << "#### finished with" << ok << "files ok of total" << files.size() << "files" << "in" << timer.elapsed() << " [ms]";

@@ -133,7 +133,8 @@ namespace Mic
     class MilRenderer
     {
     public:
-        virtual void beginModule( const QByteArray& fullName, const QString& sourceFile, const QByteArrayList& ) {}
+        virtual void beginModule( const QByteArray& fullName, const QString& sourceFile,
+                                  const QByteArrayList& metaParams = QByteArrayList() ) {}
         virtual void endModule() {}
 
         virtual void addImport( const QByteArray& path ) {}
@@ -231,18 +232,18 @@ namespace Mic
         void ldc_i8(qint64);
         void ldc_r4(double);
         void ldc_r8(double);
-        void ldc_obj(const MilObject&);
+        void ldobj(const MilObject&);
         void ldelem_(const MilQuali& typeRef);
         void ldelema_(const MilQuali& typeRef);
         void ldfld_(const MilTrident& fieldRef);
         void ldflda_(const MilTrident& fieldRef);
         void ldmeth_(const MilTrident& methodRef); // CIL ldvirtftn, returns methref
         void ldproc_(const MilQuali& methodRef); // CIL ldftn
+        void ldind_(const MilQuali& typeRef); // was CIL ldobj
         void ldind_(Type);
         void ldloc_(quint16);
         void ldloca_(quint16);
         void ldnull_();
-        void ldobj_(const MilQuali& typeRef);
         void ldvar_(const MilQuali& memberRef); // CIL ldsfld
         void ldvara_(const MilQuali& memberRef); // CIL ldsflda
         void ldstr_(const QByteArray& str);
@@ -268,8 +269,8 @@ namespace Mic
         void stelem_(const MilQuali& typeRef);
         void stfld_(const MilTrident& fieldRef);
         void stind_( Type ); // without Ux
+        void stind_(const MilQuali& typeRef); // was CIL stobj
         void stloc_(quint16);
-        void stobj_(const MilQuali& typeRef);
         void stvar_(const MilQuali& memberRef); // CIL stsfld
         void sub_();
         void switch_();
@@ -311,6 +312,8 @@ namespace Mic
         virtual void addField( const QByteArray& fieldName,
                        const MilQuali& typeRef,
                        bool isPublic = true, quint8 bits = 0);
+
+        static QString formatDouble(const QVariant& v);
     protected:
         inline QByteArray ws() { return QByteArray(level*2,' '); }
         void render(const MilProcedure&);

@@ -444,7 +444,7 @@ Token Lexer::number()
 #endif
         if( isReal)
     {
-        Token tok = token( Tok_real, off, str );
+        Token tok = token( Tok_float, off, str );
         QByteArray mantissa = ePos != -1 ? str.left(ePos) : str;
         QByteArray lhs = mantissa;
         if( commaPos != -1 )
