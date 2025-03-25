@@ -36,6 +36,26 @@ MilModule*MilLoader::getModule(const QByteArray& fullName)
     return 0;
 }
 
+static void visitImports(MilLoader* loader, Mic::MilModule* top, QList<MilModule*>& res )
+{
+    foreach( const QByteArray& import, top->imports )
+    {
+        MilModule* sub = loader->getModule(import);
+        if( res.contains(sub) )
+            continue;
+        visitImports(loader, sub, res);
+        res.append(sub);
+    }
+}
+
+QList<MilModule*> MilLoader::getModulesInDependencyOrder()
+{
+    QList<MilModule*> res;
+    for( int i = 0; i < modules.size(); i++ )
+        visitImports(this, &modules[i], res);
+    return res;
+}
+
 InMemRenderer::InMemRenderer(MilLoader* loader):loader(loader), module(0), type(0)
 {
     Q_ASSERT( loader );
@@ -245,9 +265,9 @@ static void render_(const MilVariable* v, MilRenderer* r)
     r->addVariable(v->type,v->name, v->isPublic);
 }
 
-static void render_(const MilProcedure* p, MilRenderer* r)
+static void render_(const MilConst* v, MilRenderer* r)
 {
-    r->addProcedure(*p);
+    r->addConst(v->type,v->name,v->val);
 }
 
 bool MilLoader::render(MilRenderer* r, const MilModule* m)
@@ -266,12 +286,14 @@ bool MilLoader::render(MilRenderer* r, const MilModule* m)
             render_(&m->vars[i.second],r);
             break;
         case MilModule::Proc:
-            render_(&m->procs[i.second],r);
+            r->addProcedure(m->procs[i.second]);
             break;
         case MilModule::Import:
-            // TODO render_(&m->imports[i.second],r);
+            r->addImport(m->imports[i.second]);
             break;
-            // TODO Const
+        case MilModule::Const:
+            render_(&m->consts[i.second],r);
+            break;
         }
     }
     r->endModule();

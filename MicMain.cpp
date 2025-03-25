@@ -238,12 +238,12 @@ static void process(const QStringList& files, const QStringList& searchPaths, bo
         Mic::Declaration* module = mgr.loadModule(imp); // recursively compiles all imported files
 
         if( dump )
-            foreach( const Mic::MilModule& m, mgr.loader.getModules() )
+            foreach( Mic::MilModule* m, mgr.loader.getModulesInDependencyOrder() )
             {
                 QFile out;
                 out.open(stdout, QIODevice::WriteOnly);
                 Mic::IlAsmRenderer r(&out);
-                Mic::MilLoader::render(&r,&m);
+                Mic::MilLoader::render(&r,m);
                 out.putChar('\n');
             }
 

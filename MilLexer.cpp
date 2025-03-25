@@ -27,8 +27,6 @@
 #include <ctype.h>
 using namespace Mil;
 
-QHash<QByteArray,QByteArray> Lexer::d_symbols;
-
 Lexer::Lexer(QObject *parent) : QObject(parent),
     d_lastToken(Tok_Invalid),d_lineNr(0),d_colNr(0),d_in(0),
     d_ignoreComments(true), d_packComments(true),d_enableExt(true), d_sensExt(true),
@@ -115,16 +113,6 @@ QList<Token> Lexer::tokens(const QByteArray& code, const QString& path)
         t = nextToken();
     }
     return res;
-}
-
-QByteArray Lexer::getSymbol(const QByteArray& str)
-{
-    if( str.isEmpty() )
-        return str;
-    QByteArray& sym = d_symbols[str];
-    if( sym.isEmpty() )
-        sym = str;
-    return sym;
 }
 
 static inline bool isHexDigit( char c )
@@ -239,7 +227,7 @@ Token Lexer::token(TokenType tt, int len, const QByteArray& val)
 
     QByteArray v = val;
     if( tt != Tok_Comment && tt != Tok_Invalid )
-        v = getSymbol(v);
+        v = Token::getSymbol(v);
     Token t( tt, d_lineNr, d_colNr + 1, len, v );
     d_lastToken = t;
     d_colNr += len;

@@ -1,0 +1,13 @@
+module Procs0
+
+	proc test(ch: char)
+	begin
+		println(ch)
+	end test
+		
+begin
+	//println("Procs0 start")
+	test(41x)
+	test("B")
+	//println("Procs0 done")
+end Procs0

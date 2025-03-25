@@ -31,12 +31,12 @@ namespace Mil
 #ifdef _DEBUG
         union
         {
-            int d_type; // TokenType
+            quint16 d_type; // TokenType
             TokenType d_tokenType;
         };
         union
         {
-            int d_code; // TokenType, the pseudo keyword which an ident represents, or invalid
+            quint16 d_code; // TokenType, the pseudo keyword which an ident represents, or invalid
             TokenType d_codeType;
         };
 #else
@@ -59,6 +59,7 @@ namespace Mil
         const char* getString() const;
         Mic::RowCol toRowCol() const { return Mic::RowCol(d_lineNr,d_colNr); }
         Mic::Loc toLoc() const { return Mic::Loc(d_lineNr,d_colNr,d_sourcePath); }
+        static QByteArray getSymbol( const QByteArray& );
     };
 
     typedef QList<Token> TokenList;

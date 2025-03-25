@@ -51,7 +51,6 @@ namespace Mil
         QList<Token> tokens( const QByteArray& code, const QString& path = QString() );
         quint32 getSloc() const { return d_sloc; }
 
-        static QByteArray getSymbol( const QByteArray& );
         static void parseComment( const QByteArray& str, int& pos, int& level );
     protected:
         Token nextTokenImp();
@@ -75,7 +74,6 @@ namespace Mil
         QByteArray d_line;
         QList<Token> d_buffer;
         quint32 d_sloc; // number of lines of code without empty or comment lines
-        static QHash<QByteArray,QByteArray> d_symbols;
         Token d_lastToken;
         bool d_ignoreComments;  // don't deliver comment tokens
         bool d_packComments;    // Only deliver one Tok_Comment for (*...*) instead of Tok_Latt and Tok_Ratt

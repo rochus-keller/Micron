@@ -1,5 +1,5 @@
 /*
-* Copyright 2024 Rochus Keller <mailto:me@rochus-keller.ch>
+* Copyright 2025 Rochus Keller <mailto:me@rochus-keller.ch>
 *
 * This file is part of the Micron language project.
 *
@@ -17,38 +17,11 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
-#include "MilToken.h"
-#include <QHash>
+#include "MilAst.h"
 using namespace Mil;
 
-QHash<QByteArray,QByteArray> s_symbols;
-
-bool Token::isValid() const
+Ast::Ast()
 {
-    return d_type != Tok_Eof && d_type != Tok_Invalid;
+
 }
 
-bool Token::isEof() const
-{
-    return d_type == Tok_Eof;
-}
-
-const char*Token::getName() const
-{
-    return tokenTypeName( d_type );
-}
-
-const char*Token::getString() const
-{
-    return tokenTypeString(d_type);
-}
-
-QByteArray Token::getSymbol(const QByteArray& str)
-{
-    if( str.isEmpty() )
-        return str;
-    QByteArray& sym = s_symbols[str];
-    if( sym.isEmpty() )
-        sym = str;
-    return sym;
-}

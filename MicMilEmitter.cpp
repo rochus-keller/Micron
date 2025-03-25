@@ -63,10 +63,10 @@ void MilEmitter::endModule()
     d_out->endModule();
 }
 
-void MilEmitter::addImport(const QByteArray& path)
+void MilEmitter::addImport(const QByteArray& fullName)
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
-    d_out->addImport(path);
+    d_out->addImport(fullName);
 }
 
 void MilEmitter::addVariable(const MilQuali& typeRef, QByteArray name, bool isPublic)

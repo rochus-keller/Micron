@@ -137,7 +137,7 @@ namespace Mic
                                   const QByteArrayList& metaParams = QByteArrayList() ) {}
         virtual void endModule() {}
 
-        virtual void addImport( const QByteArray& path ) {}
+        virtual void addImport( const QByteArray& fullName ) {}
 
         virtual void addVariable( const MilQuali& typeRef, QByteArray name,  bool isPublic ) {}
         virtual void addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val ) {}
@@ -162,7 +162,7 @@ namespace Mic
         void beginModule( const QByteArray& fullName, const QString& sourceFile, const MilMetaParams& = MilMetaParams() );
         void endModule();
 
-        void addImport(const QByteArray& path);
+        void addImport(const QByteArray& fullName);
 
         void addVariable( const MilQuali& typeRef, QByteArray name, bool isPublic = true );
 

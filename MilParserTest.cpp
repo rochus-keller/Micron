@@ -24,7 +24,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QElapsedTimer>
-#include <MilParser.h>
+#include <MilParser2.h>
 #include <MilLexer.h>
 using namespace Mil;
 
@@ -46,7 +46,7 @@ QStringList collectFiles( const QDir& dir, const QStringList& suffix )
 
 static QString root;
 
-#if 1
+#if 0
 static void dump(QTextStream& out, const SynTree* node, int level)
 {
     QByteArray str;
@@ -79,7 +79,7 @@ static void dump(QTextStream& out, const SynTree* node, int level)
 }
 #endif
 
-class Lex : public Scanner
+class Lex : public Scanner2
 {
 public:
     Lexer lex;
@@ -103,12 +103,12 @@ static void checkParser(const QStringList& files)
     {
         Lex lex;
         lex.lex.setStream(file);
-        Parser p(&lex);
+        Parser2 p(&lex);
         qDebug() << "**** parsing" << file.mid(root.size()+1);
         p.RunParser();
         if( !p.errors.isEmpty() )
         {
-            foreach( const Parser::Error& e, p.errors )
+            foreach( const Parser2::Error& e, p.errors )
                 qCritical() << e.path.mid(root.size()+1) << e.row << e.col << e.msg;
             // break;
         }else
@@ -122,7 +122,7 @@ static void checkParser(const QStringList& files)
         QTextStream s(&out);
         dump(s,&p.root,0);
 #else
-        QTextStream s(stdout);
+        //QTextStream s(stdout);
        // dump(s,&p.root,0);
 #endif
     }

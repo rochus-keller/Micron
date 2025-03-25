@@ -33,6 +33,7 @@ public:
 
     MilModule* getModule(const QByteArray& fullName);
     const QList<MilModule>& getModules() const { return modules; }
+    QList<MilModule*> getModulesInDependencyOrder();
     static bool render(MilRenderer*, const MilModule*);
 private:
     friend class InMemRenderer;

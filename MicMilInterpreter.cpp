@@ -604,8 +604,15 @@ public:
 
     void execError(ModuleData* module, const MilProcedure* proc, const QString& msg = QString())
     {
+        Q_ASSERT(module);
+        Q_ASSERT(proc);
+        QByteArray modName;
+        if( module->module )
+            modName = module->module->fullName;
+        else
+            modName = intrinsicMod;
         throw QString("%1!%2 error: %3")
-            .arg(module->module->fullName.constData())
+            .arg(modName.constData())
             .arg(proc->name.constData()).arg(msg);
     }
 
@@ -751,7 +758,7 @@ public:
         return res;
     }
 
-    void prepareBytecode(ModuleData* module, MilProcedure* proc, quint32& pc, Labels& labels, LoopStack& loopStack)
+    void prepareBytecode(ModuleData* module, MilProcedure* proc, qint32& pc, Labels& labels, LoopStack& loopStack)
     {
         QList<MilOperation>& ops = proc->body;
         const int start = pc;
@@ -957,7 +964,7 @@ public:
         }
     }
 
-    void prepareBytecode(ModuleData* module, MilProcedure* proc, quint32& pc)
+    void prepareBytecode(ModuleData* module, MilProcedure* proc, qint32& pc)
     {
         Labels labels; // name -> label pos, goto poss
         LoopStack loopStack;
@@ -1416,7 +1423,7 @@ public:
             callExtern(module, proc,args,ret);
             return;
         }
-        quint32 pc = 0;
+        qint32 pc = 0;
         if( !proc->compiled )
         {
             prepareBytecode(module, proc, pc);
@@ -1432,9 +1439,10 @@ public:
             proc->compiled = true;
         }
 
-// #define _USE_JUMP_TABLE
-        // crashes and the debugger becomes veeeery slow
-        // likely needs a totally new architecture to make this work; maybe later
+#define _USE_JUMP_TABLE
+        // the debugger becomes veeeery slow because of local var display
+        // the threaded interpreter when compiled with GCC 4.8 is only about 2% faster than the switch version
+
 #ifdef _USE_JUMP_TABLE
 #undef vmdispatch
 #undef vmcase
@@ -1444,29 +1452,31 @@ public:
 
 #define vmcase(l)     L_##l:
 
-#define vmbreak		 if( pc >= proc->body.size() ) return; op = proc->body[pc]; vmdispatch(op.op);
+#define vmbreak		 if( pc >= proc->body.size() ) return; vmdispatch(proc->body[pc].op);
 
         static const void *const disptab[IL_NUM_OF_OPS] = {
             &&L_IL_invalid,
-            &&L_IL_add, &&L_IL_and, &&L_IL_call, &&L_IL_calli, &&L_IL_castptr,
+            &&L_IL_add, &&L_IL_and,
+            &&L_IL_call, &&L_IL_calli,
+            &&L_IL_callvi, &&L_IL_callvirt, &&L_IL_castptr,
             &&L_IL_ceq, &&L_IL_cgt, &&L_IL_cgt_un, &&L_IL_clt, &&L_IL_clt_un,
             &&L_IL_conv_i1, &&L_IL_conv_i2, &&L_IL_conv_i4, &&L_IL_conv_i8, &&L_IL_conv_r4, &&L_IL_conv_r8,
             &&L_IL_conv_u1, &&L_IL_conv_u2, &&L_IL_conv_u4, &&L_IL_conv_u8, &&L_IL_conv_ip,
-            &&L_IL_div, &&L_IL_div_un, &&L_IL_dup, &&L_IL_iif, &&L_IL_initobj, &&L_IL_ldarg, &&L_IL_ldarg_s,
+            &&L_IL_div, &&L_IL_div_un, &&L_IL_dup, &&L_IL_iif, &&L_IL_initobj, &&L_IL_isinst, &&L_IL_ldarg, &&L_IL_ldarg_s,
             &&L_IL_ldarg_0, &&L_IL_ldarg_1, &&L_IL_ldarg_2, &&L_IL_ldarg_3,
             &&L_IL_ldarga, &&L_IL_ldarga_s,
             &&L_IL_ldc_i4, &&L_IL_ldc_i8, &&L_IL_ldc_i4_s, &&L_IL_ldc_r4, &&L_IL_ldc_r8,
             &&L_IL_ldc_i4_0, &&L_IL_ldc_i4_1, &&L_IL_ldc_i4_2, &&L_IL_ldc_i4_3, &&L_IL_ldc_i4_4, &&L_IL_ldc_i4_5,
-            &&L_IL_ldc_i4_6, &&L_IL_ldc_i4_7, &&L_IL_ldc_i4_8, &&L_IL_ldc_i4_m1, &&L_IL_ldc_obj,
+            &&L_IL_ldc_i4_6, &&L_IL_ldc_i4_7, &&L_IL_ldc_i4_8, &&L_IL_ldc_i4_m1, &&L_IL_ldobj,
             &&L_IL_ldelem, &&L_IL_ldelema, &&L_IL_ldelem_i1, &&L_IL_ldelem_i2,
             &&L_IL_ldelem_i4, &&L_IL_ldelem_i8, &&L_IL_ldelem_u1, &&L_IL_ldelem_u2,
             &&L_IL_ldelem_u4, &&L_IL_ldelem_u8, &&L_IL_ldelem_r4, &&L_IL_ldelem_r8, &&L_IL_ldelem_ip,
             &&L_IL_ldfld, &&L_IL_ldflda,
             &&L_IL_ldind_i1, &&L_IL_ldind_i2, &&L_IL_ldind_i4, &&L_IL_ldind_i8, &&L_IL_ldind_u1, &&L_IL_ldind_u2,
-            &&L_IL_ldind_u4, &&L_IL_ldind_r4, &&L_IL_ldind_u8, &&L_IL_ldind_r8, &&L_IL_ldind_ip,
+            &&L_IL_ldind_u4, &&L_IL_ldind_r4, &&L_IL_ldind_u8, &&L_IL_ldind_r8, &&L_IL_ldind_ip, &&L_IL_ldind_ipp,
             &&L_IL_ldloc, &&L_IL_ldloc_s, &&L_IL_ldloca, &&L_IL_ldloca_s,
             &&L_IL_ldloc_0, &&L_IL_ldloc_1, &&L_IL_ldloc_2, &&L_IL_ldloc_3, &&L_IL_ldnull,
-            &&L_IL_ldobj, &&L_IL_ldproc, &&L_IL_ldstr,
+            &&L_IL_ldind, &&L_IL_ldproc, &&L_IL_ldmeth, &&L_IL_ldstr,
             &&L_IL_ldvar, &&L_IL_ldvara, &&L_IL_mul, &&L_IL_neg,
             &&L_IL_newarr, &&L_IL_newvla, &&L_IL_newobj,
             &&L_IL_not, &&L_IL_or, &&L_IL_rem, &&L_IL_rem_un, &&L_IL_shl, &&L_IL_shr, &&L_IL_shr_un,
@@ -1477,9 +1487,9 @@ public:
             &&L_IL_starg, &&L_IL_starg_s,
             &&L_IL_stelem, &&L_IL_stelem_i1, &&L_IL_stelem_i2, &&L_IL_stelem_i4, &&L_IL_stelem_i8,
             &&L_IL_stelem_r4, &&L_IL_stelem_r8, &&L_IL_stelem_ip, &&L_IL_stfld,
-            &&L_IL_stind_i1, &&L_IL_stind_i2, &&L_IL_stind_i4, &&L_IL_stind_i8, &&L_IL_stind_r4, &&L_IL_stind_r8, &&L_IL_stind_ip,
+            &&L_IL_stind_i1, &&L_IL_stind_i2, &&L_IL_stind_i4, &&L_IL_stind_i8, &&L_IL_stind_r4, &&L_IL_stind_r8, &&L_IL_stind_ip, &&L_IL_stind_ipp,
             &&L_IL_stloc, &&L_IL_stloc_s, &&L_IL_stloc_0, &&L_IL_stloc_1, &&L_IL_stloc_2, &&L_IL_stloc_3,
-            &&L_IL_stobj, &&L_IL_stvar, &&L_IL_switch, &&L_IL_case, &&L_IL_while, &&L_IL_do
+            &&L_IL_stind, &&L_IL_stvar, &&L_IL_switch, &&L_IL_case, &&L_IL_while, &&L_IL_do
         };
 
 #endif
@@ -1508,13 +1518,12 @@ public:
 #endif
                 return;
             }
-            MilOperation& op = proc->body[pc];
 
             // NOTE: jump tables (i.e. &&label, computed gotos) makes little sense, since GCC is able
             // to derive it automatically in principle; e.g. Lua 5.4.7 has exactly same
             // performance with or without jump tables; but the VM has a different architecture than
             // the present one.
-            vmdispatch(op.op)
+            vmdispatch(proc->body[pc].op)
             {
             vmcase(IL_invalid)
                     pc++;
@@ -1556,10 +1565,10 @@ public:
                 vmbreak;
             vmcase(IL_call)
                 {
-                    ProcData* pd = getProc(module, op.arg.value<MilQuali>());
+                    ProcData* pd = getProc(module, proc->body[pc].arg.value<MilQuali>());
                     if( pd == 0 )
                         execError(module, proc, pc, QString("cannot resolve procedure %1").
-                                  arg(MilEmitter::toString(op.arg.value<MilQuali>()).constData()));
+                                  arg(MilEmitter::toString(proc->body[pc].arg.value<MilQuali>()).constData()));
                     makeCall(stack, pd->proc, pd->module);
                 }
                 pc++;
@@ -1581,7 +1590,7 @@ public:
                 vmbreak;
             vmcase(IL_callvirt)
                 {
-                    MilTrident tri = op.arg.value<MilTrident>();
+                    MilTrident tri = proc->body[pc].arg.value<MilTrident>();
                     FlattenedType* rec = getFlattenedType(module, tri.first);
                     if( rec == 0 )
                         execError(module, proc, pc, "invalid object type");
@@ -1734,7 +1743,7 @@ public:
                         stack.push_back(MemSlot(0)); // IS of null is false
                     else
                     {
-                        MilQuali q = op.arg.value<MilQuali>();
+                        MilQuali q = proc->body[pc].arg.value<MilQuali>();
                         FlattenedType* reftype = getFlattenedType(module, q);
                         if( reftype == 0 )
                             execError(module, proc, pc, "invalid reference object type");
@@ -1746,7 +1755,7 @@ public:
                 vmbreak;
             vmcase(IL_ldarg)
             vmcase(IL_ldarg_s)
-                stack.push_back(args.at(op.arg.toUInt()));
+                stack.push_back(args.at(proc->body[pc].arg.toUInt()));
                 pc++;
                 vmbreak;
             vmcase(IL_ldarg_0)
@@ -1767,24 +1776,24 @@ public:
                 vmbreak;
             vmcase(IL_ldarga)
             vmcase(IL_ldarga_s)
-                stack.push_back(&args[op.arg.toUInt()]);
+                stack.push_back(&args[proc->body[pc].arg.toUInt()]);
                 pc++;
                 vmbreak;
             vmcase(IL_ldc_i4)
             vmcase(IL_ldc_i4_s)
-                stack.push_back(MemSlot(op.arg.toLongLong(),true));
+                stack.push_back(MemSlot(proc->body[pc].arg.toLongLong(),true));
                 pc++;
                 vmbreak;
             vmcase(IL_ldc_i8)
-                stack.push_back(MemSlot(op.arg.toLongLong()));
+                stack.push_back(MemSlot(proc->body[pc].arg.toLongLong()));
                 pc++;
                 vmbreak;
             vmcase(IL_ldc_r4)
-                stack.push_back(MemSlot(op.arg.toDouble(),true));
+                stack.push_back(MemSlot(proc->body[pc].arg.toDouble(),true));
                 pc++;
                 vmbreak;
             vmcase(IL_ldc_r8)
-                stack.push_back(MemSlot(op.arg.toDouble(),false));
+                stack.push_back(MemSlot(proc->body[pc].arg.toDouble(),false));
                 pc++;
                 vmbreak;
             vmcase(IL_ldc_i4_0)
@@ -1828,7 +1837,7 @@ public:
                 pc++;
                 vmbreak;
             vmcase(IL_ldobj)
-                mo = op.arg.value<MilObject>();
+                mo = proc->body[pc].arg.value<MilObject>();
                 convert(lhs, mo.data);
                 stack.push_back(MemSlot());
                 stack.back().move(lhs);
@@ -1857,9 +1866,9 @@ public:
                 // TODO: bounds check
                 if( rhs.i < 0 )
                     execError(module,proc,pc,"index out of lower bound");
-                if( op.op == IL_ldelem )
+                if( proc->body[pc].op == IL_ldelem )
                 {
-                    FlattenedType* ety = getFlattenedType(module, op.arg.value<MilQuali>());
+                    FlattenedType* ety = getFlattenedType(module, proc->body[pc].arg.value<MilQuali>());
                     if( ety && ety->len )
                         rhs.u *= ety->len; // multi-dim elem types are here by value
                     boundsCheck(module,proc,pc,lhs.p,rhs.u);
@@ -1888,7 +1897,7 @@ public:
                     execError(module, proc, pc, "invalid array");
                 if( !lhs.embedded && lhs.p->t == MemSlot::Array )
                     lhs.p = lhs.p->p;
-                MilQuali ety = op.arg.value<MilQuali>();
+                MilQuali ety = proc->body[pc].arg.value<MilQuali>();
                 FlattenedType* ty = getFlattenedType(module, ety);
                 if( ty && ty->len )
                     rhs.u *= ty->len; // multi-dim elem types are all in the same flattened array
@@ -1912,7 +1921,7 @@ public:
                     execError(module, proc, pc, "invalid record or field");
                 if( !lhs.embedded && lhs.p->t == MemSlot::Record )
                     lhs.p = lhs.p->p;
-                MilTrident tri = op.arg.value<MilTrident>();
+                MilTrident tri = proc->body[pc].arg.value<MilTrident>();
                 FlattenedType* rec = getFlattenedType(module, tri.first);
                 if( rec == 0 )
                     execError(module, proc, pc, "invalid record or union type");
@@ -1920,15 +1929,15 @@ public:
                 if( field == 0 )
                     execError(module, proc, pc, "unknown field");
                 FlattenedType* ft = getFlattenedType(module, field->type);
-                boundsCheck(module,proc,pc,lhs.p,op.index);
+                boundsCheck(module,proc,pc,lhs.p,proc->body[pc].index);
                 if( ft && !ft->fields.isEmpty() )
                 {
                     // embedded struct by value
                     stack.push_back(MemSlot());
-                    boundsCheck(module,proc,pc,lhs.p,op.index+ft->fields.size()-1);
-                    stack.back().copyOf(lhs.p, op.index, ft->fields.size(), true);
+                    boundsCheck(module,proc,pc,lhs.p,proc->body[pc].index+ft->fields.size()-1);
+                    stack.back().copyOf(lhs.p, proc->body[pc].index, ft->fields.size(), true);
                 }else
-                    stack.push_back(lhs.p[op.index]);
+                    stack.push_back(lhs.p[proc->body[pc].index]);
                 pc++;
                 vmbreak;
             }
@@ -1939,7 +1948,7 @@ public:
                     execError(module, proc, pc, "invalid record or field");
                 if( !lhs.embedded && lhs.p->t == MemSlot::Record )
                     lhs.p = lhs.p->p;
-                MilTrident tri = op.arg.value<MilTrident>();
+                MilTrident tri = proc->body[pc].arg.value<MilTrident>();
                 FlattenedType* rec = getFlattenedType(module, tri.first);
                 if( rec == 0 )
                     execError(module, proc, pc, "invalid record or union type");
@@ -1947,8 +1956,8 @@ public:
                 if( field == 0 )
                     execError(module, proc, pc, "unknown field");
                 FlattenedType* ft = getFlattenedType(module, field->type);
-                boundsCheck(module,proc,pc,lhs.p,op.index);
-                stack.push_back(&lhs.p[op.index]);
+                boundsCheck(module,proc,pc,lhs.p,proc->body[pc].index);
+                stack.push_back(&lhs.p[proc->body[pc].index]);
                 /* if the struct/union has embedded structs/unions and the (flattened) field pointed to is an
                  * embedded array, the pointer is ambigous, i.e. we don't know if the actual target of the
                  * pointer is represented by the SlotPtr on the stack, or the SeqVal pointed to by the SlotPtr.
@@ -1979,12 +1988,12 @@ public:
                 vmbreak;
             vmcase(IL_ldloc)
             vmcase(IL_ldloc_s)
-                stack.push_back(locals.at(op.arg.toUInt()));
+                stack.push_back(locals.at(proc->body[pc].arg.toUInt()));
                 pc++;
                 vmbreak;
             vmcase(IL_ldloca)
             vmcase(IL_ldloca_s)
-                stack.push_back(&locals[op.arg.toUInt()]);
+                stack.push_back(&locals[proc->body[pc].arg.toUInt()]);
                 pc++;
                 vmbreak;
             vmcase(IL_ldloc_0)
@@ -2010,11 +2019,11 @@ public:
                         execError(module, proc, pc, "invalid pointer to object");
                     if( (lhs.p->t != MemSlot::Record) || lhs.p->p == 0 || lhs.p->p->t != MemSlot::TypeTag )
                         execError(module, proc, pc, "invalid record");
-                    if( op.index >= lhs.p->p->tt->vtable.size() )
+                    if( proc->body[pc].index >= lhs.p->p->tt->vtable.size() )
                         execError(module, proc, pc, "invalid vtable index");
                     MethRef* m = new MethRef();
                     m->obj = lhs.p;
-                    m->proc = &lhs.p->p->tt->vtable[op.index];
+                    m->proc = &lhs.p->p->tt->vtable[proc->body[pc].index];
                     stack.push_back(MemSlot(m));
                 }
                 pc++;
@@ -2033,7 +2042,7 @@ public:
                  * "embedded" */
                 if( lhs.embedded )
                 {
-                    MilQuali q = op.arg.value<MilQuali>();
+                    MilQuali q = proc->body[pc].arg.value<MilQuali>();
                     if( q.second.isEmpty() )
                     {
                         // we expect an intrinsic string on the stack
@@ -2064,26 +2073,26 @@ public:
                 pc++;
                 vmbreak;
             vmcase(IL_ldproc)
-                stack.push_back(MemSlot(getProc(module,op.arg.value<MilQuali>())));
+                stack.push_back(MemSlot(getProc(module,proc->body[pc].arg.value<MilQuali>())));
                 pc++;
                 vmbreak;
             vmcase(IL_ldstr) {
-                MemSlot* str = internalize(op.arg.toByteArray());
+                MemSlot* str = internalize(proc->body[pc].arg.toByteArray());
                 stack.push_back(str);
                 stack.back().embedded = true; // the SeqPtr on the stack points directly to the string value
                 pc++;
                 vmbreak;
             }
             vmcase(IL_ldvar)
-                if( module->variables.size() <= op.index )
+                if( module->variables.size() <= proc->body[pc].index )
                     execError(module, proc, pc, "invalid variable reference");
-                stack.push_back(module->variables.at(op.index));
+                stack.push_back(module->variables.at(proc->body[pc].index));
                 pc++;
                 vmbreak;
             vmcase(IL_ldvara)
-                if( module->variables.size() <= op.index )
+                if( module->variables.size() <= proc->body[pc].index )
                     execError(module, proc, pc, "invalid variable reference");
-                stack.push_back(&module->variables[op.index]);
+                stack.push_back(&module->variables[proc->body[pc].index]);
                 pc++;
                 vmbreak;
             vmcase(IL_mul)
@@ -2126,7 +2135,7 @@ public:
                     lhs = stack.takeLast();
                     if( lhs.u == 0 )
                         execError(module, proc, pc, "invalid array size");
-                    MilQuali ety = op.arg.value<MilQuali>();
+                    MilQuali ety = proc->body[pc].arg.value<MilQuali>();
                     FlattenedType* ty = getFlattenedType(module, ety);
                     // multi-dim arrays are flattened
                     MemSlot* array = createSequence(lhs.u * ( ty && ty->len ? ty->len : 1 ) );
@@ -2137,7 +2146,7 @@ public:
                 vmbreak;
             vmcase(IL_newobj)
                 {
-                    const MilQuali q = op.arg.value<MilQuali>();
+                    const MilQuali q = proc->body[pc].arg.value<MilQuali>();
                     FlattenedType* ty = getFlattenedType(module, q);
                     if( ty == 0 )
                         execError(module, proc, pc, QString("unknown type '%1'").
@@ -2306,15 +2315,15 @@ public:
                 if( curStatement.isEmpty() || curStatement.back() != IL_loop )
                     execError(module, proc, pc, "operation not allowed here");
                 curStatement.pop_back();
-                pc = op.index;
+                pc = proc->body[pc].index;
                 vmbreak;
             vmcase(IL_goto)
-                pc = op.index;
+                pc = proc->body[pc].index;
                 vmbreak;
             vmcase(IL_ifgoto)
                 lhs = stack.takeLast();
                 if( lhs.u )
-                    pc = op.index;
+                    pc = proc->body[pc].index;
                 else
                     pc++;
                 vmbreak;
@@ -2333,7 +2342,7 @@ public:
                 {
                     lhs = stack.takeLast();
                     if( lhs.u == 0 )
-                        pc = op.index; // jump to else+1 or end
+                        pc = proc->body[pc].index; // jump to else+1 or end
                     else
                         pc++;
                 }else // we never execute then in a switch statement
@@ -2345,11 +2354,11 @@ public:
                 if( curStatement.back() == IL_switch )
                 {
                     if( switchExpr.back().t == MemSlot::Procedure )
-                        pc = op.index; // done, else points to end
+                        pc = proc->body[pc].index; // done, else points to end
                     else
                         pc++; // execute else
                 }else if( curStatement.back() == IL_if || curStatement.back() == IL_iif )
-                    pc = op.index; // else points to end, only hit after then is executed
+                    pc = proc->body[pc].index; // else points to end, only hit after then is executed
                 vmbreak;
             vmcase(IL_end)
                 if( curStatement.isEmpty() )
@@ -2366,8 +2375,8 @@ public:
                     }
                 }else if( curStatement.back() == IL_switch )
                     switchExpr.pop_back();
-                if( op.index )
-                    pc = op.index;
+                if( proc->body[pc].index )
+                    pc = proc->body[pc].index;
                 else
                 {
                     curStatement.pop_back();
@@ -2411,7 +2420,7 @@ public:
 
             vmcase(IL_starg)
             vmcase(IL_starg_s)
-                storeVariable(module, proc, args[op.arg.toUInt()], stack.back());
+                storeVariable(module, proc, args[proc->body[pc].arg.toUInt()], stack.back());
                 stack.pop_back();
                 pc++;
                 vmbreak;
@@ -2434,9 +2443,9 @@ public:
                         execError(module, proc, pc, "invalid index type");
                     if( rhs.i < 0 )
                         execError(module, proc, pc, "index out of lower bound");
-                    if( op.op == IL_stelem )
+                    if( proc->body[pc].op == IL_stelem )
                     {
-                        MilQuali ety = op.arg.value<MilQuali>();
+                        MilQuali ety = proc->body[pc].arg.value<MilQuali>();
                         FlattenedType* ty = getFlattenedType(module, ety);
                         if( ty && ty->len )
                             index.u *= ty->len; // multi-dim elem types are here by value
@@ -2485,7 +2494,7 @@ public:
                 vmbreak;
             vmcase(IL_stloc)
             vmcase(IL_stloc_s)
-                storeVariable(module, proc, locals[op.arg.toUInt()], stack.back());
+                storeVariable(module, proc, locals[proc->body[pc].arg.toUInt()], stack.back());
                 stack.pop_back();
                 pc++;
                 vmbreak;
@@ -2521,7 +2530,7 @@ public:
                 pc++;
                 vmbreak;
             vmcase(IL_stvar)
-                storeVariable(module, proc, module->variables[op.index], stack.back());
+                storeVariable(module, proc, module->variables[proc->body[pc].index], stack.back());
                 stack.pop_back();
                 pc++;
                 vmbreak;
@@ -2544,12 +2553,12 @@ public:
                     switchExpr.back() = stack.takeLast();
                 if( switchExpr.back().t != MemSlot::I )
                     execError(module, proc, pc+1, "switch expression has invalid type");
-                if( op.arg.value<CaseLabelList>().contains( switchExpr.back().i ) )
+                if( proc->body[pc].arg.value<CaseLabelList>().contains( switchExpr.back().i ) )
                 {
                     switchExpr.back().t = MemSlot::Procedure; // mark as done
                     pc += 2; // skip then
                 }else
-                    pc = op.index;
+                    pc = proc->body[pc].index;
                 vmbreak;
             vmcase(IL_while) // while(1) do(1) end(5)
                 curStatement.push_back(IL_while);
@@ -2560,15 +2569,17 @@ public:
                 if( lhs.u == 0 )
                 {
                     curStatement.pop_back();
-                    pc = op.index; // jump to end+1
+                    pc = proc->body[pc].index; // jump to end+1
                 }else
                     pc++;
                 vmbreak;
             vmcase(IL_nop)
                 pc++;
                 vmbreak;
+#ifndef _USE_JUMP_TABLE
             default:
-                throw QString("operator not implemented: %1").arg(s_opName[op.op]);
+                throw QString("operator not implemented: %1").arg(s_opName[proc->body[pc].op]);
+#endif
             }
         }
     }
