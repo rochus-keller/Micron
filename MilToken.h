@@ -26,6 +26,8 @@
 
 namespace Mil
 {
+    using Mic::RowCol;
+
     struct Token
     {
 #ifdef _DEBUG
@@ -57,7 +59,7 @@ namespace Mil
         bool isEof() const;
         const char* getName() const;
         const char* getString() const;
-        Mic::RowCol toRowCol() const { return Mic::RowCol(d_lineNr,d_colNr); }
+        RowCol toRowCol() const { return RowCol(d_lineNr,d_colNr); }
         Mic::Loc toLoc() const { return Mic::Loc(d_lineNr,d_colNr,d_sourcePath); }
         static QByteArray getSymbol( const QByteArray& );
     };

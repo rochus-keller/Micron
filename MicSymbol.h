@@ -1,5 +1,8 @@
+#ifndef MICSYMBOL_H
+#define MICSYMBOL_H
+
 /*
-* Copyright 2024 Rochus Keller <mailto:me@rochus-keller.ch>
+* Copyright 2025 Rochus Keller <mailto:me@rochus-keller.ch>
 *
 * This file is part of the Micron language project.
 *
@@ -17,32 +20,16 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
-#include "MicToken.h"
-#include "MicSymbol.h"
-using namespace Mic;
+#include <QByteArray>
 
-bool Token::isValid() const
+namespace Mic
 {
-    return d_type != Tok_Eof && d_type != Tok_Invalid;
+class Symbol
+{
+public:
+    Symbol();
+    static QByteArray getSymbol( const QByteArray& );
+};
 }
 
-bool Token::isEof() const
-{
-    return d_type == Tok_Eof;
-}
-
-const char*Token::getName() const
-{
-    return tokenTypeName( d_type );
-}
-
-const char*Token::getString() const
-{
-    return tokenTypeString(d_type);
-}
-
-QByteArray Token::getSymbol(const QByteArray& str)
-{
-    return Symbol::getSymbol(str);
-}
-
+#endif // MICSYMBOL_H

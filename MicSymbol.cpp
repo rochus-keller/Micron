@@ -1,5 +1,5 @@
 /*
-* Copyright 2024 Rochus Keller <mailto:me@rochus-keller.ch>
+* Copyright 2025 Rochus Keller <mailto:me@rochus-keller.ch>
 *
 * This file is part of the Micron language project.
 *
@@ -17,32 +17,23 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
-#include "MicToken.h"
 #include "MicSymbol.h"
+#include <QHash>
 using namespace Mic;
 
-bool Token::isValid() const
+static QHash<QByteArray,QByteArray> d_symbols;
+
+Symbol::Symbol()
 {
-    return d_type != Tok_Eof && d_type != Tok_Invalid;
+
 }
 
-bool Token::isEof() const
+QByteArray Symbol::getSymbol(const QByteArray& str)
 {
-    return d_type == Tok_Eof;
+    if( str.isEmpty() )
+        return str;
+    QByteArray& sym = d_symbols[str];
+    if( sym.isEmpty() )
+        sym = str;
+    return sym;
 }
-
-const char*Token::getName() const
-{
-    return tokenTypeName( d_type );
-}
-
-const char*Token::getString() const
-{
-    return tokenTypeString(d_type);
-}
-
-QByteArray Token::getSymbol(const QByteArray& str)
-{
-    return Symbol::getSymbol(str);
-}
-

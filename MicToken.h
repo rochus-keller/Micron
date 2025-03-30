@@ -53,7 +53,6 @@ namespace Mic
         const char* getString() const;
         RowCol toRowCol() const { return RowCol(d_lineNr,d_colNr); }
         Loc toLoc() const { return Loc(d_lineNr,d_colNr,d_sourcePath); }
-
         static QByteArray getSymbol( const QByteArray& );
     };
 

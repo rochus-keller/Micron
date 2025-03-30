@@ -176,7 +176,7 @@ namespace Mic
         enum TypeKind { Invalid, Struct, Union, Object, ProcType, MethType, Alias, Pointer, Array, Generic, MaxType };
         void beginType(const QByteArray& name, bool isPublic = true, quint8 typeKind = Struct,
                        const MilQuali& super = MilQuali() );
-            // use for Struct, Union, ProcType, MethType
+            // use for Struct, Union, Object, ProcType, MethType
             // supports addField, addArgument, setReturnType, setVararg depending on typeKind
         void endType();
 

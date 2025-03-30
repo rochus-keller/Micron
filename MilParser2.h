@@ -21,6 +21,7 @@
 */
 
 #include <Micron/MilToken.h>
+#include <Micron/MilAst.h>
 #include <QList>
 
 namespace Mil {
@@ -29,12 +30,17 @@ namespace Mil {
 	public:
 		virtual Token next() = 0;
 		virtual Token peek(int offset) = 0;
+        virtual QString sourcePath() const = 0;
 	};
 
 	class Parser2 {
 	public:
-		Parser2(Scanner2* s):scanner(s) {}
-		void RunParser();
+        Parser2(AstModel* m, Scanner2* s, Importer* imp);
+        ~Parser2();
+
+        bool parseModule(); // true: module found, false: no module found
+        Declaration* takeModule(); // get module declaration and take ownership (otherwise deleted by parser)
+
 		struct Error {
 		    QString msg;
 		    int row, col;
@@ -43,62 +49,75 @@ namespace Mil {
 		};
 		QList<Error> errors;
 	protected:
-		void Mil();
-		void integer();
-		void number();
-		void qualident();
-		void trident();
-		void identdef();
+        qint64 integer();
+        void number(Constant* c);
+        Declaration* qualident(Quali* = 0);
+        Declaration* trident();
+        Declaration* identdef();
 		void ConstDeclaration();
 		void TypeDeclaration();
-		void type();
-		void NamedType();
-		void ArrayType();
-		void length();
-		void StructUnionType();
+        Type* type();
+        Type* NamedType(bool allowAny = false);
+        Type* ArrayType();
+        quint32 length();
+        Type* StructUnionType();
 		void FieldList();
-		void IdentList();
-		void ObjectType();
+        DeclList IdentList();
+        Type* ObjectType();
 		void MemberList();
-		void PointerType();
-		void ProcedureType();
+        Type* PointerType();
+        Type* ProcedureType();
 		void VariableDeclaration();
 		void ProcedureDeclaration();
-		void Binding();
-		void ProcedureBody();
+        QByteArray Binding();
+        void ProcedureBody(Declaration* proc);
 		void LocalDeclaration();
-		void FormalParameters();
-		void ReturnType();
+        Type* FormalParameters();
+        Type* ReturnType();
 		void FPSection();
 		void module();
 		void ImportList();
 		void import();
 		void DeclarationSequence();
-		void Expression();
-		void ExpInstr();
-		void CondOp();
-		void StatementSequence();
-		void Statement();
-		void IfThenElse();
-		void Loop();
-		void Switch();
-		void RepeatUntil();
-		void WhileDo();
+        Expression* Expression_();
+        Expression* ExpInstr();
+        Statement* StatementSequence();
+        Statement* Statement_();
+        Statement* IfThenElse();
+        Statement* Loop();
+        Statement* Switch();
+        Statement* RepeatUntil();
+        Statement* WhileDo();
 		void MetaActuals();
 		void MetaParams();
-		void ConstExpression();
-		void ConstExpression2();
-		void constructor();
-		void component_list();
-		void component();
+        Constant* ConstExpression();
+        Constant* ConstExpression2();
+        Constant* constructor();
+        ComponentList* component_list();
+        Component* component();
+        quint32 numberOrIdent(bool param); // param or local var
+
 	protected:
-		Token cur;
-		Token la;
-		Scanner2* scanner;
 		void next();
 		Token peek(int off);
 		void invalid(const char* what);
 		bool expect(int tt, bool pkw, const char* where);
+        void error( const Token&, const QString& msg);
+        void error( const RowCol&, const QString& msg );
+        Declaration* addDecl(const Token& id, bool public_ = false);
+        Declaration* addDecl(const QByteArray& name, const RowCol& pos, bool public_ = false);
+        Declaration* qualident2(const Quali& q, const RowCol& pos);
+
+    private:
+        AstModel* mdl;
+        Importer* imp;
+        Token cur;
+        Token la;
+        Scanner2* scanner;
+        QList<Declaration*> scopeStack;
+        QList<Type*> unresolved;
+        Declaration* curMod;
+        bool firstModule;
 	};
 }
 #endif // include

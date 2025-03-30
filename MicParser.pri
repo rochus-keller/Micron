@@ -11,7 +11,8 @@ SOURCES += \
     MicMilOp.cpp \
     MicEvaluator.cpp \
     $$PWD/MicMilLoader.cpp \
-    $$PWD/MicBuiltins.cpp
+    $$PWD/MicBuiltins.cpp \
+    MicSymbol.cpp
 
 HEADERS += \
     MicLexer.h \
@@ -25,5 +26,6 @@ HEADERS += \
     MicMilOp.h \
     MicEvaluator.h \
     $$PWD/MicMilLoader.h \
-    $$PWD/MicBuiltins.h
+    $$PWD/MicBuiltins.h \
+    MicSymbol.h
 

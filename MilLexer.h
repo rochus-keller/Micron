@@ -50,6 +50,7 @@ namespace Mil
         QList<Token> tokens( const QString& code );
         QList<Token> tokens( const QByteArray& code, const QString& path = QString() );
         quint32 getSloc() const { return d_sloc; }
+        QString getSourcePath() const { return d_sourcePath; }
 
         static void parseComment( const QByteArray& str, int& pos, int& level );
     protected:

@@ -1621,7 +1621,13 @@ void Parser2::emitType(Type* t, const Quali& q)
                 out->addField(field->name,ev->toQuali(field->getType()),field->isPublic(),field->id);
         }else if( t->kind == Type::Object )
         {
-            out->beginType(ev->toQuali(t).second,t->decl->isPublic(), MilEmitter::Object );
+            Type* base = t->getType();
+            if( base && base->kind == Type::Pointer )
+                base = base->getType();
+            MilQuali super;
+            if( base )
+                super = ev->toQuali(base);
+            out->beginType(ev->toQuali(t).second,t->decl->isPublic(), MilEmitter::Object, super );
             foreach( Declaration* field, t->subs )
                 out->addField(field->name,ev->toQuali(field->getType()),field->isPublic(),field->id);
         }else
@@ -3817,7 +3823,7 @@ void Parser2::module() {
                    la.d_type == Tok_TYPE || la.d_type == Tok_VAR || la.d_type == Tok_CONST ||
                    la.d_type == Tok_IMPORT || la.d_type == Tok_END || la.d_type == Tok_PROCEDURE ||
                    la.d_type == Tok_PROC ) {
-			DeclarationSequence();
+            DeclarationSequence();
 		} else
 			invalid("module");
 	}

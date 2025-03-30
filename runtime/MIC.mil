@@ -1,0 +1,21 @@
+module $MIC
+
+type $1 = array of char
+type $2 = pointer to $1
+proc relop1(lhs, rhs: $2; op: i4) extern // 1
+proc relop2(lhs: $2; rhs: char; op: i4) extern // 2
+proc relop3(lhs: char; rhs: $2; op: i4) extern // 3
+proc relop4(lhs, rhs: char; op: i4) extern // 4
+proc SetDiv( lhs, rhs: u4 ): u4 extern // 5
+proc SetIn( lhs, rhs: u4 ): u4 extern // 6
+proc printI8(i: i8) extern // 7
+proc printU8(u: u8) extern // 8
+proc printF8(f: r8) extern // 9
+proc printStr(s: $2) extern // 10
+proc printCh(c: char) extern // 11
+proc printBool(b: u1) extern // 12
+proc printSet(s: u4) extern // 13
+proc strcopy(lhs, rhs: $2) extern // 14
+proc assert(cond: u1; line: u4; file: $2) extern // 15
+
+end $MIC

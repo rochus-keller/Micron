@@ -1,5 +1,5 @@
 /*
-* Copyright 2024 Rochus Keller <mailto:me@rochus-keller.ch>
+* Copyright 2025 Rochus Keller <mailto:me@rochus-keller.ch>
 *
 * This file is part of the Micron language project.
 *
@@ -17,32 +17,27 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
-#include "MicToken.h"
-#include "MicSymbol.h"
-using namespace Mic;
+#include <QCoreApplication>
+#include <QFileInfo>
+#include "MilProject.h"
 
-bool Token::isValid() const
+
+int main(int argc, char *argv[])
 {
-    return d_type != Tok_Eof && d_type != Tok_Invalid;
-}
+    QCoreApplication a(argc, argv);
 
-bool Token::isEof() const
-{
-    return d_type == Tok_Eof;
-}
+    if( a.arguments().size() <= 1 )
+        return -1;
 
-const char*Token::getName() const
-{
-    return tokenTypeName( d_type );
-}
+    Mil::AstModel mdl;
+    Mil::Project pro(&mdl);
+    QFileInfo info(a.arguments()[1]);
+    if( info.isDir() )
+        pro.collectFilesFrom(info.filePath());
+    else
+        pro.setFiles(QStringList() << info.filePath());
 
-const char*Token::getString() const
-{
-    return tokenTypeString(d_type);
-}
+    pro.parse();
 
-QByteArray Token::getSymbol(const QByteArray& str)
-{
-    return Symbol::getSymbol(str);
+    return 0;
 }
-

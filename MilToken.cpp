@@ -18,10 +18,8 @@
 */
 
 #include "MilToken.h"
-#include <QHash>
+#include "MicSymbol.h"
 using namespace Mil;
-
-QHash<QByteArray,QByteArray> s_symbols;
 
 bool Token::isValid() const
 {
@@ -45,10 +43,5 @@ const char*Token::getString() const
 
 QByteArray Token::getSymbol(const QByteArray& str)
 {
-    if( str.isEmpty() )
-        return str;
-    QByteArray& sym = s_symbols[str];
-    if( sym.isEmpty() )
-        sym = str;
-    return sym;
+    return Mic::Symbol::getSymbol(str);
 }

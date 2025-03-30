@@ -1340,7 +1340,7 @@ void IlAsmRenderer::render(const MilProcedure& m)
 {
     State old = state;
 
-    if( m.kind == MilProcedure::ProcType || m.kind == MilProcedure::MethType || m.kind == MilProcedure::Extern )
+    if( m.kind == MilProcedure::ProcType || m.kind == MilProcedure::MethType )
     {
         out << ws() << "type " << m.name;
         if( m.isPublic )
