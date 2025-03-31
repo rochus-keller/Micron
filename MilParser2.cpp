@@ -774,26 +774,36 @@ void Parser2::error(const Mic::RowCol& pos, const QString& msg)
     errors << Error(msg, pos.d_row, pos.d_col, scanner->sourcePath());
 }
 
-Declaration*Parser2::addDecl(const Token& id, bool public_)
+Declaration*Parser2::addDecl(const Token& id, Declaration::Kind k, bool public_)
 {
-    return addDecl(id.d_val, id.toRowCol(), public_);
+    return addDecl(id.d_val, id.toRowCol(), k, public_);
 }
 
-Declaration*Parser2::addDecl(const QByteArray& name, const Mic::RowCol& pos, bool public_)
+Declaration*Parser2::addDecl(const QByteArray& name, const Mic::RowCol& pos, Declaration::Kind k, bool public_)
 {
+    Declaration* forward = 0;
     if( !scopeStack.isEmpty() && !name.isEmpty() ) // don't check anonymous fields
     {
         Declaration* d = scopeStack.back()->findSubByName(name);
         if( d )
         {
-            error(pos, QString("name not unique in scope: '%1'").arg(name.constData()));
-            return 0;
+            if( k == Declaration::Procedure && d->forward )
+            {
+                forward = d;
+                d->name.clear();
+            }else
+            {
+                error(pos, QString("name not unique in scope: '%1'").arg(name.constData()));
+                return 0;
+            }
         }
     }
     Declaration* res = new Declaration();
+    res->kind = k;
     res->name = name;
     res->pos = pos;
     res->public_ = public_;
+    res->forwardTo = forward;
     if( !scopeStack.isEmpty() )
     {
         res->outer = scopeStack.back();
@@ -930,9 +940,9 @@ Declaration* Parser2::trident() {
     return f;
 }
 
-Declaration* Parser2::identdef() {
+Declaration* Parser2::identdef(Declaration::Kind k) {
 	expect(Tok_ident, false, "identdef");
-    Declaration* d = addDecl(cur);
+    Declaration* d = addDecl(cur, k);
     if( d == 0 )
         return 0;
 	if( la.d_type == Tok_Star ) {
@@ -944,10 +954,9 @@ Declaration* Parser2::identdef() {
 
 void Parser2::ConstDeclaration() {
 	expect(Tok_ident, false, "ConstDeclaration");
-    Declaration* d = addDecl(cur);
+    Declaration* d = addDecl(cur, Declaration::ConstDecl);
     if( d == 0 )
         return;
-    d->kind = Declaration::ConstDecl;
 	if( la.d_type == Tok_Eq || la.d_type == Tok_Colon ) {
 		if( la.d_type == Tok_Eq ) {
 			expect(Tok_Eq, false, "ConstDeclaration");
@@ -964,10 +973,9 @@ void Parser2::ConstDeclaration() {
 }
 
 void Parser2::TypeDeclaration() {
-    Declaration* d = identdef();
+    Declaration* d = identdef(Declaration::TypeDecl);
     if( d == 0 )
         return;
-    d->kind = Declaration::TypeDecl;
     if( la.d_type == Tok_Eq )
     {
 		expect(Tok_Eq, false, "TypeDeclaration");
@@ -1100,7 +1108,7 @@ Type* Parser2::StructUnionType() {
 
 void Parser2::FieldList() {
 	if( FIRST_IdentList(la.d_type) ) {
-        DeclList fields = IdentList();
+        DeclList fields = IdentList(Declaration::Field);
 		expect(Tok_Colon, false, "FieldList");
         Type* t = NamedType();
         quint8 bw = 0;
@@ -1115,7 +1123,6 @@ void Parser2::FieldList() {
         }
         foreach( Declaration* field, fields )
         {
-            field->kind = Declaration::Field;
             field->setType(t);
             field->f.bw = bw;
         }
@@ -1125,22 +1132,21 @@ void Parser2::FieldList() {
         const quint64 tmp = cur.d_val.toULongLong();
         if( tmp > 255 )
             error(cur, "bitwidth of padding field too large");
-        Declaration* padding = addDecl("", cur.toRowCol());
-        padding->kind = Declaration::Field;
+        Declaration* padding = addDecl("", cur.toRowCol(), Declaration::Field);
         padding->anonymous = true;
         padding->f.bw = tmp;
     } else
 		invalid("FieldList");
 }
 
-DeclList Parser2::IdentList() {
+DeclList Parser2::IdentList(Declaration::Kind k) {
     DeclList res;
-    res << identdef();
+    res << identdef(k);
 	while( la.d_type == Tok_Comma || FIRST_identdef(la.d_type) ) {
 		if( la.d_type == Tok_Comma ) {
 			expect(Tok_Comma, false, "IdentList");
 		}
-        res << identdef();
+        res << identdef(k);
 	}
     return res;
 }
@@ -1179,14 +1185,11 @@ Type* Parser2::ObjectType() {
 }
 
 void Parser2::MemberList() {
-    DeclList fields = IdentList();
+    DeclList fields = IdentList(Declaration::Field);
 	expect(Tok_Colon, false, "MemberList");
     Type* t = NamedType();
     foreach( Declaration* field, fields )
-    {
-        field->kind = Declaration::Field;
         field->setType(t);
-    }
 }
 
 Type* Parser2::PointerType() {
@@ -1228,14 +1231,11 @@ Type* Parser2::ProcedureType() {
 }
 
 void Parser2::VariableDeclaration() {
-    DeclList l = IdentList();
+    DeclList l = IdentList(Declaration::VarDecl);
 	expect(Tok_Colon, false, "VariableDeclaration");
     Type* t = NamedType();
     foreach( Declaration* d , l)
-    {
-        d->kind = Declaration::VarDecl;
         d->setType(t);
-    }
 }
 
 void Parser2::ProcedureDeclaration() {
@@ -1253,7 +1253,7 @@ void Parser2::ProcedureDeclaration() {
         Declaration tmp;
         if( !receiver.isEmpty() )
             scopeStack.push_back(&tmp);
-        Declaration* p = identdef();
+        Declaration* p = identdef(Declaration::Procedure);
         if( !receiver.isEmpty() )
         {
             p->typebound = true;
@@ -1262,22 +1262,38 @@ void Parser2::ProcedureDeclaration() {
             if( object && object->getType() && object->getType()->kind != Type::Object )
                 error(tok, "binding doesn't reference an object type");
             else if( object && object->getType() )
-                object->getType()->subs.append(p);
+            {
+                Type* t = object->getType();
+                Declaration* forward = t->findSubByName(p->name, false);
+                if( forward && (forward->kind != Declaration::Procedure || !forward->forward) )
+                    error(tok, "method name not unique in object");
+                else if( forward )
+                {
+                    forward->name.clear();
+                    forward->forwardTo = p;
+                }
+                t->subs.append(p);
+            }
         }
 
         scopeStack.push_back(p);
-        p->kind = Declaration::Procedure;
 		if( FIRST_FormalParameters(la.d_type) ) {
             p->setType(FormalParameters());
 		}
 		if( la.d_type == Tok_Semi ) {
 			expect(Tok_Semi, false, "ProcedureDeclaration");
 		}
-        ProcedureBody(p);
+        if( la.d_code == Tok_FORWARD ) {
+            if( la.d_type == Tok_Semi ) {
+                expect(Tok_Semi, false, "ProcedureDeclaration");
+            }
+            expect(Tok_FORWARD, true, "ProcedureDeclaration");
+            p->forward = true;
+        }else
+            ProcedureBody(p);
         scopeStack.pop_back();
 	} else if( FIRST_identdef(la.d_type) ) {
-        Declaration* p = identdef();
-        p->kind = Declaration::Procedure;
+        Declaration* p = identdef(Declaration::Procedure);
         scopeStack.push_back(p);
         if( FIRST_FormalParameters(la.d_type) ) {
             p->setType(FormalParameters());
@@ -1313,7 +1329,13 @@ void Parser2::ProcedureDeclaration() {
 				expect(Tok_ident, false, "ProcedureDeclaration");
 			}
 #endif
-		} else
+        } else if( la.d_code == Tok_FORWARD || ( la.d_type == Tok_Semi && peek(2).d_code == Tok_FORWARD ) ) {
+            if( la.d_type == Tok_Semi ) {
+                expect(Tok_Semi, false, "ProcedureDeclaration");
+            }
+            expect(Tok_FORWARD, true, "ProcedureDeclaration");
+            p->forward = true;
+        } else
 			invalid("ProcedureDeclaration");
         scopeStack.pop_back();
 	} else
@@ -1346,14 +1368,11 @@ void Parser2::ProcedureBody(Declaration* proc) {
 }
 
 void Parser2::LocalDeclaration() {
-    DeclList l = IdentList();
+    DeclList l = IdentList(Declaration::LocalDecl);
 	expect(Tok_Colon, false, "LocalDeclaration");
     Type* t = NamedType();
     foreach( Declaration* d, l )
-    {
-        d->kind = Declaration::LocalDecl;
         d->setType(t);
-    }
 }
 
 Type* Parser2::FormalParameters() {
@@ -1397,8 +1416,7 @@ void Parser2::FPSection() {
     Type* t = NamedType();
     foreach( const Token& id, ids )
     {
-        Declaration* d = addDecl(id,false);
-        d->kind = Declaration::ParamDecl;
+        Declaration* d = addDecl(id,Declaration::ParamDecl,false);
         d->setType(t);
     }
 }
@@ -1412,8 +1430,7 @@ void Parser2::module() {
         error(cur, "A module with this name already exists");
         return;
     }
-    curMod = addDecl(cur);
-    curMod->kind = Declaration::Module;
+    curMod = addDecl(cur, Declaration::Module);
     scopeStack.push_back(curMod);
 
 	if( FIRST_MetaParams(la.d_type) ) {
@@ -1472,8 +1489,7 @@ void Parser2::import() {
         MetaActuals(); // TODO
 	}
 #endif
-    Declaration* d = addDecl(cur);
-    d->kind = Declaration::Import;
+    Declaration* d = addDecl(cur, Declaration::Import);
     Import i;
     i.moduleName = cur.d_val;
     Declaration* m = imp->loadModule(i);

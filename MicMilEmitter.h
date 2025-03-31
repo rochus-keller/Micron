@@ -67,7 +67,7 @@ namespace Mic
 
     struct MilProcedure
     {
-        enum Kind { Invalid, Intrinsic, Normal, Extern, Inline, Invar, ModuleInit, ProcType, MethType };
+        enum Kind { Invalid, Intrinsic, Normal, Forward, Extern, Inline, Invar, ModuleInit, ProcType, MethType };
         uint kind : 4;
         uint isPublic : 1;
         uint isVararg : 1;

@@ -145,7 +145,7 @@ namespace Mic
         Declaration* outer; // the owning declaration to reconstruct the qualident
         QByteArray name;
         quint16 id; // used for built-in code and local/param number, and bit size of fields
-        QVariant data; // value for Const and Enum, path for Import, name for Extern
+        QVariant data; // value for Const and Enum, path for Import, name for Extern, decl for forward
         Declaration():Node(D),next(0),link(0),id(0),outer(0){}
         ~Declaration();
 

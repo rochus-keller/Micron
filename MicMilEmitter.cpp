@@ -1392,11 +1392,15 @@ void IlAsmRenderer::render(const MilProcedure& m)
     case MilProcedure::ModuleInit:
         out << " init ";
         break;
+    case MilProcedure::Forward:
+        out << " forward ";
+        break;
     }
 
     out << endl;
 
-    if(m.kind == MilProcedure::ProcType || m.kind == MilProcedure::MethType || m.kind == MilProcedure::Extern )
+    if(m.kind == MilProcedure::ProcType || m.kind == MilProcedure::MethType ||
+            m.kind == MilProcedure::Extern || m.kind == MilProcedure::Forward )
         return;
 
     if( !m.locals.isEmpty() )

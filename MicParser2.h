@@ -183,6 +183,7 @@ namespace Mic {
         void checkUnaryOp(Expression*);
         void checkRelOp(Expression*);
         void beginFinallyEnd(bool finally);
+        Declaration* ProcedureHeader(bool inForward);
 
     private:
         AstModel* mdl;

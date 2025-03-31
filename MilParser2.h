@@ -53,7 +53,7 @@ namespace Mil {
         void number(Constant* c);
         Declaration* qualident(Quali* = 0);
         Declaration* trident();
-        Declaration* identdef();
+        Declaration* identdef(Declaration::Kind k);
 		void ConstDeclaration();
 		void TypeDeclaration();
         Type* type();
@@ -62,7 +62,7 @@ namespace Mil {
         quint32 length();
         Type* StructUnionType();
 		void FieldList();
-        DeclList IdentList();
+        DeclList IdentList(Declaration::Kind k);
         Type* ObjectType();
 		void MemberList();
         Type* PointerType();
@@ -104,8 +104,8 @@ namespace Mil {
 		bool expect(int tt, bool pkw, const char* where);
         void error( const Token&, const QString& msg);
         void error( const RowCol&, const QString& msg );
-        Declaration* addDecl(const Token& id, bool public_ = false);
-        Declaration* addDecl(const QByteArray& name, const RowCol& pos, bool public_ = false);
+        Declaration* addDecl(const Token& id, Declaration::Kind, bool public_ = false);
+        Declaration* addDecl(const QByteArray& name, const RowCol& pos, Declaration::Kind, bool public_ = false);
         Declaration* qualident2(const Quali& q, const RowCol& pos);
 
     private:

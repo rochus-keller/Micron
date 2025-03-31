@@ -887,28 +887,25 @@ void Parser2::ForwardDeclaration()
 {
     procedure();
     expect(Tok_Hat, false, "ProcedureDeclaration");
-    const IdentDef id = identdef();
-    Declaration* forwardDecl = addDecl(id,Declaration::ForwardDecl);
-    mdl->openScope(forwardDecl);
-    if( FIRST_FormalParameters(la.d_type) ) {
-        forwardDecl->setType(FormalParameters());
-    }
 
+    Declaration* procDecl = ProcedureHeader(true);
+    if( procDecl == 0 )
+        return;
+    procDecl->kind = Declaration::ForwardDecl;
     mdl->closeScope();
 
-    if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR || la.d_type == Tok_EXTERN ) {
-        if( la.d_type == Tok_INLINE ) {
-            expect(Tok_INLINE, true, "ProcedureDeclaration");
-            forwardDecl->inline_ = true;
-        } else if( la.d_type == Tok_INVAR ) {
-            expect(Tok_INVAR, true, "ProcedureDeclaration");
-            forwardDecl->invar = true;
-        } else if( la.d_type == Tok_EXTERN ) {
-            expect(Tok_EXTERN, true, "ProcedureDeclaration");
-            forwardDecl->extern_ = true;
-        } else
-            invalid("ProcedureDeclaration");
-    }
+    QByteArray binding;
+    if( procDecl->typebound )
+        binding = ev->toQuali(procDecl->link->getType()->getType()).second; // receiver is always pointer to T
+    out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
+                   procDecl->visi > 0, MilProcedure::Forward, binding);
+
+    const QList<Declaration*> params = procDecl->getParams(true);
+    foreach( Declaration* p, params )
+        out->addArgument(ev->toQuali(p->getType()),p->name); // the SELF param is explicit
+    if( procDecl->getType() && procDecl->getType()->kind != Type::NoType )
+        out->setReturnType(ev->toQuali(procDecl->getType()));
+    out->endProc();
 }
 
 Expression* Parser2::number() {
@@ -3316,6 +3313,100 @@ Type* Parser2::ProcedureType() {
     return p;
 }
 
+Declaration* Parser2::ProcedureHeader(bool inForward) {
+    NameAndType receiver;
+    bool autoself = false;
+    if( FIRST_Receiver(la.d_type) ) {
+        if( langLevel < 3 )
+            error(la, "type-bound procedures not available on current language level");
+        receiver = Receiver();
+    }else if( la.d_type == Tok_ident && peek(2).d_type == Tok_Dot )
+    {
+        if( langLevel < 3 )
+            error(la, "type-bound procedures not available on current language level");
+        receiver = Receiver2();
+        autoself = true;
+    }
+
+    const IdentDef id = identdef();
+    if( !id.isValid() )
+        return 0; // invalid syntax
+
+    Declaration* forward = 0;
+
+    if( receiver.t )
+        mdl->openScope(0);
+    else
+    {
+        forward = mdl->findDecl(id.name.d_val,false);
+        if( forward && (forward->kind != Declaration::ForwardDecl || inForward) )
+        {
+            error(id.name, QString("procedure name is not unique: %1").arg(id.name.d_val.constData()) );
+            return 0;
+        }else if(forward)
+            forward->name.clear(); // make forward invisible
+    }
+    Declaration* procDecl = addDecl(id, Declaration::Procedure);
+    if( receiver.t )
+        mdl->closeScope(true);
+
+    mdl->openScope(procDecl);
+
+    if( receiver.t )
+    {
+        // add the method to the object type
+        Type* objectType = receiver.t;
+        if( objectType->kind == Type::Pointer )
+            objectType = objectType->getType();
+        forward = objectType->findSub(id.name.d_val);
+        if( forward && (forward->kind != Declaration::ForwardDecl || inForward) )
+        {
+            error(id.name, "method name not unique in object type");
+            mdl->closeScope();
+            delete procDecl;
+            return 0;
+        }else
+            forward->name.clear();
+        objectType->subs.append(procDecl);
+        Q_ASSERT(procDecl->outer == 0);
+        procDecl->outer = objectType->decl;
+        procDecl->typebound = true;
+        procDecl->autoself = autoself;
+        Declaration* param = addDecl(receiver.id, 0, Declaration::ParamDecl);
+        param->typebound = true;
+        if( receiver.t->kind == Type::Pointer )
+            param->setType(receiver.t);
+        else
+        {
+            // Take care that the hidden "self" parameter is always pointer to T
+            Type* ptr = new Type();
+            ptr->kind = Type::Pointer;
+            ptr->setType(receiver.t);
+            addHelper(ptr);
+            param->setType(ptr);
+        }
+        receiver.t = objectType;
+    }
+
+    if( FIRST_FormalParameters(la.d_type) ) {
+        procDecl->setType(FormalParameters());
+    }
+
+    if( forward )
+    {
+        if( !matchFormals(forward->getParams(), procDecl->getParams(true) ) ||
+                !matchResultType(forward->getType(), procDecl->getType()) ||
+                forward->visi != procDecl->visi ||
+                forward->typebound != procDecl->typebound )
+            error(id.name,"procedure declaration is not compatible with preceding forward declaration");
+    }
+
+    if( forward )
+        forward->data = QVariant::fromValue(procDecl);
+
+    return procDecl;
+}
+
 void Parser2::ProcedureDeclaration() {
 	if( ( ( peek(1).d_type == Tok_PROC || peek(1).d_type == Tok_PROCEDURE ) && peek(2).d_type == Tok_Hat )  ) {
         ForwardDeclaration();
@@ -3323,84 +3414,9 @@ void Parser2::ProcedureDeclaration() {
         // inlined ProcedureHeading();
         procedure();
 
-        NameAndType receiver;
-        bool autoself = false;
-        if( FIRST_Receiver(la.d_type) ) {
-            if( langLevel < 3 )
-                error(la, "type-bound procedures not available on current language level");
-            receiver = Receiver();
-        }else if( la.d_type == Tok_ident && peek(2).d_type == Tok_Dot )
-        {
-            if( langLevel < 3 )
-                error(la, "type-bound procedures not available on current language level");
-            receiver = Receiver2();
-            autoself = true;
-        }
-
-        const IdentDef id = identdef();
-        if( !id.isValid() )
-            return; // invalid syntax
-
-        Declaration* forward = mdl->findDecl(id.name.d_val,false);
-        if( forward && forward->kind != Declaration::ForwardDecl )
-        {
-            error(id.name, QString("procedure name is not unique: %1").arg(id.name.d_val.constData()) );
+        Declaration* procDecl = ProcedureHeader(false);
+        if( procDecl == 0 )
             return;
-        }
-        if( forward )
-            forward->name.clear(); // so it doesn't intervene name lookup
-
-        if( receiver.t )
-            mdl->openScope(0);
-        Declaration* procDecl = addDecl(id, Declaration::Procedure);
-        if( receiver.t )
-            mdl->closeScope(true);
-
-        mdl->openScope(procDecl);
-
-        if( receiver.t )
-        {
-            // add the method to the object type
-            Type* objectType = receiver.t;
-            if( objectType->kind == Type::Pointer )
-                objectType = objectType->getType();
-            if( objectType->findSub(id.name.d_val) )
-                error(id.name, "method name not unique in object type");
-            objectType->subs.append(procDecl);
-            Q_ASSERT(procDecl->outer == 0);
-            procDecl->outer = objectType->decl;
-            procDecl->typebound = true;
-            procDecl->autoself = autoself;
-            Declaration* param = addDecl(receiver.id, 0, Declaration::ParamDecl);
-            param->typebound = true;
-            if( receiver.t->kind == Type::Pointer )
-                param->setType(receiver.t);
-            else
-            {
-                // Take care that the hidden "self" parameter is always pointer to T
-                Type* ptr = new Type();
-                ptr->kind = Type::Pointer;
-                ptr->setType(receiver.t);
-                addHelper(ptr);
-                param->setType(ptr);
-            }
-            receiver.t = objectType;
-        }
-
-        if( FIRST_FormalParameters(la.d_type) ) {
-            procDecl->setType(FormalParameters());
-        }
-
-        if( forward )
-        {
-            if( !matchFormals(forward->getParams(), procDecl->getParams(true) ) ||
-                    !matchResultType(forward->getType(), procDecl->getType()) ||
-                    forward->extern_ != procDecl->extern_ ||
-                    forward->inline_ != procDecl->inline_ ||
-                    forward->invar != procDecl->invar ||
-                    forward->visi != procDecl->visi )
-                error(id.name,"procedure declaration is not compatible with preceding forward declaration");
-        }
 
         if( peek(1).d_type == Tok_EXTERN ||
                 ( peek(1).d_type == Tok_Semi && peek(2).d_type == Tok_EXTERN ) ) {
@@ -3410,11 +3426,11 @@ void Parser2::ProcedureDeclaration() {
             expect(Tok_EXTERN, true, "ProcedureDeclaration");
             if( langLevel == 0 )
                 error(cur, "EXTERN not allowed in language level 0");
-            if( receiver.t )
+            if( procDecl->typebound )
                 error(cur, "EXTERN not supported for type-bound procedures");
             procDecl->extern_ = true;
             out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
-                           id.visi > 0, MilProcedure::Extern);
+                           procDecl->visi > 0, MilProcedure::Extern);
 
             const QList<Declaration*> params = procDecl->getParams(true);
             foreach( Declaration* p, params )
@@ -3443,17 +3459,17 @@ void Parser2::ProcedureDeclaration() {
                     kind = MilProcedure::Invar;
 				} else
 					invalid("ProcedureDeclaration");
-                if( receiver.t )
+                if( procDecl->typebound )
                     error(cur, "INLINE and INVAR not supported for type-bound procedures");
 			}
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "ProcedureDeclaration");
 			}
             QByteArray binding;
-            if( receiver.t )
-                binding = ev->toQuali(receiver.t).second;
+            if( procDecl->typebound )
+                binding = ev->toQuali(procDecl->link->getType()->getType()).second; // receiver is always pointer to T
             out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
-                           id.visi > 0, kind, binding);
+                           procDecl->visi > 0, kind, binding);
 
             const QList<Declaration*> params = procDecl->getParams(true);
             foreach( Declaration* p, params )
@@ -3472,8 +3488,6 @@ void Parser2::ProcedureDeclaration() {
         }  else
 			invalid("ProcedureDeclaration");
         mdl->closeScope();
-        if(forward)
-            mdl->removeDecl(forward);
 	} else
 		invalid("ProcedureDeclaration");
 }

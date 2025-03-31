@@ -35,7 +35,7 @@ namespace Mil
     {
     public:
         Node(quint8 m):kind(0),meta(m),deferred(false),anonymous(false),selfref(false),typebound(false),
-            ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
+            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),generic(false),byVal(false),
             type(0),autoself(0),public_(0),init(0) {}
         ~Node();
 
@@ -58,6 +58,7 @@ namespace Mil
         uint inline_ : 1;
         uint invar : 1;
         uint extern_ : 1; // extern name (if present) is in val
+        uint forward : 1;
         uint generic : 1;
         uint autoself : 1;
         uint init : 1;
@@ -122,12 +123,13 @@ namespace Mil
         Statement* body;
         QByteArray name;
         union {
-            Constant* c; // ConstDecl
+            Constant* c; // ConstDecl, owned
             struct {
                 uint bw : 8; // Field bitwidth
                 uint off : 24; // Field offset in bytes
             } f;
             int off;
+            Declaration* forwardTo; // Procedure if forward==true, not owned
         };
         // QVariant data; // value for Const, path for Import, name for Extern
         Declaration():Node(D),next(0),link(0),outer(0),c(0),body(0){}
