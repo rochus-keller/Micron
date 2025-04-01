@@ -29,15 +29,17 @@ static void addTypeDecl(Declaration* globals, Type* t, const QByteArray& name)
     res->name = Mic::Symbol::getSymbol(name);
     res->public_ = true;
     res->outer = globals;
+    res->setType(t);
     globals->appendSub(res);
 }
 
 AstModel::AstModel()
 {
-    for( int i = Type::BOOL; i < Type::MaxBasicType; i++ )
+    for( int i = 0; i < Type::MaxBasicType; i++ )
     {
         Type* t = new Type();
         t->kind = i;
+        t->owned = true;
         basicTypes[i] = t;
     }
     addTypeDecl(&globals, basicTypes[Type::Any], "ANY");
@@ -88,13 +90,13 @@ AstModel::AstModel()
     addTypeDecl(&globals, basicTypes[Type::FLOAT64], "r8");
     addTypeDecl(&globals, basicTypes[Type::INTPTR], "INTPTR");
     addTypeDecl(&globals, basicTypes[Type::INTPTR], "intptr");
-
-    //createMIC();
 }
 
 AstModel::~AstModel()
 {
     clear();
+    for( int i = 0; i < Type::MaxBasicType; i++ )
+        delete basicTypes[i];
 }
 
 void AstModel::clear()
@@ -125,15 +127,6 @@ bool AstModel::addModule(Declaration* module)
     return true;
 }
 
-void AstModel::createMIC()
-{
-    Declaration* m = new Declaration();
-    m->name = Mic::Symbol::getSymbol("$MIC");
-    m->kind = Declaration::Module;
-    m->public_ = true;
-    modules.append(m);
-}
-
 Node::~Node()
 {
     if( type && ownstype )
@@ -142,11 +135,14 @@ Node::~Node()
 
 void Node::setType(Type* t)
 {
+    Q_ASSERT(type == 0);
     type = t;
-    if( t && meta == D && t->decl == 0 )
+    if( t && !t->owned )
     {
         ownstype = true;
-        t->decl = static_cast<Declaration*>(this);
+        t->owned = true;
+        if( meta == D && t->decl == 0 )
+            t->decl = static_cast<Declaration*>(this);
     }
 }
 
@@ -154,6 +150,12 @@ Declaration::~Declaration()
 {
     if( kind == ConstDecl && c )
         delete c;
+    if( link )
+        delete link;
+    if( body )
+        delete body;
+    if( next )
+        delete next;
 }
 
 void Declaration::appendSub(Declaration* d)
@@ -202,9 +204,9 @@ void Declaration::append(Declaration* list, Declaration* next)
 
 Expression::~Expression()
 {
-    if( kind == Tok_LDOBJ && c )
+    if( (kind == Tok_LDOBJ || kind == Tok_LDSTR) && c != 0 )
         delete c;
-    else if( (kind == Tok_IIF || kind == Tok_THEN || kind == Tok_ELSE) && e )
+    else if( (kind == Tok_IIF || kind == Tok_THEN || kind == Tok_ELSE ) && e != 0 )
         delete e;
     if( next )
         delete next;
@@ -266,6 +268,8 @@ Type::~Type()
 {
     if( kind == NameRef && quali )
         delete quali;
+    foreach( Declaration* sub, subs )
+        delete sub;
 }
 
 Declaration*Type::findSubByName(const QByteArray& name, bool recursive) const

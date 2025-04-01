@@ -30,6 +30,11 @@ Project::Project(AstModel* mdl):mdl(mdl)
     Q_ASSERT(mdl);
 }
 
+Project::~Project()
+{
+    clear();
+}
+
 void Project::clear()
 {
 

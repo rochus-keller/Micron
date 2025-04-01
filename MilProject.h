@@ -30,6 +30,7 @@ namespace Mil
     {
     public:
         Project(AstModel*);
+        ~Project();
 
         void clear(); // delete all Ast objects and files
 

@@ -1033,28 +1033,28 @@ Type* Parser2::NamedType(bool allowAny) {
 }
 
 Type* Parser2::ArrayType() {
-	if( la.d_code == Tok_ARRAY ) {
-		expect(Tok_ARRAY, true, "ArrayType");
-        Type* res = new Type();
-        res->kind = Type::Array;
-		if( FIRST_length(la.d_type) ) {
-            res->len = length();
-		}
-		expect(Tok_OF, true, "ArrayType");
-        res->setType( NamedType() );
-        return res;
-	} else if( la.d_type == Tok_Lbrack ) {
-		expect(Tok_Lbrack, false, "ArrayType");
+    if( la.d_code == Tok_ARRAY ) {
+        expect(Tok_ARRAY, true, "ArrayType");
         Type* res = new Type();
         res->kind = Type::Array;
         if( FIRST_length(la.d_type) ) {
             res->len = length();
         }
-		expect(Tok_Rbrack, false, "ArrayType");
+        expect(Tok_OF, true, "ArrayType");
+        res->setType( NamedType() );
+        return res;
+    } else if( la.d_type == Tok_Lbrack ) {
+        expect(Tok_Lbrack, false, "ArrayType");
+        Type* res = new Type();
+        res->kind = Type::Array;
+        if( FIRST_length(la.d_type) ) {
+            res->len = length();
+        }
+        expect(Tok_Rbrack, false, "ArrayType");
         res->setType( NamedType() );
         return res;
     } else
-		invalid("ArrayType");
+        invalid("ArrayType");
     return 0;
 }
 
@@ -1079,13 +1079,13 @@ static void moveToSubs(Type* res, Declaration* tmp )
 
 Type* Parser2::StructUnionType() {
     bool isUnion = false;
-	if( la.d_code == Tok_STRUCT ) {
-		expect(Tok_STRUCT, true, "StructUnionType");
-	} else if( la.d_code == Tok_UNION ) {
-		expect(Tok_UNION, true, "StructUnionType");
+    if( la.d_code == Tok_STRUCT ) {
+        expect(Tok_STRUCT, true, "StructUnionType");
+    } else if( la.d_code == Tok_UNION ) {
+        expect(Tok_UNION, true, "StructUnionType");
         isUnion = true;
-	} else
-		invalid("StructUnionType");
+    } else
+        invalid("StructUnionType");
 
     Type* res = new Type();
     res->kind = isUnion ? Type::Union : Type::Struct;
@@ -1093,12 +1093,12 @@ Type* Parser2::StructUnionType() {
     Declaration tmp;
     scopeStack.push_back(&tmp);
     while( ( !( peek(1).d_code == Tok_END ) )  ) {
-		FieldList();
-		if( la.d_type == Tok_Semi ) {
-			expect(Tok_Semi, false, "StructUnionType");
-		}
-	}
-	expect(Tok_END, true, "StructUnionType");
+        FieldList();
+        if( la.d_type == Tok_Semi ) {
+            expect(Tok_Semi, false, "StructUnionType");
+        }
+    }
+    expect(Tok_END, true, "StructUnionType");
     scopeStack.pop_back();
 
     moveToSubs( res, &tmp );
@@ -1152,7 +1152,7 @@ DeclList Parser2::IdentList(Declaration::Kind k) {
 }
 
 Type* Parser2::ObjectType() {
-	expect(Tok_OBJECT, true, "ObjectType");
+    expect(Tok_OBJECT, true, "ObjectType");
     Type* res = new Type();
     res->kind = Type::Object;
 
@@ -1173,12 +1173,12 @@ Type* Parser2::ObjectType() {
     Declaration tmp;
     scopeStack.push_back(&tmp);
     while( FIRST_MemberList(la.d_type) ) {
-		MemberList();
-		if( la.d_type == Tok_Semi ) {
-			expect(Tok_Semi, false, "ObjectType");
-		}
-	}
-	expect(Tok_END, true, "ObjectType");
+        MemberList();
+        if( la.d_type == Tok_Semi ) {
+            expect(Tok_Semi, false, "ObjectType");
+        }
+    }
+    expect(Tok_END, true, "ObjectType");
     scopeStack.pop_back();
     moveToSubs( res, &tmp );
     return res;
@@ -1193,13 +1193,13 @@ void Parser2::MemberList() {
 }
 
 Type* Parser2::PointerType() {
-	if( la.d_code == Tok_POINTER ) {
-		expect(Tok_POINTER, true, "PointerType");
-		expect(Tok_TO, true, "PointerType");
-	} else if( la.d_type == Tok_Hat ) {
-		expect(Tok_Hat, false, "PointerType");
-	} else
-		invalid("PointerType");
+    if( la.d_code == Tok_POINTER ) {
+        expect(Tok_POINTER, true, "PointerType");
+        expect(Tok_TO, true, "PointerType");
+    } else if( la.d_type == Tok_Hat ) {
+        expect(Tok_Hat, false, "PointerType");
+    } else
+        invalid("PointerType");
     Type* base = NamedType(true);
     if( base == 0 )
         return 0;
@@ -1210,15 +1210,15 @@ Type* Parser2::PointerType() {
 }
 
 Type* Parser2::ProcedureType() {
-	if( la.d_type == Tok_PROCEDURE ) {
-		expect(Tok_PROCEDURE, false, "ProcedureType");
-	} else if( la.d_type == Tok_PROC ) {
-		expect(Tok_PROC, false, "ProcedureType");
-	} else
-		invalid("ProcedureType");
+    if( la.d_type == Tok_PROCEDURE ) {
+        expect(Tok_PROCEDURE, false, "ProcedureType");
+    } else if( la.d_type == Tok_PROC ) {
+        expect(Tok_PROC, false, "ProcedureType");
+    } else
+        invalid("ProcedureType");
     Type* res = new Type();
     res->kind = Type::Proc;
-	if( FIRST_FormalParameters(la.d_type) ) {
+    if( FIRST_FormalParameters(la.d_type) ) {
         Declaration tmp;
         scopeStack.push_back(&tmp);
         res->setType(FormalParameters());
@@ -1226,7 +1226,7 @@ Type* Parser2::ProcedureType() {
         scopeStack.pop_back();
 
         moveToSubs( res, &tmp );
-	}
+    }
     return res;
 }
 
@@ -1555,9 +1555,9 @@ Expression* Parser2::ExpInstr() {
     res->kind = la.d_code;
     res->pos = la.toRowCol();
 
-	if( la.d_code == Tok_ADD ) {
-		expect(Tok_ADD, true, "ExpInstr");
-	} else if( la.d_code == Tok_AND ) {
+    if( la.d_code == Tok_ADD ) {
+        expect(Tok_ADD, true, "ExpInstr");
+    } else if( la.d_code == Tok_AND ) {
         expect(Tok_AND, true, "ExpInstr");
     } else if( la.d_code == Tok_CALL ) {
         expect(Tok_CALL, true, "ExpInstr");
@@ -1597,46 +1597,46 @@ Expression* Parser2::ExpInstr() {
     } else if( la.d_code == Tok_CGT ) {
         expect(Tok_CGT, true, "ExpInstr");
     } else if( la.d_code == Tok_CGT_UN ) {
-		expect(Tok_CGT_UN, true, "ExpInstr");
-	} else if( la.d_code == Tok_CLT ) {
-		expect(Tok_CLT, true, "ExpInstr");
-	} else if( la.d_code == Tok_CLT_UN ) {
-		expect(Tok_CLT_UN, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_I1 ) {
-		expect(Tok_CONV_I1, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_I2 ) {
-		expect(Tok_CONV_I2, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_I4 ) {
-		expect(Tok_CONV_I4, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_I8 ) {
-		expect(Tok_CONV_I8, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_R4 ) {
-		expect(Tok_CONV_R4, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_R8 ) {
-		expect(Tok_CONV_R8, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_U1 ) {
-		expect(Tok_CONV_U1, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_U2 ) {
-		expect(Tok_CONV_U2, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_U4 ) {
-		expect(Tok_CONV_U4, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_U8 ) {
-		expect(Tok_CONV_U8, true, "ExpInstr");
-	} else if( la.d_code == Tok_CONV_IP ) {
-		expect(Tok_CONV_IP, true, "ExpInstr");
-	} else if( la.d_code == Tok_DIV ) {
-		expect(Tok_DIV, true, "ExpInstr");
-	} else if( la.d_code == Tok_DIV_UN ) {
-		expect(Tok_DIV_UN, true, "ExpInstr");
-	} else if( la.d_code == Tok_DUP ) {
-		expect(Tok_DUP, true, "ExpInstr");
-	} else if( la.d_code == Tok_INITOBJ ) {
-		expect(Tok_INITOBJ, true, "ExpInstr");
+        expect(Tok_CGT_UN, true, "ExpInstr");
+    } else if( la.d_code == Tok_CLT ) {
+        expect(Tok_CLT, true, "ExpInstr");
+    } else if( la.d_code == Tok_CLT_UN ) {
+        expect(Tok_CLT_UN, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_I1 ) {
+        expect(Tok_CONV_I1, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_I2 ) {
+        expect(Tok_CONV_I2, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_I4 ) {
+        expect(Tok_CONV_I4, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_I8 ) {
+        expect(Tok_CONV_I8, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_R4 ) {
+        expect(Tok_CONV_R4, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_R8 ) {
+        expect(Tok_CONV_R8, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_U1 ) {
+        expect(Tok_CONV_U1, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_U2 ) {
+        expect(Tok_CONV_U2, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_U4 ) {
+        expect(Tok_CONV_U4, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_U8 ) {
+        expect(Tok_CONV_U8, true, "ExpInstr");
+    } else if( la.d_code == Tok_CONV_IP ) {
+        expect(Tok_CONV_IP, true, "ExpInstr");
+    } else if( la.d_code == Tok_DIV ) {
+        expect(Tok_DIV, true, "ExpInstr");
+    } else if( la.d_code == Tok_DIV_UN ) {
+        expect(Tok_DIV_UN, true, "ExpInstr");
+    } else if( la.d_code == Tok_DUP ) {
+        expect(Tok_DUP, true, "ExpInstr");
+    } else if( la.d_code == Tok_INITOBJ ) {
+        expect(Tok_INITOBJ, true, "ExpInstr");
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_ISINST ) {
-		expect(Tok_ISINST, true, "ExpInstr");
+        expect(Tok_ISINST, true, "ExpInstr");
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl &&
                 res->d->getType() && res->d->getType()->kind != Type::Object )
@@ -1648,13 +1648,13 @@ Expression* Parser2::ExpInstr() {
         expect(Tok_LDARG_S, true, "ExpInstr");
         res->id = numberOrIdent(true);
     } else if( la.d_code == Tok_LDARG_0 ) {
-		expect(Tok_LDARG_0, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDARG_1 ) {
-		expect(Tok_LDARG_1, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDARG_2 ) {
-		expect(Tok_LDARG_2, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDARG_3 ) {
-		expect(Tok_LDARG_3, true, "ExpInstr");
+        expect(Tok_LDARG_0, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDARG_1 ) {
+        expect(Tok_LDARG_1, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDARG_2 ) {
+        expect(Tok_LDARG_2, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDARG_3 ) {
+        expect(Tok_LDARG_3, true, "ExpInstr");
     } else if( la.d_code == Tok_LDARGA ) {
         expect(Tok_LDARGA, true, "ExpInstr");
         res->id = numberOrIdent(true);
@@ -1687,27 +1687,27 @@ Expression* Parser2::ExpInstr() {
         else
             res->f = c.d;
     } else if( la.d_code == Tok_LDC_I4_0 ) {
-		expect(Tok_LDC_I4_0, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDC_I4_1 ) {
-		expect(Tok_LDC_I4_1, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDC_I4_2 ) {
-		expect(Tok_LDC_I4_2, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDC_I4_3 ) {
-		expect(Tok_LDC_I4_3, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDC_I4_4 ) {
-		expect(Tok_LDC_I4_4, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDC_I4_5 ) {
-		expect(Tok_LDC_I4_5, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDC_I4_6 ) {
-		expect(Tok_LDC_I4_6, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDC_I4_7 ) {
-		expect(Tok_LDC_I4_7, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDC_I4_8 ) {
-		expect(Tok_LDC_I4_8, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDC_I4_M1 ) {
-		expect(Tok_LDC_I4_M1, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDOBJ ) {
-		expect(Tok_LDOBJ, true, "ExpInstr");
+        expect(Tok_LDC_I4_0, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDC_I4_1 ) {
+        expect(Tok_LDC_I4_1, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDC_I4_2 ) {
+        expect(Tok_LDC_I4_2, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDC_I4_3 ) {
+        expect(Tok_LDC_I4_3, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDC_I4_4 ) {
+        expect(Tok_LDC_I4_4, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDC_I4_5 ) {
+        expect(Tok_LDC_I4_5, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDC_I4_6 ) {
+        expect(Tok_LDC_I4_6, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDC_I4_7 ) {
+        expect(Tok_LDC_I4_7, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDC_I4_8 ) {
+        expect(Tok_LDC_I4_8, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDC_I4_M1 ) {
+        expect(Tok_LDC_I4_M1, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDOBJ ) {
+        expect(Tok_LDOBJ, true, "ExpInstr");
         res->c = constructor();
     } else if( la.d_code == Tok_LDELEM ) {
         expect(Tok_LDELEM, true, "ExpInstr");
@@ -1720,27 +1720,27 @@ Expression* Parser2::ExpInstr() {
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_LDELEM_I1 ) {
-		expect(Tok_LDELEM_I1, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDELEM_I2 ) {
-		expect(Tok_LDELEM_I2, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDELEM_I4 ) {
-		expect(Tok_LDELEM_I4, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDELEM_I8 ) {
-		expect(Tok_LDELEM_I8, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDELEM_U1 ) {
-		expect(Tok_LDELEM_U1, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDELEM_U2 ) {
-		expect(Tok_LDELEM_U2, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDELEM_U4 ) {
-		expect(Tok_LDELEM_U4, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDELEM_U8 ) {
-		expect(Tok_LDELEM_U8, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDELEM_R4 ) {
-		expect(Tok_LDELEM_R4, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDELEM_R8 ) {
-		expect(Tok_LDELEM_R8, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDELEM_IP ) {
-		expect(Tok_LDELEM_IP, true, "ExpInstr");
+        expect(Tok_LDELEM_I1, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDELEM_I2 ) {
+        expect(Tok_LDELEM_I2, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDELEM_I4 ) {
+        expect(Tok_LDELEM_I4, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDELEM_I8 ) {
+        expect(Tok_LDELEM_I8, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDELEM_U1 ) {
+        expect(Tok_LDELEM_U1, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDELEM_U2 ) {
+        expect(Tok_LDELEM_U2, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDELEM_U4 ) {
+        expect(Tok_LDELEM_U4, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDELEM_U8 ) {
+        expect(Tok_LDELEM_U8, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDELEM_R4 ) {
+        expect(Tok_LDELEM_R4, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDELEM_R8 ) {
+        expect(Tok_LDELEM_R8, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDELEM_IP ) {
+        expect(Tok_LDELEM_IP, true, "ExpInstr");
     } else if( la.d_code == Tok_LDFLD ) {
         expect(Tok_LDFLD, true, "ExpInstr");
         res->d = trident();
@@ -1756,25 +1756,25 @@ Expression* Parser2::ExpInstr() {
     } else if( la.d_code == Tok_LDIND_I2 ) {
         expect(Tok_LDIND_I2, true, "ExpInstr");
     } else if( la.d_code == Tok_LDIND_I4 ) {
-		expect(Tok_LDIND_I4, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDIND_I8 ) {
-		expect(Tok_LDIND_I8, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDIND_U1 ) {
-		expect(Tok_LDIND_U1, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDIND_U2 ) {
-		expect(Tok_LDIND_U2, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDIND_U4 ) {
-		expect(Tok_LDIND_U4, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDIND_R4 ) {
-		expect(Tok_LDIND_R4, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDIND_U8 ) {
-		expect(Tok_LDIND_U8, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDIND_R8 ) {
-		expect(Tok_LDIND_R8, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDIND_IP ) {
-		expect(Tok_LDIND_IP, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDIND_IPP ) {
-		expect(Tok_LDIND_IPP, true, "ExpInstr");
+        expect(Tok_LDIND_I4, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDIND_I8 ) {
+        expect(Tok_LDIND_I8, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDIND_U1 ) {
+        expect(Tok_LDIND_U1, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDIND_U2 ) {
+        expect(Tok_LDIND_U2, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDIND_U4 ) {
+        expect(Tok_LDIND_U4, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDIND_R4 ) {
+        expect(Tok_LDIND_R4, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDIND_U8 ) {
+        expect(Tok_LDIND_U8, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDIND_R8 ) {
+        expect(Tok_LDIND_R8, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDIND_IP ) {
+        expect(Tok_LDIND_IP, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDIND_IPP ) {
+        expect(Tok_LDIND_IPP, true, "ExpInstr");
     } else if( la.d_code == Tok_LDLOC ) {
         expect(Tok_LDLOC, true, "ExpInstr");
         res->id = numberOrIdent(false);
@@ -1790,15 +1790,15 @@ Expression* Parser2::ExpInstr() {
     } else if( la.d_code == Tok_LDLOC_0 ) {
         expect(Tok_LDLOC_0, true, "ExpInstr");
     } else if( la.d_code == Tok_LDLOC_1 ) {
-		expect(Tok_LDLOC_1, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDLOC_2 ) {
-		expect(Tok_LDLOC_2, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDLOC_3 ) {
-		expect(Tok_LDLOC_3, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDNULL ) {
-		expect(Tok_LDNULL, true, "ExpInstr");
-	} else if( la.d_code == Tok_LDIND ) {
-		expect(Tok_LDIND, true, "ExpInstr");
+        expect(Tok_LDLOC_1, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDLOC_2 ) {
+        expect(Tok_LDLOC_2, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDLOC_3 ) {
+        expect(Tok_LDLOC_3, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDNULL ) {
+        expect(Tok_LDNULL, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDIND ) {
+        expect(Tok_LDIND, true, "ExpInstr");
         if( FIRST_qualident(la.d_type) )
         {
             res->d = qualident();
@@ -1806,29 +1806,29 @@ Expression* Parser2::ExpInstr() {
                 error(cur, "expecting a type declaration");
         }else
         {
-           // address of string literal on stack
+            // address of string literal on stack
         }
-	} else if( la.d_code == Tok_LDPROC ) {
-		expect(Tok_LDPROC, true, "ExpInstr");
+    } else if( la.d_code == Tok_LDPROC ) {
+        expect(Tok_LDPROC, true, "ExpInstr");
         res->d = qualident();
         if( res->d && (res->d->kind != Declaration::Procedure || res->d->typebound) )
             error(cur, "expecting an unbound procedure");
     } else if( la.d_code == Tok_LDMETH ) {
-		expect(Tok_LDMETH, true, "ExpInstr");
+        expect(Tok_LDMETH, true, "ExpInstr");
         res->d = trident();
         if( res->d && (res->d->kind != Declaration::Procedure || !res->d->typebound) )
             error(cur, "expecting a bound procedure");
     } else if( la.d_code == Tok_LDSTR ) {
-		expect(Tok_LDSTR, true, "ExpInstr");
-		if( la.d_type == Tok_string ) {
-			expect(Tok_string, false, "ExpInstr");
+        expect(Tok_LDSTR, true, "ExpInstr");
+        if( la.d_type == Tok_string ) {
+            expect(Tok_string, false, "ExpInstr");
             Constant* c = new Constant();
             c->kind = Constant::S;
             c->s = (char*)malloc( cur.d_val.size() + 1);
             strcpy(c->s, cur.d_val.constData());
             res->c = c;
         } else if( la.d_type == Tok_hexstring ) {
-			expect(Tok_hexstring, false, "ExpInstr");
+            expect(Tok_hexstring, false, "ExpInstr");
             Constant* c = new Constant();
             c->kind = Constant::B;
             c->b = new ByteString();
@@ -1837,7 +1837,7 @@ Expression* Parser2::ExpInstr() {
             memcpy(c->b->b, cur.d_val.constData(), c->b->len);
             res->c = c;
         } else
-			invalid("ExpInstr");
+            invalid("ExpInstr");
     } else if( la.d_code == Tok_LDVAR ) {
         expect(Tok_LDVAR, true, "ExpInstr");
         res->d = qualident();
@@ -1850,8 +1850,8 @@ Expression* Parser2::ExpInstr() {
             error(cur, "expecting a module variable");
     } else if( la.d_code == Tok_MUL ) {
         expect(Tok_MUL, true, "ExpInstr");
-	} else if( la.d_code == Tok_NEG ) {
-		expect(Tok_NEG, true, "ExpInstr");
+    } else if( la.d_code == Tok_NEG ) {
+        expect(Tok_NEG, true, "ExpInstr");
     } else if( la.d_code == Tok_NEWARR ) {
         expect(Tok_NEWARR, true, "ExpInstr");
         res->d = qualident();
@@ -1871,72 +1871,74 @@ Expression* Parser2::ExpInstr() {
             error(cur, "expecting a struct, union or object declaration");
     } else if( la.d_code == Tok_NOT ) {
         expect(Tok_NOT, true, "ExpInstr");
-	} else if( la.d_code == Tok_OR ) {
-		expect(Tok_OR, true, "ExpInstr");
-	} else if( la.d_code == Tok_REM ) {
-		expect(Tok_REM, true, "ExpInstr");
-	} else if( la.d_code == Tok_REM_UN ) {
-		expect(Tok_REM_UN, true, "ExpInstr");
-	} else if( la.d_code == Tok_SHL ) {
-		expect(Tok_SHL, true, "ExpInstr");
-	} else if( la.d_code == Tok_SHR ) {
-		expect(Tok_SHR, true, "ExpInstr");
-	} else if( la.d_code == Tok_SHR_UN ) {
-		expect(Tok_SHR_UN, true, "ExpInstr");
-	} else if( la.d_code == Tok_SIZEOF ) {
-		expect(Tok_SIZEOF, true, "ExpInstr");
+    } else if( la.d_code == Tok_OR ) {
+        expect(Tok_OR, true, "ExpInstr");
+    } else if( la.d_code == Tok_REM ) {
+        expect(Tok_REM, true, "ExpInstr");
+    } else if( la.d_code == Tok_REM_UN ) {
+        expect(Tok_REM_UN, true, "ExpInstr");
+    } else if( la.d_code == Tok_SHL ) {
+        expect(Tok_SHL, true, "ExpInstr");
+    } else if( la.d_code == Tok_SHR ) {
+        expect(Tok_SHR, true, "ExpInstr");
+    } else if( la.d_code == Tok_SHR_UN ) {
+        expect(Tok_SHR_UN, true, "ExpInstr");
+    } else if( la.d_code == Tok_SIZEOF ) {
+        expect(Tok_SIZEOF, true, "ExpInstr");
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_SUB ) {
-		expect(Tok_SUB, true, "ExpInstr");
-	} else if( la.d_code == Tok_XOR ) {
-		expect(Tok_XOR, true, "ExpInstr");
-	} else if( la.d_code == Tok_PTROFF ) {
-		expect(Tok_PTROFF, true, "ExpInstr");
+        expect(Tok_SUB, true, "ExpInstr");
+    } else if( la.d_code == Tok_XOR ) {
+        expect(Tok_XOR, true, "ExpInstr");
+    } else if( la.d_code == Tok_PTROFF ) {
+        expect(Tok_PTROFF, true, "ExpInstr");
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl ) // pointer base type
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_NOP ) {
-		expect(Tok_NOP, true, "ExpInstr");
-	} else if( FIRST_CondOp(la.d_type) || FIRST_CondOp(la.d_code) ) {
+        expect(Tok_NOP, true, "ExpInstr");
+    } else if( FIRST_CondOp(la.d_type) || FIRST_CondOp(la.d_code) ) {
         expect(Tok_IIF, true, "CondOp");
         res->e = Expression_();
+        res->kind = Tok_IIF;
         expect(Tok_THEN, true, "CondOp");
         Expression* res2 = new Expression();
-        res2->kind = cur.d_code;
+        res2->kind = Tok_THEN;
         res2->pos = cur.toRowCol();
         res2->e = Expression_();
         res->next = res2;
         expect(Tok_ELSE, true, "CondOp");
         Expression* res3 = new Expression();
-        res3->kind = cur.d_code;
+        res3->kind = Tok_ELSE;
         res3->pos = cur.toRowCol();
         res3->e = Expression_();
         res2->next = res3;
         expect(Tok_END, true, "CondOp");
     } else
-		invalid("ExpInstr");
+        invalid("ExpInstr");
     return res;
 }
 
 Statement* Parser2::StatementSequence() {
     Statement* res = 0;
-	while( FIRST_Statement(la.d_type) || FIRST_Statement(la.d_code) || FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
+    while( FIRST_Statement(la.d_type) || FIRST_Statement(la.d_code) ||
+           FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
         Statement* s = 0;
         if( FIRST_Statement(la.d_type) || FIRST_Statement(la.d_code) ) {
             s = Statement_();
-		} else if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
+        } else if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
             s = new Statement();
             s->kind = Statement::ExprStat;
             s->e = ExpInstr();
-		} else
-			invalid("StatementSequence");
+        } else
+            invalid("StatementSequence");
         if( res == 0 )
             res = s;
         else
             res->append(s);
-	}
+    }
     return res;
 }
 
@@ -1959,29 +1961,29 @@ Statement* Parser2::Statement_()
     res->pos = la.toRowCol();
 
     if( la.d_code == Tok_FREE ) {
-		expect(Tok_FREE, true, "Statement");
+        expect(Tok_FREE, true, "Statement");
     } else if( la.d_code == Tok_EXIT ) {
-		expect(Tok_EXIT, true, "Statement");
-	} else if( la.d_code == Tok_GOTO ) {
-		expect(Tok_GOTO, true, "Statement");
-		expect(Tok_ident, false, "Statement");
+        expect(Tok_EXIT, true, "Statement");
+    } else if( la.d_code == Tok_GOTO ) {
+        expect(Tok_GOTO, true, "Statement");
+        expect(Tok_ident, false, "Statement");
         res->name = cur.d_val.constData();
-	} else if( la.d_code == Tok_IFGOTO ) {
-		expect(Tok_IFGOTO, true, "Statement");
-		expect(Tok_ident, false, "Statement");
+    } else if( la.d_code == Tok_IFGOTO ) {
+        expect(Tok_IFGOTO, true, "Statement");
+        expect(Tok_ident, false, "Statement");
         res->name = cur.d_val.constData();
     } else if( la.d_code == Tok_LABEL ) {
-		expect(Tok_LABEL, true, "Statement");
-		expect(Tok_ident, false, "Statement");
+        expect(Tok_LABEL, true, "Statement");
+        expect(Tok_ident, false, "Statement");
         res->name = cur.d_val.constData();
     } else if( la.d_code == Tok_LINE ) {
-		expect(Tok_LINE, true, "Statement");
-		expect(Tok_unsigned, false, "Statement");
+        expect(Tok_LINE, true, "Statement");
+        expect(Tok_unsigned, false, "Statement");
         res->id = cur.d_val.toULong();
-	} else if( la.d_code == Tok_POP ) {
-		expect(Tok_POP, true, "Statement");
-	} else if( la.d_code == Tok_RET ) {
-		expect(Tok_RET, true, "Statement");
+    } else if( la.d_code == Tok_POP ) {
+        expect(Tok_POP, true, "Statement");
+    } else if( la.d_code == Tok_RET ) {
+        expect(Tok_RET, true, "Statement");
     } else if( la.d_code == Tok_STARG ) {
         expect(Tok_STARG, true, "Statement");
         res->id = numberOrIdent(true);
@@ -1994,40 +1996,40 @@ Statement* Parser2::Statement_()
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_STELEM_I1 ) {
-		expect(Tok_STELEM_I1, true, "Statement");
-	} else if( la.d_code == Tok_STELEM_I2 ) {
-		expect(Tok_STELEM_I2, true, "Statement");
-	} else if( la.d_code == Tok_STELEM_I4 ) {
-		expect(Tok_STELEM_I4, true, "Statement");
-	} else if( la.d_code == Tok_STELEM_I8 ) {
-		expect(Tok_STELEM_I8, true, "Statement");
-	} else if( la.d_code == Tok_STELEM_R4 ) {
-		expect(Tok_STELEM_R4, true, "Statement");
-	} else if( la.d_code == Tok_STELEM_R8 ) {
-		expect(Tok_STELEM_R8, true, "Statement");
-	} else if( la.d_code == Tok_STELEM_IP ) {
-		expect(Tok_STELEM_IP, true, "Statement");
-	} else if( la.d_code == Tok_STFLD ) {
-		expect(Tok_STFLD, true, "Statement");
+        expect(Tok_STELEM_I1, true, "Statement");
+    } else if( la.d_code == Tok_STELEM_I2 ) {
+        expect(Tok_STELEM_I2, true, "Statement");
+    } else if( la.d_code == Tok_STELEM_I4 ) {
+        expect(Tok_STELEM_I4, true, "Statement");
+    } else if( la.d_code == Tok_STELEM_I8 ) {
+        expect(Tok_STELEM_I8, true, "Statement");
+    } else if( la.d_code == Tok_STELEM_R4 ) {
+        expect(Tok_STELEM_R4, true, "Statement");
+    } else if( la.d_code == Tok_STELEM_R8 ) {
+        expect(Tok_STELEM_R8, true, "Statement");
+    } else if( la.d_code == Tok_STELEM_IP ) {
+        expect(Tok_STELEM_IP, true, "Statement");
+    } else if( la.d_code == Tok_STFLD ) {
+        expect(Tok_STFLD, true, "Statement");
         res->d = trident();
         if( res->d && res->d->kind != Declaration::Field )
             error(cur, "expecting a field");
     } else if( la.d_code == Tok_STIND_I1 ) {
-		expect(Tok_STIND_I1, true, "Statement");
-	} else if( la.d_code == Tok_STIND_I2 ) {
-		expect(Tok_STIND_I2, true, "Statement");
-	} else if( la.d_code == Tok_STIND_I4 ) {
-		expect(Tok_STIND_I4, true, "Statement");
-	} else if( la.d_code == Tok_STIND_I8 ) {
-		expect(Tok_STIND_I8, true, "Statement");
-	} else if( la.d_code == Tok_STIND_R4 ) {
-		expect(Tok_STIND_R4, true, "Statement");
-	} else if( la.d_code == Tok_STIND_R8 ) {
-		expect(Tok_STIND_R8, true, "Statement");
-	} else if( la.d_code == Tok_STIND_IP ) {
-		expect(Tok_STIND_IP, true, "Statement");
-	} else if( la.d_code == Tok_STIND_IPP ) {
-		expect(Tok_STIND_IPP, true, "Statement");
+        expect(Tok_STIND_I1, true, "Statement");
+    } else if( la.d_code == Tok_STIND_I2 ) {
+        expect(Tok_STIND_I2, true, "Statement");
+    } else if( la.d_code == Tok_STIND_I4 ) {
+        expect(Tok_STIND_I4, true, "Statement");
+    } else if( la.d_code == Tok_STIND_I8 ) {
+        expect(Tok_STIND_I8, true, "Statement");
+    } else if( la.d_code == Tok_STIND_R4 ) {
+        expect(Tok_STIND_R4, true, "Statement");
+    } else if( la.d_code == Tok_STIND_R8 ) {
+        expect(Tok_STIND_R8, true, "Statement");
+    } else if( la.d_code == Tok_STIND_IP ) {
+        expect(Tok_STIND_IP, true, "Statement");
+    } else if( la.d_code == Tok_STIND_IPP ) {
+        expect(Tok_STIND_IPP, true, "Statement");
     } else if( la.d_code == Tok_STLOC ) {
         expect(Tok_STLOC, true, "Statement");
         res->id = numberOrIdent(false);
@@ -2038,22 +2040,22 @@ Statement* Parser2::Statement_()
         expect(Tok_STLOC_0, true, "Statement");
     } else if( la.d_code == Tok_STLOC_1 ) {
         expect(Tok_STLOC_1, true, "Statement");
-	} else if( la.d_code == Tok_STLOC_2 ) {
-		expect(Tok_STLOC_2, true, "Statement");
-	} else if( la.d_code == Tok_STLOC_3 ) {
-		expect(Tok_STLOC_3, true, "Statement");
-	} else if( la.d_code == Tok_STIND ) {
-		expect(Tok_STIND, true, "Statement");
+    } else if( la.d_code == Tok_STLOC_2 ) {
+        expect(Tok_STLOC_2, true, "Statement");
+    } else if( la.d_code == Tok_STLOC_3 ) {
+        expect(Tok_STLOC_3, true, "Statement");
+    } else if( la.d_code == Tok_STIND ) {
+        expect(Tok_STIND, true, "Statement");
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_STVAR ) {
-		expect(Tok_STVAR, true, "Statement");
+        expect(Tok_STVAR, true, "Statement");
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::VarDecl )
             error(cur, "expecting a module variable");
     } else
-		invalid("Statement");
+        invalid("Statement");
     return res;
 }
 
@@ -2214,13 +2216,13 @@ Constant* Parser2::ConstExpression() {
         memcpy(c->b->b, cur.d_val.constData(), c->b->len);
         return c;
     } else
-		invalid("ConstExpression");
+        invalid("ConstExpression");
     return 0;
 }
 
 Constant* Parser2::ConstExpression2() {
-    const Token t = la;
-	if( FIRST_qualident(la.d_type) ) {
+    const Token tok = la;
+    if( FIRST_qualident(la.d_type) ) {
         Declaration* d = qualident();
         if( d == 0 )
             return 0;
@@ -2228,20 +2230,28 @@ Constant* Parser2::ConstExpression2() {
         {
             if( d->kind != Declaration::TypeDecl )
             {
-                error(t, "qualident must reference a type declaration if a component list follows");
+                error(tok, "qualident must reference a type declaration if a component list follows");
                 return 0;
             }
-			component_list();
+            Constant* c = new Constant();
+            c->c = component_list();
+            c->kind = Constant::C;
+            if( c->c )
+                c->c->type = d->getType();
+            return c;
         }else
         {
-
+            Constant* c = new Constant();
+            c->kind = Constant::R;
+            c->r = d;
+            return c;
         }
-	} else if( FIRST_number(la.d_type) ) {
+    } else if( FIRST_number(la.d_type) ) {
         Constant* c = new Constant();
         number(c);
         return c;
-	} else if( la.d_type == Tok_string ) {
-		expect(Tok_string, false, "ConstExpression2");
+    } else if( la.d_type == Tok_string ) {
+        expect(Tok_string, false, "ConstExpression2");
         Constant* c = new Constant();
         c->kind = Constant::S;
         c->s = (char*)malloc( cur.d_val.size() + 1);
@@ -2257,7 +2267,7 @@ Constant* Parser2::ConstExpression2() {
         memcpy(c->b->b, cur.d_val.constData(), c->b->len);
         return c;
     } else
-		invalid("ConstExpression2");
+        invalid("ConstExpression2");
     return 0;
 }
 
@@ -2280,7 +2290,7 @@ Constant* Parser2::constructor() {
         memcpy(c->b->b, cur.d_val.constData(), c->b->len);
         return c;
     } else
-		invalid("constructor");
+        invalid("constructor");
     return 0;
 }
 

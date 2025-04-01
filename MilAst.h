@@ -36,13 +36,13 @@ namespace Mil
     public:
         Node(quint8 m):kind(0),meta(m),deferred(false),anonymous(false),selfref(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),forward(false),generic(false),byVal(false),
-            type(0),autoself(0),public_(0),init(0) {}
-        ~Node();
+            type(0),autoself(0),public_(0),init(0),owned(0) {}
+        virtual ~Node();
 
         enum Meta { Inval, T, D, E, S };
         enum Visi { NA, Private, ReadOnly, ReadWrite };
 
-        uint kind : 6;
+        uint kind : 8;
         uint meta : 3;
 
         uint typebound : 1; // Type, Declaration
@@ -53,6 +53,7 @@ namespace Mil
         // Type
         uint deferred : 1;
         uint selfref : 1;
+        uint owned : 1;
 
         // Declaration:
         uint inline_ : 1;
@@ -98,7 +99,7 @@ namespace Mil
             Quali* quali; // unresolved NameRef
         };
         // type: array/pointer base type, return type
-        QList<Declaration*> subs; // list of record fields or enum elements, or params for proc type
+        QList<Declaration*> subs; // list of record fields or enum elements, or params for proc type, owned
         Declaration* decl;
 
         Type():Node(T),len(0),decl(0){}
@@ -249,9 +250,6 @@ namespace Mil
         Declaration* findModuleByName( const QByteArray& ) const;
         bool addModule(Declaration*);
         const Declaration* getGlobals() const { return &globals; }
-
-    protected:
-        void createMIC();
 
     private:
         DeclList modules;
