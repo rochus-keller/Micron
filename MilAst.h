@@ -85,15 +85,17 @@ namespace Mil
             Undefined,
             Any,
             StringLit,
+            ByteArrayLit,
             NIL,
             BOOL,
             CHAR,
             INT8, INT16, INT32, INT64,
             UINT8, UINT16, UINT32, UINT64,
             FLOAT32, FLOAT64,
-            INTPTR,
+            INTPTR, DBLINTPTR,
             MaxBasicType,
-            Pointer, Proc, Array, Struct, Union, Object, NameRef, Generic };
+            Pointer, Proc, Array, Struct, Union, Object, NameRef, Generic
+        };
         union {
             quint32 len; // array length
             Quali* quali; // unresolved NameRef
@@ -105,6 +107,11 @@ namespace Mil
         Type():Node(T),len(0),decl(0){}
         ~Type();
 
+        bool isInteger() const { return kind >= INT8 && kind <= UINT64; }
+        bool isInt64() const { return kind == UINT64 || kind == INT64; }
+        bool isInt32() const { return kind == UINT32 || kind == INT32; }
+        bool isFloat() const { return kind == FLOAT32 || kind == FLOAT64; }
+        bool isPointer() const { return kind == INTPTR || kind == Pointer; }
         Declaration* findSubByName(const QByteArray& name, bool recursive = true) const;
     };
 
@@ -131,14 +138,18 @@ namespace Mil
             } f;
             int off;
             Declaration* forwardTo; // Procedure if forward==true, not owned
+            Declaration* imported; // Import, not owned
         };
         // QVariant data; // value for Const, path for Import, name for Extern
         Declaration():Node(D),next(0),link(0),outer(0),c(0),body(0){}
         ~Declaration();
         void appendSub(Declaration*);
         Declaration* findSubByName(const QByteArray&) const;
+        QList<Declaration*> getParams() const;
+        QList<Declaration*> getLocals() const;
         int indexOf(Declaration*) const;
         static void append(Declaration* list, Declaration* next);
+        QByteArray toPath() const;
 
     };
     typedef QList<Declaration*> DeclList;
@@ -189,18 +200,21 @@ namespace Mil
     class Expression : public Node
     {
     public:
+        enum Kind { Argument = TT_Specials,  };
         // Kind corresponds to the TokenType
         Expression* next;
+        Expression* lhs; // not owned
+        Expression* rhs; // not onwned but for Argument
         union {
-            Expression* e; // IIF/THEN/ELSE
-            Declaration* d; // not owned
+            Expression* e; // IIF, THEN, ELSE owned
+            Declaration* d; // not owned, all ops with qualident or trident
             quint32 id;
             qint64 i;
             double f;
             Constant* c; // owned
         };
 
-        Expression():Node(E), next(0), i(0) {}
+        Expression():Node(E), next(0), i(0), lhs(0), rhs(0) {}
         ~Expression();
         void append(Expression*);
     };
@@ -212,6 +226,7 @@ namespace Mil
         // Kind corresponds to the TokenType
         Statement* next;
         Statement* body;
+        Expression* args;
 
         union {
             Expression* e; // owned
@@ -222,7 +237,7 @@ namespace Mil
             quint32 id;
         };
 
-        Statement():Node(S),next(0), body(0), e(0) {}
+        Statement():Node(S),next(0), body(0), e(0), args(0) {}
         ~Statement();
         void append(Statement*);
     };
@@ -250,6 +265,8 @@ namespace Mil
         Declaration* findModuleByName( const QByteArray& ) const;
         bool addModule(Declaration*);
         const Declaration* getGlobals() const { return &globals; }
+        DeclList& getModules() { return modules; }
+        Type* getBasicType(quint8) const;
 
     private:
         DeclList modules;

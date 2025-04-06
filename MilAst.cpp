@@ -127,6 +127,14 @@ bool AstModel::addModule(Declaration* module)
     return true;
 }
 
+Type* AstModel::getBasicType(quint8 k) const
+{
+    if( k < Type::MaxBasicType )
+        return basicTypes[k];
+    else
+        return basicTypes[0];
+}
+
 Node::~Node()
 {
     if( type && ownstype )
@@ -177,6 +185,32 @@ Declaration* Declaration::findSubByName(const QByteArray& name) const
         return 0;
 }
 
+QList<Declaration*> Declaration::getParams() const
+{
+    QList<Declaration*> res;
+    Declaration* d = link;
+    while( d )
+    {
+        if( d->kind == Declaration::ParamDecl )
+            res << d;
+        d = d->next;
+    }
+    return res;
+}
+
+QList<Declaration*> Declaration::getLocals() const
+{
+    QList<Declaration*> res;
+    Declaration* d = link;
+    while( d )
+    {
+        if( d->kind == Declaration::LocalDecl )
+            res << d;
+        d = d->next;
+    }
+    return res;
+}
+
 int Declaration::indexOf(Declaration* ref) const
 {
     Declaration* d = link;
@@ -202,12 +236,33 @@ void Declaration::append(Declaration* list, Declaration* next)
     }
 }
 
+QByteArray Declaration::toPath() const
+{
+    QByteArray res;
+    if( (kind == Procedure && typebound) || kind == Field || kind == LocalDecl || kind == ParamDecl )
+    {
+        res = "." + name;
+    }else if( kind != Module )
+    {
+        res = name;
+        if( outer && outer->kind != Module )
+            res = "$" + res;
+    }else
+        res = name + "!";
+    if( outer )
+        return outer->toPath() + res;
+    else
+        return res;
+}
+
 Expression::~Expression()
 {
     if( (kind == Tok_LDOBJ || kind == Tok_LDSTR) && c != 0 )
         delete c;
     else if( (kind == Tok_IIF || kind == Tok_THEN || kind == Tok_ELSE ) && e != 0 )
         delete e;
+    else if( rhs != 0 && rhs->kind == Expression::Argument )
+        delete rhs;
     if( next )
         delete next;
 }
@@ -308,3 +363,4 @@ void Statement::append(Statement* s)
     Q_ASSERT( l && l->next == 0 );
     l->next = s;
 }
+

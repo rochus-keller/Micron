@@ -3844,7 +3844,7 @@ void Parser2::module() {
 	if( FIRST_block(la.d_type) ) {
         IdentDef id;
         id.name= la;
-        id.name.d_val = "$begin";
+        id.name.d_val = "$begin"; // keep $ prefix, because "begin" is a MIL keyword
         id.visi = IdentDef::Private;
         Declaration* procDecl = addDecl(id, Declaration::Procedure);
         mdl->openScope(procDecl);

@@ -220,7 +220,7 @@ namespace Mic
         void end_();
         void exit_();
         void goto_(const QByteArray& label);
-        void ifgoto_(const QByteArray& label);
+        void ifgoto_(const QByteArray& label); // TODO: do we need this since we have IIF?
         void if_();
         void iif_();
         void initobj(const MilQuali& typeRef);

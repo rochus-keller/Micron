@@ -2,10 +2,10 @@ module $MIC
 
 type $1 = array of char
 type $2 = pointer to $1
-proc relop1(lhs, rhs: $2; op: i4) extern // 1
-proc relop2(lhs: $2; rhs: char; op: i4) extern // 2
-proc relop3(lhs: char; rhs: $2; op: i4) extern // 3
-proc relop4(lhs, rhs: char; op: i4) extern // 4
+proc relop1(lhs, rhs: $2; op: i4): u4 extern // 1
+proc relop2(lhs: $2; rhs: char; op: i4): u4 extern // 2
+proc relop3(lhs: char; rhs: $2; op: i4): u4 extern // 3
+proc relop4(lhs, rhs: char; op: i4): u4 extern // 4
 proc SetDiv( lhs, rhs: u4 ): u4 extern // 5
 proc SetIn( lhs, rhs: u4 ): u4 extern // 6
 proc printI8(i: i8) extern // 7

@@ -6,7 +6,8 @@ SOURCES += \
     MilTokenType.cpp \
     MilParser2.cpp \
     MilAst.cpp \
-    MilProject.cpp
+    MilProject.cpp \
+    $$PWD/MilValidator.cpp
 
 HEADERS += \
     MilLexer.h \
@@ -14,4 +15,5 @@ HEADERS += \
     MilTokenType.h \
     MilParser2.h \
     MilAst.h \
-    MilProject.h
+    MilProject.h \
+    $$PWD/MilValidator.h

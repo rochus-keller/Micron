@@ -23,6 +23,7 @@
 #include <QtDebug>
 #include "MilParser2.h"
 #include "MilLexer.h"
+#include "MilValidator.h"
 using namespace Mil;
 
 Project::Project(AstModel* mdl):mdl(mdl)
@@ -102,7 +103,7 @@ void Project::parse()
         Parser2 p(mdl, &lex, this);
         qDebug() << "**** parsing" << file;
         bool errorsFound = false;
-        while( p.parseModule() )
+        while( p.parseModule() ) // TODO: skip already parsed modules
         {
             if( !p.errors.isEmpty() )
             {
@@ -114,7 +115,17 @@ void Project::parse()
             {
                 Declaration* module = p.takeModule();
                 qDebug() << "module" << module->name;
-                if( !mdl->addModule(module) )
+                Validator v(mdl);
+                if( !v.validate(module) )
+                {
+                    foreach( const Validator::Error& e, v.errors )
+                        qCritical() << e.where << e.pos.d_row << e.pos.d_col << e.pc << e.msg;
+                    v.errors.clear();
+                    errorsFound = true;
+                    delete module;
+                    module = 0;
+                }
+                if( module && !mdl->addModule(module) )
                     delete module;
             }
         }

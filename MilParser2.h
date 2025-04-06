@@ -117,6 +117,7 @@ namespace Mil {
         QList<Declaration*> scopeStack;
         QList<Type*> unresolved;
         Declaration* curMod;
+        Declaration* curDecl;
         bool firstModule;
 	};
 }

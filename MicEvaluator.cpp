@@ -910,13 +910,7 @@ Value Evaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs)
                 res.val = lhs.val.toBool() || rhs.val.toBool();
         }else
         {
-            res.mode = Value::Val;
-            res.type = lhs.type;
-            // order is irrelevant for logic ops
-            if( op == Expression::And)
-                out->and_();
-            else
-                out->or_();
+            Q_ASSERT(false); // handled elsewhere
         }
     }else
         Q_ASSERT(false);

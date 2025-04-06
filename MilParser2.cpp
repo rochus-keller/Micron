@@ -686,7 +686,7 @@ static inline bool FIRST_component(int tt) {
 }
 
 Parser2::Parser2(AstModel* m, Scanner2* s, Importer* imp):mdl(m),scanner(s),imp(imp),
-    curMod(0),firstModule(true)
+    curMod(0),firstModule(true),curDecl(0)
 {
 
 }
@@ -957,30 +957,30 @@ void Parser2::ConstDeclaration() {
     Declaration* d = addDecl(cur, Declaration::ConstDecl);
     if( d == 0 )
         return;
-	if( la.d_type == Tok_Eq || la.d_type == Tok_Colon ) {
-		if( la.d_type == Tok_Eq ) {
-			expect(Tok_Eq, false, "ConstDeclaration");
-            d->c = ConstExpression2();
+    if( la.d_type == Tok_Eq ) {
+        expect(Tok_Eq, false, "ConstDeclaration");
+        d->c = ConstExpression2();
 #if 0
-            // TODO
-		} else if( la.d_type == Tok_Colon ) {
-			expect(Tok_Colon, false, "ConstDeclaration");
-			qualident();
+        // TODO
+    } else if( la.d_type == Tok_Colon ) {
+        expect(Tok_Colon, false, "ConstDeclaration");
+        qualident();
 #endif
-		} else
-			invalid("ConstDeclaration");
-	}
+    } else
+        invalid("ConstDeclaration");
 }
 
 void Parser2::TypeDeclaration() {
     Declaration* d = identdef(Declaration::TypeDecl);
     if( d == 0 )
         return;
+    curDecl = d;
     if( la.d_type == Tok_Eq )
     {
 		expect(Tok_Eq, false, "TypeDeclaration");
         d->setType(type());
 	}
+    curDecl = 0;
 }
 
 Type* Parser2::type() {
@@ -1072,7 +1072,7 @@ static void moveToSubs(Type* res, Declaration* tmp )
         Declaration* old = p;
         p = p->next;
         old->next = 0;
-        old->outer = 0;
+        //old->outer = res->decl; // res->decl is not set at this point
     }
     tmp->link = 0;
 }
@@ -1125,6 +1125,7 @@ void Parser2::FieldList() {
         {
             field->setType(t);
             field->f.bw = bw;
+            field->outer = curDecl;
         }
 	} else if( la.d_type == Tok_2Dot ) {
 		expect(Tok_2Dot, false, "FieldList");
@@ -1135,6 +1136,7 @@ void Parser2::FieldList() {
         Declaration* padding = addDecl("", cur.toRowCol(), Declaration::Field);
         padding->anonymous = true;
         padding->f.bw = tmp;
+        padding->outer = curDecl;
     } else
 		invalid("FieldList");
 }
@@ -1189,7 +1191,11 @@ void Parser2::MemberList() {
 	expect(Tok_Colon, false, "MemberList");
     Type* t = NamedType();
     foreach( Declaration* field, fields )
+    {
         field->setType(t);
+        Q_ASSERT(field->outer == 0);
+        field->outer = curDecl;
+    }
 }
 
 Type* Parser2::PointerType() {
@@ -1273,6 +1279,7 @@ void Parser2::ProcedureDeclaration() {
                     forward->forwardTo = p;
                 }
                 t->subs.append(p);
+                p->outer = t->decl;
             }
         }
 
@@ -1495,6 +1502,8 @@ void Parser2::import() {
     Declaration* m = imp->loadModule(i);
     if( m == 0 )
         error(cur, QString("cannot import '%1'").arg(cur.d_val.constData()));
+    else
+        d->imported = m;
 }
 
 void Parser2::DeclarationSequence() {
@@ -1649,12 +1658,16 @@ Expression* Parser2::ExpInstr() {
         res->id = numberOrIdent(true);
     } else if( la.d_code == Tok_LDARG_0 ) {
         expect(Tok_LDARG_0, true, "ExpInstr");
+        res->id = 0;
     } else if( la.d_code == Tok_LDARG_1 ) {
         expect(Tok_LDARG_1, true, "ExpInstr");
+        res->id = 1;
     } else if( la.d_code == Tok_LDARG_2 ) {
         expect(Tok_LDARG_2, true, "ExpInstr");
+        res->id = 2;
     } else if( la.d_code == Tok_LDARG_3 ) {
         expect(Tok_LDARG_3, true, "ExpInstr");
+        res->id = 3;
     } else if( la.d_code == Tok_LDARGA ) {
         expect(Tok_LDARGA, true, "ExpInstr");
         res->id = numberOrIdent(true);
@@ -1789,12 +1802,16 @@ Expression* Parser2::ExpInstr() {
         res->id = numberOrIdent(false);
     } else if( la.d_code == Tok_LDLOC_0 ) {
         expect(Tok_LDLOC_0, true, "ExpInstr");
+        res->id = 0;
     } else if( la.d_code == Tok_LDLOC_1 ) {
         expect(Tok_LDLOC_1, true, "ExpInstr");
+        res->id = 1;
     } else if( la.d_code == Tok_LDLOC_2 ) {
         expect(Tok_LDLOC_2, true, "ExpInstr");
-    } else if( la.d_code == Tok_LDLOC_3 ) {
+        res->id = 2;
+   } else if( la.d_code == Tok_LDLOC_3 ) {
         expect(Tok_LDLOC_3, true, "ExpInstr");
+        res->id = 3;
     } else if( la.d_code == Tok_LDNULL ) {
         expect(Tok_LDNULL, true, "ExpInstr");
     } else if( la.d_code == Tok_LDIND ) {
@@ -1932,11 +1949,34 @@ Statement* Parser2::StatementSequence() {
             s = new Statement();
             s->kind = Statement::ExprStat;
             s->e = ExpInstr();
+            if( s->e == 0 )
+            {
+                if( res )
+                    delete res;
+                return 0;
+            }
+            while( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) )
+            {
+                // take care that all stretches of expressions are connected under the same ExprStat
+                Expression* e = ExpInstr();
+                if( e == 0 )
+                {
+                    if( res )
+                        delete res;
+                    return 0;
+                }
+                s->e->append(e);
+            }
         } else
             invalid("StatementSequence");
         if( res == 0 )
             res = s;
-        else
+        else if( s == 0 )
+        {
+            if( res )
+                delete res;
+            return 0;
+        }else
             res->append(s);
     }
     return res;
@@ -1957,7 +1997,7 @@ Statement* Parser2::Statement_()
     }
 
     Statement* res = new Statement();
-    res->kind = la.d_type;
+    res->kind = la.d_code;
     res->pos = la.toRowCol();
 
     if( la.d_code == Tok_FREE ) {
@@ -2038,12 +2078,16 @@ Statement* Parser2::Statement_()
         res->id = numberOrIdent(false);
     } else if( la.d_code == Tok_STLOC_0 ) {
         expect(Tok_STLOC_0, true, "Statement");
+        res->id = 0;
     } else if( la.d_code == Tok_STLOC_1 ) {
         expect(Tok_STLOC_1, true, "Statement");
+        res->id = 1;
     } else if( la.d_code == Tok_STLOC_2 ) {
         expect(Tok_STLOC_2, true, "Statement");
+        res->id = 2;
     } else if( la.d_code == Tok_STLOC_3 ) {
         expect(Tok_STLOC_3, true, "Statement");
+        res->id = 3;
     } else if( la.d_code == Tok_STIND ) {
         expect(Tok_STIND, true, "Statement");
         res->d = qualident();
