@@ -45,7 +45,7 @@ namespace Mic
     class Node
     {
     public:
-        Node(quint8 m):kind(0),meta(m),deferred(false),anonymous(false),selfref(false),typebound(false),
+        Node(quint8 m):kind(0),meta(m),deferred(false),anonymous(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
             owned(false),type(0),autoself(0){}
         ~Node();
@@ -63,7 +63,6 @@ namespace Mic
         // Type
         uint deferred : 1;
         uint anonymous : 1;
-        uint selfref : 1;
         uint owned : 1;
 
         // Declaration:
@@ -101,7 +100,7 @@ namespace Mic
             FLT32, FLT64,
             SET,
             MaxBasicType,
-            Pointer, Proc, Array, Record, Object, ConstEnum, NameRef, Generic };
+            Pointer, Proc, Array, Record, Object, ConstEnum, Generic };
         quint32 len; // array length
         // type: array/pointer base type, return type
         QList<Declaration*> subs; // list of record fields or enum elements, or params for proc type
@@ -117,7 +116,7 @@ namespace Mic
         bool isSimple() const { return kind >= Type::String && kind < Type::MaxBasicType; }
         bool isText() const { return kind == Type::String || kind == Type::CHAR ||
                     ( kind == Array && type && type->kind == Type::CHAR ) ||
-                    ( kind == Pointer && type && type->kind == Array && type->type->kind == Type::CHAR ); }
+                    ( kind == Pointer && type && type->kind == Array && type->type && type->type->kind == Type::CHAR ); }
         bool isStructured() const { return kind == Array || kind == Record || kind == Object; }
 
         Declaration* findSub(const QByteArray& name) const;

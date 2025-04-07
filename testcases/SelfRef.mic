@@ -1,0 +1,21 @@
+module SelfRef
+
+type
+	// from Storage.mic
+	TreeArray = record
+	  // compiler error: arr2: pointer to array of TreeArray
+	  arr: pointer to TreeArrayArray // this works because pointer type resolution is deferred
+	  next: pointer to TreeArray
+	  len: uint32
+	end
+	
+	TreeArrayArray = array of TreeArray
+	
+type
+	T1 = pointer to T1Desc
+	T1Desc = record
+			next: T1
+		end
+
+
+end SelfRef

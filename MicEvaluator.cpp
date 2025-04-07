@@ -1509,8 +1509,7 @@ Qualident Evaluator::toQuali(Type* t)
     {
         Q_ASSERT( t && t->decl );
         return toQuali(t->decl);
-    }else if( t->kind == Type::NameRef )
-        return toQuali(t->subs.first());
+    }
     return Qualident();
 }
 

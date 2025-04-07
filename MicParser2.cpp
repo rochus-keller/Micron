@@ -1106,24 +1106,34 @@ void Parser2::TypeDeclaration() {
     Type* t = 0;
 
     // declare the type immediately so it is known in the forthcoming declaration
+#ifdef HAVE_SELFREF
     Declaration* d = addDecl(id,Declaration::TypeDecl);
     thisDecl = d;
+#else
+    thisDecl = 0;
+#endif
     Quali q;
-    // Token tok = la;
+
     if( FIRST_NamedType(la.d_type) ) {
-        t = NamedType(&q);
+        t = NamedType(&q); // for alias types
     }else
         t = type(false);
-    // No, it is allowed here: openArrayError(tok,t);
-    if( t && t->decl == 0 )
+
+#ifndef HAVE_SELFREF
+    Declaration* d = addDecl(id,Declaration::TypeDecl);
+#endif
+    if( t && t->kind > Type::MaxBasicType && t->decl == 0 )
     {
         t->decl = d;
         d->ownstype = true;
     }
     d->setType(t);
-    resolveAndCheckType(d);
+
     thisDecl = 0;
-    emitType(t, q);
+    if( !q.second.isEmpty() )
+        out->addType(ev->toQuali(t).second,t->decl->isPublic(),q, MilEmitter::Alias);
+    else
+        emitType(t);
 }
 
 Type* Parser2::type(bool needsHelperDecl) {
@@ -1160,29 +1170,31 @@ Type* Parser2::NamedType(Quali* qout,bool allowUnresovedLocal) {
     Declaration* d = resolveQualident(qout, allowUnresovedLocal);
     if( d == 0 )
         return 0;
-    Type* t = d->getType();
-    if( thisDecl != 0 )
-    {
-        // we are in a type declaration; mark each named type by this intermediate object
-        // which is then removed and replaced later
-        t = new Type();
-        t->kind = Type::NameRef;
-        t->subs.append(d);
-        t->setType(d->getType());
-        // no addHelper here because we get rid of NameRefs asap
-    }
     if( d->kind != Declaration::TypeDecl )
         error(tok, QString("invalid type: %1").arg(d->name.constData()) );
-    else if( d == thisDecl )
+    if( !allowUnresovedLocal && thisDecl && thisDecl == d )
     {
-        // we are in a type declaration using itself;
-        // the type is not yet known and has to be resolved later
-        t->selfref = true;
-    }
-    return t;
+        // this is a reference to the current type declaration.
+        Q_ASSERT( d->getType() == 0 );
+        if( !typeStack.isEmpty() &&
+                ( typeStack.first()->kind == Type::Pointer && typeStack.last()->kind == Type::Record ||
+                  typeStack.last()->kind == Type::Pointer ))
+        {
+            typeStack.first()->decl = thisDecl;
+            return typeStack.first(); // this is legal, e.g. T1 = POINTER TO RECORD t: T1 END
+        }else
+        {
+            error(tok, "invalid self referencing type declaration" );
+            return 0;
+        }
+    }else
+        return d->getType();
 }
 
 Type* Parser2::ArrayType() {
+    Type* arr = new Type();
+    arr->kind = Type::Array;
+    typeStack.push_back(arr);
     Type* etype = 0;
     quint32 len = 0;
     bool vla = false;
@@ -1217,10 +1229,9 @@ Type* Parser2::ArrayType() {
 
     openArrayError(tok2,etype);
     invalidTypeError(tok2,etype);
-    Type* arr = new Type();
-    arr->kind = Type::Array;
     arr->len = len;
     arr->setType(etype);
+    typeStack.pop_back();
     return arr;
 }
 
@@ -1261,6 +1272,7 @@ Type* Parser2::RecordType() {
 	expect(Tok_RECORD, true, "RecordType");
     Type* rec = new Type();
     rec->kind = Type::Record;
+    typeStack.push_back(rec);
     mdl->openScope(0);
 	if( FIRST_FixedPart(la.d_type) ) {
         FixedPart();
@@ -1270,6 +1282,7 @@ Type* Parser2::RecordType() {
 	}
 	expect(Tok_END, true, "RecordType");
     rec->subs = toList(mdl->closeScope(true));
+    typeStack.pop_back();
     return rec;
 }
 
@@ -1279,6 +1292,7 @@ Type* Parser2::ObjectType() {
         error(cur,"object types not available on current language level");
     Type* rec = new Type();
     rec->kind = Type::Object;
+    typeStack.push_back(rec);
     mdl->openScope(0);
     if( la.d_type == Tok_Lpar ) {
         expect(Tok_Lpar, false, "ObjectType");
@@ -1316,6 +1330,7 @@ Type* Parser2::ObjectType() {
     }
     expect(Tok_END, true, "ObjectType");
     rec->subs = toList(mdl->closeScope(true));
+    typeStack.pop_back();
     return rec;
 }
 
@@ -1448,6 +1463,7 @@ Type* Parser2::PointerType() {
 
     Type* res = new Type();
     res->kind = Type::Pointer;
+    typeStack.push_back(res);
 
     if( FIRST_NamedType(la.d_type) ) {
         const Token tok = la;
@@ -1467,12 +1483,14 @@ Type* Parser2::PointerType() {
     }else
         res->setType(type());
 
+    typeStack.pop_back();
     return res;
 }
 
 Type* Parser2::enumeration() {
 	expect(Tok_Lpar, false, "enumeration");
     Type* res = new Type();
+    typeStack.push_back(res);
     if( FIRST_constEnum(la.d_type) ) {
         res->subs = constEnum();
         foreach( Declaration* d, res->subs )
@@ -1481,7 +1499,7 @@ Type* Parser2::enumeration() {
     } else
 		invalid("enumeration");
 	expect(Tok_Rpar, false, "enumeration");
-
+    typeStack.pop_back();
     return res;
 }
 
@@ -1590,15 +1608,12 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
     return res;
 }
 
-void Parser2::emitType(Type* t, const Quali& q)
+void Parser2::emitType(Type* t)
 {
     if( t == 0 || t->decl == 0 )
         return;
     Q_ASSERT( t && t->decl );
-    if( !q.second.isEmpty() )
-    {
-       out->addType(ev->toQuali(t).second,t->decl->isPublic(),q, MilEmitter::Alias);
-    }else if( t->kind == Type::Record || t->kind == Type::Object || t->kind == Type::Proc )
+    if( t->kind == Type::Record || t->kind == Type::Object || t->kind == Type::Proc )
     {
         if( t->kind == Type::Record )
         {
@@ -1708,61 +1723,6 @@ void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
         // TEST paramCompat(formal,actual);
         error(actual->pos.d_row, actual->pos.d_col, "actual argument not compatible with formal parameter");
     }
-}
-
-void Parser2::resolveAndCheckType(Declaration* d)
-{
-    if( d == 0 || d->getType() == 0 )
-        return; // already reported
-    if( d->getType()->selfref )
-        error(d->pos, "circular type declaration");
-    d->setType(resolveAndCheckType(d->getType(), false));
-    foreach( Type* t, deferDeleteNamedType )
-    {
-        t->subs.clear();
-        delete t;
-    }
-    deferDeleteNamedType.clear();
-}
-
-Type*Parser2::resolveAndCheckType(Type* t, bool selfRefBroken)
-{
-    if( t == 0 || t->kind < Type::MaxBasicType || t->kind == Type::ConstEnum )
-        return t;
-    Type* res = t;
-    switch( t->kind )
-    {
-    case Type::Pointer:
-        t->setType(resolveAndCheckType(t->getType(), true));
-        break;
-    case Type::Proc:
-        t->setType(resolveAndCheckType(t->getType(), true));
-        for( int i = 0; i < t->subs.size(); i++ )
-            t->subs[i]->setType(resolveAndCheckType(t->subs[i]->getType(), true));
-        break;
-    case Type::Array:
-        if( !selfRefBroken && t->getType()->selfref )
-            error(t->getType()->subs.first()->pos,"a structured type cannot contain itself");
-        t->setType(resolveAndCheckType(t->getType(), selfRefBroken));
-        break;
-    case Type::Record:
-    case Type::Object:
-        for( int i = 0; i < t->subs.size(); i++ )
-        {
-            if( !selfRefBroken && t->subs[i]->getType() && t->subs[i]->getType()->selfref )
-                error(t->subs[i]->pos,"a structured type cannot contain itself");
-            t->subs[i]->setType(resolveAndCheckType(t->subs[i]->getType(), selfRefBroken));
-        }
-        break;
-    case Type::NameRef:
-        res = t->getType();
-        if( t->selfref )
-            res = t->subs.first()->getType();
-        deferDeleteNamedType.insert(t); // because more than one field can point to same type
-        // stop at named refs
-        break;
-    }
-    return res;
 }
 
 static inline Type* maxType(Type* lhs, Type* rhs)
@@ -2264,46 +2224,44 @@ Declaration* Parser2::resolveQualident(Parser2::Quali* qq, bool allowUnresovedLo
     Quali q = qualident();
     if( qq )
         *qq = q;
-    Declaration* d = 0;
     if( !q.first.isEmpty() )
     {
-        d = mdl->findDecl(q.first);
-        if( d == 0 )
+        // a full quali: import.decl
+        Declaration* import = mdl->findDecl(q.first);
+        if( import == 0 )
         {
             error(tok, QString("cannot find import declaration: %1").arg(q.first.constData()) );
             return 0;
-        }else if( d->kind != Declaration::Import )
+        }else if( import->kind != Declaration::Import )
         {
             error(tok, QString("identifier doesn't refer to an import declaration: %1").arg(q.first.constData()) );
             return 0;
         }
-    }
-    if( d != 0 )
-    {
-        d = mdl->findDecl(d, q.second);
-        if( d == 0 )
+        Declaration* decl = mdl->findDecl(import, q.second);
+        if( decl == 0 )
         {
             error(tok, QString("cannot find declaration '%1' in module '%2'").
                   arg(q.second.constData()).arg(q.first.constData()) );
             return 0;
         }
-        if( d->visi == Declaration::Private )
+        if( decl->visi == Declaration::Private )
         {
             error(cur,QString("cannot access private declaration '%1' from module '%2'").
                   arg(q.second.constData()).arg(q.first.constData()) );
             return 0;
         }
+        return decl;
     }else
     {
-       d = mdl->findDecl(q.second);
-       if( d == 0 && !allowUnresovedLocal )
-       {
-           error(tok, QString("cannot find declaration '%1'").arg(q.second.constData()) );
-           return 0;
-       }
-
+        // a local decl
+        Declaration* d = mdl->findDecl(q.second);
+        if( d == 0 && !allowUnresovedLocal )
+        {
+            error(tok, QString("cannot find declaration '%1'").arg(q.second.constData()) );
+            return 0;
+        }
+        return d;
     }
-    return d;
 }
 
 DeclList Parser2::toList(Declaration* d)
@@ -3288,6 +3246,9 @@ void Parser2::procedure() {
 Type* Parser2::ProcedureType() {
 	procedure();
     bool bound = false;
+    Type* p = new Type();
+    p->kind = Type::Proc;
+    typeStack.push_back(p);
     if( la.d_type == Tok_Lpar && (peek(2).d_type == Tok_POINTER || peek(2).d_type == Tok_Hat) ) {
         expect(Tok_Lpar, false, "ProcedureType");
         if( langLevel < 3 )
@@ -3305,11 +3266,10 @@ Type* Parser2::ProcedureType() {
 	if( FIRST_FormalParameters(la.d_type) ) {
         ret = FormalParameters();
 	}
-    Type* p = new Type();
-    p->kind = Type::Proc;
     p->typebound = bound;
     p->subs = toList(mdl->closeScope(true));
     p->setType(ret);
+    typeStack.pop_back();
     return p;
 }
 
@@ -3365,7 +3325,7 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
             mdl->closeScope();
             delete procDecl;
             return 0;
-        }else
+        }else if( forward )
             forward->name.clear();
         objectType->subs.append(procDecl);
         Q_ASSERT(procDecl->outer == 0);

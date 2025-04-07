@@ -730,9 +730,11 @@ void Builtins::LEN(int nArgs)
 void Builtins::PRINT(int nArgs, bool ln)
 {
     if( nArgs < 1 || ev->stack.back().type == 0 ||
-            !(ev->stack.back().type->isSimple() || ev->stack.back().type->isText() ))
+            !(ev->stack.back().type->isSimple() ||
+              ev->stack.back().type->isText() ||
+              ev->stack.back().type->kind == Type::ConstEnum ))
     {
-        ev->err = "expecting one argument of basic or char array type";
+        ev->err = "expecting one argument of basic, enum or char array type";
         return;
     }
     if( ev->stack.back().type->kind == Type::ConstEnum )

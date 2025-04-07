@@ -99,7 +99,7 @@ void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kin
 
 void MilEmitter::toFinallySection(bool yes)
 {
-    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0);
     if( yes )
         ops = &d_proc.back().finally;
     else

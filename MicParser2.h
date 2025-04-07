@@ -170,15 +170,13 @@ namespace Mic {
         Declaration* addDecl(const IdentDef& id, quint8 mode, bool* doublette = 0);
         void resolveDeferreds();
         Expression* toExpr(Declaration* d, const RowCol&);
-        void emitType(Type*, const Quali& = Quali());
+        void emitType(Type*);
         Declaration* addHelper(Type*);
         Declaration* addTemp(Type*);
         typedef QList<QPair<Token,Value> > Args;
         void openArrayError(const Token&, Type*);
         void invalidTypeError(const Token&, Type*);
         void prepareParam(const DeclList& formals, const ExpList& actuals);
-        void resolveAndCheckType(Declaration* d);
-        Type* resolveAndCheckType(Type*, bool selfRefBroken);
         void checkArithOp(Expression*);
         void checkUnaryOp(Expression*);
         void checkRelOp(Expression*);
@@ -194,6 +192,7 @@ namespace Mic {
 		Token la;
         Scanner2* scanner;
         Declaration* thisMod, *thisDecl;
+        QList<Type*> typeStack;
         QList<QPair<Type*,Token> > deferred;
         QList<RowCol> loopStack;
         typedef QList<RowCol> Depth;
@@ -212,7 +211,6 @@ namespace Mic {
         Labels labels;
         typedef QList<QPair<Depth,Token> > Gotos;
         Gotos gotos;
-        QSet<Type*> deferDeleteNamedType;
         MetaActualList metaActuals;
         QByteArray self, SELF;
 	};

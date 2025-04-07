@@ -1,3 +1,22 @@
+/*
+* Copyright 2025 Rochus Keller <mailto:me@rochus-keller.ch>
+*
+* This file is part of the Micron language project.
+*
+* The following is the license that applies to this copy of the
+* file. For a license to use the file under conditions
+* other than those described here, please email to me@rochus-keller.ch.
+*
+* GNU General Public License Usage
+* This file may be used under the terms of the GNU General Public
+* License (GPL) versions 2.0 or 3.0 as published by the Free Software
+* Foundation and appearing in the file LICENSE.GPL included in
+* the packaging of this file. Please review the following information
+* to ensure GNU General Public Licensing requirements will be met:
+* http://www.fsf.org/licensing/licenses/info/GPLv2.html and
+* http://www.gnu.org/copyleft/gpl.html.
+*/
+
 #include "MilCeeGen.h"
 #include <QDateTime>
 #include <QCoreApplication>
@@ -206,11 +225,16 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
             }
             break;
         case Type::Array:
+#if 0
             if( t->len == 0 )
                 pointerTo(out, t); // TODO: this is wrong; pointer to array of x leads to x**
             else
+#endif
             {
-                out << typeRef(t->getType()) << " " << qualident(d) << "[" << t->len << "]";
+                out << typeRef(t->getType()) << " " << qualident(d) << "[";
+                if( t->len != 0 )
+                    out << t->len;
+                out << "]";
                 return;
             }
             break;
@@ -234,16 +258,24 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
     out << " " << qualident(d);
 }
 
-void CeeGen::pointerTo(QTextStream& out, Type* t)
+void CeeGen::pointerTo(QTextStream& out, Type* ptr)
 {
-    Type* tt = t->getType();
-    if( tt && (tt->deref()->isSUO() ) )
+    Type* to = ptr->getType();
+    Type* to2 = to ? to->deref() : 0;
+    if( to2 && to2->kind == Type::Array )
     {
-        if( tt->deref()->kind == Type::Union )
+        // Pointer to array is translated to pointer to array element
+        ptr = to2;
+        to = ptr->getType();
+        to2 = to ? to->deref() : 0;
+    }
+    if( to2 && to2->isSUO() )
+    {
+        if( to->deref()->kind == Type::Union )
             out << "union ";
         else
             out << "struct ";
     }
-    out << typeRef(t->getType()) << "*";
+    out << typeRef(ptr->getType()) << "*";
 }
 

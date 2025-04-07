@@ -52,7 +52,11 @@ QList<MilModule*> MilLoader::getModulesInDependencyOrder()
 {
     QList<MilModule*> res;
     for( int i = 0; i < modules.size(); i++ )
+    {
         visitImports(this, &modules[i], res);
+        if( !res.contains(&modules[i]) )
+            res << &modules[i];
+    }
     return res;
 }
 
