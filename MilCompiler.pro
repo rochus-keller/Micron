@@ -14,13 +14,11 @@ DEFINES += _DEBUG
 
 
 SOURCES += \
-    MicRowCol.cpp \
     MilCompiler.cpp \
-    MicSymbol.cpp
+    MilCeeGen.cpp
 
 HEADERS += \
-    MicRowCol.h \
-    MicSymbol.h
+    MilCeeGen.h
 
 RESOURCES += \
     MilCompiler.qrc

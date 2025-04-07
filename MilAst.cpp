@@ -158,8 +158,8 @@ Declaration::~Declaration()
 {
     if( kind == ConstDecl && c )
         delete c;
-    if( link )
-        delete link;
+    if( subs )
+        delete subs;
     if( body )
         delete body;
     if( next )
@@ -168,15 +168,15 @@ Declaration::~Declaration()
 
 void Declaration::appendSub(Declaration* d)
 {
-    if( link == 0 )
-        link = d;
+    if( subs == 0 )
+        subs = d;
     else
-        append(link,d);
+        append(subs,d);
 }
 
 Declaration* Declaration::findSubByName(const QByteArray& name) const
 {
-    Declaration* d = link;
+    Declaration* d = subs;
     while( d && d->name.constData() != name.constData() )
         d = d->next;
     if( d && d->name.constData() == name.constData())
@@ -188,7 +188,7 @@ Declaration* Declaration::findSubByName(const QByteArray& name) const
 QList<Declaration*> Declaration::getParams() const
 {
     QList<Declaration*> res;
-    Declaration* d = link;
+    Declaration* d = subs;
     while( d )
     {
         if( d->kind == Declaration::ParamDecl )
@@ -201,7 +201,7 @@ QList<Declaration*> Declaration::getParams() const
 QList<Declaration*> Declaration::getLocals() const
 {
     QList<Declaration*> res;
-    Declaration* d = link;
+    Declaration* d = subs;
     while( d )
     {
         if( d->kind == Declaration::LocalDecl )
@@ -213,7 +213,7 @@ QList<Declaration*> Declaration::getLocals() const
 
 int Declaration::indexOf(Declaration* ref) const
 {
-    Declaration* d = link;
+    Declaration* d = subs;
     int i = 0;
     while( d )
     {
@@ -253,6 +253,14 @@ QByteArray Declaration::toPath() const
         return outer->toPath() + res;
     else
         return res;
+}
+
+Declaration*Declaration::getForwardToProc() const
+{
+    if( kind == Procedure && forward )
+        return forwardTo->getForwardToProc();
+    else
+        return const_cast<Declaration*>(this);
 }
 
 Expression::~Expression()
@@ -337,6 +345,14 @@ Declaration*Type::findSubByName(const QByteArray& name, bool recursive) const
     if( getType() && recursive )
         return getType()->findSubByName(name,recursive);
     return 0;
+}
+
+Type*Type::deref() const
+{
+    if( kind == NameRef && type )
+        return type->deref();
+    else
+        return const_cast<Type*>(this);
 }
 
 Statement::~Statement()

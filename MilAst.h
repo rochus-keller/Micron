@@ -112,7 +112,9 @@ namespace Mil
         bool isInt32() const { return kind == UINT32 || kind == INT32; }
         bool isFloat() const { return kind == FLOAT32 || kind == FLOAT64; }
         bool isPointer() const { return kind == INTPTR || kind == Pointer; }
+        bool isSUO() const { return kind == Struct || kind == Union || kind == Object; }
         Declaration* findSubByName(const QByteArray& name, bool recursive = true) const;
+        Type* deref() const;
     };
 
     struct Constant;
@@ -126,7 +128,7 @@ namespace Mil
                     Procedure,
                     Max };
         Declaration* next; // list of all declarations in outer scope
-        Declaration* link; // member list or imported module decl
+        Declaration* subs; // member list or imported module decl
         Declaration* outer; // the owning declaration to reconstruct the qualident
         Statement* body;
         QByteArray name;
@@ -141,7 +143,7 @@ namespace Mil
             Declaration* imported; // Import, not owned
         };
         // QVariant data; // value for Const, path for Import, name for Extern
-        Declaration():Node(D),next(0),link(0),outer(0),c(0),body(0){}
+        Declaration():Node(D),next(0),subs(0),outer(0),c(0),body(0){}
         ~Declaration();
         void appendSub(Declaration*);
         Declaration* findSubByName(const QByteArray&) const;
@@ -150,6 +152,7 @@ namespace Mil
         int indexOf(Declaration*) const;
         static void append(Declaration* list, Declaration* next);
         QByteArray toPath() const;
+        Declaration* getForwardToProc() const;
 
     };
     typedef QList<Declaration*> DeclList;

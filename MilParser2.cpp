@@ -803,7 +803,8 @@ Declaration*Parser2::addDecl(const QByteArray& name, const Mic::RowCol& pos, Dec
     res->name = name;
     res->pos = pos;
     res->public_ = public_;
-    res->forwardTo = forward;
+    if( forward )
+        forward->forwardTo = res;
     if( !scopeStack.isEmpty() )
     {
         res->outer = scopeStack.back();
@@ -1065,7 +1066,7 @@ quint32 Parser2::length() {
 
 static void moveToSubs(Type* res, Declaration* tmp )
 {
-    Declaration* p = tmp->link;
+    Declaration* p = tmp->subs;
     while( p )
     {
         res->subs.append(p);
@@ -1074,7 +1075,7 @@ static void moveToSubs(Type* res, Declaration* tmp )
         old->next = 0;
         //old->outer = res->decl; // res->decl is not set at this point
     }
-    tmp->link = 0;
+    tmp->subs = 0;
 }
 
 Type* Parser2::StructUnionType() {

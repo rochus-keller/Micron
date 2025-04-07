@@ -18,9 +18,11 @@
 */
 
 #include "MilProject.h"
+#include "MilCeeGen.h"
 #include <QDir>
 #include <QElapsedTimer>
 #include <QtDebug>
+#include <QFile>
 #include "MilParser2.h"
 #include "MilLexer.h"
 #include "MilValidator.h"
@@ -91,7 +93,7 @@ public:
     }
 };
 
-void Project::parse()
+bool Project::parse()
 {
     int ok = 0;
     QElapsedTimer timer;
@@ -134,6 +136,21 @@ void Project::parse()
     }
     qDebug() << "#### finished with" << ok << "files ok of total" << allMilFiles.size() << "files" << "in" <<
                 timer.elapsed() << " [ms]";
+    return ok == allMilFiles.size();
+}
+
+void Project::generateC()
+{
+    foreach( Declaration* module, mdl->getModules() )
+    {
+        CeeGen cg(mdl);
+        QFile header( module->name + ".h");
+        header.open(QFile::WriteOnly);
+        QFile body( module->name + ".c");
+        body.open(QFile::WriteOnly);
+
+        cg.generate(module, &header, &body);
+    }
 }
 
 Declaration*Project::loadModule(const Import& imp)

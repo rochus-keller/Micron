@@ -20,24 +20,38 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include "MilProject.h"
+#include <QCommandLineParser>
 
 
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-    if( a.arguments().size() <= 1 )
+    QCommandLineParser cp;
+    cp.setApplicationDescription("Micron Intermediate Language (MIL) compiler");
+    cp.addHelpOption();
+    cp.addVersionOption();
+    cp.addPositionalArgument("file", "a single mil file, or the directory searched for *.mil files");
+    QCommandLineOption cgen("cgen", "generate C code");
+    cp.addOption(cgen);
+
+    cp.process(a);
+    const QStringList args = cp.positionalArguments();
+    if( args.isEmpty() )
         return -1;
 
     Mil::AstModel mdl;
     Mil::Project pro(&mdl);
-    QFileInfo info(a.arguments()[1]);
+    QFileInfo info(args.first());
     if( info.isDir() )
         pro.collectFilesFrom(info.filePath());
     else
         pro.setFiles(QStringList() << info.filePath());
 
-    pro.parse();
+    const bool result = pro.parse();
+
+    if( result && cp.isSet(cgen) )
+        pro.generateC();
 
     return 0;
 }

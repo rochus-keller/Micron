@@ -36,7 +36,8 @@ namespace Mil
 
         void setFiles(const QStringList&);
         void collectFilesFrom( const QString& rootPath);
-        void parse();
+        bool parse();
+        void generateC();
 
     protected:
         Declaration* loadModule( const Import& imp );

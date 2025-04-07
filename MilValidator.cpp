@@ -31,7 +31,7 @@ bool Validator::validate(Declaration* module)
 {
     curMod = module;
 
-    Declaration* sub = curMod->link;
+    Declaration* sub = curMod->subs;
     while( sub )
     {
         Type* t = deref(sub->getType());
