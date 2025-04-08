@@ -1341,7 +1341,7 @@ public:
                 throw QString("assertion failed at %1:%2").arg(toStr(args[2]).constData()).arg(args[1].u);
             break;
         default:
-            throw QString("intrinsic proc '$MIC!%1' not yet implemented").arg(proc->name.constData());
+            throw QString("intrinsic proc 'MIC$!%1' not yet implemented").arg(proc->name.constData());
         }
     }
 
@@ -2608,7 +2608,7 @@ MilInterpreter::MilInterpreter(MilLoader* l)
     imp->timer.start();
 #endif
 
-    imp->intrinsicMod = Token::getSymbol("$MIC");
+    imp->intrinsicMod = Token::getSymbol("MIC$");
     imp->outMod = Token::getSymbol("Out");
     imp->inputMod = Token::getSymbol("Input");
     imp->mathlMod = Token::getSymbol("MathL");

@@ -40,6 +40,8 @@ namespace Mil
         };
         QList<Error> errors;
 
+        static Type* tokToBasicType(AstModel* mdl, int t);
+
     protected:
         Type* deref(Type*);
         void visitProcedure(Declaration* proc);
@@ -50,13 +52,12 @@ namespace Mil
         Statement* visitSwitch(Statement* stat);
         void visitWhile(Statement* stat);
         Statement* nextStat(Statement* stat);
-        void visitExpr(Expression*);
+        Expression* visitExpr(Expression*);
         void error(const Mic::RowCol& pos, const QString&);
         bool expectN(quint32 n, Expression*);
         bool expectN(quint32 n, Statement*);
         Expression* stackAt(int) const;
         Expression* eatStack(quint32 n);
-        Type* tokToBasicType(int t) const;
         Type* toType(Constant* c);
         bool equal(Type* lhs, Type* rhs);
 

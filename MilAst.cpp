@@ -38,7 +38,7 @@ AstModel::AstModel()
     for( int i = 0; i < Type::MaxBasicType; i++ )
     {
         Type* t = new Type();
-        t->kind = i;
+        t->kind = (Type::Kind)i;
         t->owned = true;
         basicTypes[i] = t;
     }

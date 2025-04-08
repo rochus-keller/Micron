@@ -42,6 +42,11 @@ namespace Mil
         void variable(QTextStream& out, Declaration* var);
         void typeDecl(QTextStream& out, Declaration* type);
         void pointerTo(QTextStream& out, Type* type);
+        void constValue(QTextStream& out, Constant* c);
+        void statementSeq(QTextStream& out, Statement* s, int level = 0);
+        void expression(QTextStream& out, Expression* e, int level = 0);
+        void emitBinOP(QTextStream& out, Expression* e, const char* op, int level);
+        void emitRelOP(QTextStream& out, Expression* e, const char* op, int level);
 
     private:
         AstModel* mdl;

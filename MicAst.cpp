@@ -198,7 +198,7 @@ Declaration*AstModel::addHelper()
     decl->link = 0;
     decl->next = helper;
     helper = decl;
-    decl->name = "$" + QByteArray::number(++helperId);
+    decl->name = "_$" + QByteArray::number(++helperId);
     decl->outer = getTopModule();
     return decl;
 }
@@ -245,7 +245,7 @@ Declaration*AstModel::findDecl(Declaration* import, const QByteArray& id) const
 
 QByteArray AstModel::getTempName()
 {
-    return Token::getSymbol("$" + QByteArray::number(++helperId));
+    return Token::getSymbol("_$" + QByteArray::number(++helperId));
 }
 
 Declaration*AstModel::getTopModule() const

@@ -148,7 +148,7 @@ Token Lexer::nextTokenImp()
             return string();
         else if( ch == '#' )
                 return hexstring();
-        else if( ::isalpha(ch) || ( ch == '_' ) || ( ch == '$' ))
+        else if( ::isalpha(ch) || ( ch == '_' ) )
             return ident();
         else if( ::isdigit(ch) )
             return number();

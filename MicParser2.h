@@ -192,7 +192,7 @@ namespace Mic {
 		Token la;
         Scanner2* scanner;
         Declaration* thisMod, *thisDecl;
-        QList<Type*> typeStack;
+        QList<Type*> typeStack; // TODO: likely not used
         QList<QPair<Type*,Token> > deferred;
         QList<RowCol> loopStack;
         typedef QList<RowCol> Depth;

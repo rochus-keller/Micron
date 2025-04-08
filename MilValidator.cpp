@@ -71,7 +71,7 @@ Type*Validator::deref(Type* t)
 
 void Validator::visitProcedure(Declaration* proc)
 {
-    if( proc->forward )
+    if( proc->forward || proc->extern_ )
     {
         return; // TODO: check param compat
     }
@@ -88,11 +88,16 @@ void Validator::visitStatSeq(Statement* stat)
 {
     while(stat)
     {
+        // TODO: check types
         switch(stat->kind)
         {
         case Statement::ExprStat:
-            expectN(0, stat);
-            visitExpr(stat->e);
+            {
+                expectN(0, stat);
+                Expression* e = visitExpr(stat->e);
+                if( stack.isEmpty() )
+                    stat->args = e;
+            }
             break;
         case Tok_EXIT:
         case Tok_GOTO:
@@ -279,7 +284,7 @@ static bool isMeth(Type* t)
     return (t->kind == Type::Proc && t->typebound) || t->kind == Type::NIL || t->kind == Type::INTPTR;
 }
 
-void Validator::visitExpr(Expression* e)
+Expression* Validator::visitExpr(Expression* e)
 {
     while(e)
     {
@@ -502,7 +507,7 @@ void Validator::visitExpr(Expression* e)
                     error(e->pos, "expecting a pointer on the stack");
                     break;
                 }
-                e->setType(deref(e->d->getType()));
+                e->setType(deref(e->d->getType())); // TODO: check if e->d->getType is indeed a pointer type
                 stack.back() = e;
             }
             break;
@@ -634,7 +639,7 @@ void Validator::visitExpr(Expression* e)
                     error(e->pos, "expecting a pointer to array and an integer index on the stack");
                     break;
                 }
-                Type* et1 = tokToBasicType(e->kind);
+                Type* et1 = tokToBasicType(mdl, e->kind);
                 if( e->kind == Tok_LDELEM )
                     et1 = deref(e->d->getType());
                 Type* et2 = deref(array->getType());
@@ -743,7 +748,7 @@ void Validator::visitExpr(Expression* e)
                     error(e->pos, "expecting a pointer on the stack");
                     break;
                 }
-                Type* bt2 = tokToBasicType(e->kind);
+                Type* bt2 = tokToBasicType(mdl, e->kind);
                 if( e->kind == Tok_LDIND )
                     bt2 = deref(e->d->getType());
                 if( !equal(bt2, bt1) )
@@ -908,6 +913,8 @@ void Validator::visitExpr(Expression* e)
         }
 
         pc++;
+        if( e->next == 0 )
+            return e;
         e = e->next;
     }
 }
@@ -968,27 +975,29 @@ Expression* Validator::eatStack(quint32 n)
     Expression* res = 0;
 
     // using one Argument expression for one or two arguments
-    // ... arg3, arg2, arg1
-    // exp1{lhs=arg3, rhs=arg2}, exp2{lhs=arg1} ...
+    // stack: ..., arg1, arg2, arg3 (top)
+    // statement->args->exp1{rhs=arg3, lhs=arg2}->exp2{rhs=arg1}
     while( !stack.isEmpty() && n > 0 )
     {
         Expression* a = new Expression();
-        a->kind = Expression::Argument;
-        a->lhs = stack.takeLast();
+        a->kind = (TokenType)Expression::Argument;
+        a->rhs = stack.takeLast();
         n--;
         if( n && !stack.isEmpty() )
         {
-           a->rhs = stack.takeLast();
-            n--;
+           a->lhs = stack.takeLast();
+           n--;
         }
-        a->next = res;
-        res = a;
+        if( res == 0 )
+            res = a;
+        else
+            res->append(a);
     }
 
     return res;
 }
 
-Type*Validator::tokToBasicType(int t) const
+Type*Validator::tokToBasicType(AstModel* mdl, int t)
 {
     switch(t)
     {

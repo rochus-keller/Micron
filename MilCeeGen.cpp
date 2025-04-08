@@ -18,8 +18,10 @@
 */
 
 #include "MilCeeGen.h"
+#include "MilValidator.h"
 #include <QDateTime>
 #include <QCoreApplication>
+#include <QtDebug>
 using namespace Mil;
 
 CeeGen::CeeGen(AstModel* mdl):mdl(mdl)
@@ -53,12 +55,14 @@ bool CeeGen::generate(Declaration* module, QIODevice* header, QIODevice* body)
 
     bout << "// " << module->name << ".c" << endl;
     bout << dedication << endl << endl;
-    bout << "#include \"" << module->name << ".h\"" << endl << endl;
+    bout << "#include \"" << module->name << ".h\"" << endl;
+    bout << "#include <stdlib.h>" << endl;
+    bout << "#include <string.h>" << endl << endl;
 
     visitModule();
 
     hout << endl << "#endif // " << guard << endl << endl;
-
+    return true;
 }
 
 void CeeGen::visitModule()
@@ -80,11 +84,24 @@ void CeeGen::visitModule()
        switch( sub->kind )
        {
        case Declaration::TypeDecl:
-           typeDecl(hout, sub);
-           hout << ";" << endl;
+           {
+               typeDecl(hout, sub);
+               hout << ";" << endl;
+               Type* t = sub->getType();
+               if( t )
+                   t = t->deref();
+               if( t && t->kind == Type::Object )
+                   foreach( Declaration* p, t->subs )
+                   {
+                       if( p->kind == Declaration::Procedure )
+                           visitProcedure(p);
+                   }
+           }
            break;
        case Declaration::ConstDecl:
-           // TODO
+           hout << "#define " << qualident(sub);
+           constValue(hout, sub->c);
+           hout << endl << endl;
            break;
        case Declaration::VarDecl:
            variable(bout, sub);
@@ -102,22 +119,40 @@ void CeeGen::visitModule()
    }
 }
 
+static inline QByteArray ws(int level)
+{
+    return QByteArray((level+1)*4,' ');
+}
+
 void CeeGen::visitProcedure(Declaration* proc)
 {
+    curProc = proc;
     procHeader(hout, proc);
     hout << ";" << endl;
     if( proc->forward )
         return;
     procHeader(bout, proc);
     bout << " {" << endl;
-    // TODO
+    Declaration* sub = proc->subs;
+    while(sub)
+    {
+        if( sub->kind == Declaration::LocalDecl )
+        {
+            bout << ws(0);
+            parameter(bout, sub);
+            bout << ";" << endl;
+        }
+        sub = sub->next;
+    }
+    statementSeq(bout, proc->body);
     bout << "}" << endl << endl;
+    curProc = 0;
 }
 
 QByteArray CeeGen::typeRef(Type* t) const
 {
     if( t == 0 )
-        return "void ";
+        return "void";
     t = t->deref();
     switch(t->kind)
     {
@@ -277,5 +312,621 @@ void CeeGen::pointerTo(QTextStream& out, Type* ptr)
             out << "struct ";
     }
     out << typeRef(ptr->getType()) << "*";
+}
+
+void CeeGen::constValue(QTextStream& out, Constant* c)
+{
+    switch( c->kind )
+    {
+    case Constant::D:
+        out << c->d;
+        break;
+    case Constant::I:
+        out << c->i;
+        break;
+    case Constant::S:
+        out << c->s;
+        break;
+    case Constant::B:
+        {
+            const ByteString* ba = c->b;
+            out << "{";
+            for( int i = 0; i < ba->len; i++ )
+            {
+                if( i != 0 && i % 16 == 0 )
+                    out << endl << "\t";
+                out << "0x" << QByteArray::number(quint8(ba->b[i]),16) << ", ";
+            }
+            out << "}";
+        }
+        break;
+    case Constant::R:
+        constValue(out, c->r->c);
+        break;
+    case Constant::C:
+        {
+            if( c->c->type )
+                out << "(" << typeRef(c->c->type) << ")";
+            out << "{";
+            Component* i = c->c->c;
+            if( !i->name.isEmpty() )
+                out << "." << i->name << "=";
+            constValue(out, i->c);
+            while( i->next )
+            {
+                out << ", ";
+                i = i->next;
+                if( !i->name.isEmpty() )
+                    out << "." << i->name << "=";
+                constValue(out, i->c);
+            }
+            out << "}";
+        }
+        break;
+    }
+}
+
+void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
+{
+    while(s)
+    {
+        switch( s->kind )
+        {
+        case Statement::ExprStat:
+            if( s->args )
+            {
+                out << ws(level);
+                expression(out, s->args, level);
+                out << ";" << endl;
+            }
+            break;
+
+        case Tok_IF:
+            out << ws(level) << "if( ";
+            expression(out, s->args, level+1);
+            out << " ) {" << endl;
+            statementSeq(out, s->body, level+1);
+            out << ws(level) << "}";
+            if( s->next && s->next->kind == Tok_ELSE )
+            {
+                s = s->next;
+                out << " else {" << endl;
+                statementSeq(out, s->body, level+1);
+                out << ws(level) << "}";
+            }
+            out << endl;
+            break;
+
+        case Tok_LOOP:
+            out << ws(level) << "while( 1 ) {" << endl;
+            statementSeq(out, s->body, level+1);
+            out << ws(level) << "}" << endl;
+            break;
+
+        case Tok_REPEAT:
+            out << ws(level) << "do {" << endl;
+            statementSeq(out, s->body, level+1);
+            out << ws(level) << "} while( !";
+            expression(out, s->args, level+1);
+            out << " );" << endl;
+            break;
+
+        case Tok_SWITCH:
+            out << ws(level) << "switch( ";
+            expression(out, s->args, level+1);
+            out << " ) {" << endl;
+            while( s->next && s->next->kind == Tok_CASE )
+            {
+                s = s->next;
+                Expression* e = s->e;
+                while(e)
+                {
+                    out << ws(level) << "case ";
+                    expression(out, e, level+1 );
+                    out << ":" << endl;
+                    e = e->next;
+                }
+                out << ws(level+1) << "{" << endl;
+                statementSeq(out, s->body, level+2);
+                out << ws(level+1) << "} break;" << endl;
+            }
+            if( s->next && s->next->kind == Tok_ELSE )
+            {
+                s = s->next;
+                out << "default:" << endl;
+                out << ws(level+1) << "{" << endl;
+                statementSeq(out, s->body, level+2);
+                out << ws(level+1) << "} break;" << endl;
+            }
+            out << endl;
+            break;
+
+        case Tok_WHILE:
+            out << ws(level) << "while( ";
+            expression(out, s->args, level+1);
+            out << " ) {" << endl;
+            statementSeq(out, s->body, level+1);
+            out << ws(level) << "}" << endl;
+            break;
+        case Tok_EXIT:
+            out << ws(level) << "break;" << endl;
+            break;
+
+        case Tok_STLOC:
+        case Tok_STLOC_S:
+        case Tok_STLOC_0:
+        case Tok_STLOC_1:
+        case Tok_STLOC_2:
+        case Tok_STLOC_3:
+            {
+                DeclList locals = curProc->getLocals();
+                Q_ASSERT(s->id < locals.size());
+                out << ws(level) << locals[s->id]->name << " = ";
+                expression(out, s->args, level + 1 );
+                out << ";" << endl;
+            }
+            break;
+
+        case Tok_STARG:
+            {
+                DeclList params = curProc->getParams();
+                Q_ASSERT(s->id < params.size());
+                out << ws(level) << params[s->id]->name << " = ";
+                expression(out, s->args, level + 1 );
+                out << ";" << endl;
+            }
+            break;
+
+        case Tok_STIND:
+        case Tok_STIND_I1:
+        case Tok_STIND_I4:
+        case Tok_STIND_I8:
+        case Tok_STIND_R4:
+        case Tok_STIND_R8:
+        case Tok_STIND_IP:
+        case Tok_STIND_IPP:
+            {
+                Q_ASSERT( s->args && s->args->kind == Expression::Argument );
+                out << ws(level) << "*";
+                expression(out, s->args->lhs, level+1);
+                out << " = ";
+                expression(out, s->args->rhs, level+1);
+                out << ";" << endl;
+            }
+            break;
+
+        case Tok_STELEM:
+        case Tok_STELEM_I1:
+        case Tok_STELEM_I2:
+        case Tok_STELEM_I4:
+        case Tok_STELEM_I8:
+        case Tok_STELEM_R4:
+        case Tok_STELEM_R8:
+        case Tok_STELEM_IP:
+            {
+                Q_ASSERT( s->args && s->args->kind == Expression::Argument &&
+                          s->args->lhs && s->args->rhs &&
+                          s->args->next && s->args->next->kind == Expression::Argument &&
+                          s->args->next->rhs && s->args->next->lhs == 0);
+                out << ws(level);
+                expression(out, s->args->next->rhs, level+1);
+                out << "[";
+                expression(out, s->args->lhs, level+1);
+                out << "] = ";
+                expression(out, s->args->rhs, level+1);
+                out << ";" << endl;
+            }
+            break;
+
+        case Tok_STFLD:
+            {
+                Q_ASSERT( s->args && s->args->kind == Expression::Argument );
+                out << ws(level) << "(";
+                expression(out, s->args->lhs, level+1);
+                out << ")->";
+                out << s->d->name;
+                out << " = ";
+                expression(out, s->args->rhs, level+1);
+                out << ";" << endl;
+            }
+            break;
+
+        case Tok_STVAR:
+            out << ws(level) << qualident(s->d);
+            out << " = ";
+            expression(out, s->args, level+1);
+            out << ";" << endl;
+            break;
+
+        case Tok_RET:
+            out << ws(level) << "return";
+            if( s->args )
+            {
+                out << " ";
+                expression(out, s->args, level+1);
+            }
+            out << ";" << endl;
+            break;
+
+        case Tok_POP:
+            expression(out, s->args, level+1);
+            break;
+
+        case Tok_FREE:
+            out << ws(level) << "free(";
+            expression(out, s->args, level+1);
+            out << ");" << endl;
+            break;
+
+        case Tok_LABEL:
+            out << ws(level) << s->name << ":" << endl;
+            break;
+
+        case Tok_GOTO:
+            out << ws(level) << "goto " << s->name << ";" << endl;
+            break;
+
+        case Tok_IFGOTO:
+            out << ws(level) << "if( ";
+            expression(out, s->args, level+1);
+            out << " ) goto " << s->name << ";" << endl;
+            break;
+
+        case Tok_LINE:
+            // TODO
+            break;
+
+        default:
+            Q_ASSERT(false);
+        }
+
+        s = s->next;
+    }
+}
+
+void CeeGen::emitBinOP(QTextStream& out, Expression* e, const char* op, int level)
+{
+    out << "( ";
+    expression(out, e->lhs, level);
+    out << " " << op << " ";
+    expression(out, e->rhs, level);
+    out << " )";
+}
+
+void CeeGen::emitRelOP(QTextStream& out, Expression* e, const char* op, int level)
+{
+    out << "(";
+    expression(out, e->lhs, level+1);
+    out << " " << op << " ";
+    expression(out, e->rhs, level+1);
+    out << ")";
+}
+
+static void collectArgs(Expression* e, QList<Expression*>& args)
+{
+    if( e && e->kind == Expression::Argument )
+    {
+        if( e->next )
+            collectArgs(e->next, args);
+        if( e->lhs )
+            args << e->lhs;
+        args << e->rhs;
+    }else if(e)
+        args << e;
+}
+
+void CeeGen::expression(QTextStream& out, Expression* e, int level)
+{
+    switch(e->kind)
+    {
+    case Tok_ADD:
+        emitBinOP(out, e, "+", level+1);
+        break;
+    case Tok_DIV_UN:
+    case Tok_DIV:
+        emitBinOP(out, e, "/", level+1); // TODO: UN
+        break;
+    case Tok_MUL:
+        emitBinOP(out, e, "*", level+1);
+        break;
+    case Tok_REM:
+    case Tok_REM_UN:
+        emitBinOP(out, e, "%", level+1); // TODO: UN
+        break;
+    case Tok_SUB:
+        emitBinOP(out, e, "-", level+1);
+        break;
+
+    case Tok_AND:
+        emitBinOP(out, e, "&", level+1);
+        break;
+    case Tok_OR:
+        emitBinOP(out, e, "|", level+1);
+        break;
+    case Tok_XOR:
+        emitBinOP(out, e, "^", level+1);
+        break;
+
+    case Tok_SHL:
+        emitBinOP(out, e, "<<", level+1);
+        break;
+    case Tok_SHR_UN:
+    case Tok_SHR:
+        emitBinOP(out, e, ">>", level+1); // TODO: UN
+        break;
+
+    case Tok_NEG:
+        out << "-";
+        expression(out, e->lhs, level+1);
+        break;
+
+    case Tok_NOT:
+        out << "~";
+        expression(out, e->lhs, level + 1);
+        break;
+
+    case Tok_LDC_I4_0:
+    case Tok_LDC_I4_1:
+    case Tok_LDC_I4_2:
+    case Tok_LDC_I4_3:
+    case Tok_LDC_I4_4:
+    case Tok_LDC_I4_5:
+    case Tok_LDC_I4_6:
+    case Tok_LDC_I4_7:
+    case Tok_LDC_I4_8:
+    case Tok_LDC_I4_M1:
+    case Tok_LDC_I4_S:
+    case Tok_LDC_I4:
+    case Tok_LDC_I8:
+        out << e->i;
+        break;
+
+    case Tok_LDC_R4:
+    case Tok_LDC_R8:
+        out << e->f;
+        break;
+
+    case Tok_LDNULL:
+        out << "NULL";
+        break;
+
+    case Tok_LDSTR:
+    case Tok_LDOBJ:
+        constValue(out, e->c);
+        break;
+
+    case Tok_CONV_I1:
+    case Tok_CONV_I2:
+    case Tok_CONV_I4:
+    case Tok_CONV_U1:
+    case Tok_CONV_U2:
+    case Tok_CONV_U4:
+    case Tok_CONV_I8:
+    case Tok_CONV_U8:
+    case Tok_CONV_IP:
+    case Tok_CONV_R4:
+    case Tok_CONV_R8:
+        out << "((" << typeRef(Validator::tokToBasicType(mdl, e->kind)) << ")";
+        expression(out, e->lhs, level+1);
+        out << ")";
+        break;
+
+    case Tok_CEQ:
+        emitRelOP(out, e, "==", level + 1);
+        break;
+    case Tok_CGT_UN: // TODO: UN
+    case Tok_CGT:
+        emitRelOP(out, e, ">", level + 1);
+        break;
+    case Tok_CLT_UN: // TODO: UN
+    case Tok_CLT:
+        emitRelOP(out, e, "<", level + 1);
+        break;
+
+    case Tok_LDVAR:
+        out << qualident(e->d);
+        break;
+    case Tok_LDVARA:
+        out << "(&" << qualident(e->d) << ")";
+        break;
+
+    case Tok_LDARG_0:
+    case Tok_LDARG_1:
+    case Tok_LDARG_2:
+    case Tok_LDARG_3:
+    case Tok_LDARG_S:
+    case Tok_LDARG:
+    case Tok_LDARGA_S:
+    case Tok_LDARGA:
+        {
+            DeclList params = curProc->getParams();
+            Q_ASSERT( e->id < params.size() );
+            if( e->kind == Tok_LDARGA_S || e->kind == Tok_LDARGA )
+                out << "(&";
+            out << params[e->id]->name;
+            if( e->kind == Tok_LDARGA_S || e->kind == Tok_LDARGA )
+                out << ")";
+        }
+        break;
+
+    case Tok_LDLOC_0:
+    case Tok_LDLOC_1:
+    case Tok_LDLOC_2:
+    case Tok_LDLOC_3:
+    case Tok_LDLOC_S:
+    case Tok_LDLOC:
+    case Tok_LDLOCA_S:
+    case Tok_LDLOCA:
+        {
+            DeclList locals = curProc->getLocals();
+            Q_ASSERT( e->id < locals.size() );
+            if( e->kind == Tok_LDLOCA_S || e->kind == Tok_LDLOCA )
+                out << "(&";
+            out << locals[e->id]->name;
+            if( e->kind == Tok_LDLOCA_S || e->kind == Tok_LDLOCA )
+                out << ")";
+        }
+        break;
+
+    case Tok_LDIND_I1:
+    case Tok_LDIND_I2:
+    case Tok_LDIND_I4:
+    case Tok_LDIND_I8:
+    case Tok_LDIND_IP:
+    case Tok_LDIND_IPP:
+    case Tok_LDIND_R4:
+    case Tok_LDIND_R8:
+    case Tok_LDIND_U1:
+    case Tok_LDIND_U2:
+    case Tok_LDIND_U4:
+    case Tok_LDIND_U8:
+    case Tok_LDIND:
+        out << "*";
+        expression(out, e->lhs, level+1);
+        break;
+
+    case Tok_LDELEM_I1:
+    case Tok_LDELEM_I2:
+    case Tok_LDELEM_I4:
+    case Tok_LDELEM_I8:
+    case Tok_LDELEM_IP:
+    case Tok_LDELEM_R4:
+    case Tok_LDELEM_R8:
+    case Tok_LDELEM_U1:
+    case Tok_LDELEM_U2:
+    case Tok_LDELEM_U4:
+    case Tok_LDELEM_U8:
+    case Tok_LDELEM:
+    case Tok_LDELEMA:
+        if( e->kind == Tok_LDELEMA )
+            out << "(&";
+        expression(out, e->lhs, level + 1);
+        out << "[";
+        expression(out, e->rhs, level + 1);
+        out << "]";
+        if( e->kind == Tok_LDELEMA )
+            out << ")";
+        break;
+
+    case Tok_LDFLD:
+    case Tok_LDFLDA:
+        if( e->kind == Tok_LDFLDA )
+            out << "(&";
+        out << "(";
+        expression(out, e->lhs, level+1 );
+        out << "->" << e->d->name;
+        out << ")";
+        if( e->kind == Tok_LDFLDA )
+            out << ")";
+        break;
+
+    case Tok_LDPROC:
+    case Tok_LDMETH:
+        out << qualident(e->d);
+        break;
+
+    case Tok_CASTPTR:
+        out << "((" << typeRef(e->d->getType()) << "*)";
+        expression(out, e->lhs, level+1 );
+        out << ")";
+        break;
+
+    case Tok_CALL:
+        {
+            out << qualident(e->d) << "(";
+            QList<Expression*> args;
+            collectArgs(e->rhs, args);
+            for( int i = 0; i < args.size(); i++ )
+            {
+                if( i != 0 )
+                    out << ", ";
+                expression(out, args[i], level+1);
+            }
+            out << ")";
+        }
+        break;
+
+    case Tok_CALLI:
+        {
+            expression(out, e->lhs, level+1 );
+            out << "(";
+            QList<Expression*> args;
+            collectArgs(e->rhs, args);
+            for( int i = 0; i < args.size(); i++ )
+            {
+                if( i != 0 )
+                    out << ", ";
+                expression(out, args[i], level+1);
+            }
+            out << ")";
+        }
+        break;
+
+    case Tok_NEWOBJ:
+        out << "(";
+        Q_ASSERT(e->getType()->kind == Type::Pointer);
+        out << typeRef(e->d->getType());
+        out << "*)malloc(sizeof(";
+        out << typeRef(e->d->getType());
+        out << "))";
+        break;
+
+    case Tok_NEWARR:
+        {
+            Type* et = e->d->getType();
+            if( et )
+                et = et->deref();
+            out << "(";
+            out << typeRef(et);
+            out << "*)malloc(sizeof(";
+            out << typeRef(et) << ") * ";
+            expression(out, e->lhs, level+1);
+            out << ")";
+        }
+        break;
+
+
+    case Tok_INITOBJ:
+        out << "memset(";
+        expression(out, e->lhs, level+1 );
+        out << ", 0, sizeof(" << typeRef(e->d->getType()) << "))";
+        break;
+
+    case Tok_DUP:
+        expression(out, e->lhs, level+1);
+        break;
+
+    case Tok_NOP:
+        break;
+
+    case Tok_PTROFF:
+        expression(out, e->lhs, level + 1);
+        out << " += ";
+        expression(out, e->rhs, level+1);
+        out << " * sizeof(" << typeRef(e->d->getType()) << ")";
+        break;
+
+    case Tok_IIF:
+        out << "( ";
+        expression(out, e->lhs, level + 1);
+        out << " ? ";
+        e = e->next;
+        expression(out, e->lhs, level + 1);
+        out << " : ";
+        expression(out, e->rhs, level + 1);
+        out << " ) ";
+        e = e->next; // skip ELSE
+        break;
+
+    case Tok_SIZEOF:
+    case Tok_NEWVLA:
+    case Tok_ISINST:
+    case Tok_CALLVI:
+    case Tok_CALLVIRT:
+        out << "TODO: " << tokenTypeName(e->kind);
+        break;
+    default:
+        Q_ASSERT(false);
+    }
 }
 

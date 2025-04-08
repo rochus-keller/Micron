@@ -23,7 +23,7 @@ using namespace Mic;
 static inline MilQuali coreName(const QByteArray& proc)
 {
     MilQuali res;
-    res.first = Token::getSymbol("$MIC");
+    res.first = Token::getSymbol("MIC$");
     res.second = Token::getSymbol(proc);
     return res;
 }
@@ -486,7 +486,7 @@ void Builtins::doAbs()
         else
             ev->out->ldc_r4(0);
         ev->out->cgt_(); // push v > 0, i.e. jump if v < 0
-        const QByteArray label = "$ABS" + QByteArray::number(count++);
+        const QByteArray label = "ABS$" + QByteArray::number(count++);
         ev->out->ifgoto_(label);
         ev->out->neg_();
         ev->out->label_(label);

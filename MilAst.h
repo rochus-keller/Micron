@@ -34,7 +34,11 @@ namespace Mil
     class Node
     {
     public:
-        Node(quint8 m):kind(0),meta(m),deferred(false),anonymous(false),selfref(false),typebound(false),
+        Node(quint8 m):
+    #ifndef _DEBUG
+            kind(0),
+    #endif
+            meta(m),deferred(false),anonymous(false),selfref(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),forward(false),generic(false),byVal(false),
             type(0),autoself(0),public_(0),init(0),owned(0) {}
         virtual ~Node();
@@ -42,7 +46,9 @@ namespace Mil
         enum Meta { Inval, T, D, E, S };
         enum Visi { NA, Private, ReadOnly, ReadWrite };
 
+#ifndef _DEBUG
         uint kind : 8;
+#endif
         uint meta : 3;
 
         uint typebound : 1; // Type, Declaration
@@ -96,6 +102,9 @@ namespace Mil
             MaxBasicType,
             Pointer, Proc, Array, Struct, Union, Object, NameRef, Generic
         };
+#ifdef _DEBUG
+        Kind kind;
+#endif
         union {
             quint32 len; // array length
             Quali* quali; // unresolved NameRef
@@ -127,6 +136,9 @@ namespace Mil
                     Field, VarDecl, LocalDecl, ParamDecl,
                     Procedure,
                     Max };
+#ifdef _DEBUG
+        Kind kind;
+#endif
         Declaration* next; // list of all declarations in outer scope
         Declaration* subs; // member list or imported module decl
         Declaration* outer; // the owning declaration to reconstruct the qualident
@@ -204,6 +216,9 @@ namespace Mil
     {
     public:
         enum Kind { Argument = TT_Specials,  };
+#ifdef _DEBUG
+        TokenType kind;
+#endif
         // Kind corresponds to the TokenType
         Expression* next;
         Expression* lhs; // not owned
@@ -226,6 +241,9 @@ namespace Mil
     {
     public:
         enum Kind { ExprStat = TT_Specials,  };
+#ifdef _DEBUG
+        TokenType kind;
+#endif
         // Kind corresponds to the TokenType
         Statement* next;
         Statement* body;

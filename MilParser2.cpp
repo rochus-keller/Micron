@@ -1562,7 +1562,7 @@ Expression* Parser2::Expression_() {
 
 Expression* Parser2::ExpInstr() {
     Expression* res = new Expression();
-    res->kind = la.d_code;
+    res->kind = (TokenType)la.d_code;
     res->pos = la.toRowCol();
 
     if( la.d_code == Tok_ADD ) {
@@ -1702,24 +1702,34 @@ Expression* Parser2::ExpInstr() {
             res->f = c.d;
     } else if( la.d_code == Tok_LDC_I4_0 ) {
         expect(Tok_LDC_I4_0, true, "ExpInstr");
+        res->i = 0;
     } else if( la.d_code == Tok_LDC_I4_1 ) {
         expect(Tok_LDC_I4_1, true, "ExpInstr");
+        res->i = 1;
     } else if( la.d_code == Tok_LDC_I4_2 ) {
         expect(Tok_LDC_I4_2, true, "ExpInstr");
+        res->i = 2;
     } else if( la.d_code == Tok_LDC_I4_3 ) {
         expect(Tok_LDC_I4_3, true, "ExpInstr");
+        res->i = 3;
     } else if( la.d_code == Tok_LDC_I4_4 ) {
         expect(Tok_LDC_I4_4, true, "ExpInstr");
+        res->i = 4;
     } else if( la.d_code == Tok_LDC_I4_5 ) {
         expect(Tok_LDC_I4_5, true, "ExpInstr");
+        res->i = 5;
     } else if( la.d_code == Tok_LDC_I4_6 ) {
         expect(Tok_LDC_I4_6, true, "ExpInstr");
+        res->i = 6;
     } else if( la.d_code == Tok_LDC_I4_7 ) {
         expect(Tok_LDC_I4_7, true, "ExpInstr");
+        res->i = 7;
     } else if( la.d_code == Tok_LDC_I4_8 ) {
         expect(Tok_LDC_I4_8, true, "ExpInstr");
+        res->i = 8;
     } else if( la.d_code == Tok_LDC_I4_M1 ) {
         expect(Tok_LDC_I4_M1, true, "ExpInstr");
+        res->i = -1;
     } else if( la.d_code == Tok_LDOBJ ) {
         expect(Tok_LDOBJ, true, "ExpInstr");
         res->c = constructor();
@@ -1948,7 +1958,7 @@ Statement* Parser2::StatementSequence() {
             s = Statement_();
         } else if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
             s = new Statement();
-            s->kind = Statement::ExprStat;
+            s->kind = (TokenType)Statement::ExprStat;
             s->e = ExpInstr();
             if( s->e == 0 )
             {
@@ -1956,6 +1966,7 @@ Statement* Parser2::StatementSequence() {
                     delete res;
                 return 0;
             }
+            s->pos = s->e->pos;
             while( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) )
             {
                 // take care that all stretches of expressions are connected under the same ExprStat
@@ -1998,7 +2009,7 @@ Statement* Parser2::Statement_()
     }
 
     Statement* res = new Statement();
-    res->kind = la.d_code;
+    res->kind = (TokenType)la.d_code;
     res->pos = la.toRowCol();
 
     if( la.d_code == Tok_FREE ) {

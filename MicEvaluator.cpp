@@ -180,7 +180,7 @@ bool Evaluator::prepareRhs(Type* lhs)
 static inline MilQuali coreName(const QByteArray& proc)
 {
     MilQuali res;
-    res.first = Token::getSymbol("$MIC");
+    res.first = Token::getSymbol("MIC$");
     res.second = Token::getSymbol(proc);
     return res;
 }
