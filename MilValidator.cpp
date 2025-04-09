@@ -96,7 +96,21 @@ void Validator::visitStatSeq(Statement* stat)
                 expectN(0, stat);
                 Expression* e = visitExpr(stat->e);
                 if( stack.isEmpty() )
+                {
                     stat->args = e;
+                    if( e->next )
+                    {
+                        // split ExprStat
+                        Statement* s = new Statement();
+                        s->kind = (TokenType)Statement::ExprStat;
+                        s->pos = e->next->pos;
+                        s->e = e->next;
+                        e->next = 0;
+                        s->next = stat->next;
+                        stat->next = s;
+                    }
+                }else
+                    Q_ASSERT(e == 0 || e->next == 0);
             }
             break;
         case Tok_EXIT:
@@ -841,7 +855,8 @@ Expression* Validator::visitExpr(Expression* e)
                 {
                     e->setType(proc->getType());
                     stack.push_back(e);
-                }
+                }else // we're in a ExprStat which needs to be split
+                    return e;
             }
             break;
         case Tok_CALL:
@@ -858,7 +873,8 @@ Expression* Validator::visitExpr(Expression* e)
                 {
                     e->setType(proc->getType());
                     stack.push_back(e);
-                }
+                }else // we're in a ExprStat which needs to be split
+                    return e;
             }
             break;
         case Tok_CALLVIRT:
@@ -878,7 +894,8 @@ Expression* Validator::visitExpr(Expression* e)
                 {
                     e->setType(proc->getType());
                     stack.push_back(e);
-                }
+                }else // we're in a ExprStat which needs to be split
+                    return e;
             }
             break;
         case Tok_IIF:
