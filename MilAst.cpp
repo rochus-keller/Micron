@@ -255,10 +255,10 @@ QByteArray Declaration::toPath() const
         return res;
 }
 
-Declaration*Declaration::getForwardToProc() const
+Declaration*Declaration::forwardToProc() const
 {
     if( kind == Procedure && forward )
-        return forwardTo->getForwardToProc();
+        return forwardTo->forwardToProc();
     else
         return const_cast<Declaration*>(this);
 }
@@ -353,6 +353,18 @@ Type*Type::deref() const
         return type->deref();
     else
         return const_cast<Type*>(this);
+}
+
+bool Type::isPtrToArray() const
+{
+    if( kind == Pointer )
+    {
+        Type* base = getType();
+        if( base )
+            base = base->deref();
+        return base->kind == Array;
+    }else
+        return false;
 }
 
 Statement::~Statement()

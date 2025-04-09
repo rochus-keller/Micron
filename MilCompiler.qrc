@@ -1,5 +1,5 @@
 <RCC>
     <qresource prefix="/">
-        <file>runtime/MIC.mil</file>
+        <file>runtime/MIC+.mil</file>
     </qresource>
 </RCC>

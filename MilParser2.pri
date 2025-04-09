@@ -9,7 +9,8 @@ SOURCES += \
     MilAst.cpp \
     MilProject.cpp \
     MilValidator.cpp \
-    MicSymbol.cpp
+    MicSymbol.cpp \
+    MilCeeGen.cpp
 
 HEADERS += \
     MicRowCol.h \
@@ -20,4 +21,5 @@ HEADERS += \
     MilAst.h \
     MilProject.h \
     MilValidator.h \
-    MicSymbol.h
+    MicSymbol.h \
+    MilCeeGen.h

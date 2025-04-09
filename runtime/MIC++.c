@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <assert.h>
-#include <stdio.h>
+#include <stdlib.h>
 
 int MIC$$relop1(const char* l, const char* r, int op)
 {
@@ -78,7 +78,7 @@ void MIC$$printStr(const char* s)
 
 void MIC$$printCh(char c)
 {
-	prinf("%c",c);
+	printf("%c",c);
 }
 
 void MIC$$printBool(uint8_t b)

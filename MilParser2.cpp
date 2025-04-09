@@ -1367,7 +1367,7 @@ void Parser2::ProcedureBody(Declaration* proc) {
 			}
 		}
 	}
-	expect(Tok_BEGIN, false, "ProcedureBody");
+    expect(Tok_BEGIN, false, "ProcedureBody");
     proc->body = StatementSequence();
 	expect(Tok_END, false, "ProcedureBody");
 	expect(Tok_ident, false, "ProcedureBody");

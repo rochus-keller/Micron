@@ -46,7 +46,7 @@ void Project::clear()
 void Project::setFiles(const QStringList& files)
 {
     clear();
-    allMilFiles << ":/runtime/MIC.mil";
+    allMilFiles << ":/runtime/MIC+.mil";
     allMilFiles << files;
 }
 
@@ -69,7 +69,7 @@ static QStringList collectFiles( const QDir& dir, const QStringList& suffix )
 void Project::collectFilesFrom(const QString& rootPath)
 {
     clear();
-    allMilFiles << ":/runtime/MIC.mil";
+    allMilFiles << ":/runtime/MIC+.mil";
     allMilFiles << collectFiles(rootPath, QStringList() << "*.mil");
 }
 
@@ -144,12 +144,18 @@ void Project::generateC()
     foreach( Declaration* module, mdl->getModules() )
     {
         CeeGen cg(mdl);
-        QFile header( module->name + ".h");
+        QFile header( escapeFilename(module->name) + ".h");
         header.open(QFile::WriteOnly);
-        QFile body( module->name + ".c");
-        body.open(QFile::WriteOnly);
+        QFile* body = 0;
+        QFile b( escapeFilename(module->name) + ".c");
+        module->nobody = !CeeGen::requiresBody(module);
+        if( !module->nobody )
+        {
+            b.open(QFile::WriteOnly);
+            body = &b;
+        }
 
-        cg.generate(module, &header, &body);
+        cg.generate(module, &header, body);
     }
 }
 

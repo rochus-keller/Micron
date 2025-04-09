@@ -32,7 +32,8 @@ namespace Mil
     public:
         CeeGen(AstModel*);
 
-        bool generate(Declaration* module, QIODevice* header, QIODevice* body);
+        bool generate(Declaration* module, QIODevice* header, QIODevice* body = 0);
+        static bool requiresBody(Declaration* module);
     protected:
         void visitModule();
         void visitProcedure(Declaration*);
@@ -47,6 +48,7 @@ namespace Mil
         void expression(QTextStream& out, Expression* e, int level = 0);
         void emitBinOP(QTextStream& out, Expression* e, const char* op, int level);
         void emitRelOP(QTextStream& out, Expression* e, const char* op, int level);
+        Type* deref(Type* t);
 
     private:
         AstModel* mdl;

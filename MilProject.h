@@ -39,6 +39,13 @@ namespace Mil
         bool parse();
         void generateC();
 
+        static inline QByteArray escapeFilename( const QByteArray& fileName )
+        {
+            QByteArray res = fileName;
+            res.replace('$','+');
+            return res;
+        }
+
     protected:
         Declaration* loadModule( const Import& imp );
 

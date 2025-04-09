@@ -40,7 +40,7 @@ namespace Mil
     #endif
             meta(m),deferred(false),anonymous(false),selfref(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),forward(false),generic(false),byVal(false),
-            type(0),autoself(0),public_(0),init(0),owned(0) {}
+            type(0),autoself(0),public_(0),init(0),owned(0),nobody(0) {}
         virtual ~Node();
 
         enum Meta { Inval, T, D, E, S };
@@ -65,6 +65,7 @@ namespace Mil
         uint inline_ : 1;
         uint invar : 1;
         uint extern_ : 1; // extern name (if present) is in val
+        uint nobody : 1;
         uint forward : 1;
         uint generic : 1;
         uint autoself : 1;
@@ -124,6 +125,7 @@ namespace Mil
         bool isSUO() const { return kind == Struct || kind == Union || kind == Object; }
         Declaration* findSubByName(const QByteArray& name, bool recursive = true) const;
         Type* deref() const;
+        bool isPtrToArray() const;
     };
 
     struct Constant;
@@ -164,7 +166,7 @@ namespace Mil
         int indexOf(Declaration*) const;
         static void append(Declaration* list, Declaration* next);
         QByteArray toPath() const;
-        Declaration* getForwardToProc() const;
+        Declaration* forwardToProc() const;
 
     };
     typedef QList<Declaration*> DeclList;
