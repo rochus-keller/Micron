@@ -201,6 +201,7 @@ namespace Mic
         static QByteArray toString(const MilTrident&);
 
         void add_();
+        void abs_();
         void and_();
         void call_( const MilQuali& methodRef, int argCount = 0, bool hasRet = false);
         void calli_( const MilQuali& methodRef, int argCount, bool hasRet = false );
@@ -220,7 +221,6 @@ namespace Mic
         void end_();
         void exit_();
         void goto_(const QByteArray& label);
-        void ifgoto_(const QByteArray& label); // TODO: do we need this since we have IIF?
         void if_();
         void iif_();
         void initobj(const MilQuali& typeRef);

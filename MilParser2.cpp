@@ -169,6 +169,7 @@ static inline bool FIRST_Expression(int tt) {
 	case Tok_CGT:
 	case Tok_AND:
 	case Tok_NEG:
+    case Tok_ABS:
 	case Tok_CALLVI:
 	case Tok_LDC_I4_1:
 	case Tok_NEWARR:
@@ -288,6 +289,7 @@ static inline bool FIRST_ExpInstr(int tt) {
 	case Tok_CGT:
 	case Tok_AND:
 	case Tok_NEG:
+    case Tok_ABS:
 	case Tok_CALLVI:
 	case Tok_LDC_I4_1:
 	case Tok_NEWARR:
@@ -461,7 +463,6 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_REPEAT:
 	case Tok_STIND_I8:
 	case Tok_LDIND_U2:
-	case Tok_IFGOTO:
 	case Tok_CONV_I1:
 	case Tok_LDIND:
 	case Tok_LDLOC:
@@ -544,6 +545,7 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_NOT:
 	case Tok_CALLI:
 	case Tok_NEG:
+    case Tok_ABS:
 	case Tok_LDIND_U8:
 	case Tok_LDELEM_I4:
 	case Tok_LDIND_U4:
@@ -579,7 +581,6 @@ static inline bool FIRST_Statement(int tt) {
 	case Tok_STIND_I4:
 	case Tok_STARG_S:
 	case Tok_SWITCH:
-	case Tok_IFGOTO:
 	case Tok_STLOC_1:
 	case Tok_STELEM_I8:
 	case Tok_STLOC:
@@ -1689,7 +1690,7 @@ Expression* Parser2::ExpInstr() {
         Constant c;
         number(&c);
         if( c.kind == Constant::I )
-            res->i = c.i;
+            res->f = c.i;
         else
             res->f = c.d;
     } else if( la.d_code == Tok_LDC_R8 ) {
@@ -1697,7 +1698,7 @@ Expression* Parser2::ExpInstr() {
         Constant c;
         number(&c);
         if( c.kind == Constant::I )
-            res->i = c.i;
+            res->f = c.i;
         else
             res->f = c.d;
     } else if( la.d_code == Tok_LDC_I4_0 ) {
@@ -1880,6 +1881,8 @@ Expression* Parser2::ExpInstr() {
         expect(Tok_MUL, true, "ExpInstr");
     } else if( la.d_code == Tok_NEG ) {
         expect(Tok_NEG, true, "ExpInstr");
+    } else if( la.d_code == Tok_ABS ) {
+        expect(Tok_ABS, true, "ExpInstr");
     } else if( la.d_code == Tok_NEWARR ) {
         expect(Tok_NEWARR, true, "ExpInstr");
         res->d = qualident();
@@ -2018,10 +2021,6 @@ Statement* Parser2::Statement_()
         expect(Tok_EXIT, true, "Statement");
     } else if( la.d_code == Tok_GOTO ) {
         expect(Tok_GOTO, true, "Statement");
-        expect(Tok_ident, false, "Statement");
-        res->name = cur.d_val.constData();
-    } else if( la.d_code == Tok_IFGOTO ) {
-        expect(Tok_IFGOTO, true, "Statement");
         expect(Tok_ident, false, "Statement");
         res->name = cur.d_val.constData();
     } else if( la.d_code == Tok_LABEL ) {

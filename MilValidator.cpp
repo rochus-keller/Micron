@@ -119,7 +119,6 @@ void Validator::visitStatSeq(Statement* stat)
         case Tok_LINE:
             expectN(0, stat);
             break;
-        case Tok_IFGOTO:
         case Tok_FREE:
         case Tok_POP:
         case Tok_STARG:
@@ -404,6 +403,7 @@ Expression* Validator::visitExpr(Expression* e)
             }
             break;
         case Tok_NEG:
+        case Tok_ABS:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1);

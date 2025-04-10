@@ -908,7 +908,6 @@ public:
             pc++;
             break;
         case IL_goto:
-        case IL_ifgoto:
             labels[ops[pc].arg.toByteArray().constData()].gotoPcs.append(pc);
             pc++;
             break;
@@ -1456,7 +1455,7 @@ public:
 
         static const void *const disptab[IL_NUM_OF_OPS] = {
             &&L_IL_invalid,
-            &&L_IL_add, &&L_IL_and,
+            &&L_IL_add, &&L_IL_abs, &&L_IL_and,
             &&L_IL_call, &&L_IL_calli,
             &&L_IL_callvi, &&L_IL_callvirt, &&L_IL_castptr,
             &&L_IL_ceq, &&L_IL_cgt, &&L_IL_cgt_un, &&L_IL_clt, &&L_IL_clt_un,
@@ -1482,7 +1481,7 @@ public:
             &&L_IL_not, &&L_IL_or, &&L_IL_rem, &&L_IL_rem_un, &&L_IL_shl, &&L_IL_shr, &&L_IL_shr_un,
             &&L_IL_sizeof, &&L_IL_sub, &&L_IL_xor, &&L_IL_ptroff, &&L_IL_nop,
             &&L_IL_free, &&L_IL_repeat, &&L_IL_until,
-            &&L_IL_exit, &&L_IL_goto, &&L_IL_ifgoto, &&L_IL_if, &&L_IL_then, &&L_IL_else, &&L_IL_end,
+            &&L_IL_exit, &&L_IL_goto, &&L_IL_if, &&L_IL_then, &&L_IL_else, &&L_IL_end,
             &&L_IL_label, &&L_IL_line, &&L_IL_loop, &&L_IL_pop, &&L_IL_ret,
             &&L_IL_starg, &&L_IL_starg_s,
             &&L_IL_stelem, &&L_IL_stelem_i1, &&L_IL_stelem_i2, &&L_IL_stelem_i4, &&L_IL_stelem_i8,
@@ -1541,6 +1540,21 @@ public:
                     break;
                 case MemSlot::F:
                     stack.push_back(MemSlot(lhs.f + rhs.f, lhs.hw));
+                    break;
+                default:
+                    Q_ASSERT(false);
+                }
+                pc++;
+                vmbreak;
+            vmcase(IL_abs)
+                lhs = stack.takeLast();
+                switch( lhs.t )
+                {
+                case MemSlot::I:
+                    stack.push_back(MemSlot(qAbs(lhs.i),lhs.hw));
+                    break;
+                case MemSlot::F:
+                    stack.push_back(MemSlot(qAbs(lhs.f),lhs.hw));
                     break;
                 default:
                     Q_ASSERT(false);

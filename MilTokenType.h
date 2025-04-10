@@ -22,7 +22,6 @@ namespace Mil {
 		Tok_Minus,
 		Tok_Dot,
 		Tok_2Dot,
-		Tok_Slash,
 		Tok_2Slash,
 		Tok_Colon,
 		Tok_Semi,
@@ -34,6 +33,7 @@ namespace Mil {
 		Tok_Rbrace,
 
 		TT_Keywords,
+		Tok_ABS,
 		Tok_ADD,
 		Tok_AND,
 		Tok_ARRAY,
@@ -73,7 +73,6 @@ namespace Mil {
 		Tok_FREE,
 		Tok_GOTO,
 		Tok_IF,
-		Tok_IFGOTO,
 		Tok_IIF,
 		Tok_IMPORT,
 		Tok_INIT,

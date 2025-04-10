@@ -62,7 +62,8 @@ bool CeeGen::generate(Declaration* module, QIODevice* header, QIODevice* body)
     bout << dedication << endl << endl;
     bout << "#include \"" << Project::escapeFilename(module->name) << ".h\"" << endl;
     bout << "#include <stdlib.h>" << endl;
-    bout << "#include <string.h>" << endl << endl;
+    bout << "#include <string.h>" << endl;
+    bout << "#include <math.h>" << endl << endl;
 
     visitModule();
 
@@ -624,12 +625,6 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             out << ws(level) << "goto " << s->name << ";" << endl;
             break;
 
-        case Tok_IFGOTO:
-            out << ws(level) << "if( ";
-            expression(out, s->args, level+1);
-            out << " ) goto " << s->name << ";" << endl;
-            break;
-
         case Tok_LINE:
             // TODO
             break;
@@ -644,11 +639,11 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
 
 void CeeGen::emitBinOP(QTextStream& out, Expression* e, const char* op, int level)
 {
-    out << "( ";
+    out << "(";
     expression(out, e->lhs, level);
     out << " " << op << " ";
     expression(out, e->rhs, level);
-    out << " )";
+    out << ")";
 }
 
 void CeeGen::emitRelOP(QTextStream& out, Expression* e, const char* op, int level)
@@ -728,6 +723,15 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         expression(out, e->lhs, level+1);
         break;
 
+    case Tok_ABS:
+        if( deref(e->lhs->getType())->isInteger() )
+            out << "abs(";
+        else
+            out << "fabs(";
+        expression(out, e->lhs, level+1);
+        out << ")";
+        break;
+
     case Tok_NOT:
         out << "~";
         expression(out, e->lhs, level + 1);
@@ -751,7 +755,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
 
     case Tok_LDC_R4:
     case Tok_LDC_R8:
-        out << e->f;
+        out << QByteArray::number(e->f,'e',16); // empirically optimized, 17 is too much
         break;
 
     case Tok_LDNULL:
@@ -973,14 +977,14 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         break;
 
     case Tok_IIF:
-        out << "( ";
+        out << "(";
         expression(out, e->lhs, level + 1);
         out << " ? ";
         e = e->next;
         expression(out, e->lhs, level + 1);
         out << " : ";
         expression(out, e->rhs, level + 1);
-        out << " ) ";
+        out << ") ";
         e = e->next; // skip ELSE
         break;
 

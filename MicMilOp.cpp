@@ -24,7 +24,7 @@ const char* s_opName[] =
 {
     "invalid",
     // expressions
-    "add", "and", "call", "calli", "callvi", "callvirt", "castptr",
+    "add", "abs", "and", "call", "calli", "callvi", "callvirt", "castptr",
     "ceq", "cgt", "cgt_un", "clt", "clt_un",
     "conv_i1", "conv_i2", "conv_i4", "conv_i8", "conv_r4", "conv_r8",
     "conv_u1", "conv_u2", "conv_u4", "conv_u8", "conv_ip",
@@ -49,7 +49,7 @@ const char* s_opName[] =
     "sizeof", "sub", "xor", "ptroff", "nop",
     // statements
     "free", "repeat", "until",
-    "exit", "goto", "ifgoto", "if", "then", "else", "end",
+    "exit", "goto", "if", "then", "else", "end",
     "label", "line", "loop", "pop", "ret",
     "starg", "starg_s",
     "stelem", "stelem_i1", "stelem_i2", "stelem_i4", "stelem_i8",

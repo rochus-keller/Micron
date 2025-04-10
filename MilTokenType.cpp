@@ -17,7 +17,6 @@ namespace Mil {
 			case Tok_Minus: return "-";
 			case Tok_Dot: return ".";
 			case Tok_2Dot: return "..";
-			case Tok_Slash: return "/";
 			case Tok_2Slash: return "//";
 			case Tok_Colon: return ":";
 			case Tok_Semi: return ";";
@@ -27,6 +26,7 @@ namespace Mil {
 			case Tok_Hat: return "^";
 			case Tok_Lbrace: return "{";
 			case Tok_Rbrace: return "}";
+			case Tok_ABS: return "ABS";
 			case Tok_ADD: return "ADD";
 			case Tok_AND: return "AND";
 			case Tok_ARRAY: return "ARRAY";
@@ -66,7 +66,6 @@ namespace Mil {
 			case Tok_FREE: return "FREE";
 			case Tok_GOTO: return "GOTO";
 			case Tok_IF: return "IF";
-			case Tok_IFGOTO: return "IFGOTO";
 			case Tok_IIF: return "IIF";
 			case Tok_IMPORT: return "IMPORT";
 			case Tok_INIT: return "INIT";
@@ -230,7 +229,6 @@ namespace Mil {
 			case Tok_Minus: return "Tok_Minus";
 			case Tok_Dot: return "Tok_Dot";
 			case Tok_2Dot: return "Tok_2Dot";
-			case Tok_Slash: return "Tok_Slash";
 			case Tok_2Slash: return "Tok_2Slash";
 			case Tok_Colon: return "Tok_Colon";
 			case Tok_Semi: return "Tok_Semi";
@@ -240,6 +238,7 @@ namespace Mil {
 			case Tok_Hat: return "Tok_Hat";
 			case Tok_Lbrace: return "Tok_Lbrace";
 			case Tok_Rbrace: return "Tok_Rbrace";
+			case Tok_ABS: return "Tok_ABS";
 			case Tok_ADD: return "Tok_ADD";
 			case Tok_AND: return "Tok_AND";
 			case Tok_ARRAY: return "Tok_ARRAY";
@@ -279,7 +278,6 @@ namespace Mil {
 			case Tok_FREE: return "Tok_FREE";
 			case Tok_GOTO: return "Tok_GOTO";
 			case Tok_IF: return "Tok_IF";
-			case Tok_IFGOTO: return "Tok_IFGOTO";
 			case Tok_IIF: return "Tok_IIF";
 			case Tok_IMPORT: return "Tok_IMPORT";
 			case Tok_INIT: return "Tok_INIT";
@@ -489,8 +487,6 @@ namespace Mil {
 		case '/':
 			if( at(str,len,i+1) == '/' ){
 				res = Tok_2Slash; i += 2;
-			} else {
-				res = Tok_Slash; i += 1;
 			}
 			break;
 		case ':':
@@ -504,6 +500,11 @@ namespace Mil {
 			break;
 		case 'A':
 			switch( at(str,len,i+1) ){
+			case 'B':
+				if( at(str,len,i+2) == 'S' ){
+					res = Tok_ABS; i += 3;
+				}
+				break;
 			case 'D':
 				if( at(str,len,i+2) == 'D' ){
 					res = Tok_ADD; i += 3;
@@ -771,17 +772,7 @@ namespace Mil {
 		case 'I':
 			switch( at(str,len,i+1) ){
 			case 'F':
-				if( at(str,len,i+2) == 'G' ){
-					if( at(str,len,i+3) == 'O' ){
-						if( at(str,len,i+4) == 'T' ){
-							if( at(str,len,i+5) == 'O' ){
-								res = Tok_IFGOTO; i += 6;
-							}
-						}
-					}
-				} else {
-					res = Tok_IF; i += 2;
-				}
+				res = Tok_IF; i += 2;
 				break;
 			case 'I':
 				if( at(str,len,i+2) == 'F' ){

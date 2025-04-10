@@ -11,7 +11,7 @@ static inline bool FIRST_integer(int tt) {
 }
 
 static inline bool FIRST_number(int tt) {
-	return tt == Tok_float || tt == Tok_unsigned || tt == Tok_Plus || tt == Tok_Minus;
+	return tt == Tok_unsigned || tt == Tok_Plus || tt == Tok_float || tt == Tok_Minus;
 }
 
 static inline bool FIRST_qualident(int tt) {
@@ -36,16 +36,16 @@ static inline bool FIRST_TypeDeclaration(int tt) {
 
 static inline bool FIRST_type(int tt) {
 	switch(tt){
-	case Tok_POINTER:
-	case Tok_UNION:
 	case Tok_Lbrack:
 	case Tok_PROCEDURE:
-	case Tok_ARRAY:
-	case Tok_STRUCT:
-	case Tok_OBJECT:
+	case Tok_POINTER:
 	case Tok_ident:
+	case Tok_ARRAY:
 	case Tok_PROC:
 	case Tok_Hat:
+	case Tok_OBJECT:
+	case Tok_STRUCT:
+	case Tok_UNION:
 		return true;
 	default: return false;
 	}
@@ -64,7 +64,7 @@ static inline bool FIRST_length(int tt) {
 }
 
 static inline bool FIRST_StructUnionType(int tt) {
-	return tt == Tok_UNION || tt == Tok_STRUCT;
+	return tt == Tok_STRUCT || tt == Tok_UNION;
 }
 
 static inline bool FIRST_FieldList(int tt) {
@@ -136,123 +136,124 @@ static inline bool FIRST_import(int tt) {
 }
 
 static inline bool FIRST_DeclarationSequence(int tt) {
-	return tt == Tok_TYPE || tt == Tok_CONST || tt == Tok_PROCEDURE || tt == Tok_VAR || tt == Tok_PROC;
+	return tt == Tok_PROCEDURE || tt == Tok_TYPE || tt == Tok_PROC || tt == Tok_CONST || tt == Tok_VAR;
 }
 
 static inline bool FIRST_Expression(int tt) {
 	switch(tt){
-	case Tok_INITOBJ:
-	case Tok_CONV_I1:
-	case Tok_LDNULL:
-	case Tok_LDELEM_R8:
-	case Tok_LDIND_IPP:
-	case Tok_LDELEM_I2:
-	case Tok_LDLOC_2:
-	case Tok_DUP:
-	case Tok_LDARGA:
-	case Tok_LDELEM_U1:
-	case Tok_CALLI:
-	case Tok_DIV:
-	case Tok_NOT:
-	case Tok_LDIND_I4:
-	case Tok_LDMETH:
-	case Tok_LDIND_U8:
-	case Tok_LDC_I4:
-	case Tok_LDIND_U4:
-	case Tok_LDC_I4_6:
-	case Tok_PTROFF:
-	case Tok_CONV_R8:
-	case Tok_LDC_I4_0:
-	case Tok_LDELEMA:
-	case Tok_NEWOBJ:
-	case Tok_LDVAR:
-	case Tok_LDELEM:
-	case Tok_LDIND_U2:
-	case Tok_LDC_R8:
-	case Tok_LDFLD:
-	case Tok_CONV_I2:
-	case Tok_XOR:
-	case Tok_LDIND_I2:
-	case Tok_LDLOC_3:
-	case Tok_LDIND:
-	case Tok_LDC_I4_7:
-	case Tok_LDLOCA_S:
-	case Tok_CONV_U4:
-	case Tok_CEQ:
-	case Tok_SIZEOF:
-	case Tok_CALLVIRT:
-	case Tok_LDARG_S:
-	case Tok_REM:
-	case Tok_CALLVI:
-	case Tok_CLT_UN:
-	case Tok_LDARG_0:
-	case Tok_LDIND_I8:
-	case Tok_LDELEM_U8:
-	case Tok_IIF:
-	case Tok_CONV_U2:
-	case Tok_LDLOC_S:
-	case Tok_NEWVLA:
-	case Tok_CONV_U1:
-	case Tok_CGT:
-	case Tok_LDELEM_I1:
-	case Tok_SUB:
-	case Tok_CLT:
-	case Tok_LDOBJ:
-	case Tok_LDELEM_U2:
-	case Tok_LDLOCA:
-	case Tok_LDFLDA:
-	case Tok_LDC_I4_M1:
-	case Tok_CGT_UN:
-	case Tok_LDLOC_1:
-	case Tok_LDLOC:
-	case Tok_LDARGA_S:
-	case Tok_NEG:
-	case Tok_LDC_I4_4:
-	case Tok_LDIND_IP:
-	case Tok_LDELEM_IP:
-	case Tok_CONV_U8:
-	case Tok_LDC_I4_3:
-	case Tok_LDIND_I1:
 	case Tok_LDC_R4:
-	case Tok_LDELEM_I4:
-	case Tok_LDIND_R4:
-	case Tok_AND:
-	case Tok_LDARG_2:
-	case Tok_SHR_UN:
-	case Tok_CASTPTR:
-	case Tok_LDSTR:
-	case Tok_LDC_I4_5:
-	case Tok_SHL:
-	case Tok_MUL:
-	case Tok_LDVARA:
-	case Tok_DIV_UN:
-	case Tok_LDELEM_R4:
-	case Tok_NEWARR:
-	case Tok_LDC_I4_S:
-	case Tok_LDELEM_I8:
-	case Tok_LDPROC:
-	case Tok_LDARG_1:
-	case Tok_REM_UN:
-	case Tok_NOP:
-	case Tok_LDC_I4_2:
-	case Tok_SHR:
-	case Tok_LDC_I8:
-	case Tok_LDIND_U1:
-	case Tok_LDARG_3:
-	case Tok_CALL:
-	case Tok_LDIND_R8:
-	case Tok_LDC_I4_8:
-	case Tok_CONV_I8:
-	case Tok_ADD:
-	case Tok_CONV_I4:
-	case Tok_LDLOC_0:
-	case Tok_LDELEM_U4:
-	case Tok_LDC_I4_1:
-	case Tok_CONV_IP:
-	case Tok_CONV_R4:
-	case Tok_LDARG:
-	case Tok_ISINST:
+	case Tok_CEQ:
 	case Tok_OR:
+	case Tok_LDIND_I1:
+	case Tok_LDLOC_3:
+	case Tok_LDNULL:
+	case Tok_LDC_I4_5:
+	case Tok_CGT:
+	case Tok_LDLOCA:
+	case Tok_NOT:
+	case Tok_LDELEMA:
+	case Tok_LDFLD:
+	case Tok_LDLOC_1:
+	case Tok_SUB:
+	case Tok_ISINST:
+	case Tok_LDC_I4_7:
+	case Tok_LDELEM_I8:
+	case Tok_CONV_U1:
+	case Tok_NEG:
+	case Tok_LDIND:
+	case Tok_LDARGA:
+	case Tok_CLT_UN:
+	case Tok_SHL:
+	case Tok_CALLI:
+	case Tok_LDIND_U8:
+	case Tok_INITOBJ:
+	case Tok_CALL:
+	case Tok_MUL:
+	case Tok_DIV_UN:
+	case Tok_LDC_I4_6:
+	case Tok_LDIND_U4:
+	case Tok_LDELEM_U8:
+	case Tok_LDIND_IP:
+	case Tok_PTROFF:
+	case Tok_LDARG_3:
+	case Tok_CONV_IP:
+	case Tok_NEWARR:
+	case Tok_LDELEM_R8:
+	case Tok_LDLOC_0:
+	case Tok_LDC_I4_0:
+	case Tok_LDSTR:
+	case Tok_CONV_R4:
+	case Tok_CASTPTR:
+	case Tok_CALLVI:
+	case Tok_LDIND_I4:
+	case Tok_LDLOC_S:
+	case Tok_LDELEM:
+	case Tok_LDPROC:
+	case Tok_LDC_I4_3:
+	case Tok_SHR:
+	case Tok_CLT:
+	case Tok_LDC_I8:
+	case Tok_CONV_I1:
+	case Tok_XOR:
+	case Tok_CONV_R8:
+	case Tok_LDIND_I2:
+	case Tok_NEWOBJ:
+	case Tok_SIZEOF:
+	case Tok_LDARG_0:
+	case Tok_LDARG_S:
+	case Tok_CONV_U2:
+	case Tok_LDELEM_U4:
+	case Tok_AND:
+	case Tok_ABS:
+	case Tok_LDIND_R8:
+	case Tok_CALLVIRT:
+	case Tok_LDARG:
+	case Tok_LDLOC_2:
+	case Tok_LDELEM_U2:
+	case Tok_LDVARA:
+	case Tok_LDELEM_I1:
+	case Tok_LDELEM_I4:
+	case Tok_LDLOCA_S:
+	case Tok_LDARGA_S:
+	case Tok_DIV:
+	case Tok_LDMETH:
+	case Tok_LDIND_IPP:
+	case Tok_CONV_I8:
+	case Tok_LDELEM_U1:
+	case Tok_LDC_I4_1:
+	case Tok_CONV_U8:
+	case Tok_LDC_I4_8:
+	case Tok_LDLOC:
+	case Tok_LDELEM_I2:
+	case Tok_CGT_UN:
+	case Tok_NOP:
+	case Tok_LDFLDA:
+	case Tok_SHR_UN:
+	case Tok_CONV_I4:
+	case Tok_LDIND_R4:
+	case Tok_LDARG_2:
+	case Tok_LDC_I4_M1:
+	case Tok_REM_UN:
+	case Tok_LDVAR:
+	case Tok_LDOBJ:
+	case Tok_LDIND_U2:
+	case Tok_LDC_I4_2:
+	case Tok_ADD:
+	case Tok_LDELEM_IP:
+	case Tok_DUP:
+	case Tok_REM:
+	case Tok_LDC_I4:
+	case Tok_LDC_I4_S:
+	case Tok_LDIND_I8:
+	case Tok_LDELEM_R4:
+	case Tok_LDARG_1:
+	case Tok_IIF:
+	case Tok_LDC_R8:
+	case Tok_LDIND_U1:
+	case Tok_CONV_U4:
+	case Tok_CONV_I2:
+	case Tok_LDC_I4_4:
+	case Tok_NEWVLA:
 		return true;
 	default: return false;
 	}
@@ -260,118 +261,119 @@ static inline bool FIRST_Expression(int tt) {
 
 static inline bool FIRST_ExpInstr(int tt) {
 	switch(tt){
-	case Tok_INITOBJ:
-	case Tok_CONV_I1:
-	case Tok_LDNULL:
-	case Tok_LDELEM_R8:
-	case Tok_LDIND_IPP:
-	case Tok_LDELEM_I2:
-	case Tok_LDLOC_2:
-	case Tok_DUP:
-	case Tok_LDARGA:
-	case Tok_LDELEM_U1:
-	case Tok_CALLI:
-	case Tok_DIV:
-	case Tok_NOT:
-	case Tok_LDIND_I4:
-	case Tok_LDMETH:
-	case Tok_LDIND_U8:
-	case Tok_LDC_I4:
-	case Tok_LDIND_U4:
-	case Tok_LDC_I4_6:
-	case Tok_PTROFF:
-	case Tok_CONV_R8:
-	case Tok_LDC_I4_0:
-	case Tok_LDELEMA:
-	case Tok_NEWOBJ:
-	case Tok_LDVAR:
-	case Tok_LDELEM:
-	case Tok_LDIND_U2:
-	case Tok_LDC_R8:
-	case Tok_LDFLD:
-	case Tok_CONV_I2:
-	case Tok_XOR:
-	case Tok_LDIND_I2:
-	case Tok_LDLOC_3:
-	case Tok_LDIND:
-	case Tok_LDC_I4_7:
-	case Tok_LDLOCA_S:
-	case Tok_CONV_U4:
-	case Tok_CEQ:
-	case Tok_SIZEOF:
-	case Tok_CALLVIRT:
-	case Tok_LDARG_S:
-	case Tok_REM:
-	case Tok_CALLVI:
-	case Tok_CLT_UN:
-	case Tok_LDARG_0:
-	case Tok_LDIND_I8:
-	case Tok_LDELEM_U8:
-	case Tok_IIF:
-	case Tok_CONV_U2:
-	case Tok_LDLOC_S:
-	case Tok_NEWVLA:
-	case Tok_CONV_U1:
-	case Tok_CGT:
-	case Tok_LDELEM_I1:
-	case Tok_SUB:
-	case Tok_CLT:
-	case Tok_LDOBJ:
-	case Tok_LDELEM_U2:
-	case Tok_LDLOCA:
-	case Tok_LDFLDA:
-	case Tok_LDC_I4_M1:
-	case Tok_CGT_UN:
-	case Tok_LDLOC_1:
-	case Tok_LDLOC:
-	case Tok_LDARGA_S:
-	case Tok_NEG:
-	case Tok_LDC_I4_4:
-	case Tok_LDIND_IP:
-	case Tok_LDELEM_IP:
-	case Tok_CONV_U8:
-	case Tok_LDC_I4_3:
-	case Tok_LDIND_I1:
 	case Tok_LDC_R4:
-	case Tok_LDELEM_I4:
-	case Tok_LDIND_R4:
-	case Tok_AND:
-	case Tok_LDARG_2:
-	case Tok_SHR_UN:
-	case Tok_CASTPTR:
-	case Tok_LDSTR:
-	case Tok_LDC_I4_5:
-	case Tok_SHL:
-	case Tok_MUL:
-	case Tok_LDVARA:
-	case Tok_DIV_UN:
-	case Tok_LDELEM_R4:
-	case Tok_NEWARR:
-	case Tok_LDC_I4_S:
-	case Tok_LDELEM_I8:
-	case Tok_LDPROC:
-	case Tok_LDARG_1:
-	case Tok_REM_UN:
-	case Tok_NOP:
-	case Tok_LDC_I4_2:
-	case Tok_SHR:
-	case Tok_LDC_I8:
-	case Tok_LDIND_U1:
-	case Tok_LDARG_3:
-	case Tok_CALL:
-	case Tok_LDIND_R8:
-	case Tok_LDC_I4_8:
-	case Tok_CONV_I8:
-	case Tok_ADD:
-	case Tok_CONV_I4:
-	case Tok_LDLOC_0:
-	case Tok_LDELEM_U4:
-	case Tok_LDC_I4_1:
-	case Tok_CONV_IP:
-	case Tok_CONV_R4:
-	case Tok_LDARG:
-	case Tok_ISINST:
+	case Tok_CEQ:
 	case Tok_OR:
+	case Tok_LDIND_I1:
+	case Tok_LDLOC_3:
+	case Tok_LDNULL:
+	case Tok_LDC_I4_5:
+	case Tok_CGT:
+	case Tok_LDLOCA:
+	case Tok_NOT:
+	case Tok_LDELEMA:
+	case Tok_LDFLD:
+	case Tok_LDLOC_1:
+	case Tok_SUB:
+	case Tok_ISINST:
+	case Tok_LDC_I4_7:
+	case Tok_LDELEM_I8:
+	case Tok_CONV_U1:
+	case Tok_NEG:
+	case Tok_LDIND:
+	case Tok_LDARGA:
+	case Tok_CLT_UN:
+	case Tok_SHL:
+	case Tok_CALLI:
+	case Tok_LDIND_U8:
+	case Tok_INITOBJ:
+	case Tok_CALL:
+	case Tok_MUL:
+	case Tok_DIV_UN:
+	case Tok_LDC_I4_6:
+	case Tok_LDIND_U4:
+	case Tok_LDELEM_U8:
+	case Tok_LDIND_IP:
+	case Tok_PTROFF:
+	case Tok_LDARG_3:
+	case Tok_CONV_IP:
+	case Tok_NEWARR:
+	case Tok_LDELEM_R8:
+	case Tok_LDLOC_0:
+	case Tok_LDC_I4_0:
+	case Tok_LDSTR:
+	case Tok_CONV_R4:
+	case Tok_CASTPTR:
+	case Tok_CALLVI:
+	case Tok_LDIND_I4:
+	case Tok_LDLOC_S:
+	case Tok_LDELEM:
+	case Tok_LDPROC:
+	case Tok_LDC_I4_3:
+	case Tok_SHR:
+	case Tok_CLT:
+	case Tok_LDC_I8:
+	case Tok_CONV_I1:
+	case Tok_XOR:
+	case Tok_CONV_R8:
+	case Tok_LDIND_I2:
+	case Tok_NEWOBJ:
+	case Tok_SIZEOF:
+	case Tok_LDARG_0:
+	case Tok_LDARG_S:
+	case Tok_CONV_U2:
+	case Tok_LDELEM_U4:
+	case Tok_AND:
+	case Tok_ABS:
+	case Tok_LDIND_R8:
+	case Tok_CALLVIRT:
+	case Tok_LDARG:
+	case Tok_LDLOC_2:
+	case Tok_LDELEM_U2:
+	case Tok_LDVARA:
+	case Tok_LDELEM_I1:
+	case Tok_LDELEM_I4:
+	case Tok_LDLOCA_S:
+	case Tok_LDARGA_S:
+	case Tok_DIV:
+	case Tok_LDMETH:
+	case Tok_LDIND_IPP:
+	case Tok_CONV_I8:
+	case Tok_LDELEM_U1:
+	case Tok_LDC_I4_1:
+	case Tok_CONV_U8:
+	case Tok_LDC_I4_8:
+	case Tok_LDLOC:
+	case Tok_LDELEM_I2:
+	case Tok_CGT_UN:
+	case Tok_NOP:
+	case Tok_LDFLDA:
+	case Tok_SHR_UN:
+	case Tok_CONV_I4:
+	case Tok_LDIND_R4:
+	case Tok_LDARG_2:
+	case Tok_LDC_I4_M1:
+	case Tok_REM_UN:
+	case Tok_LDVAR:
+	case Tok_LDOBJ:
+	case Tok_LDIND_U2:
+	case Tok_LDC_I4_2:
+	case Tok_ADD:
+	case Tok_LDELEM_IP:
+	case Tok_DUP:
+	case Tok_REM:
+	case Tok_LDC_I4:
+	case Tok_LDC_I4_S:
+	case Tok_LDIND_I8:
+	case Tok_LDELEM_R4:
+	case Tok_LDARG_1:
+	case Tok_IIF:
+	case Tok_LDC_R8:
+	case Tok_LDIND_U1:
+	case Tok_CONV_U4:
+	case Tok_CONV_I2:
+	case Tok_LDC_I4_4:
+	case Tok_NEWVLA:
 		return true;
 	default: return false;
 	}
@@ -383,158 +385,158 @@ static inline bool FIRST_CondOp(int tt) {
 
 static inline bool FIRST_StatementSequence(int tt) {
 	switch(tt){
-	case Tok_CGT:
-	case Tok_LDARG_2:
-	case Tok_STIND_IPP:
-	case Tok_SIZEOF:
-	case Tok_CALL:
-	case Tok_CONV_R8:
-	case Tok_LDPROC:
-	case Tok_REPEAT:
-	case Tok_LINE:
-	case Tok_STELEM:
-	case Tok_LDLOC:
+	case Tok_SHL:
 	case Tok_STIND_I4:
-	case Tok_LDC_I4_6:
-	case Tok_LDIND_U2:
-	case Tok_LDARG_3:
-	case Tok_CONV_IP:
-	case Tok_LDELEM_I4:
-	case Tok_LDIND_I4:
-	case Tok_LDARG_1:
-	case Tok_NOP:
-	case Tok_DUP:
-	case Tok_STLOC_3:
-	case Tok_STARG_S:
-	case Tok_LDELEM_I8:
-	case Tok_NOT:
-	case Tok_LDC_I4:
-	case Tok_LDIND:
-	case Tok_LDC_I4_4:
-	case Tok_STFLD:
-	case Tok_RET:
-	case Tok_STIND:
-	case Tok_LDVAR:
-	case Tok_LDELEM_U4:
-	case Tok_LDC_R4:
-	case Tok_STELEM_I8:
-	case Tok_CONV_U1:
-	case Tok_CONV_U4:
-	case Tok_LDLOC_S:
-	case Tok_IIF:
-	case Tok_EXIT:
-	case Tok_LDIND_I2:
-	case Tok_STIND_I8:
-	case Tok_LDC_I4_7:
-	case Tok_LDC_I4_8:
-	case Tok_LDFLD:
-	case Tok_WHILE:
-	case Tok_IFGOTO:
-	case Tok_LDLOC_1:
-	case Tok_STELEM_I2:
-	case Tok_NEWVLA:
-	case Tok_LDIND_R8:
-	case Tok_CEQ:
-	case Tok_LDLOC_0:
-	case Tok_LDELEM_U1:
-	case Tok_INITOBJ:
-	case Tok_DIV:
-	case Tok_LDIND_U8:
-	case Tok_LDARG:
-	case Tok_LDC_I4_2:
-	case Tok_STLOC_0:
-	case Tok_LDC_I4_S:
-	case Tok_LDLOCA_S:
-	case Tok_CALLVI:
-	case Tok_DIV_UN:
-	case Tok_LOOP:
-	case Tok_CGT_UN:
-	case Tok_NEG:
-	case Tok_STELEM_IP:
-	case Tok_REM:
-	case Tok_LDELEMA:
+	case Tok_LDARG_0:
 	case Tok_GOTO:
 	case Tok_STLOC:
-	case Tok_CONV_I8:
-	case Tok_LDELEM_U8:
-	case Tok_LDC_I4_3:
-	case Tok_LDC_I4_1:
-	case Tok_FREE:
-	case Tok_LDARG_0:
-	case Tok_NEWARR:
-	case Tok_STIND_I2:
-	case Tok_LDC_I4_M1:
-	case Tok_LDARG_S:
-	case Tok_LDELEM_I1:
-	case Tok_STIND_IP:
-	case Tok_LDELEM_U2:
-	case Tok_LABEL:
-	case Tok_SWITCH:
-	case Tok_LDC_I4_0:
-	case Tok_OR:
-	case Tok_LDVARA:
-	case Tok_STLOC_1:
-	case Tok_STELEM_R8:
-	case Tok_STIND_R4:
-	case Tok_LDLOCA:
-	case Tok_LDIND_U4:
-	case Tok_LDC_I8:
-	case Tok_STLOC_2:
-	case Tok_STIND_I1:
-	case Tok_LDELEM_R8:
-	case Tok_LDARGA:
-	case Tok_SHR_UN:
+	case Tok_LDELEM_U4:
+	case Tok_LDC_R4:
 	case Tok_SUB:
-	case Tok_LDELEM_R4:
-	case Tok_LDIND_IP:
-	case Tok_LDLOC_2:
-	case Tok_STELEM_I1:
-	case Tok_STIND_R8:
-	case Tok_STVAR:
-	case Tok_LDC_R8:
-	case Tok_LDIND_I8:
-	case Tok_NEWOBJ:
-	case Tok_CASTPTR:
-	case Tok_LDC_I4_5:
-	case Tok_ADD:
-	case Tok_LDELEM_I2:
-	case Tok_CONV_I1:
-	case Tok_ISINST:
-	case Tok_LDMETH:
-	case Tok_CONV_I2:
-	case Tok_LDOBJ:
-	case Tok_STLOC_S:
-	case Tok_REM_UN:
-	case Tok_LDLOC_3:
-	case Tok_CALLI:
-	case Tok_CLT_UN:
-	case Tok_CONV_U2:
-	case Tok_SHL:
-	case Tok_SHR:
-	case Tok_STARG:
-	case Tok_CLT:
-	case Tok_CONV_U8:
-	case Tok_AND:
+	case Tok_LDELEM_U8:
+	case Tok_LDLOCA_S:
 	case Tok_LDFLDA:
-	case Tok_IF:
-	case Tok_LDNULL:
-	case Tok_LDIND_I1:
-	case Tok_STELEM_R4:
-	case Tok_LDSTR:
+	case Tok_LDC_I4:
+	case Tok_LDC_I4_M1:
+	case Tok_LOOP:
+	case Tok_DIV:
+	case Tok_CLT:
+	case Tok_LDLOC_2:
 	case Tok_LDIND_IPP:
-	case Tok_LDIND_R4:
-	case Tok_LDELEM_IP:
-	case Tok_STELEM_I4:
-	case Tok_LDARGA_S:
-	case Tok_CALLVIRT:
-	case Tok_POP:
-	case Tok_LDELEM:
-	case Tok_LDIND_U1:
-	case Tok_CONV_R4:
-	case Tok_MUL:
-	case Tok_XOR:
+	case Tok_EXIT:
+	case Tok_CONV_U2:
+	case Tok_LDELEM_I4:
+	case Tok_STELEM_IP:
+	case Tok_LDIND_I8:
+	case Tok_SHR:
+	case Tok_CONV_R8:
+	case Tok_LDC_I4_5:
+	case Tok_SIZEOF:
+	case Tok_LDMETH:
+	case Tok_CGT:
+	case Tok_LDOBJ:
+	case Tok_ABS:
 	case Tok_PTROFF:
+	case Tok_STARG_S:
+	case Tok_LDELEM_I1:
+	case Tok_LDELEM_U1:
+	case Tok_LDLOC_1:
+	case Tok_LDC_I4_2:
+	case Tok_LDARG_3:
+	case Tok_LDIND_I2:
+	case Tok_WHILE:
+	case Tok_STIND:
+	case Tok_LDIND_I4:
+	case Tok_STIND_I2:
+	case Tok_STIND_IPP:
+	case Tok_LDLOC:
+	case Tok_LDELEMA:
+	case Tok_STELEM_R8:
+	case Tok_CONV_I2:
+	case Tok_LDARG:
+	case Tok_SWITCH:
+	case Tok_STELEM_I4:
+	case Tok_LDELEM_I2:
+	case Tok_CONV_U4:
+	case Tok_LDELEM_U2:
 	case Tok_CONV_I4:
+	case Tok_LDELEM:
+	case Tok_STFLD:
+	case Tok_STVAR:
+	case Tok_LDIND_IP:
+	case Tok_LABEL:
+	case Tok_LDARG_2:
+	case Tok_LDARG_1:
+	case Tok_STELEM_R4:
+	case Tok_LINE:
+	case Tok_CALLVI:
+	case Tok_NOP:
+	case Tok_LDELEM_IP:
+	case Tok_POP:
+	case Tok_NOT:
+	case Tok_LDARGA_S:
+	case Tok_LDC_I4_S:
+	case Tok_LDELEM_I8:
+	case Tok_LDPROC:
+	case Tok_STLOC_1:
+	case Tok_STELEM_I1:
+	case Tok_CONV_I1:
+	case Tok_MUL:
+	case Tok_LDIND_I1:
+	case Tok_NEWARR:
+	case Tok_STIND_R4:
+	case Tok_ISINST:
+	case Tok_LDC_I4_3:
+	case Tok_CONV_IP:
+	case Tok_CONV_U1:
+	case Tok_LDIND_R8:
+	case Tok_CALLVIRT:
+	case Tok_CASTPTR:
+	case Tok_LDFLD:
+	case Tok_STIND_I1:
+	case Tok_LDIND_U2:
+	case Tok_LDELEM_R8:
+	case Tok_NEWOBJ:
+	case Tok_LDSTR:
+	case Tok_LDIND_U1:
+	case Tok_LDLOC_S:
+	case Tok_LDVARA:
+	case Tok_CONV_R4:
+	case Tok_STELEM_I2:
+	case Tok_LDC_I4_1:
+	case Tok_RET:
+	case Tok_STLOC_0:
+	case Tok_LDLOCA:
+	case Tok_LDVAR:
+	case Tok_LDARGA:
+	case Tok_XOR:
+	case Tok_STLOC_2:
+	case Tok_STIND_IP:
+	case Tok_STLOC_S:
+	case Tok_CEQ:
+	case Tok_CONV_U8:
+	case Tok_REM:
+	case Tok_LDNULL:
+	case Tok_STELEM_I8:
+	case Tok_REM_UN:
+	case Tok_LDLOC_0:
+	case Tok_LDIND:
+	case Tok_LDARG_S:
+	case Tok_STIND_I8:
+	case Tok_LDC_I4_4:
+	case Tok_ADD:
+	case Tok_LDLOC_3:
+	case Tok_LDIND_U4:
+	case Tok_CONV_I8:
+	case Tok_DUP:
+	case Tok_LDC_I4_7:
+	case Tok_CALLI:
+	case Tok_FREE:
+	case Tok_LDC_R8:
+	case Tok_LDIND_U8:
+	case Tok_SHR_UN:
+	case Tok_INITOBJ:
+	case Tok_LDC_I8:
+	case Tok_NEWVLA:
+	case Tok_OR:
+	case Tok_STELEM:
+	case Tok_AND:
+	case Tok_LDC_I4_6:
+	case Tok_LDIND_R4:
+	case Tok_LDELEM_R4:
+	case Tok_NEG:
+	case Tok_LDC_I4_0:
+	case Tok_IF:
+	case Tok_STARG:
+	case Tok_CGT_UN:
+	case Tok_CLT_UN:
+	case Tok_DIV_UN:
+	case Tok_IIF:
+	case Tok_STIND_R8:
+	case Tok_REPEAT:
+	case Tok_LDC_I4_8:
+	case Tok_CALL:
+	case Tok_STLOC_3:
 		return true;
 	default: return false;
 	}
@@ -542,46 +544,45 @@ static inline bool FIRST_StatementSequence(int tt) {
 
 static inline bool FIRST_Statement(int tt) {
 	switch(tt){
+	case Tok_STLOC:
+	case Tok_LOOP:
+	case Tok_STELEM_R4:
+	case Tok_STIND_IP:
 	case Tok_GOTO:
-	case Tok_STIND_IPP:
-	case Tok_STIND_R4:
-	case Tok_STELEM:
-	case Tok_LINE:
+	case Tok_WHILE:
+	case Tok_RET:
+	case Tok_STLOC_0:
+	case Tok_STARG:
 	case Tok_STELEM_I1:
-	case Tok_STELEM_I2:
-	case Tok_IF:
+	case Tok_STIND:
+	case Tok_STIND_IPP:
+	case Tok_STELEM_R8:
 	case Tok_STFLD:
+	case Tok_STELEM_I2:
+	case Tok_STELEM_I8:
+	case Tok_STELEM_IP:
+	case Tok_STIND_R8:
+	case Tok_REPEAT:
+	case Tok_STLOC_S:
+	case Tok_POP:
+	case Tok_LINE:
+	case Tok_STIND_I4:
+	case Tok_IF:
+	case Tok_SWITCH:
+	case Tok_STIND_R4:
+	case Tok_STIND_I8:
+	case Tok_FREE:
 	case Tok_STIND_I2:
 	case Tok_LABEL:
-	case Tok_STLOC_S:
-	case Tok_STELEM_R8:
-	case Tok_STLOC_3:
-	case Tok_STIND_I4:
-	case Tok_STLOC:
-	case Tok_STIND:
-	case Tok_STELEM_IP:
-	case Tok_POP:
-	case Tok_EXIT:
-	case Tok_IFGOTO:
-	case Tok_STVAR:
-	case Tok_STLOC_1:
-	case Tok_RET:
-	case Tok_SWITCH:
-	case Tok_STELEM_R4:
 	case Tok_STARG_S:
-	case Tok_REPEAT:
+	case Tok_STLOC_3:
+	case Tok_EXIT:
 	case Tok_STELEM_I4:
-	case Tok_STLOC_0:
-	case Tok_WHILE:
-	case Tok_STIND_I8:
-	case Tok_STARG:
 	case Tok_STLOC_2:
-	case Tok_STELEM_I8:
-	case Tok_STIND_IP:
-	case Tok_FREE:
-	case Tok_LOOP:
+	case Tok_STELEM:
+	case Tok_STLOC_1:
 	case Tok_STIND_I1:
-	case Tok_STIND_R8:
+	case Tok_STVAR:
 		return true;
 	default: return false;
 	}
@@ -617,12 +618,12 @@ static inline bool FIRST_MetaParams(int tt) {
 
 static inline bool FIRST_ConstExpression(int tt) {
 	switch(tt){
-	case Tok_string:
-	case Tok_float:
 	case Tok_unsigned:
+	case Tok_hexstring:
+	case Tok_string:
 	case Tok_ident:
 	case Tok_Plus:
-	case Tok_hexstring:
+	case Tok_float:
 	case Tok_Minus:
 		return true;
 	default: return false;
@@ -631,12 +632,12 @@ static inline bool FIRST_ConstExpression(int tt) {
 
 static inline bool FIRST_ConstExpression2(int tt) {
 	switch(tt){
-	case Tok_string:
-	case Tok_float:
 	case Tok_unsigned:
-	case Tok_ident:
-	case Tok_Plus:
 	case Tok_hexstring:
+	case Tok_ident:
+	case Tok_string:
+	case Tok_Plus:
+	case Tok_float:
 	case Tok_Minus:
 		return true;
 	default: return false;
@@ -644,7 +645,7 @@ static inline bool FIRST_ConstExpression2(int tt) {
 }
 
 static inline bool FIRST_constructor(int tt) {
-	return tt == Tok_ident || tt == Tok_hexstring;
+	return tt == Tok_hexstring || tt == Tok_ident;
 }
 
 static inline bool FIRST_component_list(int tt) {
@@ -653,14 +654,14 @@ static inline bool FIRST_component_list(int tt) {
 
 static inline bool FIRST_component(int tt) {
 	switch(tt){
-	case Tok_string:
-	case Tok_float:
-	case Tok_unsigned:
-	case Tok_ident:
-	case Tok_Plus:
-	case Tok_hexstring:
-	case Tok_Minus:
 	case Tok_Lbrace:
+	case Tok_unsigned:
+	case Tok_hexstring:
+	case Tok_ident:
+	case Tok_string:
+	case Tok_Plus:
+	case Tok_float:
+	case Tok_Minus:
 		return true;
 	default: return false;
 	}
@@ -776,16 +777,14 @@ void Parser::identdef(SynTree* st) {
 void Parser::ConstDeclaration(SynTree* st) {
 	{ SynTree* tmp = new SynTree(SynTree::R_ConstDeclaration, la); st->d_children.append(tmp); st = tmp; }
 	if( expect(Tok_ident, false, "ConstDeclaration") ) addTerminal(st);
-	if( la.d_type == Tok_Eq || la.d_type == Tok_Colon ) {
-		if( la.d_type == Tok_Eq ) {
-			if( expect(Tok_Eq, false, "ConstDeclaration") ) addTerminal(st);
-			ConstExpression2(st);
-		} else if( la.d_type == Tok_Colon ) {
-			if( expect(Tok_Colon, false, "ConstDeclaration") ) addTerminal(st);
-			qualident(st);
-		} else
-			invalid("ConstDeclaration");
-	}
+	if( la.d_type == Tok_Eq ) {
+		if( expect(Tok_Eq, false, "ConstDeclaration") ) addTerminal(st);
+		ConstExpression2(st);
+	} else if( la.d_type == Tok_Colon ) {
+		if( expect(Tok_Colon, false, "ConstDeclaration") ) addTerminal(st);
+		qualident(st);
+	} else
+		invalid("ConstDeclaration");
 }
 
 void Parser::TypeDeclaration(SynTree* st) {
@@ -1084,7 +1083,7 @@ void Parser::module(SynTree* st) {
 	while( FIRST_ImportList(la.d_type) || FIRST_DeclarationSequence(la.d_type) ) {
 		if( FIRST_ImportList(la.d_type) ) {
 			ImportList(st);
-		} else if( FIRST_DeclarationSequence(la.d_type) || la.d_type == Tok_VAR || la.d_type == Tok_TYPE || la.d_type == Tok_END || la.d_type == Tok_PROCEDURE || la.d_type == Tok_PROC || la.d_type == Tok_CONST || la.d_type == Tok_IMPORT ) {
+		} else if( FIRST_DeclarationSequence(la.d_type) || la.d_type == Tok_CONST || la.d_type == Tok_IMPORT || la.d_type == Tok_TYPE || la.d_type == Tok_VAR || la.d_type == Tok_PROC || la.d_type == Tok_END || la.d_type == Tok_PROCEDURE ) {
 			DeclarationSequence(st);
 		} else
 			invalid("module");
@@ -1113,10 +1112,6 @@ void Parser::ImportList(SynTree* st) {
 
 void Parser::import(SynTree* st) {
 	{ SynTree* tmp = new SynTree(SynTree::R_import, la); st->d_children.append(tmp); st = tmp; }
-	while( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Slash )  ) {
-		if( expect(Tok_ident, false, "import") ) addTerminal(st);
-		if( expect(Tok_Slash, false, "import") ) addTerminal(st);
-	}
 	if( expect(Tok_ident, false, "import") ) addTerminal(st);
 	if( FIRST_MetaActuals(la.d_type) ) {
 		MetaActuals(st);
@@ -1169,6 +1164,8 @@ void Parser::Expression(SynTree* st) {
 void Parser::ExpInstr(SynTree* st) {
 	if( la.d_code == Tok_ADD ) {
 		if( expect(Tok_ADD, true, "ExpInstr") ) addTerminal(st);
+	} else if( la.d_code == Tok_ABS ) {
+		if( expect(Tok_ABS, true, "ExpInstr") ) addTerminal(st);
 	} else if( la.d_code == Tok_AND ) {
 		if( expect(Tok_AND, true, "ExpInstr") ) addTerminal(st);
 	} else if( la.d_code == Tok_CALL || la.d_code == Tok_CALLI || la.d_code == Tok_CALLVI ) {
@@ -1500,9 +1497,6 @@ void Parser::Statement(SynTree* st) {
 		if( expect(Tok_EXIT, true, "Statement") ) addTerminal(st);
 	} else if( la.d_code == Tok_GOTO ) {
 		if( expect(Tok_GOTO, true, "Statement") ) addTerminal(st);
-		if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
-	} else if( la.d_code == Tok_IFGOTO ) {
-		if( expect(Tok_IFGOTO, true, "Statement") ) addTerminal(st);
 		if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
 	} else if( FIRST_IfThenElse(la.d_type) || FIRST_IfThenElse(la.d_code) ) {
 		IfThenElse(st);

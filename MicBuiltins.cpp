@@ -466,7 +466,6 @@ void Builtins::doUnsigned()
 
 void Builtins::doAbs()
 {
-    static int count = 0;
     Value v = ev->stack.takeLast();
     if( v.isConst() )
     {
@@ -476,20 +475,7 @@ void Builtins::doAbs()
             v.val = qAbs(v.val.toDouble() );
     }else if( v.type->isInt() || v.type->isReal() )
     {
-        ev->out->dup_();
-        if( v.type->kind == Type::INT64 )
-            ev->out->ldc_i8(0);
-        else if( v.type->kind == Type::FLT64 )
-            ev->out->ldc_r8(0);
-        else if( v.type->isInt() )
-            ev->out->ldc_i4(0);
-        else
-            ev->out->ldc_r4(0);
-        ev->out->cgt_(); // push v > 0, i.e. jump if v < 0
-        const QByteArray label = "ABS$" + QByteArray::number(count++);
-        ev->out->ifgoto_(label);
-        ev->out->neg_();
-        ev->out->label_(label);
+        ev->out->abs_();
     }
     ev->stack.push_back(v);
 }

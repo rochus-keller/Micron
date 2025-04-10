@@ -275,6 +275,13 @@ void MilEmitter::add_()
     delta(-2+1);
 }
 
+void MilEmitter::abs_()
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(MilOperation(IL_abs ) );
+    delta(-1+1);
+}
+
 void MilEmitter::and_()
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
@@ -453,13 +460,6 @@ void MilEmitter::goto_(const QByteArray& label)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
     ops->append(MilOperation(IL_goto, label) );
-    delta(0);
-}
-
-void MilEmitter::ifgoto_(const QByteArray& label)
-{
-    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    ops->append(MilOperation(IL_ifgoto, label) );
     delta(0);
 }
 
