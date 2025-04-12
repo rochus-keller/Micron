@@ -20,6 +20,7 @@ end hello
 var p: proc (^)(const str: ^array of char)
 	t0: T0
 	t1: T1
+	t1p: ^T1
 	tp: ^T0
 
 begin
@@ -29,6 +30,11 @@ println(t1.i)
 
 p := t0.hello
 p("hello")
+t1.hello("gooday")
+
+t1p := @t1 // also works, but unnecessary indirection
+t1p.hello("as well")
+
 p := t1.hello
 p("bonjour")
 

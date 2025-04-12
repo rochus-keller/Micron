@@ -56,6 +56,14 @@ bool Validator::validate(Declaration* module)
         sub = sub->next;
     }
 
+    foreach( Expression* e, newExprs )
+    {
+        if( module->toDelete == 0 )
+            module->toDelete = new ToDelete(e);
+        else
+            module->toDelete->append(new ToDelete(e));
+    }
+
     return errors.isEmpty();
 }
 
@@ -97,6 +105,7 @@ void Validator::visitStatSeq(Statement* stat)
                 Expression* e = visitExpr(stat->e);
                 if( stack.isEmpty() )
                 {
+                    Q_ASSERT( stat->args == 0 );
                     stat->args = e;
                     if( e->next )
                     {
@@ -1006,8 +1015,10 @@ Expression* Validator::eatStack(quint32 n)
            n--;
         }
         if( res == 0 )
+        {
             res = a;
-        else
+            newExprs.append(a);
+        }else
             res->append(a);
     }
 

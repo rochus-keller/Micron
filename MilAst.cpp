@@ -158,6 +158,8 @@ Declaration::~Declaration()
 {
     if( kind == ConstDecl && c )
         delete c;
+    else if( kind == Module && toDelete )
+        delete toDelete;
     if( subs )
         delete subs;
     if( body )
@@ -269,8 +271,6 @@ Expression::~Expression()
         delete c;
     else if( (kind == Tok_IIF || kind == Tok_THEN || kind == Tok_ELSE ) && e != 0 )
         delete e;
-    else if( rhs != 0 && rhs->kind == Expression::Argument )
-        delete rhs;
     if( next )
         delete next;
 }
@@ -392,3 +392,24 @@ void Statement::append(Statement* s)
     l->next = s;
 }
 
+ToDelete::~ToDelete()
+{
+    if( arg )
+        delete arg;
+    if( next )
+        delete next;
+}
+
+void ToDelete::append(ToDelete* td)
+{
+    if( next == 0 )
+    {
+        next = td;
+        return;
+    }
+    ToDelete* l = next;
+    while( l && l->next )
+        l = l->next;
+    Q_ASSERT( l && l->next == 0 );
+    l->next = td;
+}

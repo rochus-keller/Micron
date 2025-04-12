@@ -7,7 +7,7 @@ static inline bool FIRST_Micron(int tt) {
 }
 
 static inline bool FIRST_number(int tt) {
-	return tt == Tok_integer || tt == Tok_real;
+	return tt == Tok_real || tt == Tok_integer;
 }
 
 static inline bool FIRST_qualident(int tt) {
@@ -24,22 +24,22 @@ static inline bool FIRST_ConstDeclaration(int tt) {
 
 static inline bool FIRST_ConstExpression(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_NOT:
-	case Tok_Plus:
-	case Tok_Minus:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_TRUE:
+	case Tok_At:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_Minus:
+	case Tok_hexstring:
+	case Tok_Plus:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -51,16 +51,16 @@ static inline bool FIRST_TypeDeclaration(int tt) {
 
 static inline bool FIRST_type(int tt) {
 	switch(tt){
-	case Tok_Hat:
-	case Tok_OBJECT:
 	case Tok_ARRAY:
-	case Tok_PROC:
-	case Tok_RECORD:
+	case Tok_OBJECT:
 	case Tok_Lpar:
-	case Tok_POINTER:
-	case Tok_PROCEDURE:
 	case Tok_ident:
+	case Tok_PROCEDURE:
+	case Tok_Hat:
+	case Tok_RECORD:
 	case Tok_Lbrack:
+	case Tok_PROC:
+	case Tok_POINTER:
 		return true;
 	default: return false;
 	}
@@ -76,23 +76,23 @@ static inline bool FIRST_ArrayType(int tt) {
 
 static inline bool FIRST_length(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
 	case Tok_VAR:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_Plus:
-	case Tok_Minus:
-	case Tok_NOT:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_At:
+	case Tok_TRUE:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_hexstring:
+	case Tok_Minus:
+	case Tok_Plus:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -111,7 +111,7 @@ static inline bool FIRST_BaseType(int tt) {
 }
 
 static inline bool FIRST_inline_(int tt) {
-	return tt == Tok_INLINE || tt == Tok_IN;
+	return tt == Tok_IN || tt == Tok_INLINE;
 }
 
 static inline bool FIRST_VariantPart(int tt) {
@@ -119,11 +119,11 @@ static inline bool FIRST_VariantPart(int tt) {
 }
 
 static inline bool FIRST_FixedPart(int tt) {
-	return tt == Tok_2Dot || tt == Tok_INLINE || tt == Tok_IN || tt == Tok_ident;
+	return tt == Tok_IN || tt == Tok_ident || tt == Tok_INLINE || tt == Tok_2Dot;
 }
 
 static inline bool FIRST_FieldList(int tt) {
-	return tt == Tok_2Dot || tt == Tok_INLINE || tt == Tok_IN || tt == Tok_ident;
+	return tt == Tok_IN || tt == Tok_ident || tt == Tok_INLINE || tt == Tok_2Dot;
 }
 
 static inline bool FIRST_IdentList(int tt) {
@@ -151,27 +151,27 @@ static inline bool FIRST_designator(int tt) {
 }
 
 static inline bool FIRST_selector(int tt) {
-	return tt == Tok_Hat || tt == Tok_Dot || tt == Tok_Lpar || tt == Tok_Lbrack;
+	return tt == Tok_Lpar || tt == Tok_Dot || tt == Tok_Hat || tt == Tok_Lbrack;
 }
 
 static inline bool FIRST_ExpList(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_NOT:
-	case Tok_Minus:
-	case Tok_Plus:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_TRUE:
+	case Tok_At:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_Minus:
+	case Tok_hexstring:
+	case Tok_Plus:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -179,22 +179,22 @@ static inline bool FIRST_ExpList(int tt) {
 
 static inline bool FIRST_expression(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_NOT:
-	case Tok_Plus:
-	case Tok_Minus:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_TRUE:
+	case Tok_At:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_Minus:
+	case Tok_hexstring:
+	case Tok_Plus:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -202,15 +202,15 @@ static inline bool FIRST_expression(int tt) {
 
 static inline bool FIRST_relation(int tt) {
 	switch(tt){
-	case Tok_Hash:
-	case Tok_Gt:
+	case Tok_IN:
 	case Tok_IS:
+	case Tok_LtGt:
 	case Tok_Eq:
 	case Tok_Leq:
+	case Tok_Hash:
 	case Tok_Geq:
-	case Tok_IN:
+	case Tok_Gt:
 	case Tok_Lt:
-	case Tok_LtGt:
 		return true;
 	default: return false;
 	}
@@ -218,47 +218,47 @@ static inline bool FIRST_relation(int tt) {
 
 static inline bool FIRST_SimpleExpression(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_NOT:
-	case Tok_Minus:
-	case Tok_Plus:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_TRUE:
+	case Tok_At:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_Minus:
+	case Tok_hexstring:
+	case Tok_Plus:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
 }
 
 static inline bool FIRST_AddOperator(int tt) {
-	return tt == Tok_Minus || tt == Tok_Plus || tt == Tok_OR;
+	return tt == Tok_OR || tt == Tok_Minus || tt == Tok_Plus;
 }
 
 static inline bool FIRST_term(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_NOT:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_TRUE:
+	case Tok_At:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_hexstring:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -267,11 +267,11 @@ static inline bool FIRST_term(int tt) {
 static inline bool FIRST_MulOperator(int tt) {
 	switch(tt){
 	case Tok_Slash:
-	case Tok_AND:
 	case Tok_DIV:
-	case Tok_MOD:
-	case Tok_Amp:
+	case Tok_AND:
 	case Tok_Star:
+	case Tok_Amp:
+	case Tok_MOD:
 		return true;
 	default: return false;
 	}
@@ -279,42 +279,42 @@ static inline bool FIRST_MulOperator(int tt) {
 
 static inline bool FIRST_literal(int tt) {
 	switch(tt){
-	case Tok_integer:
+	case Tok_real:
+	case Tok_FALSE:
 	case Tok_TRUE:
+	case Tok_NIL:
+	case Tok_integer:
 	case Tok_hexchar:
 	case Tok_hexstring:
-	case Tok_FALSE:
 	case Tok_string:
-	case Tok_NIL:
-	case Tok_real:
 		return true;
 	default: return false;
 	}
 }
 
 static inline bool FIRST_constructor(int tt) {
-	return tt == Tok_Lbrace || tt == Tok_ident;
+	return tt == Tok_ident || tt == Tok_Lbrace;
 }
 
 static inline bool FIRST_component(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_Plus:
-	case Tok_Minus:
-	case Tok_NOT:
-	case Tok_hexstring:
+	case Tok_real:
 	case Tok_Tilde:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_Lbrack:
-	case Tok_string:
+	case Tok_At:
+	case Tok_TRUE:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_hexstring:
+	case Tok_Minus:
+	case Tok_Plus:
+	case Tok_string:
+	case Tok_Lbrack:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -322,20 +322,20 @@ static inline bool FIRST_component(int tt) {
 
 static inline bool FIRST_factor(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_NOT:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_TRUE:
+	case Tok_At:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_hexstring:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -347,16 +347,16 @@ static inline bool FIRST_variableOrFunctionCall(int tt) {
 
 static inline bool FIRST_statement(int tt) {
 	switch(tt){
-	case Tok_GOTO:
+	case Tok_LOOP:
 	case Tok_REPEAT:
+	case Tok_ident:
+	case Tok_GOTO:
+	case Tok_FOR:
 	case Tok_CASE:
 	case Tok_EXIT:
-	case Tok_LOOP:
-	case Tok_RETURN:
-	case Tok_WHILE:
 	case Tok_IF:
-	case Tok_ident:
-	case Tok_FOR:
+	case Tok_WHILE:
+	case Tok_RETURN:
 		return true;
 	default: return false;
 	}
@@ -368,17 +368,17 @@ static inline bool FIRST_assignmentOrProcedureCall(int tt) {
 
 static inline bool FIRST_StatementSequence(int tt) {
 	switch(tt){
-	case Tok_GOTO:
+	case Tok_Semi:
+	case Tok_LOOP:
 	case Tok_REPEAT:
+	case Tok_ident:
+	case Tok_GOTO:
+	case Tok_FOR:
 	case Tok_CASE:
 	case Tok_EXIT:
-	case Tok_LOOP:
-	case Tok_RETURN:
-	case Tok_WHILE:
 	case Tok_IF:
-	case Tok_ident:
-	case Tok_FOR:
-	case Tok_Semi:
+	case Tok_WHILE:
+	case Tok_RETURN:
 		return true;
 	default: return false;
 	}
@@ -410,22 +410,22 @@ static inline bool FIRST_CaseStatement(int tt) {
 
 static inline bool FIRST_Case(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_NOT:
-	case Tok_Minus:
-	case Tok_Plus:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_TRUE:
+	case Tok_At:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_Minus:
+	case Tok_hexstring:
+	case Tok_Plus:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -433,22 +433,22 @@ static inline bool FIRST_Case(int tt) {
 
 static inline bool FIRST_CaseLabelList(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_NOT:
-	case Tok_Plus:
-	case Tok_Minus:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_TRUE:
+	case Tok_At:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_Minus:
+	case Tok_hexstring:
+	case Tok_Plus:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -456,22 +456,22 @@ static inline bool FIRST_CaseLabelList(int tt) {
 
 static inline bool FIRST_LabelRange(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_NOT:
-	case Tok_Minus:
-	case Tok_Plus:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_TRUE:
+	case Tok_At:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_Minus:
+	case Tok_hexstring:
+	case Tok_Plus:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -479,22 +479,22 @@ static inline bool FIRST_LabelRange(int tt) {
 
 static inline bool FIRST_label(int tt) {
 	switch(tt){
-	case Tok_integer:
-	case Tok_At:
-	case Tok_Lbrace:
-	case Tok_TRUE:
-	case Tok_hexchar:
-	case Tok_Lpar:
-	case Tok_NOT:
-	case Tok_Plus:
-	case Tok_Minus:
+	case Tok_real:
 	case Tok_Tilde:
-	case Tok_hexstring:
+	case Tok_NOT:
+	case Tok_Lpar:
 	case Tok_ident:
 	case Tok_FALSE:
-	case Tok_string:
+	case Tok_TRUE:
+	case Tok_At:
 	case Tok_NIL:
-	case Tok_real:
+	case Tok_integer:
+	case Tok_hexchar:
+	case Tok_Minus:
+	case Tok_hexstring:
+	case Tok_Plus:
+	case Tok_string:
+	case Tok_Lbrace:
 		return true;
 	default: return false;
 	}
@@ -521,19 +521,23 @@ static inline bool FIRST_ExitStatement(int tt) {
 }
 
 static inline bool FIRST_procedure(int tt) {
-	return tt == Tok_PROC || tt == Tok_PROCEDURE;
+	return tt == Tok_PROCEDURE || tt == Tok_PROC;
 }
 
 static inline bool FIRST_ProcedureType(int tt) {
-	return tt == Tok_PROC || tt == Tok_PROCEDURE;
+	return tt == Tok_PROCEDURE || tt == Tok_PROC;
 }
 
 static inline bool FIRST_ProcedureDeclaration(int tt) {
-	return tt == Tok_PROC || tt == Tok_PROCEDURE;
+	return tt == Tok_PROCEDURE || tt == Tok_PROC;
 }
 
 static inline bool FIRST_ProcedureHeading(int tt) {
-	return tt == Tok_PROC || tt == Tok_PROCEDURE;
+	return tt == Tok_PROCEDURE || tt == Tok_PROC;
+}
+
+static inline bool FIRST_ForwardDecl(int tt) {
+	return tt == Tok_PROCEDURE || tt == Tok_PROC;
 }
 
 static inline bool FIRST_Receiver(int tt) {
@@ -547,18 +551,18 @@ static inline bool FIRST_block(int tt) {
 static inline bool FIRST_ProcedureBody(int tt) {
 	switch(tt){
 	case Tok_VAR:
-	case Tok_PROC:
-	case Tok_PROCEDURE:
-	case Tok_TYPE:
-	case Tok_CONST:
 	case Tok_BEGIN:
+	case Tok_PROCEDURE:
+	case Tok_CONST:
+	case Tok_PROC:
+	case Tok_TYPE:
 		return true;
 	default: return false;
 	}
 }
 
 static inline bool FIRST_DeclarationSequence(int tt) {
-	return tt == Tok_VAR || tt == Tok_PROC || tt == Tok_PROCEDURE || tt == Tok_TYPE || tt == Tok_CONST;
+	return tt == Tok_VAR || tt == Tok_PROCEDURE || tt == Tok_CONST || tt == Tok_PROC || tt == Tok_TYPE;
 }
 
 static inline bool FIRST_ReturnStatement(int tt) {
@@ -570,7 +574,7 @@ static inline bool FIRST_FormalParameters(int tt) {
 }
 
 static inline bool FIRST_ReturnType(int tt) {
-	return tt == Tok_Hat || tt == Tok_POINTER || tt == Tok_ident;
+	return tt == Tok_ident || tt == Tok_Hat || tt == Tok_POINTER;
 }
 
 static inline bool FIRST_FPSection(int tt) {
@@ -579,16 +583,16 @@ static inline bool FIRST_FPSection(int tt) {
 
 static inline bool FIRST_FormalType(int tt) {
 	switch(tt){
-	case Tok_Hat:
-	case Tok_OBJECT:
 	case Tok_ARRAY:
-	case Tok_PROC:
-	case Tok_RECORD:
+	case Tok_OBJECT:
 	case Tok_Lpar:
-	case Tok_POINTER:
-	case Tok_PROCEDURE:
 	case Tok_ident:
+	case Tok_PROCEDURE:
+	case Tok_Hat:
+	case Tok_RECORD:
 	case Tok_Lbrack:
+	case Tok_PROC:
+	case Tok_POINTER:
 		return true;
 	default: return false;
 	}
@@ -615,7 +619,7 @@ static inline bool FIRST_MetaParams(int tt) {
 }
 
 static inline bool FIRST_MetaSection(int tt) {
-	return tt == Tok_ident || tt == Tok_TYPE || tt == Tok_CONST;
+	return tt == Tok_ident || tt == Tok_CONST || tt == Tok_TYPE;
 }
 
 void Parser::RunParser() {
@@ -1303,23 +1307,8 @@ void Parser::ProcedureType() {
 }
 
 void Parser::ProcedureDeclaration() {
-	if( ( ( peek(1).d_type == Tok_PROC || peek(1).d_type == Tok_PROCEDURE ) && peek(2).d_type == Tok_Hat )  ) {
-		procedure();
-		expect(Tok_Hat, false, "ProcedureDeclaration");
-		identdef();
-		if( FIRST_FormalParameters(la.d_type) ) {
-			FormalParameters();
-		}
-		if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR || la.d_type == Tok_EXTERN ) {
-			if( la.d_type == Tok_INLINE ) {
-				expect(Tok_INLINE, false, "ProcedureDeclaration");
-			} else if( la.d_type == Tok_INVAR ) {
-				expect(Tok_INVAR, false, "ProcedureDeclaration");
-			} else if( la.d_type == Tok_EXTERN ) {
-				expect(Tok_EXTERN, false, "ProcedureDeclaration");
-			} else
-				invalid("ProcedureDeclaration");
-		}
+	if( ( peek(2).d_type == Tok_Hat )  ) {
+		ForwardDecl();
 	} else if( FIRST_ProcedureHeading(la.d_type) ) {
 		ProcedureHeading();
 		if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR || la.d_type == Tok_Semi || FIRST_ProcedureBody(la.d_type) ) {
@@ -1359,6 +1348,24 @@ void Parser::ProcedureHeading() {
 			expect(Tok_Dot, false, "ProcedureHeading");
 		} else
 			invalid("ProcedureHeading");
+	}
+	identdef();
+	if( FIRST_FormalParameters(la.d_type) ) {
+		FormalParameters();
+	}
+}
+
+void Parser::ForwardDecl() {
+	procedure();
+	expect(Tok_Hat, false, "ForwardDecl");
+	if( FIRST_Receiver(la.d_type) || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Dot )  ) {
+		if( FIRST_Receiver(la.d_type) ) {
+			Receiver();
+		} else if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Dot )  ) {
+			expect(Tok_ident, false, "ForwardDecl");
+			expect(Tok_Dot, false, "ForwardDecl");
+		} else
+			invalid("ForwardDecl");
 	}
 	identdef();
 	if( FIRST_FormalParameters(la.d_type) ) {
@@ -1501,7 +1508,7 @@ void Parser::module() {
 	while( FIRST_ImportList(la.d_type) || FIRST_DeclarationSequence(la.d_type) ) {
 		if( FIRST_ImportList(la.d_type) ) {
 			ImportList();
-		} else if( FIRST_DeclarationSequence(la.d_type) || la.d_type == Tok_BEGIN || la.d_type == Tok_TYPE || la.d_type == Tok_END || la.d_type == Tok_CONST || la.d_type == Tok_IMPORT || la.d_type == Tok_PROC || la.d_type == Tok_PROCEDURE || la.d_type == Tok_VAR ) {
+		} else if( FIRST_DeclarationSequence(la.d_type) || la.d_type == Tok_PROCEDURE || la.d_type == Tok_CONST || la.d_type == Tok_PROC || la.d_type == Tok_IMPORT || la.d_type == Tok_VAR || la.d_type == Tok_END || la.d_type == Tok_TYPE || la.d_type == Tok_BEGIN ) {
 			DeclarationSequence();
 		} else
 			invalid("module");

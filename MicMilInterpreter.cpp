@@ -683,13 +683,14 @@ public:
                 for( int i = 0; i < ty->methods.size(); i++ )
                 {
                     const char* name = ty->methods[i].name.constData();
-                    ty->methods[i].offset = out.vtable.size();
+                    ty->methods[i].offset = out.vtable.size(); // preset for new method
                     bool found = false;
                     for(int j = 0; j < out.vtable.size(); j++ )
                     {
                         // look up the method in the inherited vtable and replace it there if it's an override
                         if( out.vtable[j].proc->name.constData() == name )
                         {
+                            ty->methods[i].offset = out.vtable[j].proc->offset;
                             out.vtable[j].proc = &ty->methods[i];
                             out.vtable[j].module = mt.second;
                             found = true;
@@ -1438,7 +1439,7 @@ public:
             proc->compiled = true;
         }
 
-#define _USE_JUMP_TABLE
+//#define _USE_JUMP_TABLE
         // the debugger becomes veeeery slow because of local var display
         // the threaded interpreter when compiled with GCC 4.8 is only about 2% faster than the switch version
 
@@ -2333,13 +2334,6 @@ public:
                 vmbreak;
             vmcase(IL_goto)
                 pc = proc->body[pc].index;
-                vmbreak;
-            vmcase(IL_ifgoto)
-                lhs = stack.takeLast();
-                if( lhs.u )
-                    pc = proc->body[pc].index;
-                else
-                    pc++;
                 vmbreak;
             vmcase(IL_if) // if(1) then(2) else(2) end(5)
                 curStatement.push_back(IL_if);

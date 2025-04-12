@@ -29,6 +29,7 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_ForStatement: return "ForStatement";
 		case R_FormalParameters: return "FormalParameters";
 		case R_FormalType: return "FormalType";
+		case R_ForwardDecl: return "ForwardDecl";
 		case R_GotoStatement: return "GotoStatement";
 		case R_IdentList: return "IdentList";
 		case R_IfStatement: return "IfStatement";

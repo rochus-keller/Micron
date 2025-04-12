@@ -130,6 +130,16 @@ namespace Mil
 
     struct Constant;
     class Statement;
+    class Expression;
+
+    struct ToDelete
+    {
+        ToDelete* next;
+        Expression* arg;
+        ToDelete(Expression* e = 0):next(0),arg(e){}
+        ~ToDelete();
+        void append(ToDelete*);
+    };
 
     class Declaration : public Node
     {
@@ -155,9 +165,14 @@ namespace Mil
             int off;
             Declaration* forwardTo; // Procedure if forward==true, not owned
             Declaration* imported; // Import, not owned
+            ToDelete* toDelete; // Module, all args to be deleted
         };
         // QVariant data; // value for Const, path for Import, name for Extern
-        Declaration():Node(D),next(0),subs(0),outer(0),c(0),body(0){}
+        Declaration():Node(D),next(0),subs(0),outer(0),c(0),body(0){
+#ifdef _DEBUG
+            kind = NoMode;
+#endif
+        }
         ~Declaration();
         void appendSub(Declaration*);
         Declaration* findSubByName(const QByteArray&) const;

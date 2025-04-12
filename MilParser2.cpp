@@ -1195,7 +1195,6 @@ void Parser2::MemberList() {
     foreach( Declaration* field, fields )
     {
         field->setType(t);
-        Q_ASSERT(field->outer == 0);
         field->outer = curDecl;
     }
 }
@@ -1226,6 +1225,10 @@ Type* Parser2::ProcedureType() {
         invalid("ProcedureType");
     Type* res = new Type();
     res->kind = Type::Proc;
+    if( la.d_type == Tok_Hat ) {
+        expect(Tok_Hat, false, "ProcedureType");
+        res->typebound = true;
+    }
     if( FIRST_FormalParameters(la.d_type) ) {
         Declaration tmp;
         scopeStack.push_back(&tmp);
@@ -1280,6 +1283,7 @@ void Parser2::ProcedureDeclaration() {
                     forward->name.clear();
                     forward->forwardTo = p;
                 }
+                tmp.subs = 0;
                 t->subs.append(p);
                 p->outer = t->decl;
             }

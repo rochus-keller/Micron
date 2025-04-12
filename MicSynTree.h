@@ -30,6 +30,7 @@ namespace Mic {
 			R_ForStatement,
 			R_FormalParameters,
 			R_FormalType,
+			R_ForwardDecl,
 			R_GotoStatement,
 			R_IdentList,
 			R_IfStatement,

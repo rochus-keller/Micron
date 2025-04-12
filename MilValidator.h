@@ -66,6 +66,7 @@ namespace Mil
         Declaration* curMod;
         Declaration* curProc;
         QList<Expression*> stack;
+        QList<Expression*> newExprs;
         quint32 pc;
     };
 }
