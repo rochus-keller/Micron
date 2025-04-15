@@ -2,7 +2,6 @@ module MIC$
 
 type _$1 = array of char
 type _$2 = pointer to _$1
-type _$3 = pointer to any
 
 proc relop1(lhs, rhs: _$2; op: i4): u4 extern // 1
 proc relop2(lhs: _$2; rhs: char; op: i4): u4 extern // 2
@@ -19,6 +18,5 @@ proc printBool(b: u1) extern // 12
 proc printSet(s: u4) extern // 13
 proc strcopy(lhs, rhs: _$2) extern // 14
 proc assert(cond: u1; line: u4; file: _$2) extern // 15
-proc initObjectArray(array: _$3; n: u4; eSize: u4; vtbl: _$3) extern
 
 end MIC$

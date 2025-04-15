@@ -40,7 +40,7 @@ namespace Mil
     #endif
             meta(m),anonymous(false),objectInit(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),forward(false),generic(false),
-            type(0),autoself(0),public_(0),init(0),owned(0),nobody(0),pointerInit(0) {}
+            type(0),autoself(0),public_(0),init(0),owned(0),nobody(0),pointerInit(0),override_(0) {}
         virtual ~Node();
 
         enum Meta { Inval, T, D, E, S };
@@ -67,6 +67,7 @@ namespace Mil
         uint extern_ : 1; // extern name (if present) is in val
         uint nobody : 1;
         uint forward : 1;
+        uint override_ : 1;
         uint generic : 1;
         uint autoself : 1;
         uint init : 1; // procedure begin$
@@ -120,8 +121,12 @@ namespace Mil
         bool isFloat() const { return kind == FLOAT32 || kind == FLOAT64; }
         bool isPointer() const { return kind == INTPTR || kind == Pointer; }
         bool isSUO() const { return kind == Struct || kind == Union || kind == Object; }
+        bool isSO() const { return kind == Struct || kind == Object; }
         bool isSUOA() const { return isSUO() || kind == Array; }
         Declaration* findSubByName(const QByteArray& name, bool recursive = true) const;
+        int numOfNonFwdNonOverrideProcs() const;
+        Type* getBaseObject() const;
+        QList<Declaration*> getMethodTable() const;
         Type* deref() const;
         bool isPtrToArray() const;
     };

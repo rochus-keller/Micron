@@ -337,6 +337,8 @@ Type::~Type()
 
 Declaration*Type::findSubByName(const QByteArray& name, bool recursive) const
 {
+    if( name.isEmpty() )
+        return 0;
     for( int i = 0; i < subs.size(); i++ )
     {
         if( subs[i]->name.constData() == name.constData() )
@@ -345,6 +347,75 @@ Declaration*Type::findSubByName(const QByteArray& name, bool recursive) const
     if( getType() && recursive )
         return getType()->findSubByName(name,recursive);
     return 0;
+}
+
+int Type::numOfNonFwdNonOverrideProcs() const
+{
+    int count = 0;
+    if( kind != Object )
+        return count;
+    Type* base = getBaseObject();
+    if( base )
+        count = base->numOfNonFwdNonOverrideProcs();
+    for( int i = 0; i < subs.size(); i++ )
+    {
+        if( subs[i]->kind == Declaration::Procedure && !subs[i]->forward && !subs[i]->override_ )
+            count++;
+    }
+    return count;
+}
+
+Type* Type::getBaseObject() const
+{
+    if( kind != Object )
+        return 0;
+    Type* base = getType();
+    if( base == 0 )
+        return 0;
+    base = base->deref();
+    if( base->kind == Pointer )
+    {
+        base = base->getType();
+        if( base == 0 )
+            return 0;
+        base = base->deref();
+    }
+    if( base && base->kind == Object )
+        return base;
+    else
+        return 0;
+}
+
+QList<Declaration*> Type::getMethodTable() const
+{
+    DeclList tbl;
+    if( kind != Object )
+        return tbl;
+    Type* base = getBaseObject();
+    if( base )
+        tbl = base->getMethodTable();
+    for( int i = 0; i < subs.size(); i++ )
+    {
+        Declaration* p = subs[i];
+        if( p->kind != Declaration::Procedure || p->forward )
+            continue;
+        if( p->override_)
+        {
+            bool found = false;
+            for( int j = 0; j < tbl.size(); j++ )
+            {
+                if( tbl[j]->name.constData() == p->name.constData() )
+                {
+                    tbl[j] = p;
+                    found = true;
+                    break;
+                }
+            }
+            Q_ASSERT(found);
+        }else
+            tbl.append(p);
+    }
+    return tbl;
 }
 
 Type*Type::deref() const

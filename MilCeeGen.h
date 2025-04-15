@@ -49,10 +49,10 @@ namespace Mil
         void expression(QTextStream& out, Expression* e, int level = 0);
         void emitBinOP(QTextStream& out, Expression* e, const char* op, int level);
         void emitRelOP(QTextStream& out, Expression* e, const char* op, int level);
-        void emitLocalInit(QTextStream& out, Declaration* d, int level);
-        void emitVarInit(QTextStream& out, Declaration* d, int level);
-        void emitObjectInit(QTextStream& out, Type* t, bool dynamic, const QByteArray& prefix, int level, const char* suffix = ";\n");
+        void emitSoapInit(QTextStream& out, const QByteArray& name, Type* t, int level);
+        void emitSoaInit(QTextStream& out, const QByteArray& name, bool nameIsPtr, Type* t, int level);
         Type* deref(Type* t);
+        void emitInitializer(Type*);
 
     private:
         AstModel* mdl;

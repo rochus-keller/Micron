@@ -118,6 +118,8 @@ void CeeGen::visitModule()
        {
            typeDecl(hout, sub);
            hout << ";" << endl;
+           if( sub->getType()->objectInit && sub->getType()->isSO() )
+               emitInitializer(sub->getType());
        }
        sub = sub->next;
    }
@@ -207,7 +209,7 @@ void CeeGen::visitProcedure(Declaration* proc)
                 if( sub->kind == Declaration::Import && !sub->imported->nobody )
                      bout << ws(1) << sub->imported->name << "$begin$();" << endl;
                 else if( sub->kind == Declaration::VarDecl )
-                    emitVarInit(bout, sub, 1);
+                    emitSoapInit(bout, qualident(sub), sub->getType(), 1 );
                 sub = sub->next;
             }
             bout << ws(0) << "}" << endl;
@@ -222,7 +224,7 @@ void CeeGen::visitProcedure(Declaration* proc)
                 bout << ws(0);
                 parameter(bout, sub);
                 bout << ";" << endl;
-                emitLocalInit(bout, sub, 0);
+                emitSoapInit(bout, sub->name, sub->getType(), 0 );
             }
             sub = sub->next;
         }
@@ -249,11 +251,10 @@ void CeeGen::visitMetaDecl(Declaration* d)
         bout << ws(0) << "0," << endl;
     }
 
-
-    foreach( Declaration* p, t->subs ) // TODO: super class methods, integrated with this class
+    DeclList methods = t->getMethodTable();
+    foreach( Declaration* p, methods )
     {
-        if( p->kind != Declaration::Procedure )
-            continue;
+        Q_ASSERT( p->kind == Declaration::Procedure && !p->forward );
         bout << ws(0) << qualident(p) << ", " << endl;
 
         hout << ws(0) << typeRef(p->getType()) << " (*" << p->name << ")";
@@ -417,19 +418,12 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
             }
             break;
         case Type::Array:
-#if 0
-            if( t->len == 0 )
-                pointerTo(out, t); // TODO: this is wrong; pointer to array of x leads to x**
-            else
-#endif
-            {
-                out << typeRef(t->getType()) << " " << qualident(d) << "[";
-                if( t->len != 0 )
-                    out << t->len;
-                out << "]";
-                return;
-            }
-            break;
+            out << typeRef(t->getType()) << " " << qualident(d) << "[";
+            if( t->len != 0 )
+                out << t->len;
+            out << "]";
+            return;
+
         case Type::Union:
         case Type::Struct:
             out << (t->kind == Type::Struct ? "struct " : "union ") << qualident(d) << " {" << endl;
@@ -443,7 +437,7 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
         case Type::Object:
             out << "struct " << qualident(d) << " {" << endl;
             out << ws(0) << qualident(d) << "$Class$* class$;" << endl;
-            foreach( Declaration* field, t->subs ) // TODO: superclass fields
+            foreach( Declaration* field, t->subs )
             {
                 if( field->kind == Declaration::Field )
                     out << ws(0) << typeRef(field->getType()) << " " << field->name << ";" << endl;
@@ -772,23 +766,9 @@ void CeeGen::emitRelOP(QTextStream& out, Expression* e, const char* op, int leve
     out << ")";
 }
 
-void CeeGen::emitLocalInit(QTextStream& out, Declaration* d, int level)
+void CeeGen::emitSoapInit(QTextStream& out, const QByteArray& name, Type* t, int level)
 {
-    Type* t = deref(d->getType());
-    if( t->kind == Type::Pointer && t->pointerInit )
-        out << ws(level) << d->name << " = NULL;" << endl;
-    else if( t->isSUOA() )
-    {
-        if( t->pointerInit ) // it's cheaper to directly zero the whole thing
-            out << ws(level) << "memset(" << (t->isSUO() ? "&" : "") << d->name << ", 0, sizeof(" << typeRef(t) << "));" << endl;
-    }
-    emitObjectInit(out, t, false, ws(level) + d->name, level);
-}
-
-void CeeGen::emitVarInit(QTextStream& out, Declaration* d, int level)
-{
-    const QByteArray name = qualident(d);
-    Type* t = deref(d->getType());
+    t = deref(t);
     if( t->kind == Type::Pointer && t->pointerInit )
         out << ws(level) << name << " = NULL;" << endl;
     else if( t->isSUOA() )
@@ -796,36 +776,16 @@ void CeeGen::emitVarInit(QTextStream& out, Declaration* d, int level)
         if( t->pointerInit ) // it's cheaper to directly zero the whole thing
             out << ws(level) << "memset(" << (t->isSUO() ? "&" : "") << name << ", 0, sizeof(" << typeRef(t) << "));" << endl;
     }
-    emitObjectInit(out, t, false, ws(level) + name , level);
+    emitSoaInit(out, name, false, t, level);
 }
 
-void CeeGen::emitObjectInit(QTextStream& out, Type* t, bool dynamic, const QByteArray& prefix, int level, const char* suffix)
+void CeeGen::emitSoaInit(QTextStream& out, const QByteArray& name, bool nameIsPtr, Type* t, int level)
 {
     t = deref(t);
-    if( t->kind == Type::Object )
-        out << prefix << (dynamic?"->":".") << "class$ = &" << qualident(t->decl) << "$class$" << suffix;
-
-    if( t->isSUO() && t->objectInit )
-    {
-        foreach( Declaration* field, t->subs )
-        {
-            Type* tt = deref(field->getType());
-            if( tt->objectInit )
-                emitObjectInit(out, tt, false, prefix + (dynamic?"->":".") + field->name, level, suffix);
-        }
-    }else if( t->kind == Type::Array && t->len && t->objectInit )
-    {
-        Type* et = deref(t->getType());
-        // TODO: replace by runtime loop
-        for( int i = 0; i < t->len; i++ )
-            emitObjectInit(out, et, false, prefix + "[" + QByteArray::number(i) + "]", level, suffix);
-    }else if( t->kind== Type::Array && t->len == 0 && t->objectInit )
-    {
-        // TODO: this only works for array of object with no embedded objects; we need array and object initializers
-        Type* et = deref(t->getType());
-        out << "MIC$$initObjectArray(" << prefix << ", _len$, sizeof("
-            <<  typeRef(et) << "), &" << qualident(et->decl) << "$class$)" << suffix;
-    }
+    if( t->isSO() )
+        out << ws(level) << qualident(t->decl) << "$init$(" << (nameIsPtr ? "" : "&") << name << ", 1);" << endl;
+    else if( t->kind == Type::Array && t->len && deref(t->getType())->isSO() )
+        out << ws(level) << qualident(deref(t->getType())->decl) << "$init$(" << name << ", " << t->len << ");" << endl;
 }
 
 static void collectArgs(Expression* e, QList<Expression*>& args)
@@ -849,6 +809,37 @@ Type*CeeGen::deref(Type* t)
         return t;
     else
         return mdl->getBasicType(Type::Undefined);
+}
+
+void CeeGen::emitInitializer(Type* t)
+{
+    t = deref(t);
+    hout << "void " << qualident(t->decl) << "$init$(" << typeRef(t) << "* obj, unsigned int n);" << endl;
+    bout << "void " << qualident(t->decl) << "$init$(" << typeRef(t) << "* obj, unsigned int n) {" << endl;
+    bout << ws(0) << "int i;" << endl;
+    bout << ws(0) << "for( i = 0; i < n; i++ ) {" << endl;
+
+    if( t->kind == Type::Object )
+        bout << ws(1) << "obj[i].class$ = &" << qualident(t->decl) << "$class$;" << endl;
+
+    foreach( Declaration* field, t->subs )
+    {
+        if( field->kind != Declaration::Field )
+            continue;
+        Type* tt = deref(field->getType());
+        if( tt->isSO() )
+        {
+            bout << ws(1) << qualident(tt->decl) << "$init$(&obj->" << field->name << ", 1);" << endl;
+        }else if( tt->kind == Type::Array && tt->len )
+        {
+            Type* et = deref(tt->getType());
+            if( et->isSO() )
+                bout << ws(1) << qualident(tt->decl) << "$init$(obj->" << field->name << ", " << tt->len << ");" << endl;
+        }
+    }
+
+    bout << ws(0) << "}" << endl;
+    bout << "}" << endl << endl;
 }
 
 void CeeGen::expression(QTextStream& out, Expression* e, int level)
@@ -1070,11 +1061,9 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         break;
 
     case Tok_LDMETH:
-        out << "{";
+        out << "{(_ptr$ = ";
         expression(out, e->lhs, level+1);
-        out << ", ";
-        expression(out, e->lhs, level+1);
-        // TODO: temp instead of multiple eval of same exr
+        out << ", _ptr$), ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
         out << "->class$->" << e->d->name << "}";
         break;
 
@@ -1101,10 +1090,10 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
 
     case Tok_CALLVIRT:
         {
+            out << "(_ptr$ = ";
             expression(out, e->lhs, level+1);
-            out << "->class$->" << e->d->name << "(";
-            expression(out, e->lhs, level+1);
-            // TODO: temp instead of multiple eval of same exr
+            out << ", ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
+            out << "->class$->" << e->d->name << "(_ptr$";
             QList<Expression*> args;
             collectArgs(e->rhs, args);
             for( int i = 0; i < args.size(); i++ )
@@ -1112,7 +1101,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
                out << ", ";
                 expression(out, args[i], level+1);
             }
-            out << ")";
+            out << "))";
         }
         break;
 
@@ -1134,11 +1123,10 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
 
     case Tok_CALLVI:
         {
+            out << "(_ptr$ = &";
             expression(out, e->lhs, level+1 );
-            out << ".proc(";
-            expression(out, e->lhs, level+1 );
-            // TODO: temp instead of multiple eval of same exr
-            out << ".self";
+            out << ", ((" << typeRef(e->lhs->getType()) << "*)_ptr$)->proc(((";
+            out << typeRef(e->lhs->getType()) << "*)_ptr$)->self";
             QList<Expression*> args;
             collectArgs(e->rhs, args);
             for( int i = 0; i < args.size(); i++ )
@@ -1146,7 +1134,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
                 out << ", ";
                 expression(out, args[i], level+1);
             }
-            out << ")";
+            out << "))";
         }
         break;
 
@@ -1155,11 +1143,11 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         Q_ASSERT(e->getType()->kind == Type::Pointer);
         if( deref(e->getType())->objectInit )
         {
+            const QByteArray name = typeRef(e->d->getType());
             out << "(_ptr$ = calloc(1, sizeof(";
-            out << typeRef(e->d->getType());
+            out << name;
             out << ")),\n\t\t";
-            emitObjectInit(out, e->d->getType(), true, "((" + typeRef(e->getType()) + ")_ptr$)", level, ",\n\t\t");
-            out << "(";
+            out << name << "$init$(" << "((" + name + "*)_ptr$)" << ", 1), (";
             out << typeRef(e->getType());
             out << ")_ptr$)";
         }else
@@ -1176,13 +1164,12 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         if( deref(e->getType())->objectInit )
         {
             Type* et = deref(e->d->getType());
+            const QByteArray name = typeRef(et);
             out << "(_len$ = ";
             expression(out, e->lhs, level+1);
             out << ", _ptr$ = calloc(_len$,sizeof(";
-            out << typeRef(et) << ")),\n\t\t";
-            emitObjectInit(out, deref(e->getType())->getType(), true,
-                           "((" + typeRef(et) + "*)_ptr$)", level, ",\n\t\t");
-            out << "(";
+            out << name << ")),\n\t\t";
+            out << name << "$init$(" << "((" << name << "*)_ptr$)" << ", _len$), (";
             out << typeRef(et);
             out << "*)_ptr$)";
         }else
@@ -1199,10 +1186,14 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
 
 
     case Tok_INITOBJ:
-        out << "memset(";
-        expression(out, e->lhs, level+1 );
-        out << ", 0, sizeof(" << typeRef(e->d->getType()) << "))";
-        // TODO emitObjectInit
+        {
+            Type* t = deref(e->d->getType());
+            const QByteArray name = typeRef(t);
+            out << "_ptr$ = ";
+            expression(out, e->lhs, level+1 );
+            out << "; memset(_ptr$, 0, sizeof(" << name << "));";
+            emitSoaInit(out, "((" + name + "*)_ptr$)", true, t, level );
+        }
         break;
 
     case Tok_DUP:
