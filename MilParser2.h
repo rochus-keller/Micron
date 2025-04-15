@@ -61,7 +61,7 @@ namespace Mil {
         Type* ArrayType();
         quint32 length();
         Type* StructUnionType();
-		void FieldList();
+        void FieldList();
         DeclList IdentList(Declaration::Kind k);
         Type* ObjectType();
 		void MemberList();

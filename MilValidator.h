@@ -60,6 +60,8 @@ namespace Mil
         Expression* eatStack(quint32 n);
         Type* toType(Constant* c);
         bool equal(Type* lhs, Type* rhs);
+        bool checkIfObjectInit(Type* t);
+        bool checkIfPointerInit(Type* t);
 
     private:
         AstModel* mdl;
@@ -68,6 +70,7 @@ namespace Mil
         QList<Expression*> stack;
         QList<Expression*> newExprs;
         quint32 pc;
+        bool needsPointerInit;
     };
 }
 

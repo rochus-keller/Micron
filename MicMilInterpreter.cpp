@@ -24,6 +24,7 @@
 #include <QVector>
 #include <QFile>
 #include <QtDebug>
+#include <math.h>
 using namespace Mic;
 
 #define _USE_GETTIMEOFDAY

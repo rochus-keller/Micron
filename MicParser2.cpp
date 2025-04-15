@@ -1363,6 +1363,8 @@ void Parser2::VariantPart() {
         const Token tok = la;
         Type* t = type();
         openArrayError(tok,t);
+        if( t->kind == Type::Object )
+            error(tok, "record variant parts cannot be of object type");
         invalidTypeError(tok,t);
         Declaration* d = addDecl(id,Declaration::Variant);
         d->inline_ = isInl;

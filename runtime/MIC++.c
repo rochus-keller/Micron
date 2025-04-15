@@ -103,3 +103,12 @@ void MIC$$assert(uint8_t cond, uint32_t line, const char* file)
 	assert(cond);
 }
 
+void MIC$$initObjectArray(void* array, unsigned int n, unsigned int eSize, void* vtbl)
+{
+    int i;
+    for( i = 0; i < n; i++ )
+    {
+        memcpy(array, &vtbl, sizeof(void*) );
+        array += eSize;
+    }
+}

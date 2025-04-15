@@ -22,7 +22,7 @@
 #include <limits>
 using namespace Mil;
 
-Validator::Validator(AstModel* m):mdl(m),curMod(0),curProc(0)
+Validator::Validator(AstModel* m):mdl(m),curMod(0),curProc(0),needsPointerInit(true)
 {
 
 }
@@ -44,6 +44,15 @@ bool Validator::validate(Declaration* module)
                     if( d->kind == Declaration::Procedure )
                         visitProcedure(d);
                 }
+            else if( t->kind == Type::Union )
+                foreach( Declaration* d, t->subs )
+                {
+                    if( d->kind == Declaration::Field )
+                        if( deref(d->getType())->kind == Type::Object )
+                            error(d->pos, "union fields cannot be of object type");
+                }
+            t->objectInit = checkIfObjectInit(t);
+            t->pointerInit = checkIfPointerInit(t);
             break;
         case Declaration::ConstDecl:
             sub->setType(toType(sub->c));
@@ -63,6 +72,7 @@ bool Validator::validate(Declaration* module)
         else
             module->toDelete->append(new ToDelete(e));
     }
+    newExprs.clear();
 
     return errors.isEmpty();
 }
@@ -118,8 +128,11 @@ void Validator::visitStatSeq(Statement* stat)
                         s->next = stat->next;
                         stat->next = s;
                     }
-                }else
-                    Q_ASSERT(e == 0 || e->next == 0);
+                }else if( e != 0 && e->next != 0 )
+                {
+                    // visitExpr returned after non-function call and we would expect the stack to be empty
+                    error(e->pos,QString("stack is not empty (%1 elements on stack)").arg(stack.size()));
+                }
             }
             break;
         case Tok_EXIT:
@@ -472,8 +485,22 @@ Expression* Validator::visitExpr(Expression* e)
             stack.push_back(e);
             break;
         case Tok_LDPROC:
-        case Tok_LDMETH:
             stack.push_back(e);
+            break;
+        case Tok_LDMETH:
+            {
+                // expect the object instance pointer on the stack
+                e->lhs = stackAt(-1); // ptr
+                Type* lhsT = deref(e->lhs->getType());
+                Type* ot1 = deref(lhsT->getType());
+                if( lhsT->kind != Type::Pointer || ot1->kind != Type::Object)
+                {
+                    error(e->pos, "expecting a pointer to object on the stack");
+                    break;
+                }
+                // TODO: check whether object on stack is compat with e->d
+                stack.back() = e; // replace the stack top with methref
+            }
             break;
         case Tok_SIZEOF:
             e->setType(mdl->getBasicType(Type::INT32));
@@ -691,7 +718,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* lhsT = deref(e->lhs->getType());
                 Type* ot1 = deref(lhsT->getType());
                 if( lhsT->kind != Type::Pointer ||
-                        !(ot1->kind == Type::Struct || ot1->kind == Type::Union || ot1->kind != Type::Object) )
+                        !(ot1->kind == Type::Struct || ot1->kind == Type::Union || ot1->kind == Type::Object) )
                 {
                     error(e->pos, "expecting a pointer to struct, union or object on the stack");
                     break;
@@ -789,6 +816,8 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* ptr = new Type();
                 ptr->kind = Type::Pointer;
                 ptr->setType(t);
+                ptr->objectInit = t->objectInit;
+                ptr->pointerInit = t->pointerInit;
                 e->setType(ptr);
                 stack.push_back(e);
             }
@@ -804,10 +833,14 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* t = deref(e->d->getType());
                 Type* array = new Type();
                 array->kind = Type::Array;
+                array->objectInit = t->objectInit;
+                array->pointerInit = t->pointerInit;
                 array->setType(t);
                 Type* ptr = new Type();
                 ptr->kind = Type::Pointer;
                 ptr->setType(array);
+                ptr->objectInit = t->objectInit;
+                ptr->pointerInit = t->pointerInit;
                 e->setType(ptr);
                 stack.back() = e;
             }
@@ -1134,5 +1167,57 @@ bool Validator::equal(Type* lhs, Type* rhs)
     if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer )
         return equal(deref(lhs->getType()), deref(rhs->getType()));
     return false;
+}
+
+bool Validator::checkIfObjectInit(Type* t)
+{
+    switch(t->kind)
+    {
+    case Type::Array:
+        if( deref(t->getType())->kind == Type::Object )
+            return true;
+        break;
+    case Type::Struct:
+        foreach( Declaration* d, t->subs )
+        {
+            if( d->kind == Declaration::Field && deref(d->getType())->kind == Type::Object )
+                return true;
+        }
+        return false;
+    case Type::Union:
+        return false;
+    case Type::Object:
+        return true;
+    case Type::NameRef:
+        return checkIfObjectInit(deref(t));
+    default:
+        return false;
+    }
+}
+
+bool Validator::checkIfPointerInit(Type* t)
+{
+    if( !needsPointerInit )
+        return false;
+    switch(t->kind)
+    {
+    case Type::Array:
+        if( deref(t->getType())->kind == Type::Pointer )
+            return true;
+        break;
+    case Type::Struct:
+    case Type::Union:
+    case Type::Object:
+        foreach( Declaration* d, t->subs )
+        {
+            if( d->kind == Declaration::Field && deref(d->getType())->kind == Type::Pointer )
+                return true;
+        }
+        return false;
+    case Type::NameRef:
+        return checkIfObjectInit(deref(t));
+    default:
+        return false;
+    }
 }
 

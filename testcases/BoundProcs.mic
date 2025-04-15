@@ -22,6 +22,10 @@ var p: proc (^)(const str: ^array of char)
 	t1: T1
 	t1p: ^T1
 	tp: ^T0
+	a: array 4 of T1
+	ap: pointer to array 4 of T1
+	app: pointer to array of T1
+	n: u32
 
 begin
 
@@ -38,8 +42,29 @@ t1p.hello("as well")
 p := t1.hello
 p("bonjour")
 
-tp := @t1
+a[1].hello("bon giorno")
+
+new(t1p)
+tp := t1p
+
+tp.hello("gugus")
 p := tp.hello
 p("ave") // correctly calls T1.hello
 
+dispose(t1p)
+
+new(ap)
+ap[2].hello("ap")
+dispose(ap)
+
+n := 4
+new(app,n)
+app[3].hello("app")
+dispose(app)
+
 end BoundProcs
+
+
+
+
+

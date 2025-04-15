@@ -37,7 +37,8 @@ namespace Mil
     protected:
         void visitModule();
         void visitProcedure(Declaration*);
-        QByteArray typeRef(Type*) const;
+        void visitMetaDecl(Declaration*);
+        QByteArray typeRef(Type*);
         void procHeader(QTextStream& out, Declaration* proc);
         void parameter(QTextStream& out, Declaration* param);
         void variable(QTextStream& out, Declaration* var);
@@ -48,6 +49,9 @@ namespace Mil
         void expression(QTextStream& out, Expression* e, int level = 0);
         void emitBinOP(QTextStream& out, Expression* e, const char* op, int level);
         void emitRelOP(QTextStream& out, Expression* e, const char* op, int level);
+        void emitLocalInit(QTextStream& out, Declaration* d, int level);
+        void emitVarInit(QTextStream& out, Declaration* d, int level);
+        void emitObjectInit(QTextStream& out, Type* t, bool dynamic, const QByteArray& prefix, int level, const char* suffix = ";\n");
         Type* deref(Type* t);
 
     private:

@@ -38,9 +38,9 @@ namespace Mil
     #ifndef _DEBUG
             kind(0),
     #endif
-            meta(m),deferred(false),anonymous(false),selfref(false),typebound(false),
-            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),generic(false),byVal(false),
-            type(0),autoself(0),public_(0),init(0),owned(0),nobody(0) {}
+            meta(m),anonymous(false),objectInit(false),typebound(false),
+            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),generic(false),
+            type(0),autoself(0),public_(0),init(0),owned(0),nobody(0),pointerInit(0) {}
         virtual ~Node();
 
         enum Meta { Inval, T, D, E, S };
@@ -57,8 +57,8 @@ namespace Mil
         uint anonymous : 1; // Type, Field
 
         // Type
-        uint deferred : 1;
-        uint selfref : 1;
+        uint objectInit : 1; // this or enclosed type need object initialization (vtbl)
+        uint pointerInit : 1; // this or enclosed type need pointer initialization
         uint owned : 1;
 
         // Declaration:
@@ -69,10 +69,7 @@ namespace Mil
         uint forward : 1;
         uint generic : 1;
         uint autoself : 1;
-        uint init : 1;
-
-        // Expression
-        uint byVal : 1; // option for LocalVar, Param, ModuleVar, Select, Index
+        uint init : 1; // procedure begin$
 
         Mic::RowCol pos; // Declaration, Expression
 
@@ -123,6 +120,7 @@ namespace Mil
         bool isFloat() const { return kind == FLOAT32 || kind == FLOAT64; }
         bool isPointer() const { return kind == INTPTR || kind == Pointer; }
         bool isSUO() const { return kind == Struct || kind == Union || kind == Object; }
+        bool isSUOA() const { return isSUO() || kind == Array; }
         Declaration* findSubByName(const QByteArray& name, bool recursive = true) const;
         Type* deref() const;
         bool isPtrToArray() const;
