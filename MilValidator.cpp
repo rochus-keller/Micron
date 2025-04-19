@@ -87,6 +87,8 @@ bool Validator::validate(Declaration* module)
     }
     newExprs.clear();
 
+    module->validated = errors.isEmpty();
+
     return errors.isEmpty();
 }
 
@@ -296,40 +298,32 @@ static bool isInt32(Type* t)
 {
     if( 0 )
         return false;
-    switch(t->kind)
-    {
-    case Type::BOOL:
-    case Type::CHAR:
-    case Type::INT8:
-    case Type::UINT8:
-    case Type::INT16:
-    case Type::UINT16:
-    case Type::INT32:
-    case Type::UINT32:
-        return true;
-    }
-    return false;
+    else
+        return t->isInt32OnStack();
 }
 
 static bool isPointer(Type* t)
 {
     if( t == 0 )
         return false;
-    return t->kind == Type::Pointer || t->kind == Type::NIL || t->kind == Type::INTPTR;
+    else
+        return t->isPointer();
 }
 
 static bool isFunc(Type* t)
 {
     if( t == 0 )
         return false;
-    return (t->kind == Type::Proc && !t->typebound) || t->kind == Type::NIL || t->kind == Type::INTPTR;
+    else
+        return t->isFuncOnStack();
 }
 
 static bool isMeth(Type* t)
 {
     if( t == 0 )
         return false;
-    return (t->kind == Type::Proc && t->typebound) || t->kind == Type::NIL || t->kind == Type::INTPTR;
+    else
+        return t->isMethOnStack();
 }
 
 Expression* Validator::visitExpr(Expression* e)
@@ -356,10 +350,13 @@ Expression* Validator::visitExpr(Expression* e)
                     t = mdl->getBasicType(Type::INT64);
                 else if( isInt32(lhs) && isInt32(rhs) )
                     t = mdl->getBasicType(Type::INT32);
-                else if( lhs->isFloat() && rhs->isFloat() )
-                {
+                else if( lhs->kind == Type::FLOAT32 && rhs->kind == Type::FLOAT32 )
+                    t = mdl->getBasicType(Type::FLOAT32);
+                else if( lhs->kind == Type::FLOAT64 && rhs->kind == Type::FLOAT64 )
                     t = mdl->getBasicType(Type::FLOAT64);
-                }else if( isInt32(lhs) && isPointer(rhs) ||
+                else if( lhs->isFloat() && rhs->isFloat() )
+                    t = mdl->getBasicType(Type::FLOAT64);
+                else if( isInt32(lhs) && isPointer(rhs) ||
                           isPointer(lhs) && isInt32(rhs) ||
                           isPointer(lhs) && isPointer(rhs) )
                 {
@@ -385,12 +382,7 @@ Expression* Validator::visitExpr(Expression* e)
                     t = mdl->getBasicType(Type::INT64);
                 else if( isInt32(lhs) && isInt32(rhs) )
                     t = mdl->getBasicType(Type::INT32);
-                else if( isInt32(lhs) && isPointer(rhs) ||
-                          isPointer(lhs) && isInt32(rhs) ||
-                          isPointer(lhs) && isPointer(rhs) )
-                {
-                    t = mdl->getBasicType(Type::INTPTR);
-                }else
+                else
                     error(e->pos, "the values on the stack are not compatible with the operation");
                 e->setType(t);
                 stack.pop_back();
@@ -407,13 +399,12 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* lhs = deref(e->lhs->getType());
                 Type* rhs = deref(e->rhs->getType());
                 Type* t = 0;
-                if( !isInt32(lhs) && !lhs->isInt64() && lhs->kind != Type::INTPTR )
-                    error(e->pos, "the value to be shifted must be of int32, int64 or intptr type");
-                if( isInt32(rhs) || rhs->kind == Type::INTPTR )
-                {
-                    t = lhs;
-                }else
-                    error(e->pos, "shift amount must be of int32 or intptr type");
+                if( lhs->isInt64() && rhs->isInt64() )
+                    t = mdl->getBasicType(Type::INT64);
+                else if( isInt32(lhs) && isInt32(rhs) )
+                    t = mdl->getBasicType(Type::INT32);
+                else
+                    error(e->pos, "the values on the stack are not compatible with the operation");
                 e->setType(t);
                 stack.pop_back();
                 stack.last() = e;
@@ -448,10 +439,10 @@ Expression* Validator::visitExpr(Expression* e)
                     t = mdl->getBasicType(Type::INT64);
                 else if( isInt32(lhs) )
                     t = mdl->getBasicType(Type::INT32);
-                else if( lhs->isFloat() )
+                else if( lhs->kind == Type::FLOAT32 )
+                    t = mdl->getBasicType(Type::FLOAT32);
+                else if( lhs->kind == Type::FLOAT64 )
                     t = mdl->getBasicType(Type::FLOAT64);
-                else if( isPointer(lhs) )
-                    t = mdl->getBasicType(Type::INTPTR);
                 else
                     error(e->pos, "the values on the stack are not compatible with the operation");
                 e->setType(t);
@@ -611,7 +602,8 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* t = 0;
                 if( (lhs->isInt64() && rhs->isInt64()) ||
                         (isInt32(lhs) && isInt32(rhs)) ||
-                        (lhs->isFloat() && rhs->isFloat()) ||
+                        (lhs->kind == Type::FLOAT32 && rhs->kind == Type::FLOAT32) ||
+                        (lhs->kind == Type::FLOAT64 && rhs->kind == Type::FLOAT64) ||
                         (isInt32(lhs) && isPointer(rhs)) ||
                         (isPointer(lhs) && isInt32(rhs)) ||
                         (isPointer(lhs) && isPointer(rhs)) ||

@@ -265,6 +265,18 @@ Declaration*Declaration::forwardToProc() const
         return const_cast<Declaration*>(this);
 }
 
+Declaration*Declaration::getModule() const
+{
+    Declaration* m = const_cast<Declaration*>(this);
+    while( m )
+    {
+        if( m->kind == Declaration::Module )
+            return m;
+        m = m->outer;
+    }
+    return 0;
+}
+
 Expression::~Expression()
 {
     if( (kind == Tok_LDOBJ || kind == Tok_LDSTR) && c != 0 )
@@ -333,6 +345,33 @@ Type::~Type()
         delete quali;
     foreach( Declaration* sub, subs )
         delete sub;
+}
+
+bool Type::isInt32OnStack() const
+{
+    switch(kind)
+    {
+    case BOOL:
+    case CHAR:
+    case INT8:
+    case UINT8:
+    case INT16:
+    case UINT16:
+    case INT32:
+    case UINT32:
+        return true;
+    }
+    return false;
+}
+
+bool Type::isFuncOnStack() const
+{
+    return (kind == Proc && !typebound) || kind == NIL || kind == INTPTR;
+}
+
+bool Type::isMethOnStack() const
+{
+    return (kind == Proc && typebound) || kind == NIL || kind == INTPTR;
 }
 
 Declaration*Type::findSubByName(const QByteArray& name, bool recursive) const

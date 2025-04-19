@@ -14,9 +14,11 @@ DEFINES += _DEBUG
 
 
 SOURCES += \
-    MilCompiler.cpp
+    MilCompiler.cpp \
+    MilInterpreter.cpp
 
-HEADERS +=
+HEADERS += \
+    MilInterpreter.h
 
 RESOURCES += \
     MilCompiler.qrc

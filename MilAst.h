@@ -39,8 +39,8 @@ namespace Mil
             kind(0),
     #endif
             meta(m),anonymous(false),objectInit(false),typebound(false),
-            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),generic(false),
-            type(0),autoself(0),public_(0),init(0),owned(0),nobody(0),pointerInit(0),override_(0) {}
+            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),validated(false),
+            type(0),public_(0),init(0),owned(0),nobody(0),pointerInit(0),override_(0) {}
         virtual ~Node();
 
         enum Meta { Inval, T, D, E, S };
@@ -68,8 +68,7 @@ namespace Mil
         uint nobody : 1;
         uint forward : 1;
         uint override_ : 1;
-        uint generic : 1;
-        uint autoself : 1;
+        uint validated : 1;
         uint init : 1; // procedure begin$
 
         Mic::RowCol pos; // Declaration, Expression
@@ -119,10 +118,13 @@ namespace Mil
         bool isInt64() const { return kind == UINT64 || kind == INT64; }
         bool isInt32() const { return kind == UINT32 || kind == INT32; }
         bool isFloat() const { return kind == FLOAT32 || kind == FLOAT64; }
-        bool isPointer() const { return kind == INTPTR || kind == Pointer; }
+        bool isPointer() const { return kind == INTPTR || kind == NIL || kind == Pointer; }
         bool isSUO() const { return kind == Struct || kind == Union || kind == Object; }
         bool isSO() const { return kind == Struct || kind == Object; }
         bool isSUOA() const { return isSUO() || kind == Array; }
+        bool isInt32OnStack() const;
+        bool isFuncOnStack() const;
+        bool isMethOnStack() const;
         Declaration* findSubByName(const QByteArray& name, bool recursive = true) const;
         int numOfNonFwdNonOverrideProcs() const;
         Type* getBaseObject() const;
@@ -165,7 +167,7 @@ namespace Mil
                 uint bw : 8; // Field bitwidth
                 uint off : 24; // Field offset in bytes
             } f;
-            int off;
+            int off;  // method
             Declaration* forwardTo; // Procedure if forward==true, not owned
             Declaration* imported; // Import, not owned
             ToDelete* toDelete; // Module, all args to be deleted
@@ -185,6 +187,7 @@ namespace Mil
         static void append(Declaration* list, Declaration* next);
         QByteArray toPath() const;
         Declaration* forwardToProc() const;
+        Declaration* getModule() const;
 
     };
     typedef QList<Declaration*> DeclList;
