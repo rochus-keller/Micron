@@ -47,13 +47,14 @@ enum IL_op
     IL_conv_i2_i4, IL_conv_i2_i8, IL_conv_i2_r4, IL_conv_i2_r8,
     IL_conv_i4_i8, IL_conv_i4_r4, IL_conv_i4_r8,
     IL_conv_i8_i4, IL_conv_i8_r4, IL_conv_i8_r8,
-    IL_conv_r4_i4, IL_conv_r4_i8, IL_conv_r4_r8,
-    IL_conv_r8_i4, IL_conv_r8_i8, IL_conv_r8_r4,
 
     IL_conv_u1_i4, IL_conv_u1_i8, IL_conv_u1_r4, IL_conv_u1_r8,
     IL_conv_u2_i4, IL_conv_u2_i8, IL_conv_u2_r4, IL_conv_u2_r8,
     IL_conv_u4_i8, IL_conv_u4_r4, IL_conv_u4_r8,
     IL_conv_u8_i4, IL_conv_u8_r4, IL_conv_u8_r8,
+
+    IL_conv_r4_i4, IL_conv_r4_i8, IL_conv_r4_r8,
+    IL_conv_r8_i4, IL_conv_r8_i8, IL_conv_r8_r4,
 
     IL_ldarg_i1, IL_ldarg_i2, IL_ldarg_i4, IL_ldarg_i8,
     IL_ldarg_u1, IL_ldarg_u2, IL_ldarg_u4, IL_ldarg_u8,

@@ -782,6 +782,8 @@ void CeeGen::emitSoapInit(QTextStream& out, const QByteArray& name, Type* t, int
 void CeeGen::emitSoaInit(QTextStream& out, const QByteArray& name, bool nameIsPtr, Type* t, int level)
 {
     t = deref(t);
+    if( !t->objectInit )
+        return;
     if( t->isSO() )
         out << ws(level) << qualident(t->decl) << "$init$(" << (nameIsPtr ? "" : "&") << name << ", 1);" << endl;
     else if( t->kind == Type::Array && t->len && deref(t->getType())->isSO() )
@@ -1155,7 +1157,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
             out << "(";
             out << typeRef(e->getType());
             out << ")calloc(1, sizeof(";
-            out << typeRef(e->getType());
+            out << typeRef(e->getType()->getType());
             out << "))";
         }
         break;
@@ -1216,9 +1218,9 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         expression(out, e->lhs, level + 1);
         out << " ? ";
         e = e->next;
-        expression(out, e->rhs->lhs, level + 1);
+        expression(out, e->lhs, level + 1);
         out << " : ";
-        expression(out, e->rhs->rhs, level + 1);
+        expression(out, e->rhs, level + 1);
         out << ") ";
         e = e->next; // skip ELSE
         break;

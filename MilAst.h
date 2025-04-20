@@ -121,7 +121,7 @@ namespace Mil
         bool isPointer() const { return kind == INTPTR || kind == NIL || kind == Pointer; }
         bool isSUO() const { return kind == Struct || kind == Union || kind == Object; }
         bool isSO() const { return kind == Struct || kind == Object; }
-        bool isSUOA() const { return isSUO() || kind == Array; }
+        bool isSUOA() const { return isSUO() || (kind == Array && len); }
         bool isInt32OnStack() const;
         bool isFuncOnStack() const;
         bool isMethOnStack() const;
