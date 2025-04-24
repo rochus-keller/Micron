@@ -38,6 +38,7 @@ namespace Mil
         void collectFilesFrom( const QString& rootPath);
         bool parse();
         void generateC();
+        void interpret();
 
         static inline QByteArray escapeFilename( const QByteArray& fileName )
         {

@@ -104,6 +104,7 @@ namespace Mil
         Kind kind;
 #endif
         union {
+            quint32 bytesize;
             quint32 len; // array length
             Quali* quali; // unresolved NameRef
         };
@@ -129,8 +130,11 @@ namespace Mil
         int numOfNonFwdNonOverrideProcs() const;
         Type* getBaseObject() const;
         QList<Declaration*> getMethodTable() const;
+        QList<Declaration*> getFieldList(bool recursive) const;
         Type* deref() const;
         bool isPtrToArray() const;
+        quint32 getByteSize(quint8 pointerWidth) const;
+        quint32 getAlignment(quint8 pointerWidth) const;
     };
 
     struct Constant;
@@ -157,7 +161,7 @@ namespace Mil
         Kind kind;
 #endif
         Declaration* next; // list of all declarations in outer scope
-        Declaration* subs; // member list or imported module decl
+        Declaration* subs; // member list
         Declaration* outer; // the owning declaration to reconstruct the qualident
         Statement* body;
         QByteArray name;
@@ -167,7 +171,7 @@ namespace Mil
                 uint bw : 8; // Field bitwidth
                 uint off : 24; // Field offset in bytes
             } f;
-            int off;  // method
+            int off;  // method vtbl slot, LocalDecl & ParamDecl offset in bytes
             Declaration* forwardTo; // Procedure if forward==true, not owned
             Declaration* imported; // Import, not owned
             ToDelete* toDelete; // Module, all args to be deleted
@@ -183,11 +187,13 @@ namespace Mil
         Declaration* findSubByName(const QByteArray&) const;
         QList<Declaration*> getParams() const;
         QList<Declaration*> getLocals() const;
+        QList<Declaration*> getVars() const;
         int indexOf(Declaration*) const;
         static void append(Declaration* list, Declaration* next);
         QByteArray toPath() const;
         Declaration* forwardToProc() const;
         Declaration* getModule() const;
+        Declaration* findInitProc() const;
 
     };
     typedef QList<Declaration*> DeclList;
@@ -301,7 +307,7 @@ namespace Mil
     class AstModel
     {
     public:
-        AstModel();
+        AstModel(quint8 ptrWidth = sizeof(void*)*8);
         ~AstModel();
 
         void clear();
@@ -311,11 +317,40 @@ namespace Mil
         const Declaration* getGlobals() const { return &globals; }
         DeclList& getModules() { return modules; }
         Type* getBasicType(quint8) const;
+        quint8 getPointerWidth() const { return pointerWidth; }
+
+        static inline int align(int off, int alignment )
+        {
+            // Round up `off` to the nearest multiple of `alignment`. For instance,
+            // align(5, 8) returns 8 and align(11, 8) returns 16.
+            if( alignment == 0 )
+                return 0;
+            return (off + alignment - 1) / alignment * alignment;
+        }
+        static inline int padding(int off, int alignment)
+        {
+            // https://en.wikipedia.org/wiki/Data_structure_alignment#Computing_padding
+            if( alignment == 0 )
+                return 0;
+            return (alignment - (off % alignment)) % alignment;
+        }
+        void calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment);
+
+        struct BitFieldUnit
+        {
+            int start, len, bits, bytelen;
+        };
+        static BitFieldUnit collectBitFields(const DeclList& fields, int start, quint8 pointerWidth);
+
+    protected:
+        void walkImports(Declaration* module, DeclList& done, quint8 pointerWidth, quint8 stackAlignment);
+        void calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quint8 stackAlignment);
 
     private:
         DeclList modules;
         Declaration globals;
         Type* basicTypes[Type::MaxBasicType];
+        quint8 pointerWidth;
     };
 }
 

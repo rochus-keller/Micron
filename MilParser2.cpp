@@ -1118,7 +1118,7 @@ void Parser2::FieldList() {
 			expect(Tok_Colon, false, "FieldList");
             expect(Tok_unsigned, false, "FieldList");
             const quint64 tmp = cur.d_val.toULongLong();
-            if( tmp > 255 )
+            if( tmp > 64 )
                 error(cur, "bitwidth of field too large");
             else
                 bw = tmp;
@@ -1133,7 +1133,7 @@ void Parser2::FieldList() {
 		expect(Tok_2Dot, false, "FieldList");
         expect(Tok_unsigned, false, "FieldList");
         const quint64 tmp = cur.d_val.toULongLong();
-        if( tmp > 255 )
+        if( tmp > 64 )
             error(cur, "bitwidth of padding field too large");
         Declaration* padding = addDecl("", cur.toRowCol(), Declaration::Field);
         padding->anonymous = true;

@@ -26,6 +26,7 @@
 #include "MilParser2.h"
 #include "MilLexer.h"
 #include "MilValidator.h"
+#include "MilInterpreter.h"
 using namespace Mil;
 
 Project::Project(AstModel* mdl):mdl(mdl)
@@ -156,6 +157,16 @@ void Project::generateC()
         }
 
         cg.generate(module, &header, body);
+    }
+}
+
+void Project::interpret()
+{
+    Interpreter r(mdl);
+    foreach( Declaration* module, mdl->getModules() )
+    {
+        if( !r.run(module) )
+            return; // TODO: error handling
     }
 }
 

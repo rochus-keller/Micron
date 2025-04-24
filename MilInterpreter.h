@@ -30,7 +30,7 @@ namespace Mil
         Interpreter(AstModel*);
         ~Interpreter();
 
-        bool run(Declaration* proc);
+        bool run(Declaration* proc); // either a procedure or a module
 
     private:
         class Imp;

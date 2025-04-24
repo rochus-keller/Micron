@@ -21,6 +21,7 @@
 #include <QFileInfo>
 #include "MilProject.h"
 #include <QCommandLineParser>
+#include <QtDebug>
 
 
 int main(int argc, char *argv[])
@@ -34,13 +35,25 @@ int main(int argc, char *argv[])
     cp.addPositionalArgument("file", "a single mil file, or the directory searched for *.mil files");
     QCommandLineOption cgen("cgen", "generate C code");
     cp.addOption(cgen);
+    QCommandLineOption m32("m32", "assume 32 bit pointers");
+    cp.addOption(m32);
+    QCommandLineOption m64("m64", "assume 64 bit pointers");
+    cp.addOption(m64);
+    QCommandLineOption run("run", "interpret the code");
+    cp.addOption(run);
 
     cp.process(a);
     const QStringList args = cp.positionalArguments();
     if( args.isEmpty() )
         return -1;
 
-    Mil::AstModel mdl;
+    if( cp.isSet(m32) && cp.isSet(m64) )
+    {
+        qCritical() << "the --m32 and --m64 options are mutually exclusive";
+        return -1;
+    }
+
+    Mil::AstModel mdl( cp.isSet(m32) ? 32 : cp.isSet(m64) ? 64 : sizeof(void*) * 8);
     Mil::Project pro(&mdl);
     QFileInfo info(args.first());
     if( info.isDir() )
@@ -52,6 +65,8 @@ int main(int argc, char *argv[])
 
     if( result && cp.isSet(cgen) )
         pro.generateC();
+    if( result && cp.isSet(run) )
+        pro.interpret();
 
     return 0;
 }

@@ -199,6 +199,7 @@ void Validator::visitStatSeq(Statement* stat)
         case Tok_STFLD:
         case Tok_STIND:
         case Tok_STIND_I1:
+        case Tok_STIND_I2:
         case Tok_STIND_I4:
         case Tok_STIND_I8:
         case Tok_STIND_R4:
@@ -915,6 +916,7 @@ Expression* Validator::visitExpr(Expression* e)
                     break;
                 e->rhs = eatStack(numOfParams);
                 // TODO: check param compat?
+                // TODO: varargs?
 
                 if(proc->getType())
                 {

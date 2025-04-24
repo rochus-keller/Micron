@@ -20,6 +20,7 @@
 #include "MilAst.h"
 #include "MicSymbol.h"
 #include "MilTokenType.h"
+#include <QtDebug>
 using namespace Mil;
 
 static void addTypeDecl(Declaration* globals, Type* t, const QByteArray& name)
@@ -33,7 +34,7 @@ static void addTypeDecl(Declaration* globals, Type* t, const QByteArray& name)
     globals->appendSub(res);
 }
 
-AstModel::AstModel()
+AstModel::AstModel(quint8 ptrWidth):pointerWidth(ptrWidth)
 {
     for( int i = 0; i < Type::MaxBasicType; i++ )
     {
@@ -135,6 +136,218 @@ Type* AstModel::getBasicType(quint8 k) const
         return basicTypes[0];
 }
 
+void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment)
+{
+    DeclList done;
+    foreach( Declaration* m, modules )
+    {
+        if( done.contains(m) )
+            continue;
+        done << m;
+        walkImports(m, done, pointerWidth, stackAlignment);
+        calcMemoryLayoutOf(m, pointerWidth, stackAlignment);
+    }
+}
+
+void AstModel::walkImports(Declaration* m, DeclList& done, quint8 pointerWidth, quint8 stackAlignment)
+{
+    Declaration* sub = m->subs;
+    while(sub)
+    {
+        if( sub->kind == Declaration::Import )
+        {
+            if( sub->imported && !done.contains(sub->imported) )
+            {
+                done << sub->imported;
+                calcMemoryLayoutOf(sub->imported, pointerWidth, stackAlignment);
+            }
+        }
+        sub = sub->next;
+    }
+}
+
+AstModel::BitFieldUnit AstModel::collectBitFields(const DeclList& fields, int start, quint8 pointerWidth)
+{
+    Q_ASSERT( start < fields.size() && fields[start]->kind == Declaration::Field &&
+              fields[start]->f.bw && fields[start]->f.bw <= 64 );
+    BitFieldUnit res;
+
+    res.start = start;
+    if( fields[start]->f.bw >= pointerWidth )
+    {
+        // special case where bw is larger than 32 bits on a 32 bit machine
+        res.len = 1;
+        res.bits = fields[start]->f.bw;
+        res.bytelen = 8;
+        return res;
+    } // else
+
+    res.len = 0;
+    res.bits = fields[start]->f.bw;
+    for(int i = start + 1; i < fields.size(); i++ )
+    {
+        Declaration* field = fields[i];
+        if( field->kind != Declaration::Field ||
+                (res.bits + field->f.bw) > pointerWidth ||
+                field->f.bw == 0 )
+            break;
+        res.len++;
+        res.bits += field->f.bw;
+    }
+    if( res.bits <= 8 )
+        res.bytelen = 8;
+    else if( res.bits <= 16 )
+        res.bytelen = 16;
+    else if( res.bits <= 32 )
+        res.bytelen = 32;
+    else
+        res.bytelen = 64;
+    return res;
+}
+
+void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quint8 stackAlignment)
+{
+    // RISK: this function assumes that declaration order reflects dependency order, besides pointers
+    Declaration* sub = module->subs;
+    int varOff = 0;
+    while(sub)
+    {
+        Type* type = sub->getType();
+        switch(sub->kind)
+        {
+        case Declaration::TypeDecl:
+            switch( type->kind )
+            {
+            case Type::Struct:
+                {
+                    int off = 0;
+                    int maxAlig = 1;
+                    int i = 0;
+                    while(i < type->subs.size())
+                    {
+                        Declaration* field = type->subs[i];
+                        if( field->kind == Declaration::Field )
+                        {
+                            int alig = 0;
+                            if( field->f.bw )
+                            {
+                                // bitfield
+                                const BitFieldUnit unit = collectBitFields(type->subs, i, pointerWidth);
+                                alig = unit.bytelen;
+                                if( i != 0 )
+                                    off += AstModel::padding(off, alig);
+                                for( int j = unit.start; j < unit.start + unit.len; j++ )
+                                    type->subs[j]->f.off = off;
+                                i += unit.len-1;
+                            }else
+                            {
+                                // a normal field
+                                Type* t = field->getType();
+                                const int size = t->getByteSize(pointerWidth);
+                                alig = t->getAlignment(pointerWidth);
+                                if( i != 0 )
+                                    off += AstModel::padding(off, alig);
+                                field->f.off = off;
+                                off += size;
+                            }
+                            if( alig > maxAlig )
+                                maxAlig = alig;
+                        }
+                        i++;
+                    }
+                    type->bytesize = off + AstModel::padding(off, maxAlig);
+                }
+                break;
+            case Type::Union:
+                {
+                    int size = 0;
+                    foreach( Declaration* field, type->getType()->subs)
+                    {
+                        if( field->kind == Declaration::Field )
+                        {
+                            Type* t = field->getType();
+                            const int s = t->getByteSize(pointerWidth);
+                            if( s > size )
+                                size = s;
+                        }
+                    }
+                    type->bytesize = size;
+                }
+                break;
+            case Type::Object:
+                {
+                    int off = pointerWidth; // spare room for the vtbl pointer
+                    int maxAlig = off;
+                    DeclList fields = type->getFieldList(true);
+                    foreach( Declaration* field, fields)
+                    {
+                        Q_ASSERT( field->kind == Declaration::Field );
+                        Type* t = field->getType();
+                        const int size = t->getByteSize(pointerWidth);
+                        const int alig = t->getAlignment(pointerWidth);
+                        if( alig > maxAlig )
+                            maxAlig = alig;
+                        off += AstModel::padding(off, alig);
+                        field->f.off = off;
+                        off += size;
+                    }
+                    type->bytesize = off + AstModel::padding(off, maxAlig);
+                }
+                break;
+            case Type::Pointer:
+                type->bytesize = pointerWidth;
+                break;
+            }
+            break;
+        case Declaration::Procedure:
+            {
+                int off_p = 0;
+                int off_l = 0;
+                Declaration* subsub = sub->subs;
+                while(subsub)
+                {
+                    Type* t = subsub->getType();
+                    switch( subsub->kind )
+                    {
+                    case Declaration::ParamDecl:
+                        {
+                            const int size = t->getByteSize(pointerWidth);
+                            const int alig = t->getAlignment(pointerWidth);
+                            off_p += AstModel::padding(off_p, alig);
+                            subsub->off = off_p;
+                            off_p += qMax(size,(int)stackAlignment);
+                        }
+                        break;
+                    case Declaration::LocalDecl:
+                        {
+                            const int size = t->getByteSize(pointerWidth);
+                            const int alig = t->getAlignment(pointerWidth);
+                            off_l += AstModel::padding(off_l, alig);
+                            subsub->off = off_l;
+                            off_l += size;
+                        }
+                        break;
+                    }
+                    subsub = subsub->next;
+                }
+            }
+            break;
+        case Declaration::VarDecl:
+            {
+                Type* t = sub->getType();
+                const int size = t->getByteSize(pointerWidth);
+                const int alig = t->getAlignment(pointerWidth);
+                varOff += AstModel::padding(varOff, alig);
+                sub->off = varOff;
+                varOff += size;
+            }
+            break;
+        }
+
+        sub = sub->next;
+    }
+}
+
 Node::~Node()
 {
     if( type && ownstype )
@@ -213,6 +426,19 @@ QList<Declaration*> Declaration::getLocals() const
     return res;
 }
 
+QList<Declaration*> Declaration::getVars() const
+{
+    QList<Declaration*> res;
+    Declaration* d = subs;
+    while( d )
+    {
+        if( d->kind == Declaration::VarDecl )
+            res << d;
+        d = d->next;
+    }
+    return res;
+}
+
 int Declaration::indexOf(Declaration* ref) const
 {
     Declaration* d = subs;
@@ -273,6 +499,20 @@ Declaration*Declaration::getModule() const
         if( m->kind == Declaration::Module )
             return m;
         m = m->outer;
+    }
+    return 0;
+}
+
+Declaration*Declaration::findInitProc() const
+{
+    if( kind != Module )
+        return 0;
+    Declaration* init = subs;
+    while(init)
+    {
+        if( init->init )
+            return init;
+        init = init->next;
     }
     return 0;
 }
@@ -457,6 +697,19 @@ QList<Declaration*> Type::getMethodTable() const
     return tbl;
 }
 
+QList<Declaration*> Type::getFieldList(bool recursive) const
+{
+    DeclList res;
+    if( recursive && getType() && getType()->kind == Type::Object )
+        res = getType()->getFieldList(recursive);
+    foreach(Declaration* f, subs)
+    {
+        if( f->kind == Declaration::Field )
+            res << f;
+    }
+    return res;
+}
+
 Type*Type::deref() const
 {
     if( kind == NameRef && type )
@@ -475,6 +728,106 @@ bool Type::isPtrToArray() const
         return base->kind == Array;
     }else
         return false;
+}
+
+quint32 Type::getByteSize(quint8 pointerWidth) const
+{
+    switch( kind )
+    {
+    case NIL:
+        return 0;
+    case BOOL:
+    case CHAR:
+    case INT8:
+    case UINT8:
+        return 1;
+    case INT16:
+    case UINT16:
+        return 2;
+    case INT32:
+    case UINT32:
+    case FLOAT32:
+        return 4;
+    case INT64:
+    case UINT64:
+    case FLOAT64:
+        return 8;
+    case Array:
+        {
+            Type* et = getType();
+            if( et ) et = et->deref();
+            return len * et->getByteSize(pointerWidth);
+        }
+    case Pointer:
+    case Proc:
+        return pointerWidth;
+    case NameRef:
+        if( getType() )
+            return getType()->getByteSize(pointerWidth);
+        break;
+    }
+    return deref()->bytesize;
+}
+
+quint32 Type::getAlignment(quint8 pointerWidth) const
+{
+    quint32 res = 0;
+    int i;
+    switch( kind )
+    {
+    case Struct:
+        i = 0;
+        while( i < subs.size() )
+        {
+            Declaration* f = subs[i];
+            if( f->kind != Declaration::Field )
+                continue;
+            quint32 a = 0;
+            if( f->f.bw )
+            {
+                AstModel::BitFieldUnit unit = AstModel::collectBitFields(subs, i, pointerWidth);
+                i += unit.len-1;
+                a = unit.bytelen;
+            }else
+                a = f->getType()->getAlignment(pointerWidth);
+            if( a > res )
+                res = a;
+            i++;
+        }
+        break;
+    case Object:
+        if( getType() )
+            res = getType()->getAlignment(pointerWidth);
+        else
+            res = pointerWidth; // the vtbl pointer
+        foreach( Declaration* f, subs )
+        {
+            if( f->kind != Declaration::Field )
+                continue;
+            const quint32 a = f->getType()->getAlignment(pointerWidth);
+            if( a > res )
+                res = a;
+        }
+        break;
+    case Union:
+        foreach( Declaration* f, subs )
+        {
+            if( f->kind != Declaration::Field )
+                continue;
+            const quint32 a = f->getType()->getAlignment(pointerWidth);
+            if( a > res )
+                res = a;
+        }
+        break;
+    case Array:
+        if( len )
+            res = getType()->getAlignment(pointerWidth);
+        break;
+    default:
+        res = deref()->getByteSize(pointerWidth);
+        break;
+    }
+    return res;
 }
 
 Statement::~Statement()
