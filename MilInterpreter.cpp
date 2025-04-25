@@ -22,126 +22,41 @@
 #include <QtDebug>
 using namespace Mil;
 
+enum OpArgCode {
+    NoOpArgs,
+    OffArg,
+    SizeArg,
+    IntArg,
+    FloatArg,
+    StrArg,
+    ProcArg,
+    JumpArg,
+    OffSizeArgs
+};
+
 enum IL_op
 {
     IL_invalid,
 
-    IL_add_i4, IL_add_i8, IL_add_r4, IL_add_r8,
-    IL_sub_i4, IL_sub_i8, IL_sub_r4, IL_sub_r8,
-    IL_mul_i4, IL_mul_i8, IL_mul_r4, IL_mul_r8,
-    IL_div_i4, IL_div_i8, IL_div_r4, IL_div_r8, IL_div_un_i4, IL_div_un_i8,
-    IL_rem_i4, IL_rem_i8, IL_rem_r4, IL_rem_r8, IL_rem_un_i4, IL_rem_un_i8,
-    IL_abs_i4, IL_abs_i8, IL_abs_r4, IL_abs_r8,
-    IL_neg_i4, IL_neg_i8, IL_neg_r4, IL_neg_r8,
-
-    IL_and_i4, IL_and_i8, IL_or_i4, IL_or_i8,
-    IL_xor_i4, IL_xor_i8, IL_not_i4, IL_not_i8,
-    IL_shl_i4, IL_shl_i8, IL_shr_i4, IL_shr_i8, IL_shr_un_i4, IL_shr_un_i8,
-
-    IL_ceq_i4, IL_ceq_i8, IL_ceq_r4, IL_ceq_r8,
-    IL_cgt_i4, IL_cgt_i8, IL_cgt_r4, IL_cgt_r8,
-    IL_cgt_u4, IL_cgt_u8,
-    IL_clt_i4, IL_clt_i8, IL_clt_r4, IL_clt_r8,
-    IL_clt_u4, IL_clt_u8,
-
-    IL_conv_i1_i4, IL_conv_i1_i8, IL_conv_i1_r4, IL_conv_i1_r8, // to_from
-    IL_conv_i2_i4, IL_conv_i2_i8, IL_conv_i2_r4, IL_conv_i2_r8,
-    IL_conv_i4_i8, IL_conv_i4_r4, IL_conv_i4_r8,
-    IL_conv_i8_i4, IL_conv_i8_r4, IL_conv_i8_r8,
-
-    IL_conv_u1_i4, IL_conv_u1_i8, IL_conv_u1_r4, IL_conv_u1_r8,
-    IL_conv_u2_i4, IL_conv_u2_i8, IL_conv_u2_r4, IL_conv_u2_r8,
-    IL_conv_u4_i8, IL_conv_u4_r4, IL_conv_u4_r8,
-    IL_conv_u8_i4, IL_conv_u8_r4, IL_conv_u8_r8,
-
-    IL_conv_r4_i4, IL_conv_r4_i8, IL_conv_r4_r8,
-    IL_conv_r8_i4, IL_conv_r8_i8, IL_conv_r8_r4,
-
-    IL_ldarg_i1, IL_ldarg_i2, IL_ldarg_i4, IL_ldarg_i8,
-    IL_ldarg_u1, IL_ldarg_u2, IL_ldarg_u4, IL_ldarg_u8,
-    IL_ldarg_r4, IL_ldarg_r8, IL_ldarg_p, IL_ldarg_pp,
-    IL_ldarg_vt, IL_ldarga,
-
-    IL_starg_i1, IL_starg_i2, IL_starg_i4, IL_starg_i8,
-    IL_starg_r4, IL_starg_r8, IL_starg_p, IL_starg_pp,
-    IL_starg_vt,
-
-    IL_ldelem_i1, IL_ldelem_i2, IL_ldelem_i4, IL_ldelem_i8,
-    IL_ldelem_u1, IL_ldelem_u2, IL_ldelem_u4, IL_ldelem_u8,
-    IL_ldelem_r4, IL_ldelem_r8, IL_ldelem_p, IL_ldelem_pp,
-    IL_ldelema, IL_ldelem_vt,
-
-    IL_stelem_i1, IL_stelem_i2, IL_stelem_i4, IL_stelem_i8,
-    IL_stelem_r4, IL_stelem_r8, IL_stelem_p, IL_stelem_pp,
-    IL_stelem_vt,
-
-    IL_ldfld_i1, IL_ldfld_i2, IL_ldfld_i4, IL_ldfld_i8,
-    IL_ldfld_u1, IL_ldfld_u2, IL_ldfld_u4, IL_ldfld_u8,
-    IL_ldfld_r4, IL_ldfld_r8, IL_ldfld_p, IL_ldfld_pp,
-    IL_ldflda, IL_ldfld_vt,
-
-    IL_stfld_i1, IL_stfld_i2, IL_stfld_i4, IL_stfld_i8,
-    IL_stfld_u1, IL_stfld_u2, IL_stfld_u4, IL_stfld_u8,
-    IL_stfld_r4, IL_stfld_r8, IL_stfld_p, IL_stfld_pp,
-    IL_stfld_vt,
-
-    IL_ldind_i1, IL_ldind_i2, IL_ldind_i4, IL_ldind_i8,
-    IL_ldind_u1, IL_ldind_u2, IL_ldind_u4, IL_ldind_u8,
-    IL_ldind_r4, IL_ldind_r8, IL_ldind_p, IL_ldind_pp,
-    IL_ldind_vt,
-
-    IL_stind_i1, IL_stind_i2, IL_stind_i4, IL_stind_i8,
-    IL_stind_r4, IL_stind_r8, IL_stind_p, IL_stind_pp,
-    IL_stind_vt,
-
-    IL_ldloc_i1, IL_ldloc_i2, IL_ldloc_i4, IL_ldloc_i8,
-    IL_ldloc_u1, IL_ldloc_u2, IL_ldloc_u4, IL_ldloc_u8,
-    IL_ldloc_r4, IL_ldloc_r8, IL_ldloc_p, IL_ldloc_pp,
-    IL_ldloca, IL_ldloc_vt,
-
-    IL_stloc_i1, IL_stloc_i2, IL_stloc_i4, IL_stloc_i8,
-    IL_stloc_r4, IL_stloc_r8, IL_stloc_p, IL_stloc_pp,
-    IL_stloc_vt,
-
-    IL_ldvar_i1, IL_ldvar_i2, IL_ldvar_i4, IL_ldvar_i8,
-    IL_ldvar_u1, IL_ldvar_u2, IL_ldvar_u4, IL_ldvar_u8,
-    IL_ldvar_r4, IL_ldvar_r8, IL_ldvar_p, IL_ldvar_pp,
-    IL_ldvara, IL_ldvar_vt,
-
-    IL_stvar_i1, IL_stvar_i2, IL_stvar_i4, IL_stvar_i8,
-    IL_stvar_u1, IL_stvar_u2, IL_stvar_u4, IL_stvar_u8,
-    IL_stvar_r4, IL_stvar_r8, IL_stvar_p, IL_stvar_pp,
-    IL_stvar_vt,
-
-    IL_ldc_i4, IL_ldc_i8, IL_ldc_r4, IL_ldc_r8,
-    IL_ldc_i4_m1, IL_ldc_i4_0, IL_ldc_i4_1, IL_ldc_i4_2, IL_ldc_i4_3,
-    IL_ldc_i4_4, IL_ldc_i4_5,IL_ldc_i4_6, IL_ldc_i4_7, IL_ldc_i4_8,
-    IL_ldnull, IL_ldstr, IL_ldobj,
-
-    IL_br,
-    IL_brtrue_i4, IL_brtrue_i8,
-    IL_brfalse_i4, IL_brfalse_i8,
-
-    IL_ldproc, IL_ldmeth,
-    IL_sizeof, IL_ptroff,
-    IL_nop, IL_pop, IL_dup,
-    IL_ret, IL_ret_void,
-    IL_call, IL_calli,
-    IL_alloc1, IL_allocN, IL_free,
-
-    IL_vt_size, // suffix of ldarg_vt, starg_vt, ldloc_vt, stloc_vt, ldelem_vt, stelem_vt, ldfld_vt, stfld_vt, ldvar_vt, stvar_vt
-
-   // TODO
-    IL_newvla,
-    IL_callvi, IL_callvirt,
-    IL_castptr, IL_conv_ip,
-    IL_line,
-    IL_initobj, IL_isinst,
-
-    // special implementation ops
-    IL_already_called, // puts int32 1 or 0 on stack
+#define OPDEF(op, x) IL_##op
+#include "MilVmOps.h"
+#undef OPDEF
 
     IL_NUM_OF_OPS
+};
+
+static const char* op_names[] = {
+    "<invalid>",
+    #define OPDEF(op, x) #op
+    #include "MilVmOps.h"
+    #undef OPDEF
+};
+
+static const int op_args[] = {
+    0,
+    #define OPDEF(op, n) n
+    #include "MilVmOps.h"
+    #undef OPDEF
 };
 
 struct Operation
@@ -212,7 +127,9 @@ struct Interpreter::Imp
     {
         if( proc->validated )
             return true; // the proc was already translated
+        proc->validated = true;
 
+        const QByteArray path = proc->toPath();
         procs.append(Procedure());
         Procedure& cur = procs.back();
         cur.decl = proc;
@@ -322,21 +239,109 @@ Interpreter::~Interpreter()
     delete imp;
 }
 
-bool Interpreter::run(Declaration* proc)
+bool Interpreter::precompile(Declaration* proc)
 {
     Q_ASSERT(proc && (proc->kind == Declaration::Procedure || proc->kind == Declaration::Module));
-
-    imp->mdl->calcMemoryLayouts(sizeof(void*), 8);
 
     Declaration* module = proc->getModule();
     Q_ASSERT(module);
     if( !module->validated )
         return false;
 
+    if( module->init )
+        return true;
+
+    imp->mdl->calcMemoryLayouts(sizeof(void*), 8);
+
     // TODO: if we run for the second time, we might reset the interpreter
 
-    if( !imp->translateModule(module) )
+    return imp->translateModule(module);
+}
+
+bool Interpreter::dumpProc(QTextStream& out, Declaration* proc)
+{
+    if( proc->forward )
         return false;
+    const int i = imp->findProc(proc);
+    if( i == -1 )
+        return false;
+    Procedure* p = &imp->procs[i];
+    out << "proc " << p->decl->toPath() << endl;
+    for( int pc = 0; pc < p->ops.size(); pc++ )
+    {
+        out << "    " << QString("%1: ").arg(pc,2) << op_names[p->ops[pc].op];
+        switch(op_args[p->ops[pc].op])
+        {
+        case NoOpArgs:
+            break;
+        case OffArg:
+            out << " " << p->ops[pc].val;
+            break;
+        case SizeArg:
+            out << " " << p->ops[pc].val;
+            break;
+        case IntArg:
+            out << " " << imp->ints[p->ops[pc].val];
+            break;
+        case FloatArg:
+            out << " " << imp->doubles[p->ops[pc].val];
+            break;
+        case StrArg:
+            out << " " << imp->strings[p->ops[pc].val];
+            break;
+        case ProcArg:
+            out << " " << imp->procs[p->ops[pc].val].decl->toPath();
+            break;
+        case JumpArg:
+            out << " " << (p->ops[pc].minus ? "-" : "") << p->ops[pc].val << " -> "
+                << QString("%1").arg(pc + 1 + (p->ops[pc].minus?-1:1) * p->ops[pc].val);
+            break;
+        case OffSizeArgs:
+            Q_ASSERT(pc+1 < p->ops.size());
+            out << " " << p->ops[pc].val;
+            out << " " << p->ops[pc+1].val;
+            pc++;
+           break;
+        default:
+            Q_ASSERT(false);
+        }
+
+        out << endl;
+    }
+    return true;
+}
+
+bool Interpreter::dumpModule(QTextStream& out, Declaration* module)
+{
+    Declaration* d = module->subs;
+    while(d)
+    {
+        if(d->kind == Declaration::Procedure)
+            dumpProc(out, d);
+        d = d->next;
+    }
+    return true;
+}
+
+bool Interpreter::dumpAll(QTextStream& out)
+{
+    DeclList& modules = imp->mdl->getModules();
+    foreach( Declaration* module, modules )
+        dumpModule(out, module);
+    return true;
+}
+
+bool Interpreter::run(Declaration* proc)
+{
+    Q_ASSERT(proc && (proc->kind == Declaration::Procedure || proc->kind == Declaration::Module));
+
+    Declaration* module = proc->getModule();
+    Q_ASSERT(module);
+    if( !module->validated )
+        return false;
+
+    if( !module->init && !precompile(module) )
+        return true;
 
     if( proc->kind == Declaration::Module )
         return imp->run(proc);
@@ -425,6 +430,8 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
                 {
                 case Type::INT8:
                 case Type::UINT8:
+                case Type::BOOL:
+                case Type::CHAR:
                     emitOp(proc, IL_starg_i1,params[s->id]->off);
                     break;
                 case Type::INT16:
@@ -473,45 +480,47 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
         case Tok_STLOC_3:
             {
                 Q_ASSERT(curProc);
-                DeclList params = curProc->decl->getParams();
-                Q_ASSERT(s->id < params.size());
-                Type* t = deref(params[s->id]->getType());
+                DeclList locals = curProc->decl->getLocals();
+                Q_ASSERT(s->id < locals.size());
+                Type* t = deref(locals[s->id]->getType());
                 switch(t->kind)
                 {
                 case Type::INT8:
                 case Type::UINT8:
-                    emitOp(proc, IL_stloc_i1,params[s->id]->off);
+                case Type::BOOL:
+                case Type::CHAR:
+                    emitOp(proc, IL_stloc_i1,locals[s->id]->off);
                     break;
                 case Type::INT16:
                 case Type::UINT16:
-                    emitOp(proc, IL_stloc_i2,params[s->id]->off);
+                    emitOp(proc, IL_stloc_i2,locals[s->id]->off);
                     break;
                 case Type::INT32:
                 case Type::UINT32:
-                    emitOp(proc, IL_stloc_i4,params[s->id]->off);
+                    emitOp(proc, IL_stloc_i4,locals[s->id]->off);
                     break;
                 case Type::UINT64:
                 case Type::INT64:
-                    emitOp(proc, IL_stloc_i8,params[s->id]->off);
+                    emitOp(proc, IL_stloc_i8,locals[s->id]->off);
                     break;
                 case Type::FLOAT32:
-                    emitOp(proc, IL_stloc_r4,params[s->id]->off);
+                    emitOp(proc, IL_stloc_r4,locals[s->id]->off);
                     break;
                 case Type::FLOAT64:
-                    emitOp(proc, IL_stloc_r8,params[s->id]->off);
+                    emitOp(proc, IL_stloc_r8,locals[s->id]->off);
                     break;
                 case Type::Pointer:
                 case Type::Proc:
                     if(t->typebound)
-                        emitOp(proc, IL_stloc_pp,params[s->id]->off);
+                        emitOp(proc, IL_stloc_pp,locals[s->id]->off);
                     else
-                        emitOp(proc, IL_stloc_p,params[s->id]->off);
+                        emitOp(proc, IL_stloc_p,locals[s->id]->off);
                     break;
                 case Type::Struct:
                 case Type::Union:
                 case Type::Object:
                 case Type::Array:
-                    emitOp(proc, IL_stloc_vt,params[s->id]->off);
+                    emitOp(proc, IL_stloc_vt,locals[s->id]->off);
                     emitOp(proc, IL_vt_size, t->getByteSize(sizeof(void*)));
                     break;
                 default:
@@ -548,8 +557,7 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             emitOp(proc, IL_stind_pp);
             break;
         case Tok_STELEM:
-            emitOp(proc, IL_stelem_vt);
-            emitOp(proc, IL_vt_size,deref(s->d->getType())->getByteSize(sizeof(void*)));
+            emitOp(proc, IL_stelem_vt, deref(s->d->getType())->getByteSize(sizeof(void*)));
             break;
         case Tok_STELEM_I1:
             emitOp(proc, IL_stelem_i1);
@@ -573,12 +581,15 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             emitOp(proc, IL_stelem_p);
             break;
         case Statement::ExprStat:
+            translateExprSeq(proc, s->e);
             break;
         case Tok_STFLD:
             switch(deref(s->d->getType())->kind)
             {
             case Type::INT8:
             case Type::UINT8:
+            case Type::BOOL:
+            case Type::CHAR:
                 emitOp(proc, IL_stloc_i1,s->d->f.off);
                 break;
             case Type::INT16:
@@ -623,6 +634,8 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             {
             case Type::INT8:
             case Type::UINT8:
+            case Type::BOOL:
+            case Type::CHAR:
                 emitOp(proc, IL_stvar_i1,s->d->off);
                 break;
             case Type::INT16:
@@ -982,7 +995,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, IL_conv_i4_r4);
             else if(t->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_i4_r8);
-            else
+            else if( !t->isInt32OnStack() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_I8:
@@ -992,7 +1005,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, IL_conv_i8_r4);
             else if(t->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_i8_r8);
-            else
+            else if( !t->isInt64() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_R4:
@@ -1002,7 +1015,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, IL_conv_r4_i8);
             else if(t->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_r4_r8);
-            else
+            else if( !t->isFloat() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_R8:
@@ -1012,7 +1025,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, IL_conv_r8_r4);
             else if( t->isInt64() )
                 emitOp(proc, IL_conv_r8_i8);
-            else
+            else if( !t->isFloat() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_U1:
@@ -1046,7 +1059,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, IL_conv_u4_r4);
             else if(t->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_u4_r8);
-            else
+            else if( !t->isInt32OnStack() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_U8:
@@ -1120,8 +1133,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
         case Tok_LDARG_S:
         case Tok_LDARG:
             {
-                Q_ASSERT(curProc);
-                DeclList params = curProc->decl->getParams();
+                DeclList params = proc.decl->getParams();
                 Q_ASSERT(e->id < params.size());
                 Type* t = deref(params[e->id]->getType());
                 switch(t->kind)
@@ -1139,6 +1151,8 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                     emitOp(proc, IL_ldarg_i8,params[e->id]->off);
                     break;
                 case Type::UINT8:
+                case Type::BOOL:
+                case Type::CHAR:
                     emitOp(proc, IL_ldarg_u1,params[e->id]->off);
                     break;
                 case Type::UINT16:
@@ -1192,8 +1206,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
         case Tok_LDLOC_S:
         case Tok_LDLOC:
             {
-                Q_ASSERT(curProc);
-                DeclList params = curProc->decl->getLocals();
+                DeclList params = proc.decl->getLocals();
                 Q_ASSERT(e->id < params.size());
                 Type* t = deref(params[e->id]->getType());
                 switch(t->kind)
@@ -1211,6 +1224,8 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                     emitOp(proc, IL_ldloc_i8,params[e->id]->off);
                     break;
                 case Type::UINT8:
+                case Type::BOOL:
+                case Type::CHAR:
                     emitOp(proc, IL_ldloc_u1,params[e->id]->off);
                     break;
                 case Type::UINT16:
@@ -1251,10 +1266,9 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
         case Tok_LDLOCA_S:
         case Tok_LDLOCA:
             {
-                Q_ASSERT(curProc);
-                DeclList params = curProc->decl->getParams();
-                Q_ASSERT(e->id < params.size());
-                emitOp(proc, IL_ldloca,params[e->id]->off);
+                DeclList locals = proc.decl->getLocals();
+                Q_ASSERT(e->id < locals.size());
+                emitOp(proc, IL_ldloca,locals[e->id]->off);
             }
             break;
         case Tok_LDIND_I1:
@@ -1330,8 +1344,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             emitOp(proc, IL_ldelem_u8);
             break;
         case Tok_LDELEM:
-            emitOp(proc, IL_ldelem_vt);
-            emitOp(proc, IL_vt_size,t->getByteSize(pointerWidth));
+            emitOp(proc, IL_ldelem_vt,t->getByteSize(pointerWidth));
             break;
         case Tok_LDELEMA:
             emitOp(proc, IL_ldelema);
@@ -1352,6 +1365,8 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, IL_ldfld_i8,e->d->f.off);
                 break;
             case Type::UINT8:
+            case Type::BOOL:
+            case Type::CHAR:
                 emitOp(proc, IL_ldfld_u1,e->d->f.off);
                 break;
             case Type::UINT16:
@@ -1407,6 +1422,8 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, IL_ldvar_i8,e->d->off);
                 break;
             case Type::UINT8:
+            case Type::BOOL:
+            case Type::CHAR:
                 emitOp(proc, IL_ldvar_u1,e->d->off);
                 break;
             case Type::UINT16:
@@ -1461,7 +1478,24 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             break;
         case Tok_CALL:
         case Tok_CALLI:
-            // TODO
+            {
+                if( e->kind == Tok_CALL )
+                    translateProc(e->d);
+#if 0
+                // TODO
+                DeclList params = e->d->getParams();
+                int len = 0;
+                if( !params.isEmpty() )
+                    len = params.last()->off + params.last()->getType()->getByteSize(pointerWidth);
+                if( e->d->getType() )
+                    len = qMax(len, (int)e->d->getType()->getByteSize(pointerWidth));
+                len += AstModel::padding(len, 8);
+#endif
+                if(e->kind == Tok_CALL)
+                    emitOp(proc, IL_call, findProc(e->d));
+                else
+                    emitOp(proc, IL_calli);
+            }
             break;
         case Tok_IIF:
             {

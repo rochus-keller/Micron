@@ -27,6 +27,8 @@
 #include <math.h>
 using namespace Mic;
 
+// NOTE: this is now obsolete, see MilInterpreter instead
+
 #define _USE_GETTIMEOFDAY
 #ifdef _USE_GETTIMEOFDAY
 #if defined(_WIN32) && !defined(__GNUC__)

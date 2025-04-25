@@ -106,8 +106,10 @@ bool Project::parse()
         Parser2 p(mdl, &lex, this);
         qDebug() << "**** parsing" << file;
         bool errorsFound = false;
+        int parsed = 0;
         while( p.parseModule() ) // TODO: skip already parsed modules
         {
+            parsed++;
             if( !p.errors.isEmpty() )
             {
                 foreach( const Parser2::Error& e, p.errors )
@@ -132,7 +134,7 @@ bool Project::parse()
                     delete module;
             }
         }
-        if( !errorsFound )
+        if( parsed && !errorsFound )
             ok++;
     }
     qDebug() << "#### finished with" << ok << "files ok of total" << allMilFiles.size() << "files" << "in" <<
@@ -160,9 +162,19 @@ void Project::generateC()
     }
 }
 
-void Project::interpret()
+void Project::interpret(bool dump)
 {
     Interpreter r(mdl);
+    foreach( Declaration* module, mdl->getModules() )
+    {
+        if( !r.precompile(module) )
+            return;
+    }
+    if( dump )
+    {
+        QTextStream out(stdout);
+        r.dumpAll(out);
+    }
     foreach( Declaration* module, mdl->getModules() )
     {
         if( !r.run(module) )

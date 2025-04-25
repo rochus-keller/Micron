@@ -1,7 +1,6 @@
 
 
 SOURCES += \
-    MicRowCol.cpp \
     MilLexer.cpp \
     MilToken.cpp \
     MilTokenType.cpp \
@@ -9,11 +8,10 @@ SOURCES += \
     MilAst.cpp \
     MilProject.cpp \
     MilValidator.cpp \
-    MicSymbol.cpp \
-    MilCeeGen.cpp
+    MilCeeGen.cpp \
+    MilInterpreter.cpp
 
 HEADERS += \
-    MicRowCol.h \
     MilLexer.h \
     MilToken.h \
     MilTokenType.h \
@@ -21,5 +19,6 @@ HEADERS += \
     MilAst.h \
     MilProject.h \
     MilValidator.h \
-    MicSymbol.h \
-    MilCeeGen.h
+    MilCeeGen.h \
+    MilInterpreter.h \
+    $$PWD/MilVmOps.h

@@ -22,6 +22,8 @@
 
 #include "MicMilLoader.h"
 
+// NOTE: this is now obsolete, see MilInterpreter instead
+
 namespace Mic
 {
 class MilInterpreter

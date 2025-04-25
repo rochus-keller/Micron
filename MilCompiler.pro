@@ -14,14 +14,13 @@ DEFINES += _DEBUG
 
 
 SOURCES += \
-    MilCompiler.cpp \
-    MilInterpreter.cpp
+    MilCompiler.cpp
 
-HEADERS += \
-    MilInterpreter.h
+HEADERS +=
 
 RESOURCES += \
     MilCompiler.qrc
 
 
+include( MicUtils.pri )
 include(MilParser2.pri)

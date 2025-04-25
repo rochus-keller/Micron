@@ -2,7 +2,6 @@
 SOURCES += \
     MicLexer.cpp \
     MicPpLexer.cpp \
-    MicRowCol.cpp \
     MicToken.cpp \
     MicTokenType.cpp \
     MicParser2.cpp \
@@ -11,13 +10,11 @@ SOURCES += \
     MicMilOp.cpp \
     MicEvaluator.cpp \
     $$PWD/MicMilLoader.cpp \
-    $$PWD/MicBuiltins.cpp \
-    MicSymbol.cpp
+    $$PWD/MicBuiltins.cpp
 
 HEADERS += \
     MicLexer.h \
     MicPpLexer.h \
-    MicRowCol.h \
     MicToken.h \
     MicTokenType.h \
     MicParser2.h \
@@ -26,6 +23,5 @@ HEADERS += \
     MicMilOp.h \
     MicEvaluator.h \
     $$PWD/MicMilLoader.h \
-    $$PWD/MicBuiltins.h \
-    MicSymbol.h
+    $$PWD/MicBuiltins.h
 

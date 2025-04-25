@@ -22,6 +22,8 @@
 
 #include <Micron/MilAst.h>
 
+class QTextStream;
+
 namespace Mil
 {
     class Interpreter
@@ -30,7 +32,12 @@ namespace Mil
         Interpreter(AstModel*);
         ~Interpreter();
 
-        bool run(Declaration* proc); // either a procedure or a module
+        // proc is either a procedure or a module
+        bool precompile(Declaration* proc);
+        bool dumpProc(QTextStream& out, Declaration* proc);
+        bool dumpModule(QTextStream& out, Declaration* module);
+        bool dumpAll(QTextStream& out);
+        bool run(Declaration* proc);
 
     private:
         class Imp;

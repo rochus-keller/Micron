@@ -19,7 +19,11 @@
 
 #include "MicEiGen.h"
 #include "MicMilLoader.h"
+#if 0
 #include "MicMilInterpreter.h"
+#endif
+#include "MicAst.h"
+#include "MilProject.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -36,6 +40,7 @@
 #include <MilToken.h>
 #include <QBuffer>
 #include <QCommandLineParser>
+#include <QTemporaryFile>
 
 class Lex2 : public Mic::Scanner2
 {
@@ -221,6 +226,10 @@ static void process(const QStringList& files, const QStringList& searchPaths, bo
     int all = 0;
     QElapsedTimer timer;
     timer.start();
+
+    QBuffer milout;
+    milout.open(QIODevice::WriteOnly);
+
     foreach( const QString& file, files )
     {
         Manager mgr;
@@ -237,28 +246,50 @@ static void process(const QStringList& files, const QStringList& searchPaths, bo
         imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
         Mic::Declaration* module = mgr.loadModule(imp); // recursively compiles all imported files
 
-        if( dump )
-            foreach( Mic::MilModule* m, mgr.loader.getModulesInDependencyOrder() )
-            {
-                QFile out;
-                out.open(stdout, QIODevice::WriteOnly);
-                Mic::IlAsmRenderer r(&out);
-                Mic::MilLoader::render(&r,m);
-                out.putChar('\n');
-            }
+        foreach( Mic::MilModule* m, mgr.loader.getModulesInDependencyOrder() )
+        {
+            Mic::IlAsmRenderer r(&milout);
+            Mic::MilLoader::render(&r,m);
+            milout.putChar('\n');
+        }
 
         all += mgr.modules.size();
         foreach( const ModuleSlot& m, mgr.modules )
             ok += m.decl ? 1 : 0;
+#if 0
         if( run && module )
         {
             Mic::MilInterpreter intp(&mgr.loader);
             intp.run(imp.path.back());
         }
+#endif
     }
     Mic::Expression::killArena();
     Mic::AstModel::cleanupGlobals();
     qDebug() << "#### finished with" << ok << "files ok of total" << all << "files" << "in" << timer.elapsed() << " [ms]";
+
+    milout.close();
+
+    if( dump )
+    {
+        QFile out;
+        out.open(stdout, QIODevice::WriteOnly);
+        out.write("\n");
+        out.write(milout.buffer());
+    }
+    if( all == ok && run )
+    {
+        QTemporaryFile out;
+        out.open();
+        out.write(milout.buffer());
+        Mil::AstModel mdl;
+        Mil::Project pro(&mdl);
+        pro.setFiles(QStringList() << out.fileName());
+
+        const bool result = pro.parse();
+        if( result )
+            pro.interpret(true);
+    }
 }
 
 
