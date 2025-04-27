@@ -941,7 +941,6 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
     case Tok_CONV_U4:
     case Tok_CONV_I8:
     case Tok_CONV_U8:
-    case Tok_CONV_IP:
     case Tok_CONV_R4:
     case Tok_CONV_R8:
         out << "((" << typeRef(Validator::tokToBasicType(mdl, e->kind)) << ")";

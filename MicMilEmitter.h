@@ -268,7 +268,7 @@ namespace Mic
         void starg_(quint16);
         void stelem_(const MilQuali& typeRef);
         void stfld_(const MilTrident& fieldRef);
-        void stind_( Type ); // without Ux
+        void stind_( Type );
         void stind_(const MilQuali& typeRef); // was CIL stobj
         void stloc_(quint16);
         void stvar_(const MilQuali& memberRef); // CIL stsfld

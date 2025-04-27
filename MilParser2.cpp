@@ -272,7 +272,6 @@ static inline bool FIRST_Expression(int tt) {
 	case Tok_LDIND_I2:
 	case Tok_LDC_R8:
 	case Tok_SHR_UN:
-	case Tok_CONV_IP:
 		return true;
 	default: return false;
 	}
@@ -392,7 +391,6 @@ static inline bool FIRST_ExpInstr(int tt) {
 	case Tok_LDIND_I2:
 	case Tok_LDC_R8:
 	case Tok_SHR_UN:
-	case Tok_CONV_IP:
 		return true;
 	default: return false;
 	}
@@ -520,7 +518,6 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_LDNULL:
 	case Tok_LDPROC:
 	case Tok_LDC_I4:
-	case Tok_CONV_IP:
 	case Tok_STLOC_S:
 	case Tok_CONV_U2:
 	case Tok_LDLOC_2:
@@ -1637,8 +1634,6 @@ Expression* Parser2::ExpInstr() {
         expect(Tok_CONV_U4, true, "ExpInstr");
     } else if( la.d_code == Tok_CONV_U8 ) {
         expect(Tok_CONV_U8, true, "ExpInstr");
-    } else if( la.d_code == Tok_CONV_IP ) {
-        expect(Tok_CONV_IP, true, "ExpInstr");
     } else if( la.d_code == Tok_DIV ) {
         expect(Tok_DIV, true, "ExpInstr");
     } else if( la.d_code == Tok_DIV_UN ) {

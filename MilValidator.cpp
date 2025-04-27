@@ -194,6 +194,7 @@ void Validator::visitStatSeq(Statement* stat)
         case Tok_STELEM_R4:
         case Tok_STELEM_R8:
         case Tok_STELEM_IP:
+            // TODO: IPP
             expectN(3, stat);
             break;
         case Tok_STFLD:
@@ -337,8 +338,6 @@ Expression* Validator::visitExpr(Expression* e)
         case Tok_DIV_UN:
         case Tok_DIV:
         case Tok_MUL:
-        case Tok_REM:
-        case Tok_REM_UN:
         case Tok_SUB:
             if( expectN(2,e) )
             {
@@ -357,12 +356,7 @@ Expression* Validator::visitExpr(Expression* e)
                     t = mdl->getBasicType(Type::FLOAT64);
                 else if( lhs->isFloat() && rhs->isFloat() )
                     t = mdl->getBasicType(Type::FLOAT64);
-                else if( isInt32(lhs) && isPointer(rhs) ||
-                          isPointer(lhs) && isInt32(rhs) ||
-                          isPointer(lhs) && isPointer(rhs) )
-                {
-                    t = mdl->getBasicType(Type::INTPTR);
-                }else
+                else
                     error(e->pos, "the values on the stack are not compatible with the operation");
                 e->setType(t);
                 stack.pop_back();
@@ -372,6 +366,8 @@ Expression* Validator::visitExpr(Expression* e)
         case Tok_AND:
         case Tok_OR:
         case Tok_XOR:
+        case Tok_REM:
+        case Tok_REM_UN:
             if( expectN(2,e) )
             {
                 e->lhs = stackAt(-2);
@@ -421,8 +417,6 @@ Expression* Validator::visitExpr(Expression* e)
                     t = mdl->getBasicType(Type::INT64);
                 else if( isInt32(lhs) )
                     t = mdl->getBasicType(Type::INT32);
-                else if( isPointer(lhs) )
-                    t = mdl->getBasicType(Type::INTPTR);
                 else
                     error(e->pos, "the values on the stack are not compatible with the operation");
                 e->setType(t);
@@ -477,6 +471,7 @@ Expression* Validator::visitExpr(Expression* e)
             e->setType(mdl->getBasicType(Type::FLOAT64));
             stack.push_back(e);
             break;
+        // TODO: LDC_IP
         case Tok_LDNULL:
             e->setType(mdl->getBasicType(Type::NIL));
             stack.push_back(e);
@@ -529,13 +524,6 @@ Expression* Validator::visitExpr(Expression* e)
                 break;
             e->lhs = stackAt(-1);
             e->setType(mdl->getBasicType(Type::INT64));
-            stack.back() = e;
-            break;
-        case Tok_CONV_IP:
-            if( !expectN(1,e) )
-                break;
-            e->lhs = stackAt(-1);
-            e->setType(mdl->getBasicType(Type::INTPTR));
             stack.back() = e;
             break;
         case Tok_CONV_R4:
@@ -675,6 +663,7 @@ Expression* Validator::visitExpr(Expression* e)
         case Tok_LDELEM_I4:
         case Tok_LDELEM_I8:
         case Tok_LDELEM_IP:
+            // TODO IPP
         case Tok_LDELEM_R4:
         case Tok_LDELEM_R8:
         case Tok_LDELEM_U1:
@@ -1100,7 +1089,6 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
         return mdl->getBasicType(Type::INT64);
     case Tok_LDELEM_IP:
     case Tok_LDIND_IP:
-    case Tok_CONV_IP:
         return mdl->getBasicType(Type::INTPTR);
     case Tok_LDIND_IPP:
         return mdl->getBasicType(Type::DBLINTPTR);

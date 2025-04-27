@@ -394,9 +394,6 @@ void MilEmitter::conv_(MilEmitter::Type t)
     case U8:
         ops->append(MilOperation(IL_conv_u8));
         break;
-    case IntPtr:
-        ops->append(MilOperation(IL_conv_ip));
-        break;
     default:
         Q_ASSERT(false);
         break;
@@ -631,6 +628,10 @@ void MilEmitter::ldelem_(const MilQuali& typeRef)
             ops->append(MilOperation(IL_ldelem_u4));
         else if( equals( typeRef.second,  U8 ) )
             ops->append(MilOperation(IL_ldelem_u8));
+        else if( equals( typeRef.second,  IntPtr ) )
+            ops->append(MilOperation(IL_ldelem_ip));
+        else if( equals( typeRef.second,  IPP ) )
+            ops->append(MilOperation(IL_ldelem_ipp));
         else
             ops->append(MilOperation(IL_ldelem,QVariant::fromValue(typeRef)));
     }else
@@ -954,6 +955,10 @@ void MilEmitter::stelem_(const MilQuali& typeRef)
         ops->append(MilOperation(IL_stelem_r4));
     else if( equals( typeRef.second,  R8) )
         ops->append(MilOperation(IL_stelem_r8));
+    else if( equals( typeRef.second,  IntPtr) )
+        ops->append(MilOperation(IL_stelem_ip));
+    else if( equals( typeRef.second,  IPP) )
+        ops->append(MilOperation(IL_stelem_ipp));
     else
         ops->append(MilOperation(IL_stelem,QVariant::fromValue(typeRef)));
     delta(-3);

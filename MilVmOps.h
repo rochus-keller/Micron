@@ -22,7 +22,7 @@ OPDEF(sub_i4, NoOpArgs), OPDEF(sub_i8, NoOpArgs), OPDEF(sub_r4, NoOpArgs), OPDEF
 OPDEF(mul_i4, NoOpArgs), OPDEF(mul_i8, NoOpArgs), OPDEF(mul_r4, NoOpArgs), OPDEF(mul_r8, NoOpArgs),
 OPDEF(div_i4, NoOpArgs), OPDEF(div_i8, NoOpArgs), OPDEF(div_r4, NoOpArgs), OPDEF(div_r8, NoOpArgs),
 OPDEF(div_un_i4, NoOpArgs), OPDEF(div_un_i8, NoOpArgs),
-OPDEF(rem_i4, NoOpArgs), OPDEF(rem_i8, NoOpArgs), OPDEF(rem_r4, NoOpArgs), OPDEF(rem_r8, NoOpArgs),
+OPDEF(rem_i4, NoOpArgs), OPDEF(rem_i8, NoOpArgs),
 OPDEF(rem_un_i4, NoOpArgs), OPDEF(rem_un_i8, NoOpArgs),
 OPDEF(abs_i4, NoOpArgs), OPDEF(abs_i8, NoOpArgs), OPDEF(abs_r4, NoOpArgs), OPDEF(abs_r8, NoOpArgs),
 OPDEF(neg_i4, NoOpArgs), OPDEF(neg_i8, NoOpArgs), OPDEF(neg_r4, NoOpArgs), OPDEF(neg_r8, NoOpArgs),
@@ -75,7 +75,6 @@ OPDEF(ldfld_r4, OffArg), OPDEF(ldfld_r8, OffArg), OPDEF(ldfld_p, OffArg), OPDEF(
 OPDEF(ldflda, OffArg), OPDEF(ldfld_vt, OffSizeArgs),
 
 OPDEF(stfld_i1, OffArg), OPDEF(stfld_i2, OffArg), OPDEF(stfld_i4, OffArg), OPDEF(stfld_i8, OffArg),
-OPDEF(stfld_u1, OffArg), OPDEF(stfld_u2, OffArg), OPDEF(stfld_u4, OffArg), OPDEF(stfld_u8, OffArg),
 OPDEF(stfld_r4, OffArg), OPDEF(stfld_r8, OffArg), OPDEF(stfld_p, OffArg), OPDEF(stfld_pp, OffArg),
 OPDEF(stfld_vt, OffSizeArgs),
 
@@ -103,7 +102,6 @@ OPDEF(ldvar_r4, OffArg), OPDEF(ldvar_r8, OffArg), OPDEF(ldvar_p, OffArg), OPDEF(
 OPDEF(ldvara, OffArg), OPDEF(ldvar_vt, OffSizeArgs),
 
 OPDEF(stvar_i1, OffArg), OPDEF(stvar_i2, OffArg), OPDEF(stvar_i4, OffArg), OPDEF(stvar_i8, OffArg),
-OPDEF(stvar_u1, OffArg), OPDEF(stvar_u2, OffArg), OPDEF(stvar_u4, OffArg), OPDEF(stvar_u8, OffArg),
 OPDEF(stvar_r4, OffArg), OPDEF(stvar_r8, OffArg), OPDEF(stvar_p, OffArg), OPDEF(stvar_pp, OffArg),
 OPDEF(stvar_vt, OffSizeArgs),
 
@@ -123,7 +121,7 @@ OPDEF(brfalse_i4, JumpArg), OPDEF(brfalse_i8, JumpArg),
 OPDEF(ldproc, ProcArg), OPDEF(ldmeth, ProcArg),
 OPDEF(sizeof, 1), // TODO
 OPDEF(ptroff, NoOpArgs),
-OPDEF(nop, NoOpArgs), OPDEF(pop, SizeArg), OPDEF(dup, SizeArg),
+OPDEF(pop, SizeArg), OPDEF(dup, SizeArg),
 OPDEF(ret, SizeArg), OPDEF(ret_void, NoOpArgs),
 OPDEF(call, ProcArg), OPDEF(calli, NoOpArgs),
 OPDEF(alloc1, SizeArg), OPDEF(allocN, SizeArg), OPDEF(free, NoOpArgs),
@@ -134,7 +132,6 @@ OPDEF(vt_size, SizeArg), // suffix of ldarg_vt, starg_vt, ldloc_vt, stloc_vt, ld
 // TODO:
 OPDEF(newvla, NoOpArgs),
 OPDEF(callvi, NoOpArgs), OPDEF(callvirt, NoOpArgs),
-OPDEF(castptr, NoOpArgs), OPDEF(conv_ip, NoOpArgs),
 OPDEF(line, NoOpArgs),
 OPDEF(initobj, NoOpArgs), OPDEF(isinst, NoOpArgs),
 

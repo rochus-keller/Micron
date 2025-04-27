@@ -47,7 +47,6 @@ namespace Mil {
 			case Tok_CONV_I2: return "CONV_I2";
 			case Tok_CONV_I4: return "CONV_I4";
 			case Tok_CONV_I8: return "CONV_I8";
-			case Tok_CONV_IP: return "CONV_IP";
 			case Tok_CONV_R4: return "CONV_R4";
 			case Tok_CONV_R8: return "CONV_R8";
 			case Tok_CONV_U1: return "CONV_U1";
@@ -95,6 +94,7 @@ namespace Mil {
 			case Tok_LDC_I4_M1: return "LDC_I4_M1";
 			case Tok_LDC_I4_S: return "LDC_I4_S";
 			case Tok_LDC_I8: return "LDC_I8";
+			case Tok_LDC_IP: return "LDC_IP";
 			case Tok_LDC_R4: return "LDC_R4";
 			case Tok_LDC_R8: return "LDC_R8";
 			case Tok_LDELEM: return "LDELEM";
@@ -104,6 +104,7 @@ namespace Mil {
 			case Tok_LDELEM_I4: return "LDELEM_I4";
 			case Tok_LDELEM_I8: return "LDELEM_I8";
 			case Tok_LDELEM_IP: return "LDELEM_IP";
+			case Tok_LDELEM_IPP: return "LDELEM_IPP";
 			case Tok_LDELEM_R4: return "LDELEM_R4";
 			case Tok_LDELEM_R8: return "LDELEM_R8";
 			case Tok_LDELEM_U1: return "LDELEM_U1";
@@ -174,6 +175,7 @@ namespace Mil {
 			case Tok_STELEM_I4: return "STELEM_I4";
 			case Tok_STELEM_I8: return "STELEM_I8";
 			case Tok_STELEM_IP: return "STELEM_IP";
+			case Tok_STELEM_IPP: return "STELEM_IPP";
 			case Tok_STELEM_R4: return "STELEM_R4";
 			case Tok_STELEM_R8: return "STELEM_R8";
 			case Tok_STFLD: return "STFLD";
@@ -259,7 +261,6 @@ namespace Mil {
 			case Tok_CONV_I2: return "Tok_CONV_I2";
 			case Tok_CONV_I4: return "Tok_CONV_I4";
 			case Tok_CONV_I8: return "Tok_CONV_I8";
-			case Tok_CONV_IP: return "Tok_CONV_IP";
 			case Tok_CONV_R4: return "Tok_CONV_R4";
 			case Tok_CONV_R8: return "Tok_CONV_R8";
 			case Tok_CONV_U1: return "Tok_CONV_U1";
@@ -307,6 +308,7 @@ namespace Mil {
 			case Tok_LDC_I4_M1: return "Tok_LDC_I4_M1";
 			case Tok_LDC_I4_S: return "Tok_LDC_I4_S";
 			case Tok_LDC_I8: return "Tok_LDC_I8";
+			case Tok_LDC_IP: return "Tok_LDC_IP";
 			case Tok_LDC_R4: return "Tok_LDC_R4";
 			case Tok_LDC_R8: return "Tok_LDC_R8";
 			case Tok_LDELEM: return "Tok_LDELEM";
@@ -316,6 +318,7 @@ namespace Mil {
 			case Tok_LDELEM_I4: return "Tok_LDELEM_I4";
 			case Tok_LDELEM_I8: return "Tok_LDELEM_I8";
 			case Tok_LDELEM_IP: return "Tok_LDELEM_IP";
+			case Tok_LDELEM_IPP: return "Tok_LDELEM_IPP";
 			case Tok_LDELEM_R4: return "Tok_LDELEM_R4";
 			case Tok_LDELEM_R8: return "Tok_LDELEM_R8";
 			case Tok_LDELEM_U1: return "Tok_LDELEM_U1";
@@ -386,6 +389,7 @@ namespace Mil {
 			case Tok_STELEM_I4: return "Tok_STELEM_I4";
 			case Tok_STELEM_I8: return "Tok_STELEM_I8";
 			case Tok_STELEM_IP: return "Tok_STELEM_IP";
+			case Tok_STELEM_IPP: return "Tok_STELEM_IPP";
 			case Tok_STELEM_R4: return "Tok_STELEM_R4";
 			case Tok_STELEM_R8: return "Tok_STELEM_R8";
 			case Tok_STFLD: return "Tok_STFLD";
@@ -637,9 +641,6 @@ namespace Mil {
 									break;
 								case '8':
 									res = Tok_CONV_I8; i += 7;
-									break;
-								case 'P':
-									res = Tok_CONV_IP; i += 7;
 									break;
 								}
 								break;
@@ -939,6 +940,9 @@ namespace Mil {
 							case '8':
 								res = Tok_LDC_I8; i += 6;
 								break;
+							case 'P':
+								res = Tok_LDC_IP; i += 6;
+								break;
 							}
 							break;
 						case 'R':
@@ -979,7 +983,11 @@ namespace Mil {
 											res = Tok_LDELEM_I8; i += 9;
 											break;
 										case 'P':
-											res = Tok_LDELEM_IP; i += 9;
+											if( at(str,len,i+9) == 'P' ){
+												res = Tok_LDELEM_IPP; i += 10;
+											} else {
+												res = Tok_LDELEM_IP; i += 9;
+											}
 											break;
 										}
 										break;
@@ -1435,7 +1443,11 @@ namespace Mil {
 											res = Tok_STELEM_I8; i += 9;
 											break;
 										case 'P':
-											res = Tok_STELEM_IP; i += 9;
+											if( at(str,len,i+9) == 'P' ){
+												res = Tok_STELEM_IPP; i += 10;
+											} else {
+												res = Tok_STELEM_IP; i += 9;
+											}
 											break;
 										}
 										break;

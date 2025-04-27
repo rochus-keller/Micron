@@ -285,6 +285,7 @@ static void process(const QStringList& files, const QStringList& searchPaths, bo
         Mil::AstModel mdl;
         Mil::Project pro(&mdl);
         pro.setFiles(QStringList() << out.fileName());
+        out.flush();
 
         const bool result = pro.parse();
         if( result )

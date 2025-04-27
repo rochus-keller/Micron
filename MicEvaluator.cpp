@@ -1822,7 +1822,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             }
             Value v;
             v.mode = Value::Const;
-            v.val = set.to_ullong();
+            v.val = (quint64)set.to_ulong();
             v.type = e->getType();
             stack.push_back(v);
             break;

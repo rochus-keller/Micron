@@ -1708,10 +1708,6 @@ public:
                 convertTo(stack, MemSlot::U, 0);
                 pc++;
                 vmbreak;
-            vmcase(IL_conv_ip)
-                convertTo(stack, MemSlot::Pointer, 0);
-                pc++;
-                vmbreak;
             vmcase(IL_div)
                 rhs = stack.takeLast();
                 lhs = stack.takeLast();
