@@ -32,6 +32,19 @@ namespace Mil
         Interpreter(AstModel*);
         ~Interpreter();
 
+        typedef bool (*FfiProc)(void* args, void* ret);
+        static qint32 toI4(void* args, int off);
+        static qint64 toI8(void* args, int off);
+        static float toR4(void* args, int off);
+        static double toR8(void* args, int off);
+        static void* toP(void* args, int off);
+        static void retI4(void* ret, qint32 val);
+        static void retI8(void* ret, qint64 val);
+        static void retR4(void* ret, float val);
+        static void retR8(void* ret, double val);
+        static void retP(void* ret, void* val);
+        static int stackAligned(int off);
+
         // proc is either a procedure or a module
         bool precompile(Declaration* proc);
         bool dumpProc(QTextStream& out, Declaration* proc);

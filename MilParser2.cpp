@@ -163,7 +163,8 @@ static inline bool FIRST_Expression(int tt) {
 	case Tok_LDELEM_U1:
 	case Tok_LDC_I8:
 	case Tok_SHL:
-	case Tok_LDIND_I8:
+    case Tok_LDIND:
+    case Tok_LDIND_I8:
 	case Tok_LDC_R4:
 	case Tok_LDARGA:
 	case Tok_CGT:
@@ -258,7 +259,6 @@ static inline bool FIRST_Expression(int tt) {
 	case Tok_LDELEM_U2:
 	case Tok_CALL:
 	case Tok_LDOBJ:
-	case Tok_LDIND:
 	case Tok_LDIND_U8:
 	case Tok_LDLOC_3:
 	case Tok_LDARG_2:
@@ -282,7 +282,8 @@ static inline bool FIRST_ExpInstr(int tt) {
 	case Tok_LDELEM_U1:
 	case Tok_LDC_I8:
 	case Tok_SHL:
-	case Tok_LDIND_I8:
+    case Tok_LDIND:
+    case Tok_LDIND_I8:
 	case Tok_LDC_R4:
 	case Tok_LDARGA:
 	case Tok_CGT:
@@ -377,7 +378,6 @@ static inline bool FIRST_ExpInstr(int tt) {
 	case Tok_LDELEM_U2:
 	case Tok_CALL:
 	case Tok_LDOBJ:
-	case Tok_LDIND:
 	case Tok_LDIND_U8:
 	case Tok_LDLOC_3:
 	case Tok_LDARG_2:
@@ -508,7 +508,7 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_OR:
 	case Tok_LDOBJ:
 	case Tok_LDFLD:
-	case Tok_LDIND_I8:
+    case Tok_LDIND_I8:
 	case Tok_LDC_I4_7:
 	case Tok_CGT_UN:
 	case Tok_LDC_I8:
@@ -1827,7 +1827,7 @@ Expression* Parser2::ExpInstr() {
         expect(Tok_LDNULL, true, "ExpInstr");
     } else if( la.d_code == Tok_LDIND ) {
         expect(Tok_LDIND, true, "ExpInstr");
-        if( FIRST_qualident(la.d_type) )
+        if( FIRST_qualident(la.d_code) )
         {
             res->d = qualident();
             if( res->d && res->d->kind != Declaration::TypeDecl )
@@ -1852,6 +1852,7 @@ Expression* Parser2::ExpInstr() {
             expect(Tok_string, false, "ExpInstr");
             Constant* c = new Constant();
             c->kind = Constant::S;
+            cur.d_val = cur.d_val.mid(1, cur.d_val.size()-2); // dequote
             c->s = (char*)malloc( cur.d_val.size() + 1);
             strcpy(c->s, cur.d_val.constData());
             res->c = c;

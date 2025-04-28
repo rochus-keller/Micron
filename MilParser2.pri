@@ -9,7 +9,8 @@ SOURCES += \
     MilProject.cpp \
     MilValidator.cpp \
     MilCeeGen.cpp \
-    MilInterpreter.cpp
+    MilInterpreter.cpp \
+    $$PWD/runtime/MIC++.c
 
 HEADERS += \
     MilLexer.h \

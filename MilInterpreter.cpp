@@ -18,6 +18,10 @@
 */
 
 #include "MilInterpreter.h"
+#include "MicSymbol.h"
+extern "C" {
+#include "runtime/MIC+.h"
+}
 #include <QVector>
 #include <QtDebug>
 using namespace Mil;
@@ -71,9 +75,11 @@ struct Procedure
 {
     QList<Operation> ops;
     Declaration* decl;
+    Interpreter::FfiProc ffi;
     quint32 called; // number of calls
-    quint32 localsSize, fixArgSize, returnSize;
-    Procedure():decl(0),called(0),localsSize(0),fixArgSize(0),returnSize(0){}
+    quint32 localsSize;
+    quint32 fixArgSize, returnSize; // stackAligned
+    Procedure():decl(0),called(0),localsSize(0),fixArgSize(0),returnSize(0),ffi(0){}
 };
 
 struct MethRef
@@ -171,6 +177,121 @@ struct Frame
     }
 };
 
+static bool MIC_relop1(void* args, void* ret)
+{
+    // int MIC$$relop1(const char* l, const char* r, int op)
+    const int res = MIC$$relop1((char*)Interpreter::toP(args, 0),
+                                (char*)Interpreter::toP(args, sizeof(void*)),
+                                Interpreter::toI4(args, 2*Interpreter::stackAligned(sizeof(void*))));
+    Interpreter::retI4(ret, res);
+    return true;
+}
+
+static bool MIC_relop2(void* args, void* ret)
+{
+    // int MIC$$relop2(const char* lhs, char rhs, int op)
+    const int res = MIC$$relop2((char*)Interpreter::toP(args, 0),
+                                Interpreter::toI4(args, sizeof(void*)),
+                                Interpreter::toI4(args, 2*Interpreter::stackAligned(sizeof(void*))));
+    Interpreter::retI4(ret, res);
+    return true;
+}
+
+static bool MIC_relop3(void* args, void* ret)
+{
+    // int MIC$$relop3(char lhs, const char* rhs, int op)
+    const int res = MIC$$relop3(Interpreter::toI4(args, 0),
+                                (char*)Interpreter::toP(args, sizeof(int)),
+                                Interpreter::toI4(args, 2*Interpreter::stackAligned(sizeof(void*))));
+    Interpreter::retI4(ret, res);
+    return true;
+}
+
+static bool MIC_relop4(void* args, void* ret)
+{
+    // int MIC$$relop4(char lhs, char rhs, int op)
+    const int res = MIC$$relop4(Interpreter::toI4(args, 0),
+                                Interpreter::toI4(args, sizeof(void*)),
+                                Interpreter::toI4(args, 2*Interpreter::stackAligned(sizeof(void*))));
+    Interpreter::retI4(ret, res);
+    return true;
+}
+
+
+static bool MIC_SetDiv(void* args, void* ret)
+{
+    // uint32_t MIC$$SetDiv( uint32_t lhs, uint32_t rhs )
+    quint32 res = MIC$$SetDiv(Interpreter::toI4(args,0), Interpreter::toI4(args,8) );
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+static bool MIC_SetIn(void* args, void* ret)
+{
+    // uint32_t MIC$$SetIn( uint32_t lhs, uint32_t rhs )
+    quint32 res = MIC$$SetIn(Interpreter::toI4(args,0), Interpreter::toI4(args,8) );
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+static bool MIC_printI8(void* args, void* ret)
+{
+    MIC$$printI8(*(qint64*)args);
+    return true;
+}
+
+static bool MIC_printU8(void* args, void* ret)
+{
+    MIC$$printU8(*(qint64*)args);
+    return true;
+}
+
+static bool MIC_printF8(void* args, void* ret)
+{
+    MIC$$printF8(*(double*)args);
+    return true;
+}
+
+static bool MIC_printStr(void* args, void* ret)
+{
+    MIC$$printStr(*(char**)args);
+    return true;
+}
+
+static bool MIC_printCh(void* args, void* ret)
+{
+    MIC$$printCh(*(qint32*)args);
+    return true;
+}
+
+static bool MIC_printBool(void* args, void* ret)
+{
+    MIC$$printBool(*(qint32*)args);
+    return true;
+}
+
+static bool MIC_printSet(void* args, void* ret)
+{
+    MIC$$printBool(*(qint32*)args);
+    return true;
+}
+
+static bool MIC_strcopy(void* args, void* ret)
+{
+    // void MIC$$strcopy(char* lhs,char* rhs)
+    MIC$$strcopy((char*)Interpreter::toP(args,0),(char*)Interpreter::toP(args,8));
+    return true;
+}
+
+static bool MIC_assert(void* args, void* ret)
+{
+    // void MIC$$assert(uint8_t cond, uint32_t line, const char* file)
+    MIC$$assert(Interpreter::toI4(args,0),
+                Interpreter::toI4(args, 8),
+                (char*)Interpreter::toP(args,16));
+    return true;
+}
+
 struct Interpreter::Imp
 {
     AstModel* mdl;
@@ -181,6 +302,8 @@ struct Interpreter::Imp
     QByteArray moduleData;
     Procedure* curProc;
     QList< QList<int> > loopStack;
+    const char* MIC$;
+    QMap<const char*,FfiProc> micProcs;
 
     Imp(AstModel* mdl):mdl(mdl),curProc(0)
     {
@@ -189,6 +312,22 @@ struct Interpreter::Imp
         for(int i = 1; i < IL_NUM_OF_OPS; i++ )
             out << "vmcase(" << op_names[i] << ")" << endl;
 #endif
+        MIC$ = Mic::Symbol::getSymbol("MIC$").constData();
+        micProcs.insert(Mic::Symbol::getSymbol("relop1").constData(), MIC_relop1);
+        micProcs.insert(Mic::Symbol::getSymbol("relop2").constData(), MIC_relop2);
+        micProcs.insert(Mic::Symbol::getSymbol("relop3").constData(), MIC_relop3);
+        micProcs.insert(Mic::Symbol::getSymbol("relop4").constData(), MIC_relop4);
+        micProcs.insert(Mic::Symbol::getSymbol("SetDiv").constData(), MIC_SetDiv);
+        micProcs.insert(Mic::Symbol::getSymbol("SetIn").constData(), MIC_SetIn);
+        micProcs.insert(Mic::Symbol::getSymbol("printI8").constData(), MIC_printI8);
+        micProcs.insert(Mic::Symbol::getSymbol("printU8").constData(), MIC_printU8);
+        micProcs.insert(Mic::Symbol::getSymbol("printF8").constData(), MIC_printF8);
+        micProcs.insert(Mic::Symbol::getSymbol("printStr").constData(), MIC_printStr);
+        micProcs.insert(Mic::Symbol::getSymbol("printCh").constData(), MIC_printCh);
+        micProcs.insert(Mic::Symbol::getSymbol("printBool").constData(), MIC_printBool);
+        micProcs.insert(Mic::Symbol::getSymbol("printSet").constData(), MIC_printSet);
+        micProcs.insert(Mic::Symbol::getSymbol("strcopy").constData(), MIC_strcopy);
+        micProcs.insert(Mic::Symbol::getSymbol("assert").constData(), MIC_assert);
     }
 
     bool translateModule(Declaration* m)
@@ -313,6 +452,11 @@ struct Interpreter::Imp
         proc.ops[pc].val = proc.ops.size() - pc - 1;
     }
 
+    static inline int stackAligned(int off)
+    {
+        return AstModel::align(off, Frame::stackAlig );
+    }
+
     bool translateInit(Procedure& proc);
     bool translateProc(Procedure& proc);
     bool translateStatSeq(Procedure& proc, Statement* s);
@@ -331,6 +475,71 @@ Interpreter::Interpreter(AstModel* mdl)
 Interpreter::~Interpreter()
 {
     delete imp;
+}
+
+qint32 Interpreter::toI4(void* args, int off)
+{
+    qint32 res;
+    memcpy(&res, args + Imp::stackAligned(off), sizeof(res));
+    return res;
+}
+
+qint64 Interpreter::toI8(void* args, int off)
+{
+    qint64 res;
+    memcpy(&res, args + Imp::stackAligned(off), sizeof(res));
+    return res;
+}
+
+float Interpreter::toR4(void* args, int off)
+{
+    float res;
+    memcpy(&res, args + Imp::stackAligned(off), sizeof(res));
+    return res;
+}
+
+double Interpreter::toR8(void* args, int off)
+{
+    double res;
+    memcpy(&res, args + Imp::stackAligned(off), sizeof(res));
+    return res;
+}
+
+void*Interpreter::toP(void* args, int off)
+{
+    void* res;
+    memcpy(&res, args + Imp::stackAligned(off), sizeof(res));
+    return res;
+}
+
+void Interpreter::retI4(void* ret, qint32 val)
+{
+    memcpy(ret, &val, sizeof(qint32));
+}
+
+void Interpreter::retI8(void* ret, qint64 val)
+{
+    memcpy(ret, &val, sizeof(qint64));
+}
+
+void Interpreter::retR4(void* ret, float val)
+{
+    memcpy(ret, &val, sizeof(float));
+}
+
+void Interpreter::retR8(void* ret, double val)
+{
+    memcpy(ret, &val, sizeof(double));
+}
+
+void Interpreter::retP(void* ret, void* val)
+{
+    memcpy(ret, &val, sizeof(void*));
+}
+
+int Interpreter::stackAligned(int off)
+{
+    return Imp::stackAligned(off);
 }
 
 bool Interpreter::precompile(Declaration* proc)
@@ -381,7 +590,7 @@ bool Interpreter::dumpProc(QTextStream& out, Declaration* proc)
             out << " " << imp->doubles[p->ops[pc].val];
             break;
         case StrArg:
-            out << " " << imp->strings[p->ops[pc].val];
+            out << " \"" << imp->strings[p->ops[pc].val] << "\"";
             break;
         case ProcArg:
             out << " " << imp->procs[p->ops[pc].val].decl->toPath();
@@ -506,14 +715,30 @@ bool Interpreter::Imp::translateProc(Procedure& proc)
         proc.localsSize = locals.last()->off + locals.last()->getType()->getByteSize(sizeof(void*));
     const DeclList params = proc.decl->getParams();
     if( !params.isEmpty() )
-        proc.fixArgSize = params.last()->off + params.last()->getType()->getByteSize(sizeof(void*));
+        proc.fixArgSize = stackAligned(params.last()->off + params.last()->getType()->getByteSize(sizeof(void*)));
     if( proc.decl->getType() )
-        proc.returnSize = proc.decl->getType()->getByteSize(sizeof(void*));
-    Statement* s = proc.decl->body;
-    curProc = &proc;
-    const bool res = translateStatSeq(proc, s);
-    curProc = 0;
-    return res;
+        proc.returnSize = stackAligned(proc.decl->getType()->getByteSize(sizeof(void*)));
+    if( proc.decl->extern_ )
+    {
+        Declaration* module = proc.decl->getModule();
+        if( module->name.constData() == MIC$ )
+        {
+            proc.ffi = micProcs.value(proc.decl->name.constData());
+            if( proc.ffi == 0 )
+            {
+                qCritical() << "cannot find external implementation for" << proc.decl->toPath();
+                return false;
+            }
+        }
+        return true;
+    }else
+    {
+        Statement* s = proc.decl->body;
+        curProc = &proc;
+        const bool res = translateStatSeq(proc, s);
+        curProc = 0;
+        return res;
+    }
 }
 
 bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
@@ -848,6 +1073,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
     while(e)
     {
         Type* t = deref(e->getType());
+        Type* lhsT = deref(e->lhs ? e->lhs->getType() : 0);
         switch(e->kind)
         {
         case Tok_ADD:
@@ -1063,109 +1289,109 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             emitOp(proc, IL_ldmeth, findProc(e->d));
             break;
         case Tok_CONV_I1:
-            if( t->isInt32OnStack() )
+            if( lhsT->isInt32OnStack() )
                 emitOp(proc, IL_conv_i1_i4);
-            else if( t->isInt64())
+            else if( lhsT->isInt64())
                 emitOp(proc, IL_conv_i1_i8);
-            else if(t->kind == Type::FLOAT32)
+            else if(lhsT->kind == Type::FLOAT32)
                 emitOp(proc, IL_conv_i1_r4);
-            else if(t->kind == Type::FLOAT64)
+            else if(lhsT->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_i1_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CONV_I2:
-            if( t->isInt32OnStack() )
+            if( lhsT->isInt32OnStack() )
                 emitOp(proc, IL_conv_i2_i4);
-            else if( t->isInt64())
+            else if( lhsT->isInt64())
                 emitOp(proc, IL_conv_i2_i8);
-            else if(t->kind == Type::FLOAT32)
+            else if(lhsT->kind == Type::FLOAT32)
                 emitOp(proc, IL_conv_i2_r4);
-            else if(t->kind == Type::FLOAT64)
+            else if(lhsT->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_i2_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CONV_I4:
-            if( t->isInt64())
+            if( lhsT->isInt64())
                 emitOp(proc, IL_conv_i4_i8);
-            else if(t->kind == Type::FLOAT32)
+            else if(lhsT->kind == Type::FLOAT32)
                 emitOp(proc, IL_conv_i4_r4);
-            else if(t->kind == Type::FLOAT64)
+            else if(lhsT->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_i4_r8);
-            else if( !t->isInt32OnStack() )
+            else if( !lhsT->isInt32OnStack() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_I8:
-            if( t->isInt32OnStack() )
+            if( lhsT->isInt32OnStack() )
                 emitOp(proc, IL_conv_i8_i4);
-            else if(t->kind == Type::FLOAT32)
+            else if(lhsT->kind == Type::FLOAT32)
                 emitOp(proc, IL_conv_i8_r4);
-            else if(t->kind == Type::FLOAT64)
+            else if(lhsT->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_i8_r8);
-            else if( !t->isInt64() )
+            else if( !lhsT->isInt64() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_R4:
-            if( t->isInt32OnStack() )
+            if( lhsT->isInt32OnStack() )
                 emitOp(proc, IL_conv_r4_i4);
-            else if(t->isInt64() )
+            else if(lhsT->isInt64() )
                 emitOp(proc, IL_conv_r4_i8);
-            else if(t->kind == Type::FLOAT64)
+            else if(lhsT->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_r4_r8);
-            else if( !t->isFloat() )
+            else if( !lhsT->isFloat() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_R8:
-            if( t->isInt32OnStack() )
+            if( lhsT->isInt32OnStack() )
                 emitOp(proc, IL_conv_r8_i4);
-            else if(t->kind == Type::FLOAT32)
+            else if(lhsT->kind == Type::FLOAT32)
                 emitOp(proc, IL_conv_r8_r4);
-            else if( t->isInt64() )
+            else if( lhsT->isInt64() )
                 emitOp(proc, IL_conv_r8_i8);
-            else if( !t->isFloat() )
+            else if( !lhsT->isFloat() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_U1:
-            if( t->isInt32OnStack() )
+            if( lhsT->isInt32OnStack() )
                 emitOp(proc, IL_conv_u1_i4);
-            else if( t->isInt64())
+            else if( lhsT->isInt64())
                 emitOp(proc, IL_conv_u1_i8);
-            else if(t->kind == Type::FLOAT32)
+            else if(lhsT->kind == Type::FLOAT32)
                 emitOp(proc, IL_conv_u1_r4);
-            else if(t->kind == Type::FLOAT64)
+            else if(lhsT->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_u1_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CONV_U2:
-            if( t->isInt32OnStack() )
+            if( lhsT->isInt32OnStack() )
                 emitOp(proc, IL_conv_u2_i4);
-            else if( t->isInt64())
+            else if( lhsT->isInt64())
                 emitOp(proc, IL_conv_u2_i8);
-            else if(t->kind == Type::FLOAT32)
+            else if(lhsT->kind == Type::FLOAT32)
                 emitOp(proc, IL_conv_u2_r4);
-            else if(t->kind == Type::FLOAT64)
+            else if(lhsT->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_u2_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CONV_U4:
-            if( t->isInt64() )
+            if( lhsT->isInt64() )
                 emitOp(proc, IL_conv_u4_i8);
-            else if(t->kind == Type::FLOAT32)
+            else if(lhsT->kind == Type::FLOAT32)
                 emitOp(proc, IL_conv_u4_r4);
-            else if(t->kind == Type::FLOAT64)
+            else if(lhsT->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_u4_r8);
-            else if( !t->isInt32OnStack() )
+            else if( !lhsT->isInt32OnStack() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_U8:
-            if( t->isInt32OnStack() )
+            if( lhsT->isInt32OnStack() )
                 emitOp(proc, IL_conv_u8_i4);
-            else if(t->kind == Type::FLOAT32)
+            else if(lhsT->kind == Type::FLOAT32)
                 emitOp(proc, IL_conv_u8_r4);
-            else if(t->kind == Type::FLOAT64)
+            else if(lhsT->kind == Type::FLOAT64)
                 emitOp(proc, IL_conv_u8_r8);
             else
                 Q_ASSERT(false);
@@ -1645,7 +1871,7 @@ bool Interpreter::Imp::run(quint32 proc)
 
 #define VM_VAR_ADDR (moduleData.data()+frame->proc->ops[pc].val)
 
-#define VM_ARG_ADDR (frame->outer->stack.data()-frame->proc->fixArgSize+frame->proc->ops[pc].val)
+#define VM_ARG_ADDR (frame->outer->stack.data()+frame->outer->sp-frame->proc->fixArgSize+frame->proc->ops[pc].val)
 
 #define VM_LDELEM(etype, totype) { const quint32 i = frame->popI4(); etype* a = (etype*)frame->popP(); \
     frame->push##totype(a[i]); pc++; }
@@ -2022,7 +2248,7 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(ldarg_pp)
                 break; // TODO
         vmcase(ldarg_vt)
-                frame->push(VM_ARG_ADDR, AstModel::align(frame->proc->ops[pc+1].val,8));
+                frame->push(VM_ARG_ADDR, stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(ldarga)
@@ -2061,7 +2287,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 break; // TODO
         vmcase(starg_vt)
                 frame->copy(VM_ARG_ADDR, // to
-                            AstModel::align(frame->proc->ops[pc+1].val, Frame::stackAlig), // size on stack
+                            stackAligned(frame->proc->ops[pc+1].val), // size on stack
                             frame->proc->ops[pc+1].val); // true size
                 pc += 2;
             vmbreak;
@@ -2107,7 +2333,7 @@ bool Interpreter::Imp::execute(Frame* frame)
             } vmbreak;
         vmcase(ldelem_vt) {
                 const quint32 i = frame->popI4(); quint8* a = (quint8*)frame->popP();
-                frame->push(a + i * frame->proc->ops[pc].val, AstModel::align(frame->proc->ops[pc].val,8));
+                frame->push(a + i * frame->proc->ops[pc].val, stackAligned(frame->proc->ops[pc].val));
                 pc++;
             } vmbreak;
         vmcase(stelem_i1)
@@ -2134,7 +2360,7 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(stelem_pp)
                 break; // TODO
         vmcase(stelem_vt) {
-                const int lenonstack = AstModel::align(frame->proc->ops[pc].val,8);
+                const int lenonstack = stackAligned(frame->proc->ops[pc].val);
                 const int etlen = frame->proc->ops[pc].val;
                 quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
                 const quint32 i = *(quint32*)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
@@ -2184,7 +2410,7 @@ bool Interpreter::Imp::execute(Frame* frame)
             } vmbreak;
         vmcase(ldfld_vt) {
                 quint8* obj = (quint8*)frame->popP();
-                frame->push( obj + frame->proc->ops[pc].val, AstModel::align(frame->proc->ops[pc+1].val,8) );
+                frame->push( obj + frame->proc->ops[pc].val, stackAligned(frame->proc->ops[pc+1].val) );
                 pc += 2;
             } vmbreak;
         vmcase(stfld_i1)
@@ -2211,7 +2437,7 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(stfld_pp)
                 break; // TODO
         vmcase(stfld_vt) {
-                const int lenonstack = AstModel::align(frame->proc->ops[pc+1].val,8);
+                const int lenonstack = stackAligned(frame->proc->ops[pc+1].val);
                 const int flen = frame->proc->ops[pc+1].val;
                 quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
                 quint8* obj = (quint8*)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
@@ -2255,7 +2481,7 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(ldind_pp)
                 break; // TODO
         vmcase(ldind_vt)
-                frame->push((void*)frame->popP(), AstModel::align(frame->proc->ops[pc].val,8)); pc++;
+                frame->push((void*)frame->popP(), stackAligned(frame->proc->ops[pc].val)); pc++;
             vmbreak;
         vmcase(stind_i1)
                 VM_STIND(qint8, I4)
@@ -2281,7 +2507,7 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(stind_pp)
                 break; // TODO
         vmcase(stind_vt) {
-                const int lenonstack = AstModel::align(frame->proc->ops[pc].val,8);
+                const int lenonstack = stackAligned(frame->proc->ops[pc].val);
                 const int len = frame->proc->ops[pc].val;
                 quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
                 quint8* ptr = (quint8*)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
@@ -2340,7 +2566,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldloc_vt)
-                frame->push(VM_LOCAL_ADDR, AstModel::align(frame->proc->ops[pc+1].val,8));
+                frame->push(VM_LOCAL_ADDR, stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(stloc_i1)
@@ -2375,7 +2601,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 vmbreak; // TODO
         vmcase(stloc_vt)
                 frame->copy(VM_LOCAL_ADDR, // to
-                            AstModel::align(frame->proc->ops[pc+1].val, Frame::stackAlig), // size on stack
+                            stackAligned(frame->proc->ops[pc+1].val), // size on stack
                             frame->proc->ops[pc+1].val); // true size
                 pc += 2;
             vmbreak;
@@ -2430,7 +2656,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldvar_vt)
-                frame->push(VM_VAR_ADDR, AstModel::align(frame->proc->ops[pc+1].val,8));
+                frame->push(VM_VAR_ADDR, stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(stvar_i1)
@@ -2465,7 +2691,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 break; // TODO
         vmcase(stvar_vt)
                 frame->copy(VM_VAR_ADDR, // to
-                            AstModel::align(frame->proc->ops[pc+1].val, Frame::stackAlig), // size on stack
+                            stackAligned(frame->proc->ops[pc+1].val), // size on stack
                             frame->proc->ops[pc+1].val); // true size
                 pc += 2;
             vmbreak;
@@ -2570,18 +2796,18 @@ bool Interpreter::Imp::execute(Frame* frame)
                 MethRef m;
                 m.obj = frame->popP();
                 m.proc = &procs[frame->proc->ops[pc].val];
-                frame->push(&m, AstModel::align(sizeof(MethRef),8));
+                frame->push(&m, stackAligned(sizeof(MethRef)));
                 pc++;
             }vmbreak;
         vmcase(sizeof)
         vmcase(ptroff)
                 break; // TODO
         vmcase(pop)
-                frame->pop(AstModel::align(frame->proc->ops[pc].val,8));
+                frame->pop(stackAligned(frame->proc->ops[pc].val));
                 pc++;
              vmbreak;
         vmcase(dup) {
-                const int len = AstModel::align(frame->proc->ops[pc].val,8);
+                const int len = stackAligned(frame->proc->ops[pc].val);
                 frame->push(frame->stack.data()+frame->sp-len, len);
                 pc++;
              }vmbreak;
@@ -2628,16 +2854,32 @@ bool Interpreter::Imp::execute(Frame* frame)
 
 bool Interpreter::Imp::call(Frame* frame, Procedure* proc)
 {
-    // TODO: built-ins
     Frame newframe;
     newframe.proc = proc;
     newframe.outer = frame;
-    newframe.locals.resize(newframe.proc->localsSize);
-    newframe.stack.resize(1024);
-    const bool res = execute(&newframe);
+    bool res;
+    if( proc->ffi )
+    {
+        newframe.retval.resize(newframe.proc->returnSize);
+        char* retval = 0;
+        if( !newframe.retval.isEmpty() )
+            retval = newframe.retval.data();
+        char* args = 0;
+        if( frame && proc->fixArgSize )
+            args = frame->stack.data() + frame->sp - proc->fixArgSize;
+        res = proc->ffi(args, retval);
+    }else
+    {
+        newframe.locals.resize(newframe.proc->localsSize);
+        newframe.stack.resize(1024);
+        res = execute(&newframe);
+    }
     if( frame && newframe.proc->fixArgSize )
-        frame->pop( AstModel::align(newframe.proc->fixArgSize, 8) );
+        frame->pop( newframe.proc->fixArgSize );
     if( frame && newframe.proc->returnSize > 0 )
+    {
+        Q_ASSERT( stackAligned(newframe.proc->returnSize) == newframe.stack.size());
         frame->push(newframe.stack.data(), newframe.stack.size());
+    }
     return res;
 }
