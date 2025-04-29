@@ -194,6 +194,7 @@ namespace Mil {
 			case Tok_STLOC_2: return "STLOC_2";
 			case Tok_STLOC_3: return "STLOC_3";
 			case Tok_STLOC_S: return "STLOC_S";
+			case Tok_STRCPY: return "STRCPY";
 			case Tok_STRUCT: return "STRUCT";
 			case Tok_STVAR: return "STVAR";
 			case Tok_SUB: return "SUB";
@@ -408,6 +409,7 @@ namespace Mil {
 			case Tok_STLOC_2: return "Tok_STLOC_2";
 			case Tok_STLOC_3: return "Tok_STLOC_3";
 			case Tok_STLOC_S: return "Tok_STLOC_S";
+			case Tok_STRCPY: return "Tok_STRCPY";
 			case Tok_STRUCT: return "Tok_STRUCT";
 			case Tok_STVAR: return "Tok_STVAR";
 			case Tok_SUB: return "Tok_SUB";
@@ -1549,12 +1551,21 @@ namespace Mil {
 					}
 					break;
 				case 'R':
-					if( at(str,len,i+3) == 'U' ){
+					switch( at(str,len,i+3) ){
+					case 'C':
+						if( at(str,len,i+4) == 'P' ){
+							if( at(str,len,i+5) == 'Y' ){
+								res = Tok_STRCPY; i += 6;
+							}
+						}
+						break;
+					case 'U':
 						if( at(str,len,i+4) == 'C' ){
 							if( at(str,len,i+5) == 'T' ){
 								res = Tok_STRUCT; i += 6;
 							}
 						}
+						break;
 					}
 					break;
 				case 'V':

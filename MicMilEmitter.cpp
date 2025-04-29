@@ -1038,6 +1038,13 @@ void MilEmitter::stloc_(quint16 loc)
     delta(-1);
 }
 
+void MilEmitter::strcpy_()
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(MilOperation(IL_strcpy));
+    delta(-2);
+}
+
 void MilEmitter::stind_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );

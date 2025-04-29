@@ -271,6 +271,7 @@ namespace Mic
         void stind_( Type );
         void stind_(const MilQuali& typeRef); // was CIL stobj
         void stloc_(quint16);
+        void strcpy_();
         void stvar_(const MilQuali& memberRef); // CIL stsfld
         void sub_();
         void switch_();

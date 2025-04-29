@@ -56,6 +56,6 @@ const char* s_opName[] =
     "stelem_r4", "stelem_r8", "stelem_ip", "stelem_ipp", "stfld",
     "stind_i1", "stind_i2", "stind_i4", "stind_i8", "stind_r4", "stind_r8", "stind_ip", "stind_ipp",
     "stloc", "stloc_s", "stloc_0", "stloc_1", "stloc_2", "stloc_3",
-    "stind", "stvar", "switch", "case", "while", "do"
+    "stind", "strcpy", "stvar", "switch", "case", "while", "do"
 };
 }

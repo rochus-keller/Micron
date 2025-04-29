@@ -3,20 +3,19 @@ module MIC$
 type _$1 = array of char
 type _$2 = pointer to _$1
 
-proc relop1(lhs, rhs: _$2; op: i4): u4 extern // 1
-proc relop2(lhs: _$2; rhs: char; op: i4): u4 extern // 2
-proc relop3(lhs: char; rhs: _$2; op: i4): u4 extern // 3
-proc relop4(lhs, rhs: char; op: i4): u4 extern // 4
-proc SetDiv( lhs, rhs: u4 ): u4 extern // 5
-proc SetIn( lhs, rhs: u4 ): u4 extern // 6
-proc printI8(i: i8) extern // 7
-proc printU8(u: u8) extern // 8
-proc printF8(f: r8) extern // 9
-proc printStr(s: _$2) extern // 10
-proc printCh(c: char) extern // 11
-proc printBool(b: u1) extern // 12
-proc printSet(s: u4) extern // 13
-proc strcopy(lhs, rhs: _$2) extern // 14
-proc assert(cond: u1; line: u4; file: _$2) extern // 15
+proc relop1(lhs, rhs: _$2; op: i4): u4 extern
+proc relop2(lhs: _$2; rhs: char; op: i4): u4 extern
+proc relop3(lhs: char; rhs: _$2; op: i4): u4 extern
+proc relop4(lhs, rhs: char; op: i4): u4 extern
+proc SetDiv( lhs, rhs: u4 ): u4 extern
+proc SetIn( lhs, rhs: u4 ): u4 extern
+proc printI8(i: i8) extern
+proc printU8(u: u8) extern
+proc printF8(f: r8) extern
+proc printStr(s: _$2) extern
+proc printCh(c: char) extern
+proc printBool(b: u1) extern
+proc printSet(s: u4) extern
+proc assert(cond: u1; line: u4; file: _$2) extern
 
 end MIC$

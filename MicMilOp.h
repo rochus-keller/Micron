@@ -59,7 +59,7 @@ enum IL_op
     IL_stelem_r4, IL_stelem_r8, IL_stelem_ip, IL_stelem_ipp, IL_stfld,
     IL_stind_i1, IL_stind_i2, IL_stind_i4, IL_stind_i8, IL_stind_r4, IL_stind_r8, IL_stind_ip, IL_stind_ipp,
     IL_stloc, IL_stloc_s, IL_stloc_0, IL_stloc_1, IL_stloc_2, IL_stloc_3,
-    IL_stind, IL_stvar, IL_switch, IL_case, IL_while, IL_do,
+    IL_stind, IL_strcpy, IL_stvar, IL_switch, IL_case, IL_while, IL_do,
     IL_NUM_OF_OPS
 }; // Update s_opName !!!
 

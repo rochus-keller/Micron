@@ -91,11 +91,6 @@ void MIC$$printSet(uint32_t s)
 	printf("%x", s);
 }
 
-void MIC$$strcopy(char* lhs,char* rhs)
-{
-	strcpy(lhs,rhs);
-}
-
 void MIC$$assert(uint8_t cond, uint32_t line, const char* file)
 {
 	if(cond)

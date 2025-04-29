@@ -153,14 +153,7 @@ bool Evaluator::prepareRhs(Type* lhs)
         return false;
     }
 
-    // make sure also a string literal is put on the stack by value
-    if( lhs && lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR &&
-            rhs.type->kind == Type::String )
-    {   // NOTE: already checked that lhs is large enough for rhs
-        Q_ASSERT( lhs->len >= quint32(dequote(rhs.val.toByteArray()).size()) );
-        assureTopOnMilStack();
-        out->ldind_(MilQuali());
-    }else if( lhs && lhs->kind == Type::CHAR &&
+    if( lhs && lhs->kind == Type::CHAR &&
               rhs.type->kind == Type::String )
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
     else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Procedure )
@@ -213,7 +206,11 @@ bool Evaluator::assign()
             if( rhs.type->kind == Type::Array && rhs.type->getType()->kind == Type::CHAR )
             {
                 Q_ASSERT(rhs.ref);
-                out->call_(coreName("strcopy"),2);
+                out->strcpy_();
+                return err.isEmpty();
+            }else if( rhs.type->kind == Type::String )
+            {
+                out->strcpy_();
                 return err.isEmpty();
             }
         } // else copy memory block TODO

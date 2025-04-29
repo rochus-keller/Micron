@@ -1329,15 +1329,6 @@ public:
             Q_ASSERT(args.size()==1);
             out << QByteArray::number(args.first().u,2).constData() << flush;
             break;
-        case 14: // strcopy
-            Q_ASSERT(args.size()==2 && args.first().p && args.last().p );
-            for( int i = 0; ; i++ )
-            {
-                args.first().p[i] = args.last().p[i];
-                if( args.last().p[i].u == 0 )
-                    break;
-            }
-            break;
         case 15: // assert
             Q_ASSERT(args.size()==3);
             if( args.first().u == 0 )
@@ -2646,8 +2637,6 @@ MilInterpreter::MilInterpreter(MilLoader* l)
     imp->intrinsics.insert(name.constData(), createIntrinsic(name,12,1,false));
     name = Token::getSymbol("printSet");
     imp->intrinsics.insert(name.constData(), createIntrinsic(name,13,1,false));
-    name = Token::getSymbol("strcopy");
-    imp->intrinsics.insert(name.constData(), createIntrinsic(name,14,1,false));
     name = Token::getSymbol("assert");
     imp->intrinsics.insert(name.constData(), createIntrinsic(name,15,3,false));
 }

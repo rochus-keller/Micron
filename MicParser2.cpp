@@ -797,9 +797,13 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs) const
     if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl || rhs->kind == Expression::MethDecl )
         return assigCompat(lhs, rhs->val.value<Declaration*>() );
 
+    // Tv is a non-open array of CHAR, Te is a string literal, or array of CHAR;
     if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
             rhs->isLiteral() && rhs->getType()->kind == Type::String)
         return strlen(rhs->getLiteralValue().toByteArray().constData()) < lhs->len;
+    if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
+             rhs->kind == Type::Array && rhs->getType()->kind == Type::CHAR )
+        return true;
 
     // A string of length 1 can be used wherever a character constant is allowed and vice versa.
     if( lhs->kind == Type::CHAR && rhs->getType()->kind == Type::String )

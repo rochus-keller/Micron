@@ -33,6 +33,7 @@ enum OpArgCode {
     IntArg,
     FloatArg,
     StrArg,
+    ByteArrayArg,
     ProcArg,
     JumpArg,
     OffSizeArgs
@@ -276,13 +277,6 @@ static bool MIC_printSet(void* args, void* ret)
     return true;
 }
 
-static bool MIC_strcopy(void* args, void* ret)
-{
-    // void MIC$$strcopy(char* lhs,char* rhs)
-    MIC$$strcopy((char*)Interpreter::toP(args,0),(char*)Interpreter::toP(args,8));
-    return true;
-}
-
 static bool MIC_assert(void* args, void* ret)
 {
     // void MIC$$assert(uint8_t cond, uint32_t line, const char* file)
@@ -296,6 +290,7 @@ struct Interpreter::Imp
 {
     AstModel* mdl;
     QList<QByteArray> strings;
+    QList<QByteArray> objects;
     QList<double> doubles;
     QList<qint64> ints;
     QList<Procedure> procs;
@@ -326,7 +321,6 @@ struct Interpreter::Imp
         micProcs.insert(Mic::Symbol::getSymbol("printCh").constData(), MIC_printCh);
         micProcs.insert(Mic::Symbol::getSymbol("printBool").constData(), MIC_printBool);
         micProcs.insert(Mic::Symbol::getSymbol("printSet").constData(), MIC_printSet);
-        micProcs.insert(Mic::Symbol::getSymbol("strcopy").constData(), MIC_strcopy);
         micProcs.insert(Mic::Symbol::getSymbol("assert").constData(), MIC_assert);
     }
 
@@ -425,6 +419,115 @@ struct Interpreter::Imp
         {
             id = strings.size();
             strings.append(str);
+        }
+        return id;
+    }
+
+    void render(char* data, quint32 off, Type* t, Constant* c)
+    {
+        switch(c->kind)
+        {
+        case Constant::D:
+            if( t->kind == Type::FLOAT32 )
+            {
+                float tmp = c->d;
+                memcpy(data+off, &tmp, sizeof(double));
+            }else
+            {
+                Q_ASSERT(t->kind == Type::FLOAT64);
+                memcpy(data+off, &c->d, sizeof(double));
+            }
+            break;
+        case Constant::I:
+            switch(t->kind)
+            {
+            case Type::BOOL:
+            case Type::CHAR:
+            case Type::UINT8:
+            case Type::INT8: {
+                    qint8 tmp = c->i;
+                    *(data+off) = tmp;
+                    break;
+                }
+            case Type::UINT16:
+            case Type::INT16: {
+                    qint16 tmp = c->i;
+                    memcpy(data+off, &tmp, sizeof(qint16));
+                    break;
+                }
+            case Type::UINT32:
+            case Type::INT32: {
+                    qint32 tmp = c->i;
+                    memcpy(data+off, &tmp, sizeof(qint32));
+                    break;
+                }
+            case Type::UINT64:
+            case Type::INT64:
+                memcpy(data+off, &c->i, sizeof(qint64));
+                break;
+            default:
+                Q_ASSERT(false);
+            }
+            break;
+        case Constant::S:
+            Q_ASSERT(t->kind == Type::Array && deref(t->getType())->kind == Type::CHAR && t->len);
+            strncpy(data+off, c->s, t->len-1);
+            *(data+off+t->len-1) = 0;
+            break;
+        case Constant::B:
+            Q_ASSERT(t->kind == Type::Array && deref(t->getType())->kind == Type::UINT8 &&
+                     t->len == c->b->len);
+            memcpy(data+off, c->b, t->len);
+            break;
+        case Constant::R:
+            Q_ASSERT(c->r->kind == Declaration::ConstDecl);
+            render(data, off, t, c->r->c);
+            break;
+        case Constant::C:
+            if( c->c->type == 0 )
+                c->c->type = t;
+            render(data, off, c->c);
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+    }
+
+    void render(char* data, quint32 start, ComponentList* cl )
+    {
+        Type* t = deref(cl->type);
+        if( t->kind == Type::Array )
+        {
+            Type* et = deref(t->getType());
+            int off = start;
+            Component* c = cl->c;
+            while( c )
+            {
+                render(data, off, et, c->c);
+                off += et->getByteSize(sizeof(void*));
+                c = c->next;
+            }
+        }
+        // else TODO
+    }
+
+    quint32 addObject(Constant* c)
+    {
+        QByteArray obj;
+        if( c->kind == Constant::B )
+            obj = QByteArray::fromRawData((const char*)c->b->b, c->b->len);
+        else
+        {
+            ComponentList* cl = c->c;
+            Q_ASSERT( cl->type );
+            obj.resize(deref(cl->type)->getByteSize(sizeof(void*)));
+            render(obj.data(), 0, cl);
+        }
+        int id = objects.indexOf(obj);
+        if( id == -1 )
+        {
+            id = objects.size();
+            objects.append(obj);
         }
         return id;
     }
@@ -591,6 +694,9 @@ bool Interpreter::dumpProc(QTextStream& out, Declaration* proc)
             break;
         case StrArg:
             out << " \"" << imp->strings[p->ops[pc].val] << "\"";
+            break;
+        case ByteArrayArg:
+            out << " $" << imp->objects[p->ops[pc].val].toHex().left(40) << " (" << imp->objects[p->ops[pc].val].size() << ")";
             break;
         case ProcArg:
             out << " " << imp->procs[p->ops[pc].val].decl->toPath();
@@ -1050,6 +1156,9 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
         case Tok_POP:
             emitOp(proc, IL_pop, s->args->getType()->getByteSize(sizeof(void*)));
             break;
+        case Tok_STRCPY:
+            emitOp(proc, IL_strcpy, deref(s->args->lhs->getType()->getType())->len);
+            break;
         case Tok_RET:
             emitOp(proc, IL_ret, s->args ? s->args->getType()->getByteSize(sizeof(void*)) : 0 );
             break;
@@ -1277,9 +1386,9 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
         case Tok_LDSTR:
             emitOp(proc, IL_ldstr, addString(e->c->s) );
             break;
-        //case Tok_LDOBJ:
-            // emitOp(proc, IL_ldobj, addString(e->c->s) ); // TODO
-            // break;
+        case Tok_LDOBJ:
+            emitOp(proc, IL_ldobj, addObject(e->c) );
+            break;
         case Tok_LDPROC:
             translateProc(e->d);
             emitOp(proc, IL_ldproc, findProc(e->d));
@@ -1726,7 +1835,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             }
             break;
         case Tok_LDFLDA:
-            emitOp(proc, IL_ldflda);
+            emitOp(proc, IL_ldflda, e->d->f.off);
             break;
         case Tok_LDVAR:
             switch(t->kind)
@@ -1783,7 +1892,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             }
             break;
         case Tok_LDVARA:
-            emitOp(proc, IL_ldvara);
+            emitOp(proc, IL_ldvara, e->d->off);
             break;
         case Tok_NEWOBJ:
             emitOp(proc,IL_alloc1, e->d->getType()->getByteSize(pointerWidth));
@@ -2835,6 +2944,13 @@ bool Interpreter::Imp::execute(Frame* frame)
                 free(frame->popP());
                 pc++;
             vmbreak;
+        vmcase(strcpy) {
+                const char* rhs = (const char*)frame->popP();
+                char* lhs = (char*)frame->popP();
+                strncpy(lhs, rhs, frame->proc->ops[pc].val-1);
+                lhs[frame->proc->ops[pc].val-1] = 0;
+                pc++;
+            } vmbreak;
         vmcase(vt_size)
                 Q_ASSERT(false); // instead consumed by other ops
             vmbreak;

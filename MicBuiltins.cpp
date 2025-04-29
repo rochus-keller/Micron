@@ -279,11 +279,13 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::PCALL:
         break;
     case Builtin::PRINT:
-        expectingNArgs(args,1);
-        break;
-    case Builtin::PRINTLN:
-        expectingNArgs(args,1);
-       break;
+    case Builtin::PRINTLN: {
+            expectingNArgs(args,1);
+            Q_ASSERT(args.size() == 1);
+            Type* t = args.first()->getType();
+            if( t->kind != Type::Array && t->kind != Type::Record && t->kind != Type::Object )
+                args.first()->setByVal();
+        } break;
     case Builtin::RAISE:
         expectingNArgs(args,1);
         break;
@@ -312,6 +314,9 @@ bool Builtins::requiresLvalue(quint8 builtin, quint8 arg)
     case Builtin::EXCL:
     case Builtin::INCL:
     case Builtin::PCALL:
+
+    case Builtin::PRINT: // because we need a pointer to array of chars
+    case Builtin::PRINTLN:
         if( arg == 0 )
             return true;
         break;

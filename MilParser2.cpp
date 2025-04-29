@@ -553,6 +553,7 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_SHR:
 	case Tok_ADD:
 	case Tok_CLT_UN:
+    case Tok_STRCPY:
 		return true;
 	default: return false;
 	}
@@ -599,7 +600,8 @@ static inline bool FIRST_Statement(int tt) {
 	case Tok_STIND_R4:
 	case Tok_RET:
 	case Tok_POP:
-		return true;
+    case Tok_STRCPY:
+        return true;
 	default: return false;
 	}
 }
@@ -2104,6 +2106,8 @@ Statement* Parser2::Statement_()
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
+    } else if( la.d_code == Tok_STRCPY ) {
+        expect(Tok_STRCPY, true, "Statement");
     } else if( la.d_code == Tok_STVAR ) {
         expect(Tok_STVAR, true, "Statement");
         res->d = qualident();

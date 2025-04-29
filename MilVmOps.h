@@ -112,7 +112,7 @@ OPDEF(ldc_i4_4, NoOpArgs), OPDEF(ldc_i4_5, NoOpArgs),OPDEF(ldc_i4_6, NoOpArgs),
 OPDEF(ldc_i4_7, NoOpArgs), OPDEF(ldc_i4_8, NoOpArgs),
 
 OPDEF(ldnull, NoOpArgs), OPDEF(ldstr, StrArg),
-OPDEF(ldobj, 1), // TODO
+OPDEF(ldobj, ByteArrayArg),
 
 OPDEF(br, JumpArg),
 OPDEF(brtrue_i4, JumpArg), OPDEF(brtrue_i8, JumpArg),
@@ -121,6 +121,7 @@ OPDEF(brfalse_i4, JumpArg), OPDEF(brfalse_i8, JumpArg),
 OPDEF(ldproc, ProcArg), OPDEF(ldmeth, ProcArg),
 OPDEF(sizeof, 1), // TODO
 OPDEF(ptroff, NoOpArgs),
+OPDEF(strcpy, NoOpArgs),
 OPDEF(pop, SizeArg), OPDEF(dup, SizeArg),
 OPDEF(ret, SizeArg), OPDEF(ret_void, NoOpArgs),
 OPDEF(call, ProcArg), OPDEF(calli, NoOpArgs),

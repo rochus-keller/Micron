@@ -207,6 +207,7 @@ void Validator::visitStatSeq(Statement* stat)
         case Tok_STIND_R8:
         case Tok_STIND_IP:
         case Tok_STIND_IPP:
+        case Tok_STRCPY:
             expectN(2, stat);
             break;
         case Tok_SWITCH:

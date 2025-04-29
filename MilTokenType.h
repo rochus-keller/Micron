@@ -201,6 +201,7 @@ namespace Mil {
 		Tok_STLOC_2,
 		Tok_STLOC_3,
 		Tok_STLOC_S,
+		Tok_STRCPY,
 		Tok_STRUCT,
 		Tok_STVAR,
 		Tok_SUB,
