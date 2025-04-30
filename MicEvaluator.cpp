@@ -136,7 +136,7 @@ bool Evaluator::binaryOp(quint8 op)
     return err.isEmpty();
 }
 
-bool Evaluator::prepareRhs(Type* lhs)
+bool Evaluator::prepareRhs(Type* lhs, bool assig)
 {
     err.clear();
     if( stack.size() < 1 )
@@ -153,8 +153,23 @@ bool Evaluator::prepareRhs(Type* lhs)
         return false;
     }
 
-    if( lhs && lhs->kind == Type::CHAR &&
-              rhs.type->kind == Type::String )
+    // make sure also a string literal is put on the stack by value
+    if( !assig && lhs && lhs->kind == Type::Array && lhs->len && lhs->getType()->kind == Type::CHAR &&
+            (rhs.type->kind == Type::String ||
+             rhs.ref && rhs.type->kind == Type::Array && rhs.type->len == 0 &&
+                rhs.type->getType()->kind == Type::CHAR))
+    {
+        // Tv is a non-open array of CHAR, Te is a string literal, or an open array of CHAR;
+        assureTopOnMilStack();
+        out->ldind_(toQuali(lhs));
+    }else if( lhs && lhs->kind == Type::Array && lhs->len &&
+              rhs.type->kind == Type::Array && rhs.type->len > 0 && rhs.ref )
+    {
+        // copy rhs non-open array ref by value to stack to copy to non-open lhs array
+        Q_ASSERT( lhs->len == rhs.type->len );
+        assureTopOnMilStack();
+        out->ldind_(toQuali(lhs));
+    }else if( lhs && lhs->kind == Type::CHAR && rhs.type->kind == Type::String )
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
     else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Procedure )
         out->ldproc_(toQuali(rhs.val.value<Declaration*>()));
@@ -187,7 +202,7 @@ bool Evaluator::assign()
         return false;
     }
 
-    if( !prepareRhs( stack[stack.size()-2].type ) )
+    if( !prepareRhs( stack[stack.size()-2].type, true ) )
         return false;
 
     Value rhs = stack.takeLast();
@@ -200,10 +215,10 @@ bool Evaluator::assign()
 
     if( lhs.type->kind == Type::Array )
     {
-        if( lhs.type->getType()->kind == Type::CHAR )
+        if( lhs.type->getType()->kind == Type::CHAR && lhs.type->len != 0 )
         {
-            // special case both sides char arrays, just copy up to and including zero
-            if( rhs.type->kind == Type::Array && rhs.type->getType()->kind == Type::CHAR )
+            // special case: lhs is non-open char array and rhs is either open char array or string literal
+            if( rhs.type->kind == Type::Array && rhs.type->getType()->kind == Type::CHAR && rhs.type->len == 0 )
             {
                 Q_ASSERT(rhs.ref);
                 out->strcpy_();

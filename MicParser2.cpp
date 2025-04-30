@@ -596,6 +596,21 @@ static inline bool FIRST_MetaSection(int tt) {
 	return tt == Tok_TYPE || tt == Tok_CONST || tt == Tok_ident;
 }
 
+#if 0
+// TODO
+static bool isPtrToOpenCharArray(Type* t)
+{
+    if( t && t->kind == Type::Pointer )
+    {
+        Type* array = t->getType();
+        if( array && array->kind == Type::Array && array->len == 0 )
+            return array->getType() && array->getType()->kind == Type::CHAR;
+    }
+    // else
+    return false;
+}
+#endif
+
 Parser2::Parser2(AstModel* m, Scanner2* s, MilEmitter* out, Importer* i):
     mdl(m),scanner(s),out(out),imp(i),thisMod(0),thisDecl(0),inFinally(false),
     langLevel(3),haveExceptions(false)
@@ -715,6 +730,11 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs) const
     if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer && lhs->getType()->kind == Type::Any )
         return true;
 
+    // Tv is a non-open array of CHAR, Te is an open array of CHAR;
+    if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
+             rhs->kind == Type::Array && rhs->len == 0 && rhs->getType()->kind == Type::CHAR )
+        return true;
+
     // Tv is a pointer to one dimensional open array, Te is a pointer to any one or more dimensional array,
     // and their element types are equal, or
     if( lhs->kind == Type::Pointer && lhs->getType()->kind == Type::Array &&
@@ -797,13 +817,10 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs) const
     if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl || rhs->kind == Expression::MethDecl )
         return assigCompat(lhs, rhs->val.value<Declaration*>() );
 
-    // Tv is a non-open array of CHAR, Te is a string literal, or array of CHAR;
+    // Tv is a non-open array of CHAR, Te is a string literal
     if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
             rhs->isLiteral() && rhs->getType()->kind == Type::String)
         return strlen(rhs->getLiteralValue().toByteArray().constData()) < lhs->len;
-    if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
-             rhs->kind == Type::Array && rhs->getType()->kind == Type::CHAR )
-        return true;
 
     // A string of length 1 can be used wherever a character constant is allowed and vice versa.
     if( lhs->kind == Type::CHAR && rhs->getType()->kind == Type::String )
@@ -2456,7 +2473,7 @@ Expression* Parser2::literal() {
         res = Expression::create(Expression::Literal,cur.toRowCol());
         res->setType(mdl->getType(Type::String));
         res->val = ev->dequote(cur.d_val);
-        // string literal: byte array latin-1 with type Type::String
+        // string literal: byte array latin-1
     }else if( la.d_type == Tok_hexstring ) {
         expect(Tok_hexstring, false, "literal");
         // alternative syntax for A{ x x x } with A = array of byte

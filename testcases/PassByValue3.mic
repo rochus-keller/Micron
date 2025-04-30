@@ -1,0 +1,22 @@
+module Test
+
+type Str = array 32 of char
+proc Proc5(str: Str)
+begin
+	println(str)
+end Proc5
+var str: Str
+var ptr: pointer to array of char
+begin
+	new(ptr, 7)
+	ptr[0] := "H"
+	ptr[1] := "i"
+	ptr[2] := "!"
+	ptr[3] := 0x
+	
+	Proc5(ptr^)
+	
+	str := ptr^
+	Proc5(str)
+
+end Test

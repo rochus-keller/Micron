@@ -18,6 +18,7 @@ module Fibonacci
 begin
 	println("Fibonacci start")
 	res := calc(21)
+	println(res)
 	assert( res = 10946 )
 	println("Fibonacci done")
 end Fibonacci

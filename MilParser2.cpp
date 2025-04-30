@@ -1829,15 +1829,9 @@ Expression* Parser2::ExpInstr() {
         expect(Tok_LDNULL, true, "ExpInstr");
     } else if( la.d_code == Tok_LDIND ) {
         expect(Tok_LDIND, true, "ExpInstr");
-        if( FIRST_qualident(la.d_code) )
-        {
-            res->d = qualident();
-            if( res->d && res->d->kind != Declaration::TypeDecl )
-                error(cur, "expecting a type declaration");
-        }else
-        {
-            // address of string literal on stack
-        }
+        res->d = qualident();
+        if( res->d && res->d->kind != Declaration::TypeDecl )
+            error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_LDPROC ) {
         expect(Tok_LDPROC, true, "ExpInstr");
         res->d = qualident();

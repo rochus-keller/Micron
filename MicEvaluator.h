@@ -32,7 +32,7 @@ public:
 
     bool evaluate(Expression*, bool assureOnMilStack = false);
 
-    bool prepareRhs(Type* lhs);
+    bool prepareRhs(Type* lhs, bool assig = false);
     bool assign(); // move rhs (top) to lhs (top-1)
 
     Value pop();

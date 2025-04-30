@@ -936,7 +936,7 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs)
 int Builtins::addIncDecTmp()
 {
     bool doublette;
-    Declaration* decl = ev->mdl->addDecl(Token::getSymbol("$incdec"),&doublette);
+    Declaration* decl = ev->mdl->addDecl(Token::getSymbol("_$incdec"),&doublette);
     if( !doublette )
     {
         decl->kind = Declaration::LocalDecl;

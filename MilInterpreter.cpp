@@ -100,14 +100,20 @@ struct Frame
     int sp;
     QByteArray retval;
     Frame():proc(0),outer(0),sp(0){}
-    void push(void* what, int len)
+    void* alloc(int len)
     {
         if( len < stackAlig )
             len = stackAlig;
         if( sp + len > stack.size() )
             stack.resize(stack.size()*2 + len);
-        memcpy(stack.data()+sp,what,len);
+        void* res = stack.data()+sp;
         sp += len;
+        return res;
+    }
+    void push(void* what, int len)
+    {
+        void* ptr = alloc(len);
+        memcpy(ptr,what,len);
     }
     inline void pushI4(qint32 v)
     {
@@ -840,9 +846,10 @@ bool Interpreter::Imp::translateProc(Procedure& proc)
     }else
     {
         Statement* s = proc.decl->body;
+        Procedure* oldProc = curProc;
         curProc = &proc;
         const bool res = translateStatSeq(proc, s);
-        curProc = 0;
+        curProc = oldProc;
         return res;
     }
 }
@@ -1739,7 +1746,10 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             emitOp(proc, IL_ldind_u8);
             break;
         case Tok_LDIND:
-            emitOp(proc, IL_ldind_vt,t->getByteSize(pointerWidth));
+            if( lhsT && (lhsT->kind == Type::StringLit || lhsT->isPtrToOpenCharArray()) )
+                emitOp(proc, IL_ldind_str,t->getByteSize(pointerWidth));
+            else
+                emitOp(proc, IL_ldind_vt,t->getByteSize(pointerWidth));
             break;
         case Tok_LDELEM_I1:
             emitOp(proc, IL_ldelem_i1);
@@ -2355,7 +2365,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldarg_pp)
-                break; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(ldarg_vt)
                 frame->push(VM_ARG_ADDR, stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
@@ -2393,7 +2405,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(starg_pp)
-                break; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(starg_vt)
                 frame->copy(VM_ARG_ADDR, // to
                             stackAligned(frame->proc->ops[pc+1].val), // size on stack
@@ -2434,7 +2448,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_LDELEM(void*,P)
             vmbreak;
         vmcase(ldelem_pp)
-                break; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(ldelema) {
                 const quint32 i = frame->popI4(); quint8* a = (quint8*)frame->popP();
                 frame->pushP(a + i * frame->proc->ops[pc].val);
@@ -2467,13 +2483,15 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_STELEM(void*, P)
             vmbreak;
         vmcase(stelem_pp)
-                break; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(stelem_vt) {
                 const int lenonstack = stackAligned(frame->proc->ops[pc].val);
                 const int etlen = frame->proc->ops[pc].val;
                 quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
                 const quint32 i = *(quint32*)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
-                quint8* a = (quint8*)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig - Frame::stackAlig);
+                quint8* a = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig - Frame::stackAlig);
                 memcpy(a + i * etlen, v, etlen);
                 frame->pop(lenonstack + Frame::stackAlig + Frame::stackAlig);
                 pc++;
@@ -2512,7 +2530,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_LDFLD(void*, P)
             vmbreak;
         vmcase(ldfld_pp)
-                break; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(ldflda) {
                 quint8* obj = (quint8*)frame->popP();
                 frame->pushP( obj + frame->proc->ops[pc].val ); pc++;
@@ -2544,12 +2564,14 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_STFLD(void*, P)
             vmbreak;
         vmcase(stfld_pp)
-                break; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(stfld_vt) {
                 const int lenonstack = stackAligned(frame->proc->ops[pc+1].val);
                 const int flen = frame->proc->ops[pc+1].val;
                 quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
-                quint8* obj = (quint8*)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
+                quint8* obj = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
                 memcpy(obj + frame->proc->ops[pc].val, v, flen);
                 frame->pop(lenonstack + Frame::stackAlig);
                 pc++;
@@ -2588,10 +2610,22 @@ bool Interpreter::Imp::execute(Frame* frame)
                 frame->pushP(*(void**)frame->popP()); pc++;
             vmbreak;
         vmcase(ldind_pp)
-                break; // TODO
-        vmcase(ldind_vt)
-                frame->push((void*)frame->popP(), stackAligned(frame->proc->ops[pc].val)); pc++;
-            vmbreak;
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
+        vmcase(ldind_vt){
+                void* ptr = frame->popP();
+                const char* str = (const char*)ptr;
+                frame->push(ptr, stackAligned(frame->proc->ops[pc].val)); pc++;
+            } vmbreak;
+       vmcase(ldind_str) {
+                const int n = stackAligned(frame->proc->ops[pc].val);
+                const char* from = (const char*)frame->popP();
+                char* to = (char*)frame->alloc(n);
+                strncpy(to, from, n-1);
+                to[n-1] = 0;
+                pc++;
+            } vmbreak;
         vmcase(stind_i1)
                 VM_STIND(qint8, I4)
             vmbreak;
@@ -2614,12 +2648,14 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_STIND(void*, P)
             vmbreak;
         vmcase(stind_pp)
-                break; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(stind_vt) {
                 const int lenonstack = stackAligned(frame->proc->ops[pc].val);
                 const int len = frame->proc->ops[pc].val;
                 quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
-                quint8* ptr = (quint8*)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
+                quint8* ptr = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
                 memcpy(ptr, v, len);
                 frame->pop(lenonstack + Frame::stackAlig);
                 pc++;
@@ -2669,7 +2705,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldloc_pp)
-                vmbreak; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(ldloca)
                 frame->pushP(VM_LOCAL_ADDR);
                 pc++;
@@ -2707,7 +2745,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(stloc_pp)
-                vmbreak; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(stloc_vt)
                 frame->copy(VM_LOCAL_ADDR, // to
                             stackAligned(frame->proc->ops[pc+1].val), // size on stack
@@ -2759,7 +2799,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldvar_pp)
-                break; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(ldvara)
                 frame->pushP(VM_VAR_ADDR);
                 pc++;
@@ -2797,7 +2839,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(stvar_pp)
-                break; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(stvar_vt)
                 frame->copy(VM_VAR_ADDR, // to
                             stackAligned(frame->proc->ops[pc+1].val), // size on stack
@@ -2868,8 +2912,11 @@ bool Interpreter::Imp::execute(Frame* frame)
                 frame->pushP(strings[frame->proc->ops[pc].val].data());
                 pc++;
             vmbreak;
-        vmcase(ldobj)
-                break; // TODO
+        vmcase(ldobj) {
+                QByteArray& obj = objects[frame->proc->ops[pc].val];
+                frame->push(obj.data(),obj.size());
+                pc++;
+            } vmbreak;
         vmcase(br)
                 pc = pc + 1 + (frame->proc->ops[pc].minus ? -1 : 1 ) * frame->proc->ops[pc].val;
             vmbreak;
@@ -2910,7 +2957,9 @@ bool Interpreter::Imp::execute(Frame* frame)
             }vmbreak;
         vmcase(sizeof)
         vmcase(ptroff)
-                break; // TODO
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
+                vmbreak;
         vmcase(pop)
                 frame->pop(stackAligned(frame->proc->ops[pc].val));
                 pc++;
@@ -2955,13 +3004,14 @@ bool Interpreter::Imp::execute(Frame* frame)
                 Q_ASSERT(false); // instead consumed by other ops
             vmbreak;
         vmcase(newvla)
-                break; // TODO
         vmcase(callvi)
         vmcase(callvirt)
         vmcase(line)
         vmcase(initobj)
         vmcase(isinst)
         vmcase(already_called)
+                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                pc++;
                 vmbreak;
         }
     }
@@ -2994,8 +3044,8 @@ bool Interpreter::Imp::call(Frame* frame, Procedure* proc)
         frame->pop( newframe.proc->fixArgSize );
     if( frame && newframe.proc->returnSize > 0 )
     {
-        Q_ASSERT( stackAligned(newframe.proc->returnSize) == newframe.stack.size());
-        frame->push(newframe.stack.data(), newframe.stack.size());
+        Q_ASSERT( stackAligned(newframe.proc->returnSize) == newframe.sp);
+        frame->push(newframe.stack.data(), newframe.sp);
     }
     return res;
 }

@@ -81,7 +81,7 @@ OPDEF(stfld_vt, OffSizeArgs),
 OPDEF(ldind_i1, NoOpArgs), OPDEF(ldind_i2, NoOpArgs), OPDEF(ldind_i4, NoOpArgs), OPDEF(ldind_i8, NoOpArgs),
 OPDEF(ldind_u1, NoOpArgs), OPDEF(ldind_u2, NoOpArgs), OPDEF(ldind_u4, NoOpArgs), OPDEF(ldind_u8, NoOpArgs),
 OPDEF(ldind_r4, NoOpArgs), OPDEF(ldind_r8, NoOpArgs), OPDEF(ldind_p, NoOpArgs), OPDEF(ldind_pp, NoOpArgs),
-OPDEF(ldind_vt, SizeArg),
+OPDEF(ldind_vt, SizeArg), OPDEF(ldind_str, SizeArg),
 
 OPDEF(stind_i1, NoOpArgs), OPDEF(stind_i2, NoOpArgs), OPDEF(stind_i4, NoOpArgs), OPDEF(stind_i8, NoOpArgs),
 OPDEF(stind_r4, NoOpArgs), OPDEF(stind_r8, NoOpArgs), OPDEF(stind_p, NoOpArgs), OPDEF(stind_pp, NoOpArgs),

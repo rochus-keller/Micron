@@ -93,7 +93,7 @@ void MIC$$printSet(uint32_t s)
 
 void MIC$$assert(uint8_t cond, uint32_t line, const char* file)
 {
-	if(cond)
-		fprintf(stderr,"assertion failed in %s line %d", file, line);
+    if(!cond)
+        fprintf(stderr,"assertion failed in %s line %d\n", file, line);
 	assert(cond);
 }

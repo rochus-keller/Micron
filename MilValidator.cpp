@@ -788,21 +788,28 @@ Expression* Validator::visitExpr(Expression* e)
             {
                 e->lhs = stackAt(-1); // ptr
                 Type* lhsT = deref(e->lhs->getType());
-                Type* bt1 = deref(lhsT->getType());
-                if( lhsT->kind != Type::Pointer )
-                {
-                    error(e->pos, "expecting a pointer on the stack");
-                    break;
+                if( lhsT->kind != Type::Pointer && lhsT->kind != Type::StringLit ) {
+                    error(e->pos, "expecting a pointer on the stack"); break;
                 }
+                Type* bt1 = deref(lhsT->getType());
                 Type* bt2 = tokToBasicType(mdl, e->kind);
                 if( e->kind == Tok_LDIND )
                     bt2 = deref(e->d->getType());
-                if( !equal(bt2, bt1) )
+                if( e->kind == Tok_LDIND &&
+                        (bt1->kind == Type::Array && bt1->len == 0 && deref(bt1->getType())->kind == Type::CHAR ||
+                         lhsT->kind == Type::StringLit ) &&
+                        bt2->kind == Type::Array && bt2->len != 0 && deref(bt2->getType())->kind == Type::CHAR )
+                {
+                    ; // ok to store an open char array or strlit in a non-open char array on stack.
+                }else if( !equal(bt2, bt1) )
                 {
                     error(e->pos, "ldind type not compatible with type on the stack");
                     break;
                 }
-                e->setType(bt1);
+                if( e->kind == Tok_LDIND )
+                    e->setType(bt2);
+                else
+                    e->setType(bt1);
                 stack.back() = e;
             }
             break;
@@ -1160,6 +1167,10 @@ bool Validator::equal(Type* lhs, Type* rhs)
         return false;
     if( lhs == rhs )
         return true;
+    if( lhs->kind == Type::INTPTR && rhs->kind == Type::INTPTR ||
+            lhs->kind == Type::Pointer && rhs->kind == Type::INTPTR ||
+            lhs->kind == Type::INTPTR && rhs->kind == Type::Pointer )
+        return true; // happens for ldind_ip, stind_ip, which we cannot check more precise
     if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer )
         return equal(deref(lhs->getType()), deref(rhs->getType()));
     return false;

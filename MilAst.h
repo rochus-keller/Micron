@@ -133,6 +133,7 @@ namespace Mil
         QList<Declaration*> getFieldList(bool recursive) const;
         Type* deref() const;
         bool isPtrToArray() const;
+        bool isPtrToOpenCharArray() const;
         quint32 getByteSize(quint8 pointerWidth) const;
         quint32 getAlignment(quint8 pointerWidth) const;
     };

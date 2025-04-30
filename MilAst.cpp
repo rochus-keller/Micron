@@ -730,6 +730,25 @@ bool Type::isPtrToArray() const
         return false;
 }
 
+bool Type::isPtrToOpenCharArray() const
+{
+    if( kind == Pointer )
+    {
+        Type* to = getType();
+        if( to )
+            to = to->deref();
+        if( to->kind == Array )
+        {
+            Type* et = to->getType();
+            if( et )
+                et = et->deref();
+            if( et->kind == Type::CHAR && to->len == 0 )
+                return true;
+        }
+    } // else
+    return false;
+}
+
 quint32 Type::getByteSize(quint8 pointerWidth) const
 {
     switch( kind )
