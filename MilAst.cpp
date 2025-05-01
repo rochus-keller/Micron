@@ -476,10 +476,13 @@ QByteArray Declaration::toPath() const
         if( outer && outer->kind != Module )
             res = "$" + res;
     }else
-        res = name + "!";
+        res = name;
     if( outer )
+    {
+        if( outer->kind == Module )
+            res = "!" + res;
         return outer->toPath() + res;
-    else
+    }else
         return res;
 }
 

@@ -44,6 +44,8 @@ namespace Mil
         static void retR8(void* ret, double val);
         static void retP(void* ret, void* val);
         static int stackAligned(int off);
+        enum { StackAlign = 8 };
+        void registerProc(const QByteArray& module, const QByteArray& procName, FfiProc proc);
 
         // proc is either a procedure or a module
         bool precompile(Declaration* proc);

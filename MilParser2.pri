@@ -10,7 +10,10 @@ SOURCES += \
     MilValidator.cpp \
     MilCeeGen.cpp \
     MilInterpreter.cpp \
-    $$PWD/runtime/MIC++.c
+    $$PWD/runtime/MIC++.c \
+    $$PWD/oakwood/Input+.c \
+    $$PWD/oakwood/MathL+.c \
+    $$PWD/oakwood/Out+.c
 
 HEADERS += \
     MilLexer.h \
