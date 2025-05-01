@@ -72,15 +72,42 @@ struct Operation
     Operation(IL_op op = IL_invalid, quint32 val = 0, bool minus = false):val(val),minus(minus),op(op){}
 };
 
+class ByteArray
+{
+    char* d;
+    int s;
+public:
+    // according to Valgrind, QByteArray.detach() is very expensive; so here a custom imp.
+    ByteArray():d(0),s(0) {}
+    ~ByteArray()
+    {
+        if( d )
+            free(d);
+    }
+    void resize(int len)
+    {
+        if(len <= s)
+            return;
+        if( d )
+            d = (char*)realloc(d, len);
+        else
+            d = (char*)calloc(1,len); // TODO: there are issues when we don't initialize the stack memory to zero
+        s = len;
+    }
+    inline char* data() { return d; }
+    inline int size() const { return s; }
+};
+
 struct Procedure
 {
-    QList<Operation> ops; // TODO: according to Valgrind, ops.detach() is very expensive
+    QVector<Operation> ops_;
+    Operation* ops; // according to Valgrind, ops.detach() is very expensive, so we directly access the pointer
     Declaration* decl;
     Interpreter::FfiProc ffi;
     bool called;
     quint32 localsSize;
     quint32 fixArgSize, returnSize; // stackAligned
-    Procedure():decl(0),called(false),localsSize(0),fixArgSize(0),returnSize(0),ffi(0){}
+    Procedure():decl(0),called(false),localsSize(0),fixArgSize(0),returnSize(0),ffi(0),ops(0){}
 };
 
 struct MethRef
@@ -95,9 +122,8 @@ struct Frame
     enum { stackAlig = 8 };
     Procedure* proc;
     Frame* outer;
-    QByteArray locals;
-    QByteArray stack; // intermediate, calls, aligns to quint64
-    // TODO: according to Valgrind, QByteArray::detach() is very expensive
+    ByteArray locals;
+    ByteArray stack; // intermediate, calls, aligns to quint64
     int sp;
     Frame():proc(0),outer(0),sp(0){}
     void* alloc(int len)
@@ -105,7 +131,7 @@ struct Frame
         if( len < stackAlig )
             len = stackAlig;
         if( sp + len > stack.size() )
-            stack.resize(stack.size()*2 + len);
+            stack.resize(len);
         void* res = stack.data()+sp;
         sp += len;
         return res;
@@ -548,8 +574,8 @@ struct Interpreter::Imp
 
     int emitOp(Procedure& proc, IL_op op, quint32 v = 0, bool minus = false )
     {
-        const int res = proc.ops.size();
-        proc.ops.append(Operation(op, v, minus));
+        const int res = proc.ops_.size();
+        proc.ops_.append(Operation(op, v, minus));
         return res;
     }
 
@@ -565,8 +591,8 @@ struct Interpreter::Imp
 
     void inline branch_here(Procedure& proc, int pc)
     {
-        Q_ASSERT(pc >= 0 && pc < proc.ops.size());
-        proc.ops[pc].val = proc.ops.size() - pc - 1;
+        Q_ASSERT(pc >= 0 && pc < proc.ops_.size());
+        proc.ops_[pc].val = proc.ops_.size() - pc - 1;
     }
 
     static inline int stackAligned(int off)
@@ -686,45 +712,46 @@ bool Interpreter::dumpProc(QTextStream& out, Declaration* proc)
         return false; // there is no implementation for this proc, not an error
     Procedure* p = &imp->procs[i];
     out << "proc " << p->decl->toPath() << endl;
-    for( int pc = 0; pc < p->ops.size(); pc++ )
+    for( int pc = 0; pc < p->ops_.size(); pc++ )
     {
-        out << "    " << QString("%1: ").arg(pc,2) << op_names[p->ops[pc].op];
-        switch(op_args[p->ops[pc].op])
+        out << "    " << QString("%1: ").arg(pc,2) << op_names[p->ops_[pc].op];
+        switch(op_args[p->ops_[pc].op])
         {
         case NoOpArgs:
             break;
         case OffArg:
-            out << " " << p->ops[pc].val;
+            out << " " << p->ops_[pc].val;
             break;
         case SizeArg:
-            out << " " << p->ops[pc].val;
+            out << " " << p->ops_[pc].val;
             break;
         case IntArg:
-            out << " " << imp->ints[p->ops[pc].val];
+            out << " " << imp->ints[p->ops_[pc].val];
             break;
         case FloatArg:
-            out << " " << imp->doubles[p->ops[pc].val];
+            out << " " << imp->doubles[p->ops_[pc].val];
             break;
         case StrArg:
-            out << " \"" << imp->strings[p->ops[pc].val] << "\"";
+            out << " \"" << imp->strings[p->ops_[pc].val] << "\"";
             break;
         case ByteArrayArg:
-            out << " $" << imp->objects[p->ops[pc].val].toHex().left(40) << " (" << imp->objects[p->ops[pc].val].size() << ")";
+            out << " $" << imp->objects[p->ops_[pc].val].toHex().left(40) << " (" <<
+                   imp->objects[p->ops_[pc].val].size() << ")";
             break;
         case ProcArg:
-            if( p->ops[pc].val < imp->procs.size() )
-                out << " " << imp->procs[p->ops[pc].val].decl->toPath();
+            if( p->ops_[pc].val < imp->procs.size() )
+                out << " " << imp->procs[p->ops_[pc].val].decl->toPath();
             else
-                out << " invalid proc " << p->ops[pc].val;
+                out << " invalid proc " << p->ops_[pc].val;
             break;
         case JumpArg:
-            out << " " << (p->ops[pc].minus ? "-" : "") << p->ops[pc].val << " -> "
-                << QString("%1").arg(pc + 1 + (p->ops[pc].minus?-1:1) * p->ops[pc].val);
+            out << " " << (p->ops_[pc].minus ? "-" : "") << p->ops_[pc].val << " -> "
+                << QString("%1").arg(pc + 1 + (p->ops_[pc].minus?-1:1) * p->ops_[pc].val);
             break;
         case OffSizeArgs:
-            Q_ASSERT(pc+1 < p->ops.size());
-            out << " " << p->ops[pc].val;
-            out << " " << p->ops[pc+1].val;
+            Q_ASSERT(pc+1 < p->ops_.size());
+            out << " " << p->ops_[pc].val;
+            out << " " << p->ops_[pc+1].val;
             pc++;
            break;
         default:
@@ -759,6 +786,9 @@ bool Interpreter::dumpAll(QTextStream& out)
 bool Interpreter::run(Declaration* proc)
 {
     Q_ASSERT(proc && (proc->kind == Declaration::Procedure || proc->kind == Declaration::Module));
+
+    for( int i = 0; i < imp->procs.size(); i++ )
+        imp->procs[i].ops = imp->procs[i].ops_.data();
 
     Declaration* module = proc->getModule();
     Q_ASSERT(module);
@@ -824,7 +854,10 @@ bool Interpreter::Imp::translateInit(Procedure& proc, quint32 id)
             translateModule(d->imported);
             const int p = findProc(d->imported);
             if( p < 0 )
+            {
+                qCritical() << "module initializer not found" << d->imported->toPath();
                 return false; // procedure not found
+            }
             emitOp(proc,IL_call, p);
         }
         // TODO: initialize structs, arrays and objects for value objects vtables
@@ -1161,23 +1194,23 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             break;
         case Tok_REPEAT:
             {
-                const int start = proc.ops.size();
+                const int start = proc.ops_.size();
                 if( !translateStatSeq(proc, s->body) )
                     return false;
                 if( !translateExprSeq(proc, s->e) )
                     return false;
-                emitOp(proc, s->e->getType()->isInt64() ? IL_brfalse_i8 : IL_brfalse_i4, proc.ops.size()-start+1, true );
+                emitOp(proc, s->e->getType()->isInt64() ? IL_brfalse_i8 : IL_brfalse_i4, proc.ops_.size()-start+1, true );
             }
             break;
         case Tok_WHILE:
             {
-                const int start = proc.ops.size();
+                const int start = proc.ops_.size();
                 if( !translateExprSeq(proc, s->e) )
                     return false;
                 const int while_ = emitOp(proc, s->e->getType()->isInt64() ? IL_brfalse_i8 : IL_brfalse_i4 );
                 if( !translateStatSeq(proc, s->body) )
                     return false;
-                emitOp(proc, IL_br, proc.ops.size()-start+1, true);
+                emitOp(proc, IL_br, proc.ops_.size()-start+1, true);
                 branch_here(proc, while_);
             }
             break;
@@ -2036,11 +2069,11 @@ bool Interpreter::Imp::run(quint32 proc)
 
 bool Interpreter::Imp::execute(Frame* frame)
 {
-//#define _USE_JUMP_TABLE
+#define _USE_JUMP_TABLE
 #ifdef _USE_JUMP_TABLE
 #define vmdispatch(x)     goto *disptab[x];
 #define vmcase(l)     L_IL_##l:
-#define vmbreak		 if( pc >= frame->proc->ops.size() ) return true; vmdispatch(frame->proc->ops[pc].op);
+#define vmbreak		 if( pc >= frame->proc->ops_.size() ) return true; vmdispatch(frame->proc->ops[pc].op);
 
     static const void *const disptab[IL_NUM_OF_OPS] = {
         &&L_IL_invalid,
@@ -2056,7 +2089,7 @@ bool Interpreter::Imp::execute(Frame* frame)
 #endif
 
     int pc = 0;
-    while( pc < frame->proc->ops.size() )
+    while( pc < frame->proc->ops_.size() )
     {
         vmdispatch(frame->proc->ops[pc].op)
         {
@@ -3065,7 +3098,7 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc)
         newframe.stack.resize(newframe.proc->returnSize);
         newframe.sp = newframe.stack.size();
         char* retval = 0;
-        if( !newframe.stack.isEmpty() )
+        if( newframe.stack.size() != 0 )
             retval = newframe.stack.data();
         char* args = 0;
         if( frame && proc->fixArgSize )
