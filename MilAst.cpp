@@ -400,7 +400,7 @@ Declaration* Declaration::findSubByName(const QByteArray& name) const
         return 0;
 }
 
-QList<Declaration*> Declaration::getParams() const
+QList<Declaration*> Declaration::getParams(bool includeSelf) const
 {
     QList<Declaration*> res;
     Declaration* d = subs;

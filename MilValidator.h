@@ -60,6 +60,9 @@ namespace Mil
         Expression* eatStack(quint32 n);
         Type* toType(Constant* c);
         bool equal(Type* lhs, Type* rhs);
+        bool assigCompat(Type* lhs, Type* rhs);
+        bool assigCompat(Type* lhs, Expression* rhs);
+        bool assigCompat(Type* lhs, Declaration* rhs);
         bool checkIfObjectInit(Type* t);
         bool checkIfPointerInit(Type* t);
 

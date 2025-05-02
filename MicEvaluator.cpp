@@ -283,7 +283,7 @@ bool Evaluator::assign()
     return err.isEmpty();
 }
 
-bool Evaluator::derefPointer()
+bool Evaluator::derefPointer(bool byVal)
 {
     err.clear();
     if( stack.isEmpty() )
@@ -291,7 +291,7 @@ bool Evaluator::derefPointer()
         err = "expecting a value on the stack";
         return false;
     }
-    assureTopIsValue();
+
     Value v = stack.takeLast();
 
     Q_ASSERT( v.type && v.type->kind == Type::Pointer && !v.ref );
@@ -300,6 +300,9 @@ bool Evaluator::derefPointer()
     v.ref = true;
 
     stack.push_back(v);
+
+    if( byVal )
+        derefValue(); // actually do it, because we need a value, not an lvalue
 
     return err.isEmpty();
 }
@@ -314,7 +317,10 @@ bool Evaluator::derefValue()
     }
     Value v = stack.takeLast();
     if( v.isConst() || !v.ref || v.type == 0 )
+    {
+        err = "expecting a non const reference on the stack";
         return false;
+    }
     Q_ASSERT(!v.isConst());
     Q_ASSERT(v.ref && v.type);
     v.ref = false;
@@ -1606,7 +1612,7 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Deref:
         if( !recursiveRun(e->lhs) )
             return false;
-        derefPointer();
+        derefPointer(e->byVal);
         // TODO: derefValue?
         break;
     case Expression::Addr:

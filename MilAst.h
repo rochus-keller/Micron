@@ -186,7 +186,7 @@ namespace Mil
         ~Declaration();
         void appendSub(Declaration*);
         Declaration* findSubByName(const QByteArray&) const;
-        QList<Declaration*> getParams() const;
+        QList<Declaration*> getParams(bool includeSelf = true) const;
         QList<Declaration*> getLocals() const;
         QList<Declaration*> getVars() const;
         int indexOf(Declaration*) const;
@@ -255,7 +255,8 @@ namespace Mil
         Expression* rhs; // not onwned but for Argument
         union {
             Expression* e; // IIF, THEN, ELSE owned
-            Declaration* d; // not owned, all ops with qualident or trident
+            Declaration* d; // not owned, CALL, CALLI, CALLVI, CALLVIRT, CASTPTR, INITOBJ, ISINST, LDELEM, LDELEMA, LDFLD
+                            //    LDFLDA, LDIND, LDPROC, LDMETH, LDVAR, LDVARA, NEWARR, NEWVLA, NEWOBJ, SIZEOF, PTROFF
             quint32 id;
             qint64 i;
             double f;

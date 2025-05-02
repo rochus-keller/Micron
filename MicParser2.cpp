@@ -749,12 +749,11 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs) const
 
     // Tv is a pointer to a record TR and Te is a pointer to a record the first field of which is of type TR, or
     // is again a record the first field of which is of type TR.
-    if( lhs->kind == Type::Pointer && (lhs->getType()->kind == Type::Record || lhs->getType()->kind == Type::Object) &&
-            rhs->kind == Type::Pointer && (rhs->getType()->kind == Type::Record || rhs->getType()->kind == Type::Object) )
+    if( lhs->kind == Type::Pointer && lhs->getType()->kind == Type::Record &&
+            rhs->kind == Type::Pointer && rhs->getType()->kind == Type::Record )
     {
-        // TODO: limited Object assignment
         Declaration* first = !rhs->getType()->subs.isEmpty() ? rhs->getType()->subs.first() : 0;
-        while(first && (first->getType()->kind == Type::Record || first->getType()->kind == Type::Object))
+        while(first && first->getType()->kind == Type::Record)
         {
             if( sameType(lhs->getType(), first->getType()) )
                 return true;
@@ -2844,7 +2843,7 @@ void Parser2::assignmentOrProcedureCall() {
         if( lhs->kind == Expression::ProcDecl || lhs->kind == Expression::MethDecl ||
                 lhs->getType() && lhs->getType()->kind == Type::Proc )
         {
-            // call procedure without ()
+            // call procedure without "()"
             const DeclList formals = lhs->getFormals();
             if( !formals.isEmpty() )
                 error(t,"expecting actual parameters to call this procedure");
@@ -2858,6 +2857,8 @@ void Parser2::assignmentOrProcedureCall() {
         }
         if( !ev->evaluate(lhs) )
             error(t, ev->getErr());
+        if( lhs->getType() && lhs->getType()->kind != Type::NoType )
+            out->pop_(); // remove unused result
     }
     Expression::deleteAllExpressions();
 }
@@ -2903,6 +2904,8 @@ void Parser2::IfStatement() {
     if( cond != 0 && !ev->evaluate(cond, true) )
         error(t, ev->getErr());
     Expression::deleteAllExpressions();
+    if( ev->top().type == 0 || ev->top().type->kind != Type::BOOL )
+        error(t, "expecting a boolean expression");
     ev->pop();
 	expect(Tok_THEN, true, "IfStatement");
     out->then_();
@@ -2917,6 +2920,8 @@ void Parser2::IfStatement() {
         if( !ev->evaluate(expression(0), true) )
             error(t, ev->getErr());
         Expression::deleteAllExpressions();
+        if( ev->top().type == 0 || ev->top().type->kind != Type::BOOL )
+            error(t, "expecting a boolean expression");
         ev->pop();
         expect(Tok_THEN, true, "ElsifStatement");
         out->then_();
@@ -3103,7 +3108,7 @@ void Parser2::WhileStatement() {
     Expression* res = expression(0);
     if( res && !ev->evaluate(res, true) )
         error(t, ev->getErr());
-    if( ev->top().type->kind != Type::BOOL )
+    if( ev->top().type == 0 || ev->top().type->kind != Type::BOOL )
         error(t,"expecting boolean expression");
     Expression::deleteAllExpressions();
     ev->pop();
@@ -3123,7 +3128,7 @@ void Parser2::RepeatStatement() {
     const Token t = la;
     if( !ev->evaluate(expression(0), true) )
         error(t, ev->getErr());
-    if( ev->top().type->kind != Type::BOOL )
+    if( ev->top().type == 0 || ev->top().type->kind != Type::BOOL )
         error(t,"expecting boolean expression");
     Expression::deleteAllExpressions();
     ev->pop();

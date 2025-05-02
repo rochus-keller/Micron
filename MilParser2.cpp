@@ -1285,6 +1285,7 @@ void Parser2::ProcedureDeclaration() {
                 tmp.subs = 0;
                 t->subs.append(p);
                 p->outer = t->decl;
+                // TODO: do we need an explicit SELF param? we likely do!
             }
         }
 

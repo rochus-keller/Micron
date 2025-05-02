@@ -91,8 +91,12 @@ public:
         if( d )
             d = (char*)realloc(d, len);
         else
-            d = (char*)calloc(1,len); // TODO: there are issues when we don't initialize the stack memory to zero
+            d = (char*)malloc(len);
         s = len;
+    }
+    void zero()
+    {
+        memset(d, 0, s);
     }
     inline char* data() { return d; }
     inline int size() const { return s; }
@@ -547,8 +551,10 @@ struct Interpreter::Imp
                 off += et->getByteSize(sizeof(void*));
                 c = c->next;
             }
+        }else
+        {
+            qWarning() << "TODO record literals not yet implemented";
         }
-        // else TODO
     }
 
     quint32 addObject(Constant* c)
@@ -2069,7 +2075,7 @@ bool Interpreter::Imp::run(quint32 proc)
 
 bool Interpreter::Imp::execute(Frame* frame)
 {
-#define _USE_JUMP_TABLE
+//#define _USE_JUMP_TABLE
 #ifdef _USE_JUMP_TABLE
 #define vmdispatch(x)     goto *disptab[x];
 #define vmcase(l)     L_IL_##l:
@@ -3108,6 +3114,7 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc)
     {
         newframe.locals.resize(newframe.proc->localsSize);
         newframe.stack.resize(1024);
+        newframe.stack.zero(); // TODO: there are issues when we don't initialize the stack memory to zero
         res = execute(&newframe);
     }
     if( frame && newframe.proc->fixArgSize )

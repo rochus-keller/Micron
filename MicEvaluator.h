@@ -60,7 +60,7 @@ protected:
     void shortCircuitOr(Expression*);
 
     // designator:
-    bool derefPointer(); // unary op
+    bool derefPointer(bool byVal); // unary op
     bool desigField(Declaration* field, bool byVal); // binary op
     bool desigIndex(bool byVal); // binary op
     bool call(int nArgs); // n-ary op, callee top on stack

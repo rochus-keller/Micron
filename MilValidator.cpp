@@ -22,6 +22,8 @@
 #include <limits>
 using namespace Mil;
 
+// TODO: remove all INTPTR from the checks. There should never be an actual INTPTR type on stack since there is no conv_ip
+
 Validator::Validator(AstModel* m):mdl(m),curMod(0),curProc(0),needsPointerInit(true)
 {
 
@@ -117,11 +119,18 @@ void Validator::visitProcedure(Declaration* proc)
     curProc = 0;
 }
 
+static inline bool isInt32(Type* t)
+{
+    if( 0 )
+        return false;
+    else
+        return t->isInt32OnStack();
+}
+
 void Validator::visitStatSeq(Statement* stat)
 {
     while(stat)
     {
-        // TODO: check types
         switch(stat->kind)
         {
         case Statement::ExprStat:
@@ -154,19 +163,62 @@ void Validator::visitStatSeq(Statement* stat)
         case Tok_GOTO:
         case Tok_LABEL:
         case Tok_LINE:
-            expectN(0, stat);
+            expectN(0, stat); // TODO
+            break;
+        case Tok_POP:
+            expectN(1, stat); // we have no reference type information to check here
             break;
         case Tok_FREE:
-        case Tok_POP:
+            if( expectN(1, stat) )
+            {
+                Type* t = deref(stat->args->getType());
+                if( t->kind != Type::Pointer )
+                {
+                    error(stat->pos, "expecting a pointer argument");
+                    break;
+                }
+            }
+            break;
         case Tok_STARG:
+            if( expectN(1, stat) )
+            {
+                DeclList params = curProc->getParams();
+                if( stat->id >= params.size() )
+                {
+                    error(stat->pos, "the referenced parameter does not exist");
+                    break;
+                }
+                Type* lhsT = deref(params[stat->id]->getType());
+                if( !assigCompat(lhsT,stat->args) )
+                    error(stat->pos, "argument type not compatible with value on stack");
+            }
+            break;
         case Tok_STLOC:
         case Tok_STLOC_S:
         case Tok_STLOC_0:
         case Tok_STLOC_1:
         case Tok_STLOC_2:
         case Tok_STLOC_3:
+            if( expectN(1, stat) )
+            {
+                DeclList locals = curProc->getLocals();
+                if( stat->id >= locals.size() )
+                {
+                    error(stat->pos, "the referenced local does not exist");
+                    break;
+                }
+                Type* lhsT = deref(locals[stat->id]->getType());
+                if( !assigCompat(lhsT,stat->args) )
+                    error(stat->pos, "local variable type not compatible with value on stack");
+            }
+            break;
         case Tok_STVAR:
-            expectN(1, stat);
+            if( expectN(1, stat) )
+            {
+                Type* lhsT = deref(stat->d->getType());
+                if( !assigCompat(lhsT,stat->args) )
+                    error(stat->pos, "module variable type not compatible with value on stack");
+            }
             break;
         case Tok_IF:
             expectN(0, stat);
@@ -182,9 +234,15 @@ void Validator::visitStatSeq(Statement* stat)
             break;
         case Tok_RET:
             if( curProc && curProc->getType() )
-                expectN(1, stat);
-            else
+            {
+                if( expectN(1, stat) && !assigCompat(deref(curProc->getType()), stat->args) )
+                    error(stat->pos,"return type incompatible with function type");
+            }else
+            {
                 expectN(0, stat);
+                if( curProc && curProc->getType() )
+                    error(stat->pos,"return requires a value");
+            }
             break;
         case Tok_STELEM:
         case Tok_STELEM_I1:
@@ -194,10 +252,75 @@ void Validator::visitStatSeq(Statement* stat)
         case Tok_STELEM_R4:
         case Tok_STELEM_R8:
         case Tok_STELEM_IP:
-            // TODO: IPP
-            expectN(3, stat);
+        case Tok_STELEM_IPP:
+            if( expectN(3, stat) )
+            {
+                Type* aptr = deref(stat->args->next->rhs->getType());
+                if( aptr->kind != Type::Pointer )
+                    error(stat->pos,"first argument must be a pointer");
+                Type* aos = deref(aptr->getType()); // array actually on stack
+                if( aos->kind != Type::Array  )
+                    error(stat->pos,"first argument must be a pointer to array");
+
+                Type* index = deref(stat->args->lhs->getType());
+                if( isInt32(index) )
+                    error(stat->pos,"second argument must be a 32 bit integer");
+
+                Type* etOs = deref(aptr->getType()); // element type on stack
+                Type* refT = tokToBasicType(mdl, stat->kind);
+                if( stat->kind == Tok_STELEM )
+                    refT = deref(stat->d->getType());
+
+                if( etOs && !equal(etOs,refT) )
+                    error(stat->pos,"the element type on stack is not compatible with the reference type");
+
+                if( etOs == 0 )
+                    etOs = refT;
+                if( !assigCompat(etOs, stat->args->rhs) )
+                    error(stat->pos,"value on stack is not compatible with the element type");
+            }
             break;
         case Tok_STFLD:
+            if( expectN(2, stat) )
+            {
+                Type* objptr = deref(stat->args->lhs->getType());
+                if( objptr->kind != Type::Pointer && objptr->kind != Type::INTPTR )
+                    error(stat->pos,"first argument must be a pointer");
+                Type* objOs = 0; // object actually on stack
+                if( objptr->kind == Type::Pointer )
+                {
+                    objOs = deref(objptr->getType());
+                    if( objOs->kind != Type::Struct && objOs->kind != Type::Union && objOs->kind != Type::Object )
+                        error(stat->pos,"first argument must be a pointer to struct, union or object");
+                }
+                Type* refObj = deref(stat->d->outer->getType());
+                if( objOs && !equal(objOs, refObj) )
+                    error(stat->pos,"the pointer type on stack is not compatible with the reference type");
+
+                Type* refFld = deref(stat->d->getType());
+                if( !assigCompat(refFld, stat->args->rhs) )
+                    error(stat->pos,"value on stack is not compatible with the pointer type");
+            }
+            break;
+        case Tok_STRCPY:
+            if( expectN(2, stat) )
+            {
+                Type* lhsT = deref(stat->args->lhs->getType());
+                if( lhsT->kind != Type::Pointer )
+                    error(stat->pos,"first argument must be a pointer");
+                Type* a = deref(lhsT->getType());
+                if( a->kind != Type::Array || a->len != 0 || deref(a->getType())->kind != Type::CHAR )
+                    error(stat->pos,"first argument must be a pointer to an open char array");
+                Type* rhsT = deref(stat->args->rhs->getType());
+                if( rhsT->kind == Type::Pointer )
+                {
+                    a = deref(rhsT->getType());
+                    if( a->kind != Type::Array || a->len != 0 || deref(a->getType())->kind != Type::CHAR )
+                        error(stat->pos,"second argument must be a pointer to an open char array or string literal");
+                }else if( rhsT->kind != Type::StringLit )
+                    error(stat->pos,"second argument must be a pointer to an open char array or string literal");
+            }
+            break;
         case Tok_STIND:
         case Tok_STIND_I1:
         case Tok_STIND_I2:
@@ -207,12 +330,31 @@ void Validator::visitStatSeq(Statement* stat)
         case Tok_STIND_R8:
         case Tok_STIND_IP:
         case Tok_STIND_IPP:
-        case Tok_STRCPY:
-            expectN(2, stat);
+            if( expectN(2, stat) )
+            {
+                Type* lhsT = deref(stat->args->lhs->getType());
+                if( lhsT->kind != Type::Pointer && lhsT->kind != Type::INTPTR )
+                    error(stat->pos,"first argument must be a pointer");
+
+                Type* baseOs = 0; // pointer basetype on stack
+                if( lhsT->kind != Type::INTPTR )
+                    baseOs = deref(lhsT->getType()); // deref pointer
+
+                Type* refT = tokToBasicType(mdl, stat->kind);
+                if( stat->kind == Tok_STIND )
+                    refT = deref(stat->d->getType());
+
+                if( baseOs && !equal(baseOs,refT) )
+                    error(stat->pos,"the pointer type on stack is not compatible with the reference type");
+                if( baseOs == 0 )
+                    baseOs = refT;
+                if( !assigCompat(baseOs, stat->args->rhs) )
+                    error(stat->pos,"value on stack is not compatible with the pointer type");
+            }
             break;
         case Tok_SWITCH:
             expectN(0, stat);
-            stat = visitSwitch(stat);
+            stat = visitSwitch(stat); // TODO
             break;
         case Tok_WHILE:
             expectN(0, stat);
@@ -231,7 +373,9 @@ Statement* Validator::visitIfThenElse(Statement* stat)
     Q_ASSERT( stat && stat->kind == Tok_IF );
     visitExpr(stat->e);
     pc++; // THEN
-    expectN(1, stat); // IF args points to the boolean expression, TODO: check boolean
+    expectN(1, stat); // IF args points to the boolean expression,
+    if( !isInt32(deref(stat->args->getType())) )
+        error(stat->pos,"expecting a 32 bit result of boolean expression");
     visitStatSeq(stat->body);
     if( stat->next && stat->next->kind == Tok_ELSE )
     {
@@ -255,7 +399,9 @@ void Validator::visitRepeat(Statement* stat)
     visitStatSeq(stat->body);
     pc++; // UNTIL
     visitExpr(stat->e);
-    expectN(1, stat); // TODO check boolean
+    expectN(1, stat);
+    if( !isInt32(deref(stat->args->getType())) )
+        error(stat->pos,"expecting a 32 bit result of boolean expression");
     pc++; // END
 }
 
@@ -263,7 +409,7 @@ Statement*Validator::visitSwitch(Statement* stat)
 {
     Q_ASSERT( stat && stat->kind == Tok_SWITCH );
     visitExpr(stat->e);
-    expectN(1, stat); // TODO check boolean
+    expectN(1, stat);
     while( stat->next && stat->next->kind == Tok_CASE )
     {
         stat = nextStat(stat);
@@ -284,7 +430,9 @@ void Validator::visitWhile(Statement* stat)
 {
     Q_ASSERT( stat && stat->kind == Tok_WHILE );
     visitExpr(stat->e);
-    expectN(1, stat); // TODO: check boolean
+    expectN(1, stat);
+    if( !isInt32(deref(stat->args->getType())) )
+        error(stat->pos,"expecting a 32 bit result of boolean expression");
     pc++; // DO
     visitStatSeq(stat->body);
     pc++; // END
@@ -295,14 +443,6 @@ Statement*Validator::nextStat(Statement* stat)
     if( stat->kind != Statement::ExprStat )
         pc++;
     return stat->next;
-}
-
-static bool isInt32(Type* t)
-{
-    if( 0 )
-        return false;
-    else
-        return t->isInt32OnStack();
 }
 
 static bool isPointer(Type* t)
@@ -551,7 +691,10 @@ Expression* Validator::visitExpr(Expression* e)
                     error(e->pos, "expecting a pointer on the stack");
                     break;
                 }
-                e->setType(deref(e->d->getType())); // TODO: check if e->d->getType is indeed a pointer type
+                Type* ptr = new Type();
+                ptr->kind = Type::Pointer;
+                ptr->setType(e->d->getType());
+                e->setType(ptr);
                 stack.back() = e;
             }
             break;
@@ -664,7 +807,7 @@ Expression* Validator::visitExpr(Expression* e)
         case Tok_LDELEM_I4:
         case Tok_LDELEM_I8:
         case Tok_LDELEM_IP:
-            // TODO IPP
+        case Tok_LDELEM_IPP:
         case Tok_LDELEM_R4:
         case Tok_LDELEM_R8:
         case Tok_LDELEM_U1:
@@ -954,7 +1097,10 @@ Expression* Validator::visitExpr(Expression* e)
                 visitExpr(iif_->e);
                 if( !expectN(1, iif_) )
                     break;
-                iif_->lhs = eatStack(1); // TODO: check boolean
+                iif_->lhs = eatStack(1);
+                if( !isInt32(deref(iif_->lhs->getType())) )
+                    error(iif_->lhs->pos,"expecting a 32 bit result of boolean expression");
+
                 iif_->rhs = then_;
                 visitExpr(then_->e);
                 if( !expectN(1, then_) )
@@ -1067,15 +1213,20 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
     switch(t)
     {
     case Tok_LDELEM_I1:
+    case Tok_STELEM_I1:
     case Tok_LDIND_I1:
+    case Tok_STIND_I1:
     case Tok_CONV_I1:
         return mdl->getBasicType(Type::INT8);
     case Tok_LDELEM_I2:
+    case Tok_STELEM_I2:
     case Tok_LDIND_I2:
     case Tok_CONV_I2:
         return mdl->getBasicType(Type::INT16);
     case Tok_LDELEM_I4:
+    case Tok_STELEM_I4:
     case Tok_LDIND_I4:
+    case Tok_STIND_I4:
     case Tok_CONV_I4:
     case Tok_LDC_I4_0:
     case Tok_LDC_I4_1:
@@ -1091,22 +1242,31 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
     case Tok_LDC_I4:
         return mdl->getBasicType(Type::INT32);
     case Tok_LDELEM_I8:
+    case Tok_STELEM_I8:
     case Tok_LDIND_I8:
+    case Tok_STIND_I8:
     case Tok_CONV_I8:
     case Tok_LDC_I8:
         return mdl->getBasicType(Type::INT64);
     case Tok_LDELEM_IP:
+    case Tok_STELEM_IP:
     case Tok_LDIND_IP:
+    case Tok_STIND_IP:
         return mdl->getBasicType(Type::INTPTR);
     case Tok_LDIND_IPP:
+    case Tok_STIND_IPP:
         return mdl->getBasicType(Type::DBLINTPTR);
     case Tok_LDELEM_R4:
+    case Tok_STELEM_R4:
     case Tok_LDIND_R4:
+    case Tok_STIND_R4:
     case Tok_CONV_R4:
     case Tok_LDC_R4:
         return mdl->getBasicType(Type::FLOAT32);
     case Tok_LDELEM_R8:
+    case Tok_STELEM_R8:
     case Tok_LDIND_R8:
+    case Tok_STIND_R8:
     case Tok_CONV_R8:
     case Tok_LDC_R8:
         return mdl->getBasicType(Type::FLOAT64);
@@ -1167,13 +1327,113 @@ bool Validator::equal(Type* lhs, Type* rhs)
         return false;
     if( lhs == rhs )
         return true;
-    if( lhs->kind == Type::INTPTR && rhs->kind == Type::INTPTR ||
-            lhs->kind == Type::Pointer && rhs->kind == Type::INTPTR ||
-            lhs->kind == Type::INTPTR && rhs->kind == Type::Pointer )
-        return true; // happens for ldind_ip, stind_ip, which we cannot check more precise
+    if( isInt32(lhs) && isInt32(rhs) )
+        return true;
+    if( lhs->isInt64() && rhs->isInt64() )
+        return true;
+    if( lhs->kind == Type::FLOAT32 && rhs->kind == Type::FLOAT32 )
+        return true;
+    if( (lhs->kind == Type::INTPTR && rhs->kind == Type::INTPTR) ||
+            (lhs->kind == Type::Pointer && rhs->kind == Type::INTPTR) ||
+            (lhs->kind == Type::INTPTR && rhs->kind == Type::Pointer) ||
+            (lhs->kind == Type::Proc && !lhs->typebound && rhs->kind == Type::INTPTR) ||
+            (lhs->kind == Type::INTPTR && rhs->kind == Type::Proc && !rhs->typebound) )
+        return true; // happens for ldind_ip, stind_ip, which we cannot check more precisely
     if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer )
         return equal(deref(lhs->getType()), deref(rhs->getType()));
+    if( lhs->kind == Type::Array && rhs->kind == Type::Array && lhs->len == rhs->len )
+        return equal(deref(lhs->getType()), deref(rhs->getType()));
     return false;
+}
+
+bool Validator::assigCompat(Type* lhs, Type* rhs)
+{
+    if( lhs == 0 || rhs == 0 )
+        return false;
+    if( equal(lhs,rhs) )
+        return true;
+    if( (lhs->kind == Type::Pointer || lhs->kind == Type::INTPTR || lhs->kind == Type::Proc) &&
+            rhs->kind == Type::NIL )
+        return true;
+
+    if( lhs->kind == Type::Pointer && deref(lhs->getType())->kind == Type::Struct &&
+            rhs->kind == Type::Pointer && deref(rhs->getType())->kind == Type::Struct )
+    {
+        Type* lstruct = deref(lhs->getType());
+        Type* rstruct = deref(rhs->getType());
+        while( rstruct && !rstruct->subs.isEmpty() && deref(rstruct->subs.first()->getType())->kind == Type::Struct )
+        {
+            Type* sub = deref(rstruct->subs.first()->getType());
+            if( equal(lstruct, sub) )
+                return true;
+            rstruct = sub;
+        }
+    }
+
+    if( lhs->kind == Type::Proc && rhs->kind == Type::Proc )
+    {
+        if( lhs->typebound != rhs->typebound )
+            return false;
+        if( lhs->subs.size() != rhs->subs.size() )
+            return false;
+        for( int i = 0; i < lhs->subs.size(); i++ )
+            if( !equal(deref(lhs->subs[i]->getType()), deref(rhs->subs[i]->getType()) ) )
+                return false;
+        if( !equal(deref(lhs->getType()),deref(rhs->getType() ) ) )
+            return false;
+        return true;
+    }
+    return false;
+}
+
+bool Validator::assigCompat(Type* lhs, Expression* rhs)
+{
+    switch( rhs->kind )
+    {
+    case Tok_LDPROC:
+    case Tok_LDMETH:
+        return assigCompat(lhs, rhs->d);
+    case Tok_CASTPTR:
+    case Tok_CALL:
+    case Tok_CALLI:
+    case Tok_CALLVIRT:
+    case Tok_CALLVI:
+    case Tok_INITOBJ:
+    case Tok_ISINST:
+    case Tok_LDELEM:
+    case Tok_LDELEMA:
+    case Tok_LDFLD:
+    case Tok_LDFLDA:
+    case Tok_LDIND:
+    case Tok_LDVAR:
+    case Tok_LDVARA:
+    case Tok_NEWARR:
+    case Tok_NEWVLA:
+    case Tok_NEWOBJ:
+    case Tok_SIZEOF:
+    case Tok_PTROFF:
+    default:
+        return assigCompat(lhs, deref(rhs->getType()));
+    }
+}
+
+bool Validator::assigCompat(Type* lhs, Declaration* rhs)
+{
+    if( lhs->kind == Type::Proc && rhs->kind == Declaration::Procedure )
+    {
+        if( lhs->typebound != rhs->typebound )
+            return false;
+        DeclList params = rhs->getParams(false);
+        if( lhs->subs.size() != params.size() )
+            return false;
+        for( int i = 0; i < params.size(); i++ )
+            if( !equal(deref(lhs->subs[i]->getType()), deref(params[i]->getType()) ) )
+                return false;
+        if( !equal(deref(lhs->getType()),deref(rhs->getType() ) ) )
+            return false;
+        return true;
+    }
+    return assigCompat(lhs, deref(rhs->getType() ) );
 }
 
 bool Validator::checkIfObjectInit(Type* t)
