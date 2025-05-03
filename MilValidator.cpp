@@ -20,9 +20,11 @@
 #include "MilValidator.h"
 #include <QtDebug>
 #include <limits>
+#include <float.h>
+#include <math.h>
 using namespace Mil;
 
-// TODO: remove all INTPTR from the checks. There should never be an actual INTPTR type on stack since there is no conv_ip
+// NOTE: removed all INTPTR from the checks. There should never be an actual INTPTR type on stack since there is no conv_ip
 
 Validator::Validator(AstModel* m):mdl(m),curMod(0),curProc(0),needsPointerInit(true)
 {
@@ -284,15 +286,13 @@ void Validator::visitStatSeq(Statement* stat)
             if( expectN(2, stat) )
             {
                 Type* objptr = deref(stat->args->lhs->getType());
-                if( objptr->kind != Type::Pointer && objptr->kind != Type::INTPTR )
+                if( objptr->kind != Type::Pointer )
                     error(stat->pos,"first argument must be a pointer");
-                Type* objOs = 0; // object actually on stack
-                if( objptr->kind == Type::Pointer )
-                {
-                    objOs = deref(objptr->getType());
-                    if( objOs->kind != Type::Struct && objOs->kind != Type::Union && objOs->kind != Type::Object )
-                        error(stat->pos,"first argument must be a pointer to struct, union or object");
-                }
+
+                Type* objOs = deref(objptr->getType()); // object actually on stack
+                if( objOs->kind != Type::Struct && objOs->kind != Type::Union && objOs->kind != Type::Object )
+                    error(stat->pos,"first argument must be a pointer to struct, union or object");
+
                 Type* refObj = deref(stat->d->outer->getType());
                 if( objOs && !equal(objOs, refObj) )
                     error(stat->pos,"the pointer type on stack is not compatible with the reference type");
@@ -332,13 +332,11 @@ void Validator::visitStatSeq(Statement* stat)
         case Tok_STIND_IPP:
             if( expectN(2, stat) )
             {
-                Type* lhsT = deref(stat->args->lhs->getType());
-                if( lhsT->kind != Type::Pointer && lhsT->kind != Type::INTPTR )
+                Type* ptrT = deref(stat->args->lhs->getType());
+                if( ptrT->kind != Type::Pointer )
                     error(stat->pos,"first argument must be a pointer");
 
-                Type* baseOs = 0; // pointer basetype on stack
-                if( lhsT->kind != Type::INTPTR )
-                    baseOs = deref(lhsT->getType()); // deref pointer
+                Type* baseOs = deref(ptrT->getType()); // pointer basetype on stack
 
                 Type* refT = tokToBasicType(mdl, stat->kind);
                 if( stat->kind == Tok_STIND )
@@ -974,8 +972,8 @@ Expression* Validator::visitExpr(Expression* e)
             {
                 e->lhs = stackAt(-1); // numElems
                 Type* lhsT = deref(e->lhs->getType());
-                if( !isInt32(lhsT) && lhsT->kind == Type::INTPTR )
-                    error(e->pos, "expecing an int32 or intptr on stack");
+                if( !isInt32(lhsT) )
+                    error(e->pos, "expecing an 32 bit integer on stack");
                 Type* t = deref(e->d->getType());
                 Type* array = new Type();
                 array->kind = Type::Array;
@@ -1295,6 +1293,16 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
     }
 }
 
+static int is_float_range(double d) {
+    return (fabs(d) <= FLT_MAX) && (fabs(d) >= FLT_MIN);
+}
+
+static int is_representable_as_float(double d) {
+    if (!is_float_range(d))
+        return 0;
+    return (d == (double)(float)d);
+}
+
 Type*Validator::toType(Constant* c)
 {
     if( c == 0 )
@@ -1302,7 +1310,10 @@ Type*Validator::toType(Constant* c)
     switch( c->kind )
     {
     case Constant::D:
-        return mdl->getBasicType(Type::FLOAT64);
+        if( is_representable_as_float(c->d) )
+            return mdl->getBasicType(Type::FLOAT32);
+        else
+            return mdl->getBasicType(Type::FLOAT64);
     case Constant::I:
         if( c->i <= std::numeric_limits<qint32>::max() && c->i >= std::numeric_limits<qint32>::min())
             return mdl->getBasicType(Type::INT32);

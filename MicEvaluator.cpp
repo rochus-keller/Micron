@@ -180,7 +180,10 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig)
         const MilTrident trident = qMakePair(toQuali(proc->outer),proc->name);
         out->ldmeth_(trident);
     }else
-        assureTopOnMilStack();
+    {
+        assureTopOnMilStack(); // modifies stack.back() i.e. rhs
+        adjustNumType(stack.back().type,lhs);
+    }
 
     return true;
 }
@@ -210,8 +213,6 @@ bool Evaluator::assign()
 
     if( !lhs.ref )
         return false; // error reported elsewhere
-
-    adjustNumType(rhs.type,lhs.type);
 
     if( lhs.type->kind == Type::Array )
     {

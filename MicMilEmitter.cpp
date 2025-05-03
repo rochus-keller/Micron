@@ -26,9 +26,14 @@
 #include <QtDebug>
 using namespace Mic;
 
+static const char* bool_sym = 0;
+static const char* char_sym = 0;
+
 MilEmitter::MilEmitter(MilRenderer* r):d_out(r),d_typeKind(0),ops(0)
 {
     Q_ASSERT( r );
+    bool_sym = Token::getSymbol("bool").constData();
+    char_sym = Token::getSymbol("char").constData();
 }
 
 void MilEmitter::beginModule(const QByteArray& fullName, const QString& sourceFile, const MilMetaParams& mp)
@@ -620,7 +625,8 @@ void MilEmitter::ldelem_(const MilQuali& typeRef)
             ops->append(MilOperation(IL_ldelem_r4));
         else if( equals( typeRef.second,  R8 ) )
             ops->append(MilOperation(IL_ldelem_r8));
-        else if( equals( typeRef.second,  U1 ) )
+        else if( equals( typeRef.second,  U1 ) ||
+                 typeRef.second.constData() == char_sym || typeRef.second.constData() == bool_sym)
             ops->append(MilOperation(IL_ldelem_u1));
         else if( equals( typeRef.second,  U2 ) )
             ops->append(MilOperation(IL_ldelem_u2));
@@ -943,7 +949,8 @@ void MilEmitter::starg_(quint16 arg)
 void MilEmitter::stelem_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    if( equals( typeRef.second,  I1) )
+    if( equals( typeRef.second,  I1) ||
+            typeRef.second.constData() == char_sym || typeRef.second.constData() == bool_sym)
         ops->append(MilOperation(IL_stelem_i1));
     else if( equals( typeRef.second,  I2) )
         ops->append(MilOperation(IL_stelem_i2));

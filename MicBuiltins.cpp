@@ -260,6 +260,8 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::DISPOSE:
         expectingNArgs(args,1);
+        if( args[0]->getType()->kind != Type::Pointer )
+            throw "expecting a pointer argument";
         break;
     case Builtin::EXCL:
         expectingNArgs(args,2);
@@ -275,6 +277,8 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::NEW:
         expectingNMArgs(args,1,2);
+        if( args[0]->getType()->kind != Type::Pointer )
+            throw "expecting a pointer as the first argument";
         break;
     case Builtin::PCALL:
         break;

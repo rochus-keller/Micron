@@ -483,7 +483,7 @@ void CeeGen::constValue(QTextStream& out, Constant* c)
         out << c->i;
         break;
     case Constant::S:
-        out << c->s;
+        out << "\"" << c->s << "\"";
         break;
     case Constant::B:
         {

@@ -18,6 +18,7 @@ void Out$LongReal(double x, int n)
 void Out$Ln()
 {
 	printf("\n");
+    fflush(stdout);
 }
 
 void Out$Char(char c)

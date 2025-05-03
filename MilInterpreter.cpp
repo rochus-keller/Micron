@@ -475,7 +475,7 @@ struct Interpreter::Imp
             if( t->kind == Type::FLOAT32 )
             {
                 float tmp = c->d;
-                memcpy(data+off, &tmp, sizeof(double));
+                memcpy(data+off, &tmp, sizeof(float));
             }else
             {
                 Q_ASSERT(t->kind == Type::FLOAT64);
@@ -2075,7 +2075,7 @@ bool Interpreter::Imp::run(quint32 proc)
 
 bool Interpreter::Imp::execute(Frame* frame)
 {
-//#define _USE_JUMP_TABLE
+#define _USE_JUMP_TABLE
 #ifdef _USE_JUMP_TABLE
 #define vmdispatch(x)     goto *disptab[x];
 #define vmcase(l)     L_IL_##l:
@@ -2638,7 +2638,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 quint8* obj = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
                 memcpy(obj + frame->proc->ops[pc].val, v, flen);
                 frame->pop(lenonstack + Frame::stackAlig);
-                pc++;
+                pc += 2;
             } vmbreak;
         vmcase(ldind_i1)
                 frame->pushI4(*(qint8*)frame->popP()); pc++;
@@ -2679,7 +2679,6 @@ bool Interpreter::Imp::execute(Frame* frame)
                 vmbreak;
         vmcase(ldind_vt){
                 void* ptr = frame->popP();
-                const char* str = (const char*)ptr;
                 frame->push(ptr, stackAligned(frame->proc->ops[pc].val)); pc++;
             } vmbreak;
        vmcase(ldind_str) {
@@ -2761,7 +2760,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldloc_r8)
-                frame->pushR8(*(float*)VM_LOCAL_ADDR);
+                frame->pushR8(*(double*)VM_LOCAL_ADDR);
                 pc++;
             vmbreak;
         vmcase(ldloc_p)
@@ -3114,7 +3113,6 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc)
     {
         newframe.locals.resize(newframe.proc->localsSize);
         newframe.stack.resize(1024);
-        newframe.stack.zero(); // TODO: there are issues when we don't initialize the stack memory to zero
         res = execute(&newframe);
     }
     if( frame && newframe.proc->fixArgSize )

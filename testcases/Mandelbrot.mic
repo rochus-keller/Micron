@@ -87,7 +87,7 @@ module Mandelbrot
          notDone := true
          escape := 0
          while notDone & ( z < 50 ) do
-           zr := zrzr - zizi + cr;
+          zr := zrzr - zizi + cr;
            zi := 2.0 * zr * zi + ci;
 
            // preserve recalculation

@@ -1,0 +1,9 @@
+module Test
+
+var ii: int64
+	i: int32
+begin
+	i := 33
+	ii := i
+	println(ii)
+end Test
