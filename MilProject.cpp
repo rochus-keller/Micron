@@ -389,7 +389,7 @@ void Project::interpret(bool dump)
         if( !r.precompile(module) )
             return;
     }
-    if( dump )
+    if( false ) // dump )
     {
         QTextStream out(stdout);
         r.dumpAll(out);

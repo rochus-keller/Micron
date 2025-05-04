@@ -22,6 +22,7 @@
 extern "C" {
 #include "runtime/MIC+.h"
 }
+#include <stdint.h>  // For uintptr_t
 #include <QVector>
 #include <QtDebug>
 using namespace Mil;
@@ -72,31 +73,72 @@ struct Operation
     Operation(IL_op op = IL_invalid, quint32 val = 0, bool minus = false):val(val),minus(minus),op(op){}
 };
 
+#define _USE_JUMP_TABLE // instead of a big switch
+//#define _CHECK_HEAP_ADDRESSES
+//#define _USE_ALLOCA_ // doesn't work; strange data in debug mode, crash in release mode
+#define _USE_LOCAL_PREALLOC_
+enum { PreAllocSize = 1024 };
+
+#ifdef _USE_ALLOCA_
+static inline void* aligned_alloca(size_t size) {
+    enum { Alignment = sizeof(void*) };
+    void* ptr = alloca(size+Alignment);
+    return (void*)(((uintptr_t)ptr + Alignment-1) & ~((uintptr_t)(Alignment-1)));
+}
+#ifdef _USE_LOCAL_PREALLOC_
+#error alloca not compatible with prealloc
+#endif
+#endif
+
 class ByteArray
 {
     char* d;
-    int s;
+    quint32 s : 31;
+    quint32 borrowed : 1;
 public:
     // according to Valgrind, QByteArray.detach() is very expensive; so here a custom imp.
-    ByteArray():d(0),s(0) {}
+    ByteArray():d(0),s(0),borrowed(0) {}
     ~ByteArray()
     {
-        if( d )
+        if( d && !borrowed )
             free(d);
     }
-    void resize(int len)
+#ifdef _USE_LOCAL_PREALLOC_
+    void init(void* mem, quint32 size)
+    {
+        if( d && !borrowed )
+            free(d);
+        d = (char*)mem;
+        s = size;
+        borrowed = 1;
+    }
+#ifdef _USE_ALLOCA_
+#error prealloc not compatible with alloca
+#endif
+#endif
+    void resize(int len, bool useVla = true)
     {
         if(len <= s)
             return;
         if( d )
-            d = (char*)realloc(d, len);
+        {
+            if( borrowed )
+            {
+                d = (char*)malloc(len);
+                borrowed = 0;
+            }else
+                d = (char*)realloc(d, len);
+        }
+#ifdef _USE_ALLOCA_
+        else if( useVla )
+        {
+            d = (char*)aligned_alloca(len);
+            borrowed = 1;
+        }
+#endif
         else
             d = (char*)malloc(len);
         s = len;
-    }
-    void zero()
-    {
-        memset(d, 0, s);
     }
     inline char* data() { return d; }
     inline int size() const { return s; }
@@ -121,8 +163,9 @@ struct MethRef
     MethRef(void* o = 0, void* p = 0):obj(o),proc(p){}
 };
 
-struct Frame
+class Frame
 {
+public:
     enum { stackAlig = 8 };
     Procedure* proc;
     Frame* outer;
@@ -135,7 +178,7 @@ struct Frame
         if( len < stackAlig )
             len = stackAlig;
         if( sp + len > stack.size() )
-            stack.resize(len);
+            stack.resize(len, false); // true resize if necessary, never use vla for resize
         void* res = stack.data()+sp;
         sp += len;
         return res;
@@ -212,6 +255,9 @@ struct Frame
     {
         return stack.data()+sp+off*stackAlig;
     }
+private:
+    static void* operator new(size_t);      // Block scalar heap allocation
+    static void* operator new[](size_t);    // Block array heap allocation
 };
 
 static bool MIC_relop1(void* args, void* ret)
@@ -613,7 +659,7 @@ struct Interpreter::Imp
 
     bool run(quint32 proc);
     bool execute(Frame*);
-    bool call(Frame* frame, int pc, Procedure* proc);
+    bool call(Frame* frame, int pc, Procedure* proc, void* local, void* stack);
 };
 
 Interpreter::Interpreter(AstModel* mdl)
@@ -2031,7 +2077,13 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
 
 bool Interpreter::Imp::run(quint32 proc)
 {
+#ifdef _USE_LOCAL_PREALLOC_
+    quint8 locals[PreAllocSize];
+    quint8 stack[PreAllocSize];
+    return call(0, 0, &procs[proc], locals, stack);
+#else
     return call(0, 0, &procs[proc]);
+#endif
 }
 
 #define VM_BINARY_OP(type, op) \
@@ -2073,9 +2125,12 @@ bool Interpreter::Imp::run(quint32 proc)
 #define VM_STIND(totype, fromtype) { totype v = (totype)frame->pop##fromtype(); \
     totype* p = (totype*)frame->popP(); *p = v; pc++; }
 
+#ifdef _CHECK_HEAP_ADDRESSES
+static QSet<void*> dynamics;
+#endif
+
 bool Interpreter::Imp::execute(Frame* frame)
 {
-#define _USE_JUMP_TABLE
 #ifdef _USE_JUMP_TABLE
 #define vmdispatch(x)     goto *disptab[x];
 #define vmcase(l)     L_IL_##l:
@@ -2092,6 +2147,18 @@ bool Interpreter::Imp::execute(Frame* frame)
 #define vmdispatch(o)	switch(o)
 #define vmcase(l)	case IL_##l:
 #define vmbreak		break
+#endif
+
+#ifdef _USE_LOCAL_PREALLOC_
+    quint8 locals[PreAllocSize];
+    quint8 stack[PreAllocSize];
+#endif
+
+#ifdef _TRACE_CALLS_
+    if( frame->proc->decl->kind == Declaration::Module )
+        qDebug() << "exec" << frame->proc->decl->name << "(synthetic)";
+    else
+        qDebug() << "exec" << frame->proc->decl->toPath();
 #endif
 
     int pc = 0;
@@ -3037,27 +3104,48 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(ret_void)
             return true;
         vmcase(call){
+#ifdef _USE_LOCAL_PREALLOC_
+                if( !call(frame, pc, &procs[frame->proc->ops[pc].val], locals, stack ) )
+#else
                 if( !call(frame, pc, &procs[frame->proc->ops[pc].val]) )
+#endif
                     return false;
                 pc++;
             } vmbreak;
         vmcase(calli) {
-                if( !call(frame, pc, (Procedure*)frame->popP()) )
+#ifdef _USE_LOCAL_PREALLOC_
+                if( !call(frame, pc, (Procedure*)frame->popP(), locals, stack ) )
+#else
+               if( !call(frame, pc, (Procedure*)frame->popP()) )
+#endif
                     return false;
                 pc++;
             } vmbreak;
-        vmcase(alloc1)
-                frame->pushP(malloc(frame->proc->ops[pc].val));
+        vmcase(alloc1) {
+                void* ptr = malloc(frame->proc->ops[pc].val);
+#ifdef _CHECK_HEAP_ADDRESSES
+                dynamics.insert(ptr);
+#endif
+                frame->pushP(ptr);
                 pc++;
-            vmbreak;
-        vmcase(allocN)
-                frame->pushP(malloc(frame->proc->ops[pc].val * (quint32)frame->popI4()));
+            } vmbreak;
+        vmcase(allocN) {
+                void* ptr = malloc(frame->proc->ops[pc].val * (quint32)frame->popI4());
+#ifdef _CHECK_HEAP_ADDRESSES
+                dynamics.insert(ptr);
+#endif
+                frame->pushP(ptr);
                 pc++;
-            vmbreak;
-        vmcase(free)
-                free(frame->popP());
+            } vmbreak;
+        vmcase(free) {
+                void* ptr = frame->popP();
+#ifdef _CHECK_HEAP_ADDRESSES
+                Q_ASSERT(dynamics.contains(ptr));
+                dynamics.remove(ptr);
+#endif
+                free(ptr);
                 pc++;
-            vmbreak;
+            } vmbreak;
         vmcase(strcpy) {
                 const char* rhs = (const char*)frame->popP();
                 char* lhs = (char*)frame->popP();
@@ -3092,7 +3180,7 @@ bool Interpreter::Imp::execute(Frame* frame)
     return true;
 }
 
-bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc)
+bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, void* stack)
 {
     Frame newframe;
     newframe.proc = proc;
@@ -3100,8 +3188,11 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc)
     bool res;
     if( proc->ffi )
     {
+#ifdef _USE_LOCAL_PREALLOC_
+        newframe.stack.init(stack,PreAllocSize);
+#endif
         newframe.stack.resize(newframe.proc->returnSize);
-        newframe.sp = newframe.stack.size();
+        newframe.sp = newframe.proc->returnSize;
         char* retval = 0;
         if( newframe.stack.size() != 0 )
             retval = newframe.stack.data();
@@ -3111,8 +3202,13 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc)
         res = proc->ffi(args, retval);
     }else
     {
+#ifdef _USE_LOCAL_PREALLOC_
+        newframe.locals.init(local,PreAllocSize);
+        newframe.stack.init(stack, PreAllocSize);
+#else
         newframe.locals.resize(newframe.proc->localsSize);
         newframe.stack.resize(1024);
+#endif
         res = execute(&newframe);
     }
     if( frame && newframe.proc->fixArgSize )
