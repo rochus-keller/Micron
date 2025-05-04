@@ -22,7 +22,6 @@
 extern "C" {
 #include "runtime/MIC+.h"
 }
-#include <stdint.h>  // For uintptr_t
 #include <QVector>
 #include <QtDebug>
 using namespace Mil;
@@ -75,20 +74,8 @@ struct Operation
 
 #define _USE_JUMP_TABLE // instead of a big switch
 //#define _CHECK_HEAP_ADDRESSES
-//#define _USE_ALLOCA_ // doesn't work; strange data in debug mode, crash in release mode
 #define _USE_LOCAL_PREALLOC_
 enum { PreAllocSize = 1024 };
-
-#ifdef _USE_ALLOCA_
-static inline void* aligned_alloca(size_t size) {
-    enum { Alignment = sizeof(void*) };
-    void* ptr = alloca(size+Alignment);
-    return (void*)(((uintptr_t)ptr + Alignment-1) & ~((uintptr_t)(Alignment-1)));
-}
-#ifdef _USE_LOCAL_PREALLOC_
-#error alloca not compatible with prealloc
-#endif
-#endif
 
 class ByteArray
 {
@@ -112,11 +99,8 @@ public:
         s = size;
         borrowed = 1;
     }
-#ifdef _USE_ALLOCA_
-#error prealloc not compatible with alloca
 #endif
-#endif
-    void resize(int len, bool useVla = true)
+    void resize(int len)
     {
         if(len <= s)
             return;
@@ -128,15 +112,7 @@ public:
                 borrowed = 0;
             }else
                 d = (char*)realloc(d, len);
-        }
-#ifdef _USE_ALLOCA_
-        else if( useVla )
-        {
-            d = (char*)aligned_alloca(len);
-            borrowed = 1;
-        }
-#endif
-        else
+        }else
             d = (char*)malloc(len);
         s = len;
     }
@@ -178,7 +154,7 @@ public:
         if( len < stackAlig )
             len = stackAlig;
         if( sp + len > stack.size() )
-            stack.resize(len, false); // true resize if necessary, never use vla for resize
+            stack.resize(len);
         void* res = stack.data()+sp;
         sp += len;
         return res;
