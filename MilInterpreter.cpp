@@ -24,6 +24,7 @@ extern "C" {
 }
 #include <QVector>
 #include <QtDebug>
+#include <deque>
 using namespace Mil;
 
 enum OpArgCode {
@@ -122,14 +123,22 @@ public:
 
 struct Procedure
 {
-    QVector<Operation> ops_;
-    Operation* ops; // according to Valgrind, ops.detach() is very expensive, so we directly access the pointer
+    std::vector<Operation> ops;
+    // according to Valgrind, QVector.detach() is very expensive
     Declaration* decl;
     Interpreter::FfiProc ffi;
     bool called;
+    bool init;
     quint32 localsSize;
     quint32 fixArgSize, returnSize; // stackAligned
-    Procedure():decl(0),called(false),localsSize(0),fixArgSize(0),returnSize(0),ffi(0),ops(0){}
+    Procedure():decl(0),called(false),localsSize(0),fixArgSize(0),returnSize(0),ffi(0),ops(0),init(false){}
+};
+
+struct Vtable
+{
+    Vtable* parent;
+    Declaration* type;
+    std::vector<Procedure*> methods;
 };
 
 struct MethRef
@@ -350,12 +359,14 @@ static bool MIC_assert(void* args, void* ret)
 struct Interpreter::Imp
 {
     AstModel* mdl;
-    QList<QByteArray> strings;
-    QList<QByteArray> objects;
-    QList<double> doubles;
-    QList<qint64> ints;
-    QList<Procedure> procs;
-    QByteArray moduleData;
+    // accessing std::vector is cheaper than QVector or QByteArray
+    std::vector<std::string> strings;
+    std::vector<QByteArray> objects;
+    std::vector<double> doubles;
+    std::vector<qint64> ints;
+    std::vector<Procedure*> procs;
+    std::vector<Vtable*> vtables;
+    std::vector<char> moduleData;
     Procedure* curProc;
     QList< QList<int> > loopStack;
     const char* MIC$;
@@ -384,6 +395,11 @@ struct Interpreter::Imp
         ffiProcs[MIC$].insert(Mic::Symbol::getSymbol("printSet").constData(), MIC_printSet);
         ffiProcs[MIC$].insert(Mic::Symbol::getSymbol("assert").constData(), MIC_assert);
     }
+    ~Imp()
+    {
+        for( int i = 0; i < procs.size(); i++ )
+            delete procs[i];
+    }
 
     bool translateModule(Declaration* m)
     {
@@ -399,10 +415,10 @@ struct Interpreter::Imp
         if(init == 0)
         {
             // no init proc was found, so we synthesize a minimal one
-            procs.append(Procedure());
-            Procedure& cur = procs.back();
-            cur.decl = m;
-            if( !translateInit(cur, procs.size()-1) )
+            Procedure* cur = new Procedure();
+            procs.push_back(cur);
+            cur->decl = m;
+            if( !translateInit(*cur, procs.size()-1) )
                 return false;
         }else if( !translateProc(init) )
             return false;
@@ -419,14 +435,14 @@ struct Interpreter::Imp
 
         Q_ASSERT( proc->kind == Declaration::Procedure );
 
-        procs.append(Procedure());
-        Procedure& cur = procs.back();
-        cur.decl = proc;
+        Procedure* cur = new Procedure();
+        procs.push_back(cur);
+        cur->decl = proc;
 
-        if( proc->init && !translateInit(cur, procs.size()-1) )
+        if( proc->init && !translateInit(*cur, procs.size()-1) )
             // add a prefix which calls imports if not already called
             return false;
-        return translateProc(cur);
+        return translateProc(*cur);
     }
 
     int findProc(Declaration* proc) const
@@ -441,7 +457,7 @@ struct Interpreter::Imp
         }
         for( int i = 0; i < procs.size(); i++ )
         {
-            if( procs[i].decl == proc )
+            if( procs[i]->decl == proc )
                 return i;
         }
         return -1;
@@ -456,37 +472,30 @@ struct Interpreter::Imp
         return false;
     }
 
+    template<typename T>
+    int appendUnique(std::vector<T>& vec, const T& val)
+    {
+          for (size_t i = 0; i < vec.size(); ++i) {
+              if (vec[i] == val)
+                  return i;
+          }
+          vec.push_back(val);
+          return vec.size() - 1;
+    }
+
     quint32 addInt(qint64 i)
     {
-        int id = ints.indexOf(i);
-        if( id == -1 )
-        {
-            id = ints.size();
-            ints.append(i);
-        }
-        return id;
+        return appendUnique(ints,i);
     }
 
     quint32 addFloat(double f)
     {
-        int id = doubles.indexOf(f);
-        if( id == -1 )
-        {
-            id = doubles.size();
-            doubles.append(f);
-        }
-        return id;
+        return appendUnique(doubles, f);
     }
 
-    quint32 addString(const QByteArray& str)
+    quint32 addString(const char* str)
     {
-        int id = strings.indexOf(str);
-        if( id == -1 )
-        {
-            id = strings.size();
-            strings.append(str);
-        }
-        return id;
+        return appendUnique(strings, std::string(str));
     }
 
     void render(char* data, quint32 off, Type* t, Constant* c)
@@ -591,19 +600,15 @@ struct Interpreter::Imp
             obj.resize(deref(cl->type)->getByteSize(sizeof(void*)));
             render(obj.data(), 0, cl);
         }
-        int id = objects.indexOf(obj);
-        if( id == -1 )
-        {
-            id = objects.size();
-            objects.append(obj);
-        }
+        const quint32 id = objects.size();
+        objects.push_back(obj);
         return id;
     }
 
     int emitOp(Procedure& proc, IL_op op, quint32 v = 0, bool minus = false )
     {
-        const int res = proc.ops_.size();
-        proc.ops_.append(Operation(op, v, minus));
+        const int res = proc.ops.size();
+        proc.ops.push_back(Operation(op, v, minus));
         return res;
     }
 
@@ -619,8 +624,8 @@ struct Interpreter::Imp
 
     void inline branch_here(Procedure& proc, int pc)
     {
-        Q_ASSERT(pc >= 0 && pc < proc.ops_.size());
-        proc.ops_[pc].val = proc.ops_.size() - pc - 1;
+        Q_ASSERT(pc >= 0 && pc < proc.ops.size());
+        proc.ops[pc].val = proc.ops.size() - pc - 1;
     }
 
     static inline int stackAligned(int off)
@@ -738,48 +743,48 @@ bool Interpreter::dumpProc(QTextStream& out, Declaration* proc)
     const int i = imp->findProc(proc);
     if( i == -1 )
         return false; // there is no implementation for this proc, not an error
-    Procedure* p = &imp->procs[i];
+    Procedure* p = imp->procs[i];
     out << "proc " << p->decl->toPath() << endl;
-    for( int pc = 0; pc < p->ops_.size(); pc++ )
+    for( int pc = 0; pc < p->ops.size(); pc++ )
     {
-        out << "    " << QString("%1: ").arg(pc,2) << op_names[p->ops_[pc].op];
-        switch(op_args[p->ops_[pc].op])
+        out << "    " << QString("%1: ").arg(pc,2) << op_names[p->ops[pc].op];
+        switch(op_args[p->ops[pc].op])
         {
         case NoOpArgs:
             break;
         case OffArg:
-            out << " " << p->ops_[pc].val;
+            out << " " << p->ops[pc].val;
             break;
         case SizeArg:
-            out << " " << p->ops_[pc].val;
+            out << " " << p->ops[pc].val;
             break;
         case IntArg:
-            out << " " << imp->ints[p->ops_[pc].val];
+            out << " " << imp->ints[p->ops[pc].val];
             break;
         case FloatArg:
-            out << " " << imp->doubles[p->ops_[pc].val];
+            out << " " << imp->doubles[p->ops[pc].val];
             break;
         case StrArg:
-            out << " \"" << imp->strings[p->ops_[pc].val] << "\"";
+            out << " \"" << imp->strings[p->ops[pc].val].c_str() << "\"";
             break;
         case ByteArrayArg:
-            out << " $" << imp->objects[p->ops_[pc].val].toHex().left(40) << " (" <<
-                   imp->objects[p->ops_[pc].val].size() << ")";
+            out << " $" << imp->objects[p->ops[pc].val].toHex().left(40) << " (" <<
+                   imp->objects[p->ops[pc].val].size() << ")";
             break;
         case ProcArg:
-            if( p->ops_[pc].val < imp->procs.size() )
-                out << " " << imp->procs[p->ops_[pc].val].decl->toPath();
+            if( p->ops[pc].val < imp->procs.size() )
+                out << " " << imp->procs[p->ops[pc].val]->decl->toPath();
             else
-                out << " invalid proc " << p->ops_[pc].val;
+                out << " invalid proc " << p->ops[pc].val;
             break;
         case JumpArg:
-            out << " " << (p->ops_[pc].minus ? "-" : "") << p->ops_[pc].val << " -> "
-                << QString("%1").arg(pc + 1 + (p->ops_[pc].minus?-1:1) * p->ops_[pc].val);
+            out << " " << (p->ops[pc].minus ? "-" : "") << p->ops[pc].val << " -> "
+                << QString("%1").arg(pc + 1 + (p->ops[pc].minus?-1:1) * p->ops[pc].val);
             break;
         case OffSizeArgs:
-            Q_ASSERT(pc+1 < p->ops_.size());
-            out << " " << p->ops_[pc].val;
-            out << " " << p->ops_[pc+1].val;
+            Q_ASSERT(pc+1 < p->ops.size());
+            out << " " << p->ops[pc].val;
+            out << " " << p->ops[pc+1].val;
             pc++;
            break;
         default:
@@ -814,9 +819,6 @@ bool Interpreter::dumpAll(QTextStream& out)
 bool Interpreter::run(Declaration* proc)
 {
     Q_ASSERT(proc && (proc->kind == Declaration::Procedure || proc->kind == Declaration::Module));
-
-    for( int i = 0; i < imp->procs.size(); i++ )
-        imp->procs[i].ops = imp->procs[i].ops_.data();
 
     Declaration* module = proc->getModule();
     Q_ASSERT(module);
@@ -868,11 +870,8 @@ bool Interpreter::Imp::translateInit(Procedure& proc, quint32 id)
                 d->off += off;
         }
     }
-
     // first check if already called
-    emitOp(proc,IL_already_called, id);
-    emitOp(proc,IL_brfalse_i4,1);
-    emitOp(proc,IL_ret_void);
+    proc.init = true;
 
     Declaration* d = proc.decl->subs;
     while(d)
@@ -1222,23 +1221,23 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             break;
         case Tok_REPEAT:
             {
-                const int start = proc.ops_.size();
+                const int start = proc.ops.size();
                 if( !translateStatSeq(proc, s->body) )
                     return false;
                 if( !translateExprSeq(proc, s->e) )
                     return false;
-                emitOp(proc, s->e->getType()->isInt64() ? IL_brfalse_i8 : IL_brfalse_i4, proc.ops_.size()-start+1, true );
+                emitOp(proc, s->e->getType()->isInt64() ? IL_brfalse_i8 : IL_brfalse_i4, proc.ops.size()-start+1, true );
             }
             break;
         case Tok_WHILE:
             {
-                const int start = proc.ops_.size();
+                const int start = proc.ops.size();
                 if( !translateExprSeq(proc, s->e) )
                     return false;
                 const int while_ = emitOp(proc, s->e->getType()->isInt64() ? IL_brfalse_i8 : IL_brfalse_i4 );
                 if( !translateStatSeq(proc, s->body) )
                     return false;
-                emitOp(proc, IL_br, proc.ops_.size()-start+1, true);
+                emitOp(proc, IL_br, proc.ops.size()-start+1, true);
                 branch_here(proc, while_);
             }
             break;
@@ -2056,9 +2055,9 @@ bool Interpreter::Imp::run(quint32 proc)
 #ifdef _USE_LOCAL_PREALLOC_
     quint8 locals[PreAllocSize];
     quint8 stack[PreAllocSize];
-    return call(0, 0, &procs[proc], locals, stack);
+    return call(0, 0, procs[proc], locals, stack);
 #else
-    return call(0, 0, &procs[proc]);
+    return call(0, 0, procs[proc]);
 #endif
 }
 
@@ -2110,7 +2109,7 @@ bool Interpreter::Imp::execute(Frame* frame)
 #ifdef _USE_JUMP_TABLE
 #define vmdispatch(x)     goto *disptab[x];
 #define vmcase(l)     L_IL_##l:
-#define vmbreak		 if( pc >= frame->proc->ops_.size() ) return true; vmdispatch(frame->proc->ops[pc].op);
+#define vmbreak		 if( pc >= frame->proc->ops.size() ) return true; vmdispatch(frame->proc->ops[pc].op);
 
     static const void *const disptab[IL_NUM_OF_OPS] = {
         &&L_IL_invalid,
@@ -2138,7 +2137,7 @@ bool Interpreter::Imp::execute(Frame* frame)
 #endif
 
     int pc = 0;
-    while( pc < frame->proc->ops_.size() )
+    while( pc < frame->proc->ops.size() )
     {
         vmdispatch(frame->proc->ops[pc].op)
         {
@@ -3015,7 +3014,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldstr)
-                frame->pushP(strings[frame->proc->ops[pc].val].data());
+                frame->pushP((void*)strings[frame->proc->ops[pc].val].c_str());
                 pc++;
             vmbreak;
         vmcase(ldobj) {
@@ -3051,13 +3050,13 @@ bool Interpreter::Imp::execute(Frame* frame)
                     pc++;
              vmbreak;
         vmcase(ldproc)
-                frame->pushP( &procs[frame->proc->ops[pc].val] );
+                frame->pushP( procs[frame->proc->ops[pc].val] );
                 pc++;
              vmbreak;
         vmcase(ldmeth) {
                 MethRef m;
                 m.obj = frame->popP();
-                m.proc = &procs[frame->proc->ops[pc].val];
+                m.proc = procs[frame->proc->ops[pc].val];
                 frame->push(&m, stackAligned(sizeof(MethRef)));
                 pc++;
             }vmbreak;
@@ -3081,9 +3080,9 @@ bool Interpreter::Imp::execute(Frame* frame)
             return true;
         vmcase(call){
 #ifdef _USE_LOCAL_PREALLOC_
-                if( !call(frame, pc, &procs[frame->proc->ops[pc].val], locals, stack ) )
+                if( !call(frame, pc, procs[frame->proc->ops[pc].val], locals, stack ) )
 #else
-                if( !call(frame, pc, &procs[frame->proc->ops[pc].val]) )
+                if( !call(frame, pc, procs[frame->proc->ops[pc].val]) )
 #endif
                     return false;
                 pc++;
@@ -3132,16 +3131,6 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(vt_size)
                 Q_ASSERT(false); // instead consumed by other ops
             vmbreak;
-        vmcase(already_called)
-                if( procs[frame->proc->ops[pc].val].called )
-                    frame->pushI4(1);
-                else
-                {
-                    procs[frame->proc->ops[pc].val].called = true;
-                    frame->pushI4(0);
-                }
-                pc++;
-            vmbreak;
         vmcase(newvla)
         vmcase(callvi)
         vmcase(callvirt)
@@ -3178,6 +3167,12 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
         res = proc->ffi(args, retval);
     }else
     {
+        if( proc->init )
+        {
+            if( proc->called )
+                return true; // already called
+            proc->called = true;
+        }
 #ifdef _USE_LOCAL_PREALLOC_
         newframe.locals.init(local,PreAllocSize);
         newframe.stack.init(stack, PreAllocSize);

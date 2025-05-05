@@ -130,9 +130,6 @@ OPDEF(alloc1, SizeArg), OPDEF(allocN, SizeArg), OPDEF(free, NoOpArgs),
 OPDEF(vt_size, SizeArg), // suffix of ldarg_vt, starg_vt, ldloc_vt, stloc_vt, ldfld_vt, stfld_vt,
                 //   ldvar_vt, stvar_vt
 
-// special implementation ops
-OPDEF(already_called, ProcArg),
-
 // TODO:
 OPDEF(newvla, NoOpArgs),
 OPDEF(callvi, NoOpArgs), OPDEF(callvirt, NoOpArgs),
