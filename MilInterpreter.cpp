@@ -75,7 +75,7 @@ struct Operation
 
 #define _USE_JUMP_TABLE // instead of a big switch
 //#define _CHECK_HEAP_ADDRESSES
-#define _USE_LOCAL_PREALLOC_
+
 enum { PreAllocSize = 1024 };
 
 class ByteArray
@@ -91,7 +91,6 @@ public:
         if( d && !borrowed )
             free(d);
     }
-#ifdef _USE_LOCAL_PREALLOC_
     void init(void* mem, quint32 size)
     {
         if( d && !borrowed )
@@ -100,7 +99,6 @@ public:
         s = size;
         borrowed = 1;
     }
-#endif
     void resize(int len)
     {
         if(len <= s)
@@ -137,15 +135,15 @@ struct Procedure
 struct Vtable
 {
     Vtable* parent;
-    Declaration* type;
+    Type* type;
     std::vector<Procedure*> methods;
 };
 
 struct MethRef
 {
     void* obj;
-    void* proc;
-    MethRef(void* o = 0, void* p = 0):obj(o),proc(p){}
+    Procedure* proc;
+    MethRef(Vtable* o = 0, Procedure* p = 0):obj(o),proc(p){}
 };
 
 class Frame
@@ -232,8 +230,33 @@ public:
         pop(stackAlig);
         return res;
     }
+    MethRef popPP()
+    {
+        MethRef res;
+        const int sos = Interpreter::stackAligned(sizeof(MethRef));
+        copy(&res, -sos, sizeof(MethRef));
+        pop(sos);
+        return res;
+    }
+    void insert(int off, void* p)
+    {
+        Q_ASSERT(off <= 0);
+        // make room for one slot as the first argument and
+        // move all existing arguments by one slot to the right
+        quint8* to = (quint8*)(stack.data()+sp+off);
+        quint8* from = (quint8*)(stack.data()+sp);
+        while( from >= to )
+        {
+            from[Interpreter::StackAlign] = *from;
+            from--;
+        }
+        *(void**)to = p;
+        sp -= off;
+    }
+
     inline void copy(void* to, int off, int len)
     {
+        Q_ASSERT(off <= 0);
         memcpy(to,stack.data()+sp+off,len);
     }
     inline void* slot(int off)
@@ -356,6 +379,13 @@ static bool MIC_assert(void* args, void* ret)
     return true;
 }
 
+struct Template
+{
+    Type* type;
+    std::vector<char> mem; // preinitialized memory for type
+    Template():type(0){}
+};
+
 struct Interpreter::Imp
 {
     AstModel* mdl;
@@ -367,6 +397,7 @@ struct Interpreter::Imp
     std::vector<Procedure*> procs;
     std::vector<Vtable*> vtables;
     std::vector<char> moduleData;
+    std::vector<Template> templates;
     Procedure* curProc;
     QList< QList<int> > loopStack;
     const char* MIC$;
@@ -399,6 +430,8 @@ struct Interpreter::Imp
     {
         for( int i = 0; i < procs.size(); i++ )
             delete procs[i];
+        for( int i = 0; i < vtables.size(); i++ )
+            delete vtables[i];
     }
 
     bool translateModule(Declaration* m)
@@ -409,6 +442,25 @@ struct Interpreter::Imp
             return true; // the module was already translated
 
         m->init = true; // re/misuse this flag to indicate that we already translated
+
+        Declaration* sub = m->subs;
+        while(sub)
+        {
+            if( sub->kind == Declaration::TypeDecl && sub->getType() && sub->getType()->kind == Type::Object )
+            {
+                Vtable* vt = new Vtable();
+                vtables.push_back(vt);
+                vt->type = sub->getType();
+                if( sub->getType()->getType() )
+                {
+                    const int i = findVtable(deref(sub->getType()->getType()));
+                    if( i != -1 )
+                        vt->parent = vtables[i];
+                }
+                vt->methods.resize(vt->type->getMethodTable().size());
+            }
+            sub = sub->next;
+        }
 
         // look for the init procedure or synthesize one
         Declaration* init = m->findInitProc();
@@ -442,7 +494,33 @@ struct Interpreter::Imp
         if( proc->init && !translateInit(*cur, procs.size()-1) )
             // add a prefix which calls imports if not already called
             return false;
+        if( proc->typebound )
+        {
+            const int off = findVtable(proc->outer->getType());
+            Q_ASSERT(off != -1);
+            vtables[off]->methods[proc->off] = cur;
+        }
         return translateProc(*cur);
+    }
+
+    int findVtable(Type* object) const
+    {
+        for( int i = 0; i < vtables.size(); i++ )
+        {
+            if( vtables[i]->type == object )
+                return i;
+        }
+        return -1;
+    }
+
+    Vtable* getVtable(Type* object) const
+    {
+        for( int i = 0; i < vtables.size(); i++ )
+        {
+            if( vtables[i]->type == object )
+                return vtables[i];
+        }
+        return 0;
     }
 
     int findProc(Declaration* proc) const
@@ -631,6 +709,48 @@ struct Interpreter::Imp
     static inline int stackAligned(int off)
     {
         return AstModel::align(off, Frame::stackAlig );
+    }
+
+    int findTemplate(Type* t) const
+    {
+        for( int i = 0; i < templates.size(); i++ )
+            if( templates[i].type == t )
+                return i;
+        return -1;
+    }
+
+    void initMemory(char* mem, Type* t, bool doPointerInit )
+    {
+        if( doPointerInit && t->pointerInit )
+            memset(mem, 0, t->getByteSize(sizeof(void*)));
+        if( !t->objectInit )
+            return;
+        if( t->kind == Type::Object )
+        {
+            *((Vtable**) mem) = getVtable(t);
+        }
+        if( t->kind == Type::Struct || t->kind == Type::Object )
+        {
+            DeclList fields = t->getFieldList(true);
+            int off = 0;
+            foreach(Declaration* field, fields)
+            {
+
+                Type* tt = deref(field->getType());
+                if( tt->objectInit )
+                    initMemory(mem + off, tt, false);
+                off += field->f.off;
+            }
+        }else if( t->kind == Type::Array && t->len != 0)
+        {
+            Type* et = deref(t->getType());
+            int off = 0;
+            for(int i = 0; i < t->len; i++ )
+            {
+                initMemory(mem + off, et, false);
+                off += et->getByteSize(sizeof(void*));
+            }
+        }
     }
 
     bool translateInit(Procedure& proc, quint32 id);
@@ -863,11 +983,12 @@ bool Interpreter::Imp::translateInit(Procedure& proc, quint32 id)
         const int off = moduleData.size();
         const int len = vars.last()->off + vars.last()->getType()->getByteSize(sizeof(void*));
         moduleData.resize(off + len + AstModel::padding(len, sizeof(void*)));
-        if( off )
+        // relocate module var addresses, init vars if necessary
+        foreach( Declaration* d, vars )
         {
-            // relocate module var addresses
-            foreach( Declaration* d, vars )
-                d->off += off;
+            Type* t = deref(d->getType());
+            d->off += off;
+            initMemory(moduleData.data()+d->off, t,true);
         }
     }
     // first check if already called
@@ -901,11 +1022,17 @@ bool Interpreter::Imp::translateProc(Procedure& proc)
         proc.localsSize = locals.last()->off + locals.last()->getType()->getByteSize(sizeof(void*));
     const DeclList params = proc.decl->getParams();
     if( !params.isEmpty() )
+        // this always includes SELF
         proc.fixArgSize = stackAligned(params.last()->off + params.last()->getType()->getByteSize(sizeof(void*)));
     if( proc.decl->getType() )
         proc.returnSize = stackAligned(proc.decl->getType()->getByteSize(sizeof(void*)));
     if( proc.decl->extern_ )
     {
+        if(proc.decl->typebound)
+        {
+            qCritical() << "typebound external implementations not yet supported" << proc.decl->toPath();
+            return false;
+        }
         Declaration* module = proc.decl->getModule();
 
         proc.ffi = ffiProcs.value(module->name.constData()).value(proc.decl->name.constData());
@@ -1066,7 +1193,10 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             emitOp(proc, IL_stind_p);
             break;
         case Tok_STIND_IPP:
-            emitOp(proc, IL_stind_pp);
+            emitOp(proc, IL_stind_vt,sizeof(MethRef));
+            break;
+        case Tok_STELEM_IPP:
+            emitOp(proc, IL_stelem_vt, sizeof(MethRef));
             break;
         case Tok_STELEM:
             emitOp(proc, IL_stelem_vt, deref(s->d->getType())->getByteSize(sizeof(void*)));
@@ -1256,7 +1386,9 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
         case Tok_SWITCH:
         case Tok_LABEL:
         case Tok_GOTO:
-        default:
+            qCritical() << "ERROR: not yet implemented in interpreter:" << tokenTypeString(s->kind);
+            return false;
+       default:
             Q_ASSERT(false);
         }
 
@@ -1486,7 +1618,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
         case Tok_LDMETH:
             if( !translateProc(e->d) )
                 return false;
-            emitOp(proc, IL_ldmeth, findProc(e->d));
+            emitOp(proc, IL_ldmeth, e->d->off);
             break;
         case Tok_CONV_I1:
             if( lhsT->isInt32OnStack() )
@@ -1809,7 +1941,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             emitOp(proc, IL_ldind_p);
             break;
         case Tok_LDIND_IPP:
-            emitOp(proc, IL_ldind_pp);
+            emitOp(proc, IL_ldind_vt,sizeof(MethRef));
             break;
         case Tok_LDIND_R4:
             emitOp(proc, IL_ldind_r4);
@@ -1867,6 +1999,9 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             break;
         case Tok_LDELEM_U8:
             emitOp(proc, IL_ldelem_u8);
+            break;
+        case Tok_LDELEM_IPP:
+            emitOp(proc, IL_ldelem_vt,sizeof(MethRef));
             break;
         case Tok_LDELEM:
             emitOp(proc, IL_ldelem_vt,t->getByteSize(pointerWidth));
@@ -1989,10 +2124,30 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             emitOp(proc, IL_ldvara, e->d->off);
             break;
         case Tok_NEWOBJ:
-            emitOp(proc,IL_alloc1, e->d->getType()->getByteSize(pointerWidth));
-            break;
         case Tok_NEWARR:
-            emitOp(proc,IL_allocN, e->d->getType()->getByteSize(pointerWidth)); // N is on stack
+        case Tok_INITOBJ: {
+                Type* tt = deref(e->d->getType());
+                const int len = tt->getByteSize(pointerWidth);
+                const IL_op op = e->kind == Tok_NEWOBJ ? IL_alloc1 :
+                                 e->kind == Tok_NEWARR ?
+                                                       IL_allocN : // N is on stack
+                                                             IL_initobj;
+                if( tt->objectInit || tt->pointerInit )
+                {
+                    int id = findTemplate(tt);
+                    if( id == -1 )
+                    {
+                        id = templates.size();
+                        templates.push_back(Template());
+                        Template& temp = templates.back();
+                        temp.type = tt;
+                        temp.mem.resize(len);
+                        initMemory(temp.mem.data(), tt, true);
+                    }
+                    emitOp(proc,op, id, true);
+                }else
+                    emitOp(proc,op, len);
+            }
             break;
         case Tok_NOP:
         case Tok_CASTPTR:
@@ -2001,23 +2156,27 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             emitOp(proc,IL_dup, e->getType()->getByteSize(pointerWidth));
             break;
         case Tok_CALL:
-        case Tok_CALLI:
+        case Tok_CALLVIRT:
             {
-                if( e->kind == Tok_CALL )
-                    if( !translateProc(e->d) )
-                        return false;
-                if(e->kind == Tok_CALL)
+                if( !translateProc(e->d) )
+                    return false;
+                const int id =  findProc(e->d);
+                if( id < 0 )
                 {
-                    const int id =  findProc(e->d);
-                    if( id < 0 )
-                    {
-                        qCritical() << "cannot find implementation of" << e->d->toPath();
-                        return false;
-                    }
+                    qCritical() << "cannot find implementation of" << e->d->toPath();
+                    return false;
+                }
+                if( e->kind == Tok_CALL )
                     emitOp(proc, IL_call, id);
-                }else
-                    emitOp(proc, IL_calli);
+                else
+                    emitOp(proc, IL_callvirt, id);
             }
+            break;
+        case Tok_CALLI:
+            emitOp(proc, IL_calli);
+            break;
+        case Tok_CALLVI:
+            emitOp(proc, IL_callvi);
             break;
         case Tok_IIF:
             {
@@ -2035,13 +2194,21 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 e = e->next->next;
             }
             break;
+        case Tok_ISINST: {
+                const int id = findVtable(t);
+                if( id < 0 )
+                {
+                    qCritical() << "cannot find vtable of" << t->decl->toPath();
+                    return false;
+                }
+                emitOp(proc, IL_isinst, id);
+            }
+            break;
         case Tok_SIZEOF:
-        case Tok_INITOBJ:
         case Tok_PTROFF:
         case Tok_NEWVLA:
-        case Tok_ISINST:
-        case Tok_CALLVI:
-        case Tok_CALLVIRT:
+            qCritical() << "ERROR: not yet implemented in interpreter:" << tokenTypeString(e->kind);
+            return false;
         default:
             Q_ASSERT(false);
         }
@@ -2052,13 +2219,9 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
 
 bool Interpreter::Imp::run(quint32 proc)
 {
-#ifdef _USE_LOCAL_PREALLOC_
     quint8 locals[PreAllocSize];
     quint8 stack[PreAllocSize];
     return call(0, 0, procs[proc], locals, stack);
-#else
-    return call(0, 0, procs[proc]);
-#endif
 }
 
 #define VM_BINARY_OP(type, op) \
@@ -2124,10 +2287,8 @@ bool Interpreter::Imp::execute(Frame* frame)
 #define vmbreak		break
 #endif
 
-#ifdef _USE_LOCAL_PREALLOC_
     quint8 locals[PreAllocSize];
     quint8 stack[PreAllocSize];
-#endif
 
 #ifdef _TRACE_CALLS_
     if( frame->proc->decl->kind == Declaration::Module )
@@ -2471,7 +2632,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldarg_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                frame->push(VM_ARG_ADDR, stackAligned(sizeof(MethRef)));
                 pc++;
                 vmbreak;
         vmcase(ldarg_vt)
@@ -2511,7 +2672,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(starg_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                frame->copy(VM_ARG_ADDR, // to
+                            stackAligned(sizeof(MethRef)), // size on stack
+                            sizeof(MethRef)); // true size
                 pc++;
                 vmbreak;
         vmcase(starg_vt)
@@ -2553,10 +2716,6 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(ldelem_p)
                 VM_LDELEM(void*,P)
             vmbreak;
-        vmcase(ldelem_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
-                pc++;
-                vmbreak;
         vmcase(ldelema) {
                 const quint32 i = frame->popI4(); quint8* a = (quint8*)frame->popP();
                 frame->pushP(a + i * frame->proc->ops[pc].val);
@@ -2588,10 +2747,6 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(stelem_p)
                 VM_STELEM(void*, P)
             vmbreak;
-        vmcase(stelem_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
-                pc++;
-                vmbreak;
         vmcase(stelem_vt) {
                 const int lenonstack = stackAligned(frame->proc->ops[pc].val);
                 const int etlen = frame->proc->ops[pc].val;
@@ -2636,17 +2791,17 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_LDFLD(void*, P)
             vmbreak;
         vmcase(ldfld_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                frame->push( frame->popP() + frame->proc->ops[pc].val, stackAligned(sizeof(MethRef)) );
                 pc++;
                 vmbreak;
-        vmcase(ldflda) {
-                quint8* obj = (quint8*)frame->popP();
-                frame->pushP( obj + frame->proc->ops[pc].val ); pc++;
-            } vmbreak;
         vmcase(ldfld_vt) {
                 quint8* obj = (quint8*)frame->popP();
                 frame->push( obj + frame->proc->ops[pc].val, stackAligned(frame->proc->ops[pc+1].val) );
                 pc += 2;
+            } vmbreak;
+        vmcase(ldflda) {
+                quint8* obj = (quint8*)frame->popP();
+                frame->pushP( obj + frame->proc->ops[pc].val ); pc++;
             } vmbreak;
         vmcase(stfld_i1)
                 VM_STFLD(qint8, I4)
@@ -2669,10 +2824,15 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(stfld_p)
                 VM_STFLD(void*, P)
             vmbreak;
-        vmcase(stfld_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
-                pc++;
-                vmbreak;
+        vmcase(stfld_pp){
+            const int lenonstack = stackAligned(sizeof(MethRef));
+            const int flen = sizeof(MethRef);
+            quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
+            quint8* obj = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
+            memcpy(obj + frame->proc->ops[pc].val, v, flen);
+            frame->pop(lenonstack + Frame::stackAlig);
+            pc++;
+        } vmbreak;
         vmcase(stfld_vt) {
                 const int lenonstack = stackAligned(frame->proc->ops[pc+1].val);
                 const int flen = frame->proc->ops[pc+1].val;
@@ -2715,10 +2875,6 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(ldind_p)
                 frame->pushP(*(void**)frame->popP()); pc++;
             vmbreak;
-        vmcase(ldind_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
-                pc++;
-                vmbreak;
         vmcase(ldind_vt){
                 void* ptr = frame->popP();
                 frame->push(ptr, stackAligned(frame->proc->ops[pc].val)); pc++;
@@ -2752,10 +2908,6 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(stind_p)
                 VM_STIND(void*, P)
             vmbreak;
-        vmcase(stind_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
-                pc++;
-                vmbreak;
         vmcase(stind_vt) {
                 const int lenonstack = stackAligned(frame->proc->ops[pc].val);
                 const int len = frame->proc->ops[pc].val;
@@ -2810,7 +2962,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldloc_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                frame->push(VM_LOCAL_ADDR, stackAligned(sizeof(MethRef)));
                 pc++;
                 vmbreak;
         vmcase(ldloca)
@@ -2850,7 +3002,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(stloc_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                frame->copy(VM_LOCAL_ADDR, // to
+                            stackAligned(sizeof(MethRef)), // size on stack
+                            sizeof(MethRef)); // true size
                 pc++;
                 vmbreak;
         vmcase(stloc_vt)
@@ -2904,7 +3058,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldvar_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                frame->push(VM_VAR_ADDR, stackAligned(sizeof(MethRef)));
                 pc++;
                 vmbreak;
         vmcase(ldvara)
@@ -2944,7 +3098,9 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(stvar_pp)
-                qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
+                frame->copy(VM_VAR_ADDR, // to
+                            stackAligned(sizeof(MethRef)), // size on stack
+                            sizeof(MethRef)); // true size
                 pc++;
                 vmbreak;
         vmcase(stvar_vt)
@@ -3056,7 +3212,8 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(ldmeth) {
                 MethRef m;
                 m.obj = frame->popP();
-                m.proc = procs[frame->proc->ops[pc].val];
+                Vtable* vt = *(Vtable**)m.obj;
+                m.proc =vt->methods[frame->proc->ops[pc].val];
                 frame->push(&m, stackAligned(sizeof(MethRef)));
                 pc++;
             }vmbreak;
@@ -3079,25 +3236,52 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(ret_void)
             return true;
         vmcase(call){
-#ifdef _USE_LOCAL_PREALLOC_
                 if( !call(frame, pc, procs[frame->proc->ops[pc].val], locals, stack ) )
-#else
-                if( !call(frame, pc, procs[frame->proc->ops[pc].val]) )
-#endif
                     return false;
                 pc++;
             } vmbreak;
         vmcase(calli) {
-#ifdef _USE_LOCAL_PREALLOC_
                 if( !call(frame, pc, (Procedure*)frame->popP(), locals, stack ) )
-#else
-               if( !call(frame, pc, (Procedure*)frame->popP()) )
-#endif
                     return false;
                 pc++;
             } vmbreak;
+        vmcase(callvirt) {
+                // dispatch using the SELF pointer on stack; but we can only access the
+                // SELF pointer after we have the size of the parameters
+                Procedure* proc = procs[frame->proc->ops[pc].val];
+                void* obj = *(void**)(frame->stack.data()+frame->sp-proc->fixArgSize);
+                Vtable* vtbl = *(Vtable**)(obj);
+                proc = vtbl->methods[proc->decl->off];
+                if( !call(frame, pc, proc, locals, stack ) )
+                    return false;
+                pc++;
+            } vmbreak;
+        vmcase(callvi) {
+                MethRef r = frame->popPP();
+                // make room for SELF on stack and copy r.obj to the first argument slot
+                frame->insert(-r.proc->fixArgSize + StackAlign, r.obj); // fixArgSize already includes SELF
+                if( !call(frame, pc, r.proc, locals, stack ) )
+                    return false;
+                pc++;
+            } vmbreak;
+        vmcase(initobj) {
+                void* ptr = frame->popP();
+                if( frame->proc->ops[pc].minus )
+                {
+                    const Template& tt = templates[frame->proc->ops[pc].val];
+                    memcpy(ptr, tt.mem.data(), tt.mem.size());
+                }
+                pc++;
+            } vmbreak;
         vmcase(alloc1) {
-                void* ptr = malloc(frame->proc->ops[pc].val);
+                void* ptr;
+                if( frame->proc->ops[pc].minus )
+                {
+                    const Template& tt = templates[frame->proc->ops[pc].val];
+                    ptr = malloc(tt.mem.size());
+                    memcpy(ptr, tt.mem.data(), tt.mem.size());
+                }else
+                    ptr = malloc(frame->proc->ops[pc].val);
 #ifdef _CHECK_HEAP_ADDRESSES
                 dynamics.insert(ptr);
 #endif
@@ -3105,7 +3289,18 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             } vmbreak;
         vmcase(allocN) {
-                void* ptr = malloc(frame->proc->ops[pc].val * (quint32)frame->popI4());
+            void* ptr;
+            const quint32 len = (quint32)frame->popI4();
+            if( frame->proc->ops[pc].minus )
+            {
+                const Template& tt = templates[frame->proc->ops[pc].val];
+                ptr = malloc(tt.mem.size() * len);
+                for(int i = 0; i < len; i++ )
+                {
+                    memcpy(ptr + i * tt.mem.size(), tt.mem.data(), tt.mem.size());
+                }
+            }else
+                ptr = malloc(frame->proc->ops[pc].val * len);
 #ifdef _CHECK_HEAP_ADDRESSES
                 dynamics.insert(ptr);
 #endif
@@ -3131,15 +3326,16 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(vt_size)
                 Q_ASSERT(false); // instead consumed by other ops
             vmbreak;
+        vmcase(isinst) {
+                Vtable* obj = (Vtable*)frame->popP();
+                Vtable* ref = vtables[frame->proc->ops[pc].val];
+                frame->pushI4(Type::isA(obj->type, ref->type));
+            } vmbreak;
         vmcase(newvla)
-        vmcase(callvi)
-        vmcase(callvirt)
         vmcase(line)
-        vmcase(initobj)
-        vmcase(isinst)
                 qWarning() << "TODO not yet implemented" << op_names[frame->proc->ops[pc].op];
                 pc++;
-                vmbreak;
+            vmbreak;
         }
     }
     return true;
@@ -3153,9 +3349,7 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
     bool res;
     if( proc->ffi )
     {
-#ifdef _USE_LOCAL_PREALLOC_
         newframe.stack.init(stack,PreAllocSize);
-#endif
         newframe.stack.resize(newframe.proc->returnSize);
         newframe.sp = newframe.proc->returnSize;
         char* retval = 0;
@@ -3173,13 +3367,15 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
                 return true; // already called
             proc->called = true;
         }
-#ifdef _USE_LOCAL_PREALLOC_
         newframe.locals.init(local,PreAllocSize);
+        DeclList locals = proc->decl->getLocals();
+        foreach( Declaration* d, locals )
+        {
+            Type* t = deref(d->getType());
+            initMemory((char*)local+d->off, t,true);
+        }
+
         newframe.stack.init(stack, PreAllocSize);
-#else
-        newframe.locals.resize(newframe.proc->localsSize);
-        newframe.stack.resize(1024);
-#endif
         res = execute(&newframe);
     }
     if( frame && newframe.proc->fixArgSize )

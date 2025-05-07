@@ -804,8 +804,7 @@ void Builtins::NEW(int nArgs)
             ev->err = "cannot dynamically set array length for non-open array";
             return;
         }
-        ev->out->ldc_i4(what.type->getType()->len);
-        ev->out->newarr_(ev->toQuali(what.type->getType()->getType()));
+        ev->out->newobj_(ev->toQuali(what.type->getType())); // don't use newarr for fixed size arrays
         ev->out->stind_(MilEmitter::IntPtr);
     }else // open array
     {

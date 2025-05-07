@@ -1264,11 +1264,12 @@ void Parser2::ProcedureDeclaration() {
         if( !receiver.isEmpty() )
             scopeStack.push_back(&tmp);
         Declaration* p = identdef(Declaration::Procedure);
+        Declaration* object = 0;
         if( !receiver.isEmpty() )
         {
             p->typebound = true;
             scopeStack.pop_back();
-            Declaration* object = scopeStack.back()->findSubByName(receiver);
+            object = scopeStack.back()->findSubByName(receiver);
             if( object && object->getType() && object->getType()->kind != Type::Object )
                 error(tok, "binding doesn't reference an object type");
             else if( object && object->getType() )
@@ -1285,14 +1286,20 @@ void Parser2::ProcedureDeclaration() {
                 tmp.subs = 0;
                 t->subs.append(p);
                 p->outer = t->decl;
-                // TODO: do we need an explicit SELF param? we likely do!
             }
-        }
+        }else
+            error(tok, "cannot find the receiver type");
 
         scopeStack.push_back(p);
 		if( FIRST_FormalParameters(la.d_type) ) {
             p->setType(FormalParameters());
 		}
+        DeclList params = p->getParams();
+        if( params.isEmpty() )
+            error(tok, "expecting at least the SELF parameter");
+        else
+            params.first()->typebound = true;
+
 		if( la.d_type == Tok_Semi ) {
 			expect(Tok_Semi, false, "ProcedureDeclaration");
 		}

@@ -3615,6 +3615,8 @@ Type* Parser2::FormalParameters() {
 			}
 			expect(Tok_2Dot, false, "FormalParameters");
             cur.d_val = Token::getSymbol("..");
+            if( mdl->getTopScope()->typebound )
+                error(cur, "type-bound procedures don't support variable parameters");
             Declaration* d = addDecl(cur,0,Declaration::ParamDecl);
             d->outer = mdl->getTopScope();
             d->setType(mdl->getType(Type::NoType));

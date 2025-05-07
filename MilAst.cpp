@@ -292,6 +292,11 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
                         off += size;
                     }
                     type->bytesize = off + AstModel::padding(off, maxAlig);
+                    foreach( Declaration* sub, type->subs )
+                    {
+                        if( sub->kind == Declaration::Procedure )
+                            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment);
+                    }
                 }
                 break;
             case Type::Pointer:
@@ -300,37 +305,7 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
             }
             break;
         case Declaration::Procedure:
-            {
-                int off_p = 0;
-                int off_l = 0;
-                Declaration* subsub = sub->subs;
-                while(subsub)
-                {
-                    Type* t = subsub->getType();
-                    switch( subsub->kind )
-                    {
-                    case Declaration::ParamDecl:
-                        {
-                            const int size = t->getByteSize(pointerWidth);
-                            const int alig = t->getAlignment(pointerWidth);
-                            off_p += AstModel::padding(off_p, alig);
-                            subsub->off = off_p;
-                            off_p += qMax(size,(int)stackAlignment);
-                        }
-                        break;
-                    case Declaration::LocalDecl:
-                        {
-                            const int size = t->getByteSize(pointerWidth);
-                            const int alig = t->getAlignment(pointerWidth);
-                            off_l += AstModel::padding(off_l, alig);
-                            subsub->off = off_l;
-                            off_l += size;
-                        }
-                        break;
-                    }
-                    subsub = subsub->next;
-                }
-            }
+            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment );
             break;
         case Declaration::VarDecl:
             {
@@ -345,6 +320,39 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
         }
 
         sub = sub->next;
+    }
+}
+
+void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, quint8 stackAlignment)
+{
+    int off_p = 0;
+    int off_l = 0;
+    Declaration* subsub = proc->subs;
+    while(subsub)
+    {
+        Type* t = subsub->getType();
+        switch( subsub->kind )
+        {
+        case Declaration::ParamDecl:
+            {
+                const int size = t->getByteSize(pointerWidth);
+                const int alig = t->getAlignment(pointerWidth);
+                off_p += AstModel::padding(off_p, alig);
+                subsub->off = off_p;
+                off_p += qMax(size,(int)stackAlignment);
+            }
+            break;
+        case Declaration::LocalDecl:
+            {
+                const int size = t->getByteSize(pointerWidth);
+                const int alig = t->getAlignment(pointerWidth);
+                off_l += AstModel::padding(off_l, alig);
+                subsub->off = off_l;
+                off_l += size;
+            }
+            break;
+        }
+        subsub = subsub->next;
     }
 }
 
@@ -406,7 +414,7 @@ QList<Declaration*> Declaration::getParams(bool includeSelf) const
     Declaration* d = subs;
     while( d )
     {
-        if( d->kind == Declaration::ParamDecl )
+        if( d->kind == Declaration::ParamDecl && (includeSelf || !d->typebound) )
             res << d;
         d = d->next;
     }
@@ -850,6 +858,20 @@ quint32 Type::getAlignment(quint8 pointerWidth) const
         break;
     }
     return res;
+}
+
+bool Type::isA(Type* sub, Type* super)
+{
+    if( sub == 0 || super == 0 )
+        return false;
+    while(sub)
+    {
+        if( sub == super )
+            return true;
+        sub = sub->getType();
+        if( sub ) sub = sub->deref();
+    }
+    return false;
 }
 
 Statement::~Statement()

@@ -62,11 +62,11 @@ OPDEF(starg_vt, OffSizeArgs),
 
 OPDEF(ldelem_i1, NoOpArgs), OPDEF(ldelem_i2, NoOpArgs), OPDEF(ldelem_i4, NoOpArgs), OPDEF(ldelem_i8, NoOpArgs),
 OPDEF(ldelem_u1, NoOpArgs), OPDEF(ldelem_u2, NoOpArgs), OPDEF(ldelem_u4, NoOpArgs), OPDEF(ldelem_u8, NoOpArgs),
-OPDEF(ldelem_r4, NoOpArgs), OPDEF(ldelem_r8, NoOpArgs), OPDEF(ldelem_p, NoOpArgs), OPDEF(ldelem_pp, NoOpArgs),
+OPDEF(ldelem_r4, NoOpArgs), OPDEF(ldelem_r8, NoOpArgs), OPDEF(ldelem_p, NoOpArgs),
 OPDEF(ldelema, NoOpArgs), OPDEF(ldelem_vt, SizeArg),
 
 OPDEF(stelem_i1, NoOpArgs), OPDEF(stelem_i2, NoOpArgs), OPDEF(stelem_i4, NoOpArgs), OPDEF(stelem_i8, NoOpArgs),
-OPDEF(stelem_r4, NoOpArgs), OPDEF(stelem_r8, NoOpArgs), OPDEF(stelem_p, NoOpArgs), OPDEF(stelem_pp, NoOpArgs),
+OPDEF(stelem_r4, NoOpArgs), OPDEF(stelem_r8, NoOpArgs), OPDEF(stelem_p, NoOpArgs),
 OPDEF(stelem_vt, SizeArg),
 
 OPDEF(ldfld_i1, OffArg), OPDEF(ldfld_i2, OffArg), OPDEF(ldfld_i4, OffArg), OPDEF(ldfld_i8, OffArg),
@@ -80,11 +80,11 @@ OPDEF(stfld_vt, OffSizeArgs),
 
 OPDEF(ldind_i1, NoOpArgs), OPDEF(ldind_i2, NoOpArgs), OPDEF(ldind_i4, NoOpArgs), OPDEF(ldind_i8, NoOpArgs),
 OPDEF(ldind_u1, NoOpArgs), OPDEF(ldind_u2, NoOpArgs), OPDEF(ldind_u4, NoOpArgs), OPDEF(ldind_u8, NoOpArgs),
-OPDEF(ldind_r4, NoOpArgs), OPDEF(ldind_r8, NoOpArgs), OPDEF(ldind_p, NoOpArgs), OPDEF(ldind_pp, NoOpArgs),
+OPDEF(ldind_r4, NoOpArgs), OPDEF(ldind_r8, NoOpArgs), OPDEF(ldind_p, NoOpArgs),
 OPDEF(ldind_vt, SizeArg), OPDEF(ldind_str, SizeArg),
 
 OPDEF(stind_i1, NoOpArgs), OPDEF(stind_i2, NoOpArgs), OPDEF(stind_i4, NoOpArgs), OPDEF(stind_i8, NoOpArgs),
-OPDEF(stind_r4, NoOpArgs), OPDEF(stind_r8, NoOpArgs), OPDEF(stind_p, NoOpArgs), OPDEF(stind_pp, NoOpArgs),
+OPDEF(stind_r4, NoOpArgs), OPDEF(stind_r8, NoOpArgs), OPDEF(stind_p, NoOpArgs),
 OPDEF(stind_vt, SizeArg),
 
 OPDEF(ldloc_i1, OffArg), OPDEF(ldloc_i2, OffArg), OPDEF(ldloc_i4, OffArg), OPDEF(ldloc_i8, OffArg),

@@ -187,7 +187,7 @@ namespace Mic
         void addField(const QByteArray& fieldName, // on top level or in struct/union
                        const MilQuali& typeRef, bool isPublic = true, quint8 bits = 0);
         quint32 addLocal( const MilQuali& typeRef, QByteArray name = QByteArray() );
-        quint32 addArgument(const MilQuali& typeRef, QByteArray name = QByteArray() );
+        quint32 addArgument(const MilQuali& typeRef, QByteArray name = QByteArray() ); // SELF is explicit
         void setReturnType(const MilQuali& typeRef);
         void setExtern( const QByteArray& origName = QByteArray() );
         void setVararg();

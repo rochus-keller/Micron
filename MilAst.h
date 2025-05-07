@@ -136,6 +136,7 @@ namespace Mil
         bool isPtrToOpenCharArray() const;
         quint32 getByteSize(quint8 pointerWidth) const;
         quint32 getAlignment(quint8 pointerWidth) const;
+        static bool isA(Type* sub, Type* super);
     };
 
     struct Constant;
@@ -347,6 +348,7 @@ namespace Mil
     protected:
         void walkImports(Declaration* module, DeclList& done, quint8 pointerWidth, quint8 stackAlignment);
         void calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quint8 stackAlignment);
+        void calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, quint8 stackAlignment);
 
     private:
         DeclList modules;

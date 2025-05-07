@@ -115,6 +115,13 @@ void Validator::visitProcedure(Declaration* proc)
     pc = 0;
     curProc = proc;
     stack.clear();
+    if( proc->typebound )
+    {
+        DeclList params = proc->getParams();
+        if( proc->outer && (deref(params.first()->getType())->kind != Type::Pointer ||
+                 deref(deref(params.first()->getType())->getType()) != proc->outer->getType() ) )
+            error(params.first()->pos, "the SELF parameter must be a pointer to the bound object type");
+    }
     visitStatSeq(proc->body);
     if( !stack.isEmpty() )
         error(proc->pos, "stack not empty at the end of the procedure");
@@ -274,7 +281,7 @@ void Validator::visitStatSeq(Statement* stat)
                     refT = deref(stat->d->getType());
 
                 if( etOs && !equal(etOs,refT) )
-                    error(stat->pos,"the element type on stack is not compatible with the reference type");
+                    error(stat->pos,"the element type on stack is not compatible with the required type");
 
                 if( etOs == 0 )
                     etOs = refT;
@@ -295,11 +302,11 @@ void Validator::visitStatSeq(Statement* stat)
 
                 Type* refObj = deref(stat->d->outer->getType());
                 if( objOs && !equal(objOs, refObj) )
-                    error(stat->pos,"the pointer type on stack is not compatible with the reference type");
+                    error(stat->pos,"the pointer base type on stack is not compatible with the required type");
 
                 Type* refFld = deref(stat->d->getType());
                 if( !assigCompat(refFld, stat->args->rhs) )
-                    error(stat->pos,"value on stack is not compatible with the pointer type");
+                    error(stat->pos,"value on stack is not compatible with the pointer base type");
             }
             break;
         case Tok_STRCPY:
@@ -343,11 +350,14 @@ void Validator::visitStatSeq(Statement* stat)
                     refT = deref(stat->d->getType());
 
                 if( baseOs && !equal(baseOs,refT) )
-                    error(stat->pos,"the pointer type on stack is not compatible with the reference type");
+                    error(stat->pos,"the pointer base type on stack is not compatible with the required type");
                 if( baseOs == 0 )
                     baseOs = refT;
                 if( !assigCompat(baseOs, stat->args->rhs) )
-                    error(stat->pos,"value on stack is not compatible with the pointer type");
+                {
+                    assigCompat(baseOs, stat->args->rhs);
+                    error(stat->pos,"value on stack is not compatible with the pointer base type");
+                }
             }
             break;
         case Tok_SWITCH:
@@ -960,6 +970,9 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* ptr = new Type();
                 ptr->kind = Type::Pointer;
                 ptr->setType(t);
+                if( t->kind != Type::Struct && t->kind != Type::Union && t->kind != Type::Object &&
+                        t->kind == Type::Array && t->len == 0)
+                    error(e->pos, "expecting a structured type of fixed size");
                 ptr->objectInit = t->objectInit;
                 ptr->pointerInit = t->pointerInit;
                 e->setType(ptr);
@@ -1046,24 +1059,6 @@ Expression* Validator::visitExpr(Expression* e)
             }
             break;
         case Tok_CALL:
-            {
-                Declaration* proc = e->d;
-                DeclList params = proc->getParams();
-                const int numOfParams = params.size();
-                if( !expectN(numOfParams, e) )
-                    break;
-                e->rhs = eatStack(numOfParams);
-                // TODO: check param compat?
-                // TODO: varargs?
-
-                if(proc->getType())
-                {
-                    e->setType(proc->getType());
-                    stack.push_back(e);
-                }else // we're in a ExprStat which needs to be split
-                    return e;
-            }
-            break;
         case Tok_CALLVIRT:
             {
                 Declaration* proc = e->d;
@@ -1071,11 +1066,17 @@ Expression* Validator::visitExpr(Expression* e)
                 const int numOfParams = params.size();
                 if( !expectN(numOfParams, e) )
                     break;
-                e->rhs = eatStack(numOfParams-1); // all true params without self
                 // TODO: check param compat?
+                // TODO: varargs?
 
-                e->lhs = stack.takeLast(); // self
-                // TODO: is this necessary, or just the first param?
+                if(e->kind == Tok_CALLVIRT )
+                {
+
+                    e->rhs = eatStack(numOfParams-1); // all true params without self
+                    e->lhs = stack.takeLast(); // self
+                }else
+                    e->rhs = eatStack(numOfParams);
+
 
                 if(proc->getType())
                 {
@@ -1354,6 +1355,9 @@ bool Validator::equal(Type* lhs, Type* rhs)
         return equal(deref(lhs->getType()), deref(rhs->getType()));
     if( lhs->kind == Type::Array && rhs->kind == Type::Array && lhs->len == rhs->len )
         return equal(deref(lhs->getType()), deref(rhs->getType()));
+    if( (lhs->kind == Type::DBLINTPTR && rhs->kind == Type::Proc && rhs->typebound) ||
+            (lhs->kind == Type::Proc && lhs->typebound && rhs->kind == Type::DBLINTPTR) )
+        return true;
     return false;
 }
 
@@ -1394,6 +1398,13 @@ bool Validator::assigCompat(Type* lhs, Type* rhs)
             return false;
         return true;
     }
+
+    if( lhs->kind == Type::Object && rhs->kind == Type::Object && Type::isA(rhs, lhs) )
+        return true;
+
+    if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer )
+        return assigCompat(deref(lhs->getType()), deref(rhs->getType()) );
+
     return false;
 }
 
