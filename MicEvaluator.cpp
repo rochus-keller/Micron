@@ -172,11 +172,24 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig)
     }else if( lhs && lhs->kind == Type::CHAR && rhs.type->kind == Type::String )
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
     else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Procedure )
-        out->ldproc_(toQuali(rhs.val.value<Declaration*>()));
-    else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Method )
     {
         Declaration* proc = rhs.val.value<Declaration*>();
         Q_ASSERT(proc);
+        if( proc->inline_ )
+        {
+            err = "cannot take address of INLINE procedure";
+            return false;
+        }
+        out->ldproc_(toQuali(proc));
+    }else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Method )
+    {
+        Declaration* proc = rhs.val.value<Declaration*>();
+        Q_ASSERT(proc);
+        if( proc->inline_ )
+        {
+            err = "cannot take address of INLINE procedure";
+            return false;
+        }
         const MilTrident trident = qMakePair(toQuali(proc->outer),proc->name);
         out->ldmeth_(trident);
     }else

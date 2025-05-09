@@ -40,7 +40,7 @@ private:
     QList<MilModule> modules;
 };
 
-class InMemRenderer : public Mic::MilRenderer
+class InMemRenderer : public MilRenderer
 {
 public:
     InMemRenderer(MilLoader*);
@@ -52,7 +52,7 @@ public:
 
     void addVariable(const MilQuali& typeRef, QByteArray name , bool isPublic);
     void addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val );
-    void addProcedure(const Mic::MilProcedure& method );
+    void addProcedure(const MilProcedure& method );
 
     void beginType(const QByteArray& name, bool isPublic, quint8 typeKind, const MilQuali& super);
     void endType();

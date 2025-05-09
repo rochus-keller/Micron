@@ -434,6 +434,21 @@ struct Interpreter::Imp
             delete vtables[i];
     }
 
+    void downcopy(Vtable* vt)
+    {
+        // make sure that each vtable is filled with inherited methods as far as used
+        // TODO avoid multiple scans of same vt
+        if( vt->parent )
+        {
+            downcopy(vt->parent);
+            for( int i = 0; i < vt->parent->methods.size(); i++ )
+            {
+                if( vt->parent->methods[i] && vt->methods[i] == 0 )
+                    vt->methods[i] = vt->parent->methods[i];
+            }
+        }
+    }
+
     bool translateModule(Declaration* m)
     {
         Q_ASSERT(m && m->kind == Declaration::Module);
@@ -499,6 +514,18 @@ struct Interpreter::Imp
             const int off = findVtable(proc->outer->getType());
             Q_ASSERT(off != -1);
             vtables[off]->methods[proc->off] = cur;
+            if(proc->override_)
+            {
+                // go up the inheritance chain and assure all super methods are translated
+                Type* super = deref(proc->outer->getType()->getType());
+                Q_ASSERT(super && super->kind == Type::Object);
+                Declaration* baseproc = super->findSubByName(proc->name, true);
+                if( baseproc )
+                {
+                    Q_ASSERT(proc->off == baseproc->off );
+                    translateProc(baseproc);
+                }
+            }
         }
         return translateProc(*cur);
     }
@@ -853,7 +880,13 @@ bool Interpreter::precompile(Declaration* proc)
     if( !module->validated )
         return false;
 
-    return imp->translateModule(module);
+    const bool res = imp->translateModule(module);
+    if(res)
+    {
+        foreach(Vtable* vt, imp->vtables )
+            imp->downcopy(vt);
+    }
+    return res;
 }
 
 bool Interpreter::dumpProc(QTextStream& out, Declaration* proc)

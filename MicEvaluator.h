@@ -30,6 +30,9 @@ class Evaluator
 public:
     Evaluator(AstModel* m, MilEmitter* out):mdl(m),out(out) {}
 
+    void pushCurProc(Declaration*d) { curProcs.push_back(d); }
+    void popCurProc() { curProcs.pop_back(); }
+
     bool evaluate(Expression*, bool assureOnMilStack = false);
 
     bool prepareRhs(Type* lhs, bool assig = false);
@@ -90,6 +93,7 @@ private:
     QString err;
     QList<Value> stack;
     friend class Builtins;
+    QList<Declaration*> curProcs;
 };
 }
 

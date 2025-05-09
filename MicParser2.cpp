@@ -3406,6 +3406,8 @@ void Parser2::ProcedureDeclaration() {
         if( procDecl == 0 )
             return;
 
+        ev->pushCurProc(procDecl);
+
         if( peek(1).d_type == Tok_EXTERN ||
                 ( peek(1).d_type == Tok_Semi && peek(2).d_type == Tok_EXTERN ) ) {
             if( la.d_type == Tok_Semi ) {
@@ -3476,6 +3478,7 @@ void Parser2::ProcedureDeclaration() {
         }  else
 			invalid("ProcedureDeclaration");
         mdl->closeScope();
+        ev->popCurProc();
 	} else
 		invalid("ProcedureDeclaration");
 }

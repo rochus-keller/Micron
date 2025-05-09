@@ -50,7 +50,7 @@ bool Validator::validate(Declaration* module)
                 {
                     if( d->kind == Declaration::Procedure && !d->forward )
                     {
-                        Declaration* p = base->findSubByName(d->name, false);
+                        Declaration* p = base->findSubByName(d->name, true);
                         if( p )
                         {
                             d->off = p->off;
