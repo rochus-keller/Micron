@@ -18,7 +18,7 @@
 */
 
 #include "MicMilInterpreter.h"
-#include "MicMilOp.h"
+#include "MilOps.h"
 #include "MicToken.h"
 #include <QElapsedTimer>
 #include <QVector>
@@ -26,6 +26,7 @@
 #include <QtDebug>
 #include <math.h>
 using namespace Mic;
+using namespace Mil;
 
 // NOTE: this is now obsolete, see MilInterpreter instead
 

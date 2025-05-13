@@ -1,5 +1,5 @@
-#ifndef MICMILOP_H
-#define MICMILOP_H
+#ifndef MICMILOPS_H
+#define MICMILOPS_H
 
 /*
 * Copyright 2019-2024 Rochus Keller <mailto:me@rochus-keller.ch>
@@ -20,7 +20,7 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
-namespace Mic
+namespace Mil
 {
 
 enum IL_op
@@ -67,4 +67,4 @@ extern const char* s_opName[];
 
 }
 
-#endif // MICMILOP_H
+#endif // MICMILOPS_H

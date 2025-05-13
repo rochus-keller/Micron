@@ -16,9 +16,9 @@
 * http://www.fsf.org/licensing/licenses/info/GPLv2.html and
 * http://www.gnu.org/copyleft/gpl.html.
 */
-#include "MicMilOp.h"
+#include "MilOps.h"
 
-namespace Mic
+namespace Mil
 {
 const char* s_opName[] =
 {

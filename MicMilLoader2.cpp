@@ -19,7 +19,7 @@
 
 #include "MicMilLoader2.h"
 #include "MicSymbol.h"
-#include "MicMilOp.h"
+#include "MilOps.h"
 #include <QtDebug>
 using namespace Mic;
 using namespace Mil;

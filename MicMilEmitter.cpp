@@ -19,12 +19,13 @@
 
 #include "MicRowCol.h"
 #include "MicMilEmitter.h"
-#include "MicMilOp.h"
+#include "MilOps.h"
 #include "MicToken.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QtDebug>
 using namespace Mic;
+using namespace Mil;
 
 static const char* bool_sym = 0;
 static const char* char_sym = 0;

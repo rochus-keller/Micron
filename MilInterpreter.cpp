@@ -40,15 +40,15 @@ enum OpArgCode {
     OffSizeArgs
 };
 
-enum IL_op
+enum LL_op
 {
-    IL_invalid,
+    LL_invalid,
 
-#define OPDEF(op, x) IL_##op
+#define OPDEF(op, x) LL_##op
 #include "MilVmOps.h"
 #undef OPDEF
 
-    IL_NUM_OF_OPS
+    LL_NUM_OF_OPS
 };
 
 static const char* op_names[] = {
@@ -70,7 +70,7 @@ struct Operation
     uint val : 22;
     uint minus : 1;
     uint op : 9;
-    Operation(IL_op op = IL_invalid, quint32 val = 0, bool minus = false):val(val),minus(minus),op(op){}
+    Operation(LL_op op = LL_invalid, quint32 val = 0, bool minus = false):val(val),minus(minus),op(op){}
 };
 
 #define _USE_JUMP_TABLE // instead of a big switch
@@ -407,7 +407,7 @@ struct Interpreter::Imp
     {
 #if 0
         QTextStream out(stdout);
-        for(int i = 1; i < IL_NUM_OF_OPS; i++ )
+        for(int i = 1; i < LL_NUM_OF_OPS; i++ )
             out << "vmcase(" << op_names[i] << ")" << endl;
 #endif
         MIC$ = Mic::Symbol::getSymbol("MIC$").constData();
@@ -710,7 +710,7 @@ struct Interpreter::Imp
         return id;
     }
 
-    int emitOp(Procedure& proc, IL_op op, quint32 v = 0, bool minus = false )
+    int emitOp(Procedure& proc, LL_op op, quint32 v = 0, bool minus = false )
     {
         const int res = proc.ops.size();
         proc.ops.push_back(Operation(op, v, minus));
@@ -1039,7 +1039,7 @@ bool Interpreter::Imp::translateInit(Procedure& proc, quint32 id)
                 qCritical() << "module initializer not found" << d->imported->toPath();
                 return false; // procedure not found
             }
-            emitOp(proc,IL_call, p);
+            emitOp(proc,LL_call, p);
         }
         // TODO: initialize structs, arrays and objects for value objects vtables
         d = d->next;
@@ -1104,39 +1104,39 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
                 case Type::UINT8:
                 case Type::BOOL:
                 case Type::CHAR:
-                    emitOp(proc, IL_starg_i1,params[s->id]->off);
+                    emitOp(proc, LL_starg_i1,params[s->id]->off);
                     break;
                 case Type::INT16:
                 case Type::UINT16:
-                    emitOp(proc, IL_starg_i2,params[s->id]->off);
+                    emitOp(proc, LL_starg_i2,params[s->id]->off);
                     break;
                 case Type::INT32:
                 case Type::UINT32:
-                    emitOp(proc, IL_starg_i4,params[s->id]->off);
+                    emitOp(proc, LL_starg_i4,params[s->id]->off);
                     break;
                 case Type::INT64:
                 case Type::UINT64:
-                    emitOp(proc, IL_starg_i8,params[s->id]->off);
+                    emitOp(proc, LL_starg_i8,params[s->id]->off);
                     break;
                 case Type::FLOAT32:
-                    emitOp(proc, IL_starg_r4,params[s->id]->off);
+                    emitOp(proc, LL_starg_r4,params[s->id]->off);
                     break;
                 case Type::FLOAT64:
-                    emitOp(proc, IL_starg_r8,params[s->id]->off);
+                    emitOp(proc, LL_starg_r8,params[s->id]->off);
                     break;
                 case Type::Pointer:
                 case Type::Proc:
                     if(t->typebound)
-                        emitOp(proc, IL_starg_pp,params[s->id]->off);
+                        emitOp(proc, LL_starg_pp,params[s->id]->off);
                     else
-                        emitOp(proc, IL_starg_p,params[s->id]->off);
+                        emitOp(proc, LL_starg_p,params[s->id]->off);
                     break;
                 case Type::Struct:
                 case Type::Union:
                 case Type::Object:
                 case Type::Array:
-                    emitOp(proc, IL_starg_vt,params[s->id]->off);
-                    emitOp(proc, IL_vt_size,t->getByteSize(sizeof(void*)));
+                    emitOp(proc, LL_starg_vt,params[s->id]->off);
+                    emitOp(proc, LL_vt_size,t->getByteSize(sizeof(void*)));
                     break;
                 default:
                     Q_ASSERT(false);
@@ -1161,39 +1161,39 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
                 case Type::UINT8:
                 case Type::BOOL:
                 case Type::CHAR:
-                    emitOp(proc, IL_stloc_i1,locals[s->id]->off);
+                    emitOp(proc, LL_stloc_i1,locals[s->id]->off);
                     break;
                 case Type::INT16:
                 case Type::UINT16:
-                    emitOp(proc, IL_stloc_i2,locals[s->id]->off);
+                    emitOp(proc, LL_stloc_i2,locals[s->id]->off);
                     break;
                 case Type::INT32:
                 case Type::UINT32:
-                    emitOp(proc, IL_stloc_i4,locals[s->id]->off);
+                    emitOp(proc, LL_stloc_i4,locals[s->id]->off);
                     break;
                 case Type::UINT64:
                 case Type::INT64:
-                    emitOp(proc, IL_stloc_i8,locals[s->id]->off);
+                    emitOp(proc, LL_stloc_i8,locals[s->id]->off);
                     break;
                 case Type::FLOAT32:
-                    emitOp(proc, IL_stloc_r4,locals[s->id]->off);
+                    emitOp(proc, LL_stloc_r4,locals[s->id]->off);
                     break;
                 case Type::FLOAT64:
-                    emitOp(proc, IL_stloc_r8,locals[s->id]->off);
+                    emitOp(proc, LL_stloc_r8,locals[s->id]->off);
                     break;
                 case Type::Pointer:
                 case Type::Proc:
                     if(t->typebound)
-                        emitOp(proc, IL_stloc_pp,locals[s->id]->off);
+                        emitOp(proc, LL_stloc_pp,locals[s->id]->off);
                     else
-                        emitOp(proc, IL_stloc_p,locals[s->id]->off);
+                        emitOp(proc, LL_stloc_p,locals[s->id]->off);
                     break;
                 case Type::Struct:
                 case Type::Union:
                 case Type::Object:
                 case Type::Array:
-                    emitOp(proc, IL_stloc_vt,locals[s->id]->off);
-                    emitOp(proc, IL_vt_size, t->getByteSize(sizeof(void*)));
+                    emitOp(proc, LL_stloc_vt,locals[s->id]->off);
+                    emitOp(proc, LL_vt_size, t->getByteSize(sizeof(void*)));
                     break;
                 default:
                     Q_ASSERT(false);
@@ -1202,58 +1202,58 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             }
             break;
         case Tok_STIND:
-            emitOp(proc, IL_stind_vt,deref(s->d->getType())->getByteSize(sizeof(void*)));
+            emitOp(proc, LL_stind_vt,deref(s->d->getType())->getByteSize(sizeof(void*)));
             break;
         case Tok_STIND_I1:
-            emitOp(proc, IL_stind_i1);
+            emitOp(proc, LL_stind_i1);
             break;
         case Tok_STIND_I2:
-            emitOp(proc, IL_stind_i2);
+            emitOp(proc, LL_stind_i2);
             break;
         case Tok_STIND_I4:
-            emitOp(proc, IL_stind_i4);
+            emitOp(proc, LL_stind_i4);
             break;
         case Tok_STIND_I8:
-            emitOp(proc, IL_stind_i8);
+            emitOp(proc, LL_stind_i8);
             break;
         case Tok_STIND_R4:
-            emitOp(proc, IL_stind_r4);
+            emitOp(proc, LL_stind_r4);
             break;
         case Tok_STIND_R8:
-            emitOp(proc, IL_stind_r8);
+            emitOp(proc, LL_stind_r8);
             break;
         case Tok_STIND_IP:
-            emitOp(proc, IL_stind_p);
+            emitOp(proc, LL_stind_p);
             break;
         case Tok_STIND_IPP:
-            emitOp(proc, IL_stind_vt,sizeof(MethRef));
+            emitOp(proc, LL_stind_vt,sizeof(MethRef));
             break;
         case Tok_STELEM_IPP:
-            emitOp(proc, IL_stelem_vt, sizeof(MethRef));
+            emitOp(proc, LL_stelem_vt, sizeof(MethRef));
             break;
         case Tok_STELEM:
-            emitOp(proc, IL_stelem_vt, deref(s->d->getType())->getByteSize(sizeof(void*)));
+            emitOp(proc, LL_stelem_vt, deref(s->d->getType())->getByteSize(sizeof(void*)));
             break;
         case Tok_STELEM_I1:
-            emitOp(proc, IL_stelem_i1);
+            emitOp(proc, LL_stelem_i1);
             break;
         case Tok_STELEM_I2:
-            emitOp(proc, IL_stelem_i2);
+            emitOp(proc, LL_stelem_i2);
             break;
         case Tok_STELEM_I4:
-            emitOp(proc, IL_stelem_i4);
+            emitOp(proc, LL_stelem_i4);
             break;
         case Tok_STELEM_I8:
-            emitOp(proc, IL_stelem_i8);
+            emitOp(proc, LL_stelem_i8);
             break;
         case Tok_STELEM_R4:
-            emitOp(proc, IL_stelem_r4);
+            emitOp(proc, LL_stelem_r4);
             break;
         case Tok_STELEM_R8:
-            emitOp(proc, IL_stelem_r8);
+            emitOp(proc, LL_stelem_r8);
             break;
         case Tok_STELEM_IP:
-            emitOp(proc, IL_stelem_p);
+            emitOp(proc, LL_stelem_p);
             break;
         case Statement::ExprStat:
             if( !translateExprSeq(proc, s->e) )
@@ -1266,39 +1266,39 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             case Type::UINT8:
             case Type::BOOL:
             case Type::CHAR:
-                emitOp(proc, IL_stfld_i1,s->d->f.off);
+                emitOp(proc, LL_stfld_i1,s->d->f.off);
                 break;
             case Type::INT16:
             case Type::UINT16:
-                emitOp(proc, IL_stfld_i2,s->d->f.off);
+                emitOp(proc, LL_stfld_i2,s->d->f.off);
                 break;
             case Type::INT32:
             case Type::UINT32:
-                emitOp(proc, IL_stfld_i4,s->d->f.off);
+                emitOp(proc, LL_stfld_i4,s->d->f.off);
                 break;
             case Type::UINT64:
             case Type::INT64:
-                emitOp(proc, IL_stfld_i8,s->d->f.off);
+                emitOp(proc, LL_stfld_i8,s->d->f.off);
                 break;
             case Type::FLOAT32:
-                emitOp(proc, IL_stfld_r4,s->d->f.off);
+                emitOp(proc, LL_stfld_r4,s->d->f.off);
                 break;
             case Type::FLOAT64:
-                emitOp(proc, IL_stfld_r8,s->d->f.off);
+                emitOp(proc, LL_stfld_r8,s->d->f.off);
                 break;
             case Type::Pointer:
             case Type::Proc:
                 if(deref(s->d->getType())->typebound)
-                    emitOp(proc, IL_stfld_pp,s->d->f.off);
+                    emitOp(proc, LL_stfld_pp,s->d->f.off);
                 else
-                    emitOp(proc, IL_stfld_p,s->d->f.off);
+                    emitOp(proc, LL_stfld_p,s->d->f.off);
                 break;
             case Type::Struct:
             case Type::Union:
             case Type::Object:
             case Type::Array:
-                emitOp(proc, IL_stfld_vt,s->d->f.off);
-                emitOp(proc, IL_vt_size, deref(s->d->getType())->getByteSize(sizeof(void*)));
+                emitOp(proc, LL_stfld_vt,s->d->f.off);
+                emitOp(proc, LL_vt_size, deref(s->d->getType())->getByteSize(sizeof(void*)));
                 break;
             default:
                 Q_ASSERT(false);
@@ -1312,39 +1312,39 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             case Type::UINT8:
             case Type::BOOL:
             case Type::CHAR:
-                emitOp(proc, IL_stvar_i1,s->d->off);
+                emitOp(proc, LL_stvar_i1,s->d->off);
                 break;
             case Type::INT16:
             case Type::UINT16:
-                emitOp(proc, IL_stvar_i2,s->d->off);
+                emitOp(proc, LL_stvar_i2,s->d->off);
                 break;
             case Type::INT32:
             case Type::UINT32:
-                emitOp(proc, IL_stvar_i4,s->d->off);
+                emitOp(proc, LL_stvar_i4,s->d->off);
                 break;
             case Type::UINT64:
             case Type::INT64:
-                emitOp(proc, IL_stvar_i8,s->d->off);
+                emitOp(proc, LL_stvar_i8,s->d->off);
                 break;
             case Type::FLOAT32:
-                emitOp(proc, IL_stvar_r4,s->d->off);
+                emitOp(proc, LL_stvar_r4,s->d->off);
                 break;
             case Type::FLOAT64:
-                emitOp(proc, IL_stvar_r8,s->d->off);
+                emitOp(proc, LL_stvar_r8,s->d->off);
                 break;
             case Type::Pointer:
             case Type::Proc:
                 if(deref(s->d->getType())->typebound)
-                    emitOp(proc, IL_stvar_pp,s->d->off);
+                    emitOp(proc, LL_stvar_pp,s->d->off);
                 else
-                    emitOp(proc, IL_stvar_p,s->d->off);
+                    emitOp(proc, LL_stvar_p,s->d->off);
                 break;
             case Type::Struct:
             case Type::Union:
             case Type::Object:
             case Type::Array:
-                emitOp(proc, IL_stvar_vt,s->d->off);
-                emitOp(proc, IL_vt_size, deref(s->d->getType())->getByteSize(sizeof(void*)));
+                emitOp(proc, LL_stvar_vt,s->d->off);
+                emitOp(proc, LL_vt_size, deref(s->d->getType())->getByteSize(sizeof(void*)));
                 break;
             default:
                 Q_ASSERT(false);
@@ -1355,10 +1355,10 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             {
                 if( !translateExprSeq(proc, s->e) )
                     return false;
-                const int ifnot = emitOp(proc, deref(s->e->getType())->isInt64() ? IL_brfalse_i8 : IL_brfalse_i4);
+                const int ifnot = emitOp(proc, deref(s->e->getType())->isInt64() ? LL_brfalse_i8 : LL_brfalse_i4);
                 if( !translateStatSeq(proc, s->body) )
                     return false;
-                const int after_if = emitOp(proc, IL_br);
+                const int after_if = emitOp(proc, LL_br);
                 branch_here(proc, ifnot);
                 if( s->next && s->next->kind == Tok_ELSE )
                 {
@@ -1380,7 +1380,7 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
             }
             break;
         case Tok_EXIT:
-            loopStack.back() << emitOp(proc,IL_br);
+            loopStack.back() << emitOp(proc,LL_br);
             break;
         case Tok_REPEAT:
             {
@@ -1389,7 +1389,7 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
                     return false;
                 if( !translateExprSeq(proc, s->e) )
                     return false;
-                emitOp(proc, s->e->getType()->isInt64() ? IL_brfalse_i8 : IL_brfalse_i4, proc.ops.size()-start+1, true );
+                emitOp(proc, s->e->getType()->isInt64() ? LL_brfalse_i8 : LL_brfalse_i4, proc.ops.size()-start+1, true );
             }
             break;
         case Tok_WHILE:
@@ -1397,24 +1397,24 @@ bool Interpreter::Imp::translateStatSeq(Procedure& proc, Statement* s)
                 const int start = proc.ops.size();
                 if( !translateExprSeq(proc, s->e) )
                     return false;
-                const int while_ = emitOp(proc, s->e->getType()->isInt64() ? IL_brfalse_i8 : IL_brfalse_i4 );
+                const int while_ = emitOp(proc, s->e->getType()->isInt64() ? LL_brfalse_i8 : LL_brfalse_i4 );
                 if( !translateStatSeq(proc, s->body) )
                     return false;
-                emitOp(proc, IL_br, proc.ops.size()-start+1, true);
+                emitOp(proc, LL_br, proc.ops.size()-start+1, true);
                 branch_here(proc, while_);
             }
             break;
         case Tok_POP:
-            emitOp(proc, IL_pop, s->args->getType()->getByteSize(sizeof(void*)));
+            emitOp(proc, LL_pop, s->args->getType()->getByteSize(sizeof(void*)));
             break;
         case Tok_STRCPY:
-            emitOp(proc, IL_strcpy, deref(s->args->lhs->getType()->getType())->len);
+            emitOp(proc, LL_strcpy, deref(s->args->lhs->getType()->getType())->len);
             break;
         case Tok_RET:
-            emitOp(proc, IL_ret, s->args ? s->args->getType()->getByteSize(sizeof(void*)) : 0 );
+            emitOp(proc, LL_ret, s->args ? s->args->getType()->getByteSize(sizeof(void*)) : 0 );
             break;
         case Tok_FREE:
-            emitOp(proc, IL_free );
+            emitOp(proc, LL_free );
             break;
         case Tok_SWITCH:
         case Tok_LABEL:
@@ -1441,375 +1441,375 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
         {
         case Tok_ADD:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_add_i4);
+                emitOp(proc, LL_add_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_add_i8);
+                emitOp(proc, LL_add_i8);
             else if(t->kind == Type::FLOAT32)
-                emitOp(proc, IL_add_r4);
+                emitOp(proc, LL_add_r4);
             else if(t->kind == Type::FLOAT64)
-                emitOp(proc, IL_add_r8);
+                emitOp(proc, LL_add_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_SUB:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_sub_i4);
+                emitOp(proc, LL_sub_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_sub_i8);
+                emitOp(proc, LL_sub_i8);
             else if(t->kind == Type::FLOAT32)
-                emitOp(proc, IL_sub_r4);
+                emitOp(proc, LL_sub_r4);
             else if(t->kind == Type::FLOAT64)
-                emitOp(proc, IL_sub_r8);
+                emitOp(proc, LL_sub_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_DIV:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_div_i4);
+                emitOp(proc, LL_div_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_div_i8);
+                emitOp(proc, LL_div_i8);
             else if(t->kind == Type::FLOAT32)
-                emitOp(proc, IL_div_r4);
+                emitOp(proc, LL_div_r4);
             else if(t->kind == Type::FLOAT64)
-                emitOp(proc, IL_div_r8);
+                emitOp(proc, LL_div_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_DIV_UN:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_div_un_i4);
+                emitOp(proc, LL_div_un_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_div_un_i8);
+                emitOp(proc, LL_div_un_i8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_MUL:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_mul_i4);
+                emitOp(proc, LL_mul_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_mul_i8);
+                emitOp(proc, LL_mul_i8);
             else if(t->kind == Type::FLOAT32)
-                emitOp(proc, IL_mul_r4);
+                emitOp(proc, LL_mul_r4);
             else if(t->kind == Type::FLOAT64)
-                emitOp(proc, IL_mul_r8);
+                emitOp(proc, LL_mul_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_REM:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_rem_i4);
+                emitOp(proc, LL_rem_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_rem_i8);
+                emitOp(proc, LL_rem_i8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_REM_UN:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_rem_un_i4);
+                emitOp(proc, LL_rem_un_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_rem_un_i8);
+                emitOp(proc, LL_rem_un_i8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_ABS:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_abs_i4);
+                emitOp(proc, LL_abs_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_abs_i8);
+                emitOp(proc, LL_abs_i8);
             else if(t->kind == Type::FLOAT32)
-                emitOp(proc, IL_abs_r4);
+                emitOp(proc, LL_abs_r4);
             else if(t->kind == Type::FLOAT64)
-                emitOp(proc, IL_abs_r8);
+                emitOp(proc, LL_abs_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_NEG:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_neg_i4);
+                emitOp(proc, LL_neg_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_neg_i8);
+                emitOp(proc, LL_neg_i8);
             else if(t->kind == Type::FLOAT32)
-                emitOp(proc, IL_neg_r4);
+                emitOp(proc, LL_neg_r4);
             else if(t->kind == Type::FLOAT64)
-                emitOp(proc, IL_neg_r8);
+                emitOp(proc, LL_neg_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_AND:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_and_i4);
+                emitOp(proc, LL_and_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_and_i8);
+                emitOp(proc, LL_and_i8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_OR:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_or_i4);
+                emitOp(proc, LL_or_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_or_i8);
+                emitOp(proc, LL_or_i8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_XOR:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_xor_i4);
+                emitOp(proc, LL_xor_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_xor_i8);
+                emitOp(proc, LL_xor_i8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_SHL:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_shl_i4);
+                emitOp(proc, LL_shl_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_shl_i8);
+                emitOp(proc, LL_shl_i8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_SHR_UN:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_shr_un_i4);
+                emitOp(proc, LL_shr_un_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_shr_un_i8);
+                emitOp(proc, LL_shr_un_i8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_SHR:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_shr_i4);
+                emitOp(proc, LL_shr_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_shr_i8);
+                emitOp(proc, LL_shr_i8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_NOT:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_not_i4);
+                emitOp(proc, LL_not_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_not_i8);
+                emitOp(proc, LL_not_i8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_LDC_I4_0:
-            emitOp(proc, IL_ldc_i4_0);
+            emitOp(proc, LL_ldc_i4_0);
             break;
         case Tok_LDC_I4_1:
-            emitOp(proc, IL_ldc_i4_1);
+            emitOp(proc, LL_ldc_i4_1);
             break;
         case Tok_LDC_I4_2:
-            emitOp(proc, IL_ldc_i4_2);
+            emitOp(proc, LL_ldc_i4_2);
             break;
         case Tok_LDC_I4_3:
-            emitOp(proc, IL_ldc_i4_3);
+            emitOp(proc, LL_ldc_i4_3);
             break;
         case Tok_LDC_I4_4:
-            emitOp(proc, IL_ldc_i4_4);
+            emitOp(proc, LL_ldc_i4_4);
             break;
         case Tok_LDC_I4_5:
-            emitOp(proc, IL_ldc_i4_5);
+            emitOp(proc, LL_ldc_i4_5);
             break;
         case Tok_LDC_I4_6:
-            emitOp(proc, IL_ldc_i4_6);
+            emitOp(proc, LL_ldc_i4_6);
             break;
         case Tok_LDC_I4_7:
-            emitOp(proc, IL_ldc_i4_7);
+            emitOp(proc, LL_ldc_i4_7);
             break;
         case Tok_LDC_I4_8:
-            emitOp(proc, IL_ldc_i4_8);
+            emitOp(proc, LL_ldc_i4_8);
             break;
         case Tok_LDC_I4_M1:
-            emitOp(proc, IL_ldc_i4_m1);
+            emitOp(proc, LL_ldc_i4_m1);
             break;
         case Tok_LDC_I4_S:
         case Tok_LDC_I4:
-            emitOp(proc, IL_ldc_i4, addInt(e->i));
+            emitOp(proc, LL_ldc_i4, addInt(e->i));
             break;
         case Tok_LDC_I8:
-            emitOp(proc, IL_ldc_i8, addInt(e->i));
+            emitOp(proc, LL_ldc_i8, addInt(e->i));
             break;
         case Tok_LDC_R4:
-            emitOp(proc, IL_ldc_r4, addFloat(e->f) );
+            emitOp(proc, LL_ldc_r4, addFloat(e->f) );
             break;
         case Tok_LDC_R8:
-            emitOp(proc, IL_ldc_r8, addFloat(e->f) );
+            emitOp(proc, LL_ldc_r8, addFloat(e->f) );
             break;
         case Tok_LDNULL:
-            emitOp(proc, IL_ldnull);
+            emitOp(proc, LL_ldnull);
             break;
         case Tok_LDSTR:
-            emitOp(proc, IL_ldstr, addString(e->c->s) );
+            emitOp(proc, LL_ldstr, addString(e->c->s) );
             break;
         case Tok_LDOBJ:
-            emitOp(proc, IL_ldobj, addObject(e->c) );
+            emitOp(proc, LL_ldobj, addObject(e->c) );
             break;
         case Tok_LDPROC:
             if( !translateProc(e->d) )
                 return false;
-            emitOp(proc, IL_ldproc, findProc(e->d));
+            emitOp(proc, LL_ldproc, findProc(e->d));
             break;
         case Tok_LDMETH:
             if( !translateProc(e->d) )
                 return false;
-            emitOp(proc, IL_ldmeth, e->d->off);
+            emitOp(proc, LL_ldmeth, e->d->off);
             break;
         case Tok_CONV_I1:
             if( lhsT->isInt32OnStack() )
-                emitOp(proc, IL_conv_i1_i4);
+                emitOp(proc, LL_conv_i1_i4);
             else if( lhsT->isInt64())
-                emitOp(proc, IL_conv_i1_i8);
+                emitOp(proc, LL_conv_i1_i8);
             else if(lhsT->kind == Type::FLOAT32)
-                emitOp(proc, IL_conv_i1_r4);
+                emitOp(proc, LL_conv_i1_r4);
             else if(lhsT->kind == Type::FLOAT64)
-                emitOp(proc, IL_conv_i1_r8);
+                emitOp(proc, LL_conv_i1_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CONV_I2:
             if( lhsT->isInt32OnStack() )
-                emitOp(proc, IL_conv_i2_i4);
+                emitOp(proc, LL_conv_i2_i4);
             else if( lhsT->isInt64())
-                emitOp(proc, IL_conv_i2_i8);
+                emitOp(proc, LL_conv_i2_i8);
             else if(lhsT->kind == Type::FLOAT32)
-                emitOp(proc, IL_conv_i2_r4);
+                emitOp(proc, LL_conv_i2_r4);
             else if(lhsT->kind == Type::FLOAT64)
-                emitOp(proc, IL_conv_i2_r8);
+                emitOp(proc, LL_conv_i2_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CONV_I4:
             if( lhsT->isInt64())
-                emitOp(proc, IL_conv_i4_i8);
+                emitOp(proc, LL_conv_i4_i8);
             else if(lhsT->kind == Type::FLOAT32)
-                emitOp(proc, IL_conv_i4_r4);
+                emitOp(proc, LL_conv_i4_r4);
             else if(lhsT->kind == Type::FLOAT64)
-                emitOp(proc, IL_conv_i4_r8);
+                emitOp(proc, LL_conv_i4_r8);
             else if( !lhsT->isInt32OnStack() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_I8:
             if( lhsT->isInt32OnStack() )
-                emitOp(proc, IL_conv_i8_i4);
+                emitOp(proc, LL_conv_i8_i4);
             else if(lhsT->kind == Type::FLOAT32)
-                emitOp(proc, IL_conv_i8_r4);
+                emitOp(proc, LL_conv_i8_r4);
             else if(lhsT->kind == Type::FLOAT64)
-                emitOp(proc, IL_conv_i8_r8);
+                emitOp(proc, LL_conv_i8_r8);
             else if( !lhsT->isInt64() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_R4:
             if( lhsT->isInt32OnStack() )
-                emitOp(proc, IL_conv_r4_i4);
+                emitOp(proc, LL_conv_r4_i4);
             else if(lhsT->isInt64() )
-                emitOp(proc, IL_conv_r4_i8);
+                emitOp(proc, LL_conv_r4_i8);
             else if(lhsT->kind == Type::FLOAT64)
-                emitOp(proc, IL_conv_r4_r8);
+                emitOp(proc, LL_conv_r4_r8);
             else if( !lhsT->isFloat() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_R8:
             if( lhsT->isInt32OnStack() )
-                emitOp(proc, IL_conv_r8_i4);
+                emitOp(proc, LL_conv_r8_i4);
             else if(lhsT->kind == Type::FLOAT32)
-                emitOp(proc, IL_conv_r8_r4);
+                emitOp(proc, LL_conv_r8_r4);
             else if( lhsT->isInt64() )
-                emitOp(proc, IL_conv_r8_i8);
+                emitOp(proc, LL_conv_r8_i8);
             else if( !lhsT->isFloat() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_U1:
             if( lhsT->isInt32OnStack() )
-                emitOp(proc, IL_conv_u1_i4);
+                emitOp(proc, LL_conv_u1_i4);
             else if( lhsT->isInt64())
-                emitOp(proc, IL_conv_u1_i8);
+                emitOp(proc, LL_conv_u1_i8);
             else if(lhsT->kind == Type::FLOAT32)
-                emitOp(proc, IL_conv_u1_r4);
+                emitOp(proc, LL_conv_u1_r4);
             else if(lhsT->kind == Type::FLOAT64)
-                emitOp(proc, IL_conv_u1_r8);
+                emitOp(proc, LL_conv_u1_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CONV_U2:
             if( lhsT->isInt32OnStack() )
-                emitOp(proc, IL_conv_u2_i4);
+                emitOp(proc, LL_conv_u2_i4);
             else if( lhsT->isInt64())
-                emitOp(proc, IL_conv_u2_i8);
+                emitOp(proc, LL_conv_u2_i8);
             else if(lhsT->kind == Type::FLOAT32)
-                emitOp(proc, IL_conv_u2_r4);
+                emitOp(proc, LL_conv_u2_r4);
             else if(lhsT->kind == Type::FLOAT64)
-                emitOp(proc, IL_conv_u2_r8);
+                emitOp(proc, LL_conv_u2_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CONV_U4:
             if( lhsT->isInt64() )
-                emitOp(proc, IL_conv_u4_i8);
+                emitOp(proc, LL_conv_u4_i8);
             else if(lhsT->kind == Type::FLOAT32)
-                emitOp(proc, IL_conv_u4_r4);
+                emitOp(proc, LL_conv_u4_r4);
             else if(lhsT->kind == Type::FLOAT64)
-                emitOp(proc, IL_conv_u4_r8);
+                emitOp(proc, LL_conv_u4_r8);
             else if( !lhsT->isInt32OnStack() )
                 Q_ASSERT(false);
             break;
         case Tok_CONV_U8:
             if( lhsT->isInt32OnStack() )
-                emitOp(proc, IL_conv_u8_i4);
+                emitOp(proc, LL_conv_u8_i4);
             else if(lhsT->kind == Type::FLOAT32)
-                emitOp(proc, IL_conv_u8_r4);
+                emitOp(proc, LL_conv_u8_r4);
             else if(lhsT->kind == Type::FLOAT64)
-                emitOp(proc, IL_conv_u8_r8);
+                emitOp(proc, LL_conv_u8_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CEQ:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_ceq_i4);
+                emitOp(proc, LL_ceq_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_ceq_i8);
+                emitOp(proc, LL_ceq_i8);
             else if(t->kind == Type::FLOAT32)
-                emitOp(proc, IL_ceq_r4);
+                emitOp(proc, LL_ceq_r4);
             else if(t->kind == Type::FLOAT64)
-                emitOp(proc, IL_ceq_r8);
+                emitOp(proc, LL_ceq_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CGT:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_cgt_i4);
+                emitOp(proc, LL_cgt_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_cgt_i8);
+                emitOp(proc, LL_cgt_i8);
             else if(t->kind == Type::FLOAT32)
-                emitOp(proc, IL_cgt_r4);
+                emitOp(proc, LL_cgt_r4);
             else if(t->kind == Type::FLOAT64)
-                emitOp(proc, IL_cgt_r8);
+                emitOp(proc, LL_cgt_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CGT_UN:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_cgt_u4);
+                emitOp(proc, LL_cgt_u4);
             else if( t->isInt64())
-                emitOp(proc, IL_cgt_u8);
+                emitOp(proc, LL_cgt_u8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CLT:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_clt_i4);
+                emitOp(proc, LL_clt_i4);
             else if( t->isInt64())
-                emitOp(proc, IL_clt_i8);
+                emitOp(proc, LL_clt_i8);
             else if(t->kind == Type::FLOAT32)
-                emitOp(proc, IL_clt_r4);
+                emitOp(proc, LL_clt_r4);
             else if(t->kind == Type::FLOAT64)
-                emitOp(proc, IL_clt_r8);
+                emitOp(proc, LL_clt_r8);
             else
                 Q_ASSERT(false);
             break;
         case Tok_CLT_UN:
             if( t->isInt32OnStack() )
-                emitOp(proc, IL_clt_u4);
+                emitOp(proc, LL_clt_u4);
             else if( t->isInt64())
-                emitOp(proc, IL_clt_u8);
+                emitOp(proc, LL_clt_u8);
             else
                 Q_ASSERT(false);
             break;
@@ -1826,50 +1826,50 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 switch(t->kind)
                 {
                 case Type::INT8:
-                    emitOp(proc, IL_ldarg_i1,params[e->id]->off);
+                    emitOp(proc, LL_ldarg_i1,params[e->id]->off);
                     break;
                 case Type::INT16:
-                    emitOp(proc, IL_ldarg_i2,params[e->id]->off);
+                    emitOp(proc, LL_ldarg_i2,params[e->id]->off);
                     break;
                 case Type::INT32:
-                    emitOp(proc, IL_ldarg_i4,params[e->id]->off);
+                    emitOp(proc, LL_ldarg_i4,params[e->id]->off);
                     break;
                 case Type::INT64:
-                    emitOp(proc, IL_ldarg_i8,params[e->id]->off);
+                    emitOp(proc, LL_ldarg_i8,params[e->id]->off);
                     break;
                 case Type::UINT8:
                 case Type::BOOL:
                 case Type::CHAR:
-                    emitOp(proc, IL_ldarg_u1,params[e->id]->off);
+                    emitOp(proc, LL_ldarg_u1,params[e->id]->off);
                     break;
                 case Type::UINT16:
-                    emitOp(proc, IL_ldarg_u2,params[e->id]->off);
+                    emitOp(proc, LL_ldarg_u2,params[e->id]->off);
                     break;
                 case Type::UINT32:
-                    emitOp(proc, IL_ldarg_u4,params[e->id]->off);
+                    emitOp(proc, LL_ldarg_u4,params[e->id]->off);
                     break;
                 case Type::UINT64:
-                    emitOp(proc, IL_ldarg_u8,params[e->id]->off);
+                    emitOp(proc, LL_ldarg_u8,params[e->id]->off);
                     break;
                 case Type::FLOAT32:
-                    emitOp(proc, IL_ldarg_r4,params[e->id]->off);
+                    emitOp(proc, LL_ldarg_r4,params[e->id]->off);
                     break;
                 case Type::FLOAT64:
-                    emitOp(proc, IL_ldarg_r8,params[e->id]->off);
+                    emitOp(proc, LL_ldarg_r8,params[e->id]->off);
                     break;
                 case Type::Pointer:
                 case Type::Proc:
                     if(t->typebound)
-                        emitOp(proc, IL_ldarg_pp,params[e->id]->off);
+                        emitOp(proc, LL_ldarg_pp,params[e->id]->off);
                     else
-                        emitOp(proc, IL_ldarg_p,params[e->id]->off);
+                        emitOp(proc, LL_ldarg_p,params[e->id]->off);
                     break;
                 case Type::Struct:
                 case Type::Union:
                 case Type::Object:
                 case Type::Array:
-                    emitOp(proc, IL_ldarg_vt,params[e->id]->off);
-                    emitOp(proc, IL_vt_size,t->getByteSize(pointerWidth));
+                    emitOp(proc, LL_ldarg_vt,params[e->id]->off);
+                    emitOp(proc, LL_vt_size,t->getByteSize(pointerWidth));
                     break;
                 default:
                     Q_ASSERT(false);
@@ -1883,7 +1883,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 Q_ASSERT(curProc);
                 DeclList params = curProc->decl->getParams();
                 Q_ASSERT(e->id < params.size());
-                emitOp(proc, IL_ldarga,params[e->id]->off);
+                emitOp(proc, LL_ldarga,params[e->id]->off);
             }
             break;
         case Tok_LDLOC_0:
@@ -1899,50 +1899,50 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                 switch(t->kind)
                 {
                 case Type::INT8:
-                    emitOp(proc, IL_ldloc_i1,params[e->id]->off);
+                    emitOp(proc, LL_ldloc_i1,params[e->id]->off);
                     break;
                 case Type::INT16:
-                    emitOp(proc, IL_ldloc_i2,params[e->id]->off);
+                    emitOp(proc, LL_ldloc_i2,params[e->id]->off);
                     break;
                 case Type::INT32:
-                    emitOp(proc, IL_ldloc_i4,params[e->id]->off);
+                    emitOp(proc, LL_ldloc_i4,params[e->id]->off);
                     break;
                 case Type::INT64:
-                    emitOp(proc, IL_ldloc_i8,params[e->id]->off);
+                    emitOp(proc, LL_ldloc_i8,params[e->id]->off);
                     break;
                 case Type::UINT8:
                 case Type::BOOL:
                 case Type::CHAR:
-                    emitOp(proc, IL_ldloc_u1,params[e->id]->off);
+                    emitOp(proc, LL_ldloc_u1,params[e->id]->off);
                     break;
                 case Type::UINT16:
-                    emitOp(proc, IL_ldloc_u2,params[e->id]->off);
+                    emitOp(proc, LL_ldloc_u2,params[e->id]->off);
                     break;
                 case Type::UINT32:
-                    emitOp(proc, IL_ldloc_u4,params[e->id]->off);
+                    emitOp(proc, LL_ldloc_u4,params[e->id]->off);
                     break;
                 case Type::UINT64:
-                    emitOp(proc, IL_ldloc_u8,params[e->id]->off);
+                    emitOp(proc, LL_ldloc_u8,params[e->id]->off);
                     break;
                 case Type::FLOAT32:
-                    emitOp(proc, IL_ldloc_r4,params[e->id]->off);
+                    emitOp(proc, LL_ldloc_r4,params[e->id]->off);
                     break;
                 case Type::FLOAT64:
-                    emitOp(proc, IL_ldloc_r8,params[e->id]->off);
+                    emitOp(proc, LL_ldloc_r8,params[e->id]->off);
                     break;
                 case Type::Pointer:
                 case Type::Proc:
                     if(t->typebound)
-                        emitOp(proc, IL_ldloc_pp,params[e->id]->off);
+                        emitOp(proc, LL_ldloc_pp,params[e->id]->off);
                     else
-                        emitOp(proc, IL_ldloc_p,params[e->id]->off);
+                        emitOp(proc, LL_ldloc_p,params[e->id]->off);
                     break;
                 case Type::Struct:
                 case Type::Union:
                 case Type::Object:
                 case Type::Array:
-                    emitOp(proc, IL_ldloc_vt,params[e->id]->off);
-                    emitOp(proc, IL_vt_size,t->getByteSize(pointerWidth));
+                    emitOp(proc, LL_ldloc_vt,params[e->id]->off);
+                    emitOp(proc, LL_vt_size,t->getByteSize(pointerWidth));
                     break;
                 default:
                     Q_ASSERT(false);
@@ -1955,141 +1955,141 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             {
                 DeclList locals = proc.decl->getLocals();
                 Q_ASSERT(e->id < locals.size());
-                emitOp(proc, IL_ldloca,locals[e->id]->off);
+                emitOp(proc, LL_ldloca,locals[e->id]->off);
             }
             break;
         case Tok_LDIND_I1:
-            emitOp(proc, IL_ldind_i1);
+            emitOp(proc, LL_ldind_i1);
             break;
         case Tok_LDIND_I2:
-            emitOp(proc, IL_ldind_i2);
+            emitOp(proc, LL_ldind_i2);
             break;
         case Tok_LDIND_I4:
-            emitOp(proc, IL_ldind_i4);
+            emitOp(proc, LL_ldind_i4);
             break;
         case Tok_LDIND_I8:
-            emitOp(proc, IL_ldind_i8);
+            emitOp(proc, LL_ldind_i8);
             break;
         case Tok_LDIND_IP:
-            emitOp(proc, IL_ldind_p);
+            emitOp(proc, LL_ldind_p);
             break;
         case Tok_LDIND_IPP:
-            emitOp(proc, IL_ldind_vt,sizeof(MethRef));
+            emitOp(proc, LL_ldind_vt,sizeof(MethRef));
             break;
         case Tok_LDIND_R4:
-            emitOp(proc, IL_ldind_r4);
+            emitOp(proc, LL_ldind_r4);
             break;
         case Tok_LDIND_R8:
-            emitOp(proc, IL_ldind_r8);
+            emitOp(proc, LL_ldind_r8);
             break;
         case Tok_LDIND_U1:
-            emitOp(proc, IL_ldind_u1);
+            emitOp(proc, LL_ldind_u1);
             break;
         case Tok_LDIND_U2:
-            emitOp(proc, IL_ldind_u2);
+            emitOp(proc, LL_ldind_u2);
             break;
         case Tok_LDIND_U4:
-            emitOp(proc, IL_ldind_u2);
+            emitOp(proc, LL_ldind_u2);
             break;
         case Tok_LDIND_U8:
-            emitOp(proc, IL_ldind_u8);
+            emitOp(proc, LL_ldind_u8);
             break;
         case Tok_LDIND:
             if( lhsT && (lhsT->kind == Type::StringLit || lhsT->isPtrToOpenCharArray()) )
-                emitOp(proc, IL_ldind_str,t->getByteSize(pointerWidth));
+                emitOp(proc, LL_ldind_str,t->getByteSize(pointerWidth));
             else
-                emitOp(proc, IL_ldind_vt,t->getByteSize(pointerWidth));
+                emitOp(proc, LL_ldind_vt,t->getByteSize(pointerWidth));
             break;
         case Tok_LDELEM_I1:
-            emitOp(proc, IL_ldelem_i1);
+            emitOp(proc, LL_ldelem_i1);
             break;
         case Tok_LDELEM_I2:
-            emitOp(proc, IL_ldelem_i2);
+            emitOp(proc, LL_ldelem_i2);
             break;
         case Tok_LDELEM_I4:
-            emitOp(proc, IL_ldelem_i4);
+            emitOp(proc, LL_ldelem_i4);
             break;
         case Tok_LDELEM_I8:
-            emitOp(proc, IL_ldelem_i8);
+            emitOp(proc, LL_ldelem_i8);
             break;
         case Tok_LDELEM_IP:
-            emitOp(proc, IL_ldelem_p);
+            emitOp(proc, LL_ldelem_p);
             break;
         case Tok_LDELEM_R4:
-            emitOp(proc, IL_ldelem_r4);
+            emitOp(proc, LL_ldelem_r4);
             break;
         case Tok_LDELEM_R8:
-            emitOp(proc, IL_ldelem_r8);
+            emitOp(proc, LL_ldelem_r8);
             break;
         case Tok_LDELEM_U1:
-            emitOp(proc, IL_ldelem_u1);
+            emitOp(proc, LL_ldelem_u1);
             break;
         case Tok_LDELEM_U2:
-            emitOp(proc, IL_ldelem_u2);
+            emitOp(proc, LL_ldelem_u2);
             break;
         case Tok_LDELEM_U4:
-            emitOp(proc, IL_ldelem_u4);
+            emitOp(proc, LL_ldelem_u4);
             break;
         case Tok_LDELEM_U8:
-            emitOp(proc, IL_ldelem_u8);
+            emitOp(proc, LL_ldelem_u8);
             break;
         case Tok_LDELEM_IPP:
-            emitOp(proc, IL_ldelem_vt,sizeof(MethRef));
+            emitOp(proc, LL_ldelem_vt,sizeof(MethRef));
             break;
         case Tok_LDELEM:
-            emitOp(proc, IL_ldelem_vt,t->getByteSize(pointerWidth));
+            emitOp(proc, LL_ldelem_vt,t->getByteSize(pointerWidth));
             break;
         case Tok_LDELEMA:
-            emitOp(proc, IL_ldelema,t->getType()->getByteSize(pointerWidth)); // deref pointer for et
+            emitOp(proc, LL_ldelema,t->getType()->getByteSize(pointerWidth)); // deref pointer for et
             break;
         case Tok_LDFLD:
             switch(t->kind)
             {
             case Type::INT8:
-                emitOp(proc, IL_ldfld_i1,e->d->f.off);
+                emitOp(proc, LL_ldfld_i1,e->d->f.off);
                 break;
             case Type::INT16:
-                emitOp(proc, IL_ldfld_i2,e->d->f.off);
+                emitOp(proc, LL_ldfld_i2,e->d->f.off);
                 break;
             case Type::INT32:
-                emitOp(proc, IL_ldfld_i4,e->d->f.off);
+                emitOp(proc, LL_ldfld_i4,e->d->f.off);
                 break;
             case Type::INT64:
-                emitOp(proc, IL_ldfld_i8,e->d->f.off);
+                emitOp(proc, LL_ldfld_i8,e->d->f.off);
                 break;
             case Type::UINT8:
             case Type::BOOL:
             case Type::CHAR:
-                emitOp(proc, IL_ldfld_u1,e->d->f.off);
+                emitOp(proc, LL_ldfld_u1,e->d->f.off);
                 break;
             case Type::UINT16:
-                emitOp(proc, IL_ldfld_u2,e->d->f.off);
+                emitOp(proc, LL_ldfld_u2,e->d->f.off);
                 break;
             case Type::UINT32:
-                emitOp(proc, IL_ldfld_u4,e->d->f.off);
+                emitOp(proc, LL_ldfld_u4,e->d->f.off);
                 break;
             case Type::UINT64:
-                emitOp(proc, IL_ldfld_u8,e->d->f.off);
+                emitOp(proc, LL_ldfld_u8,e->d->f.off);
                 break;
             case Type::FLOAT32:
-                emitOp(proc, IL_ldfld_r4,e->d->f.off);
+                emitOp(proc, LL_ldfld_r4,e->d->f.off);
                 break;
             case Type::FLOAT64:
-                emitOp(proc, IL_ldfld_r8,e->d->f.off);
+                emitOp(proc, LL_ldfld_r8,e->d->f.off);
                 break;
             case Type::Pointer:
             case Type::Proc:
                 if(t->typebound)
-                    emitOp(proc, IL_ldfld_pp,e->d->f.off);
+                    emitOp(proc, LL_ldfld_pp,e->d->f.off);
                 else
-                    emitOp(proc, IL_ldfld_p,e->d->f.off);
+                    emitOp(proc, LL_ldfld_p,e->d->f.off);
                 break;
             case Type::Struct:
             case Type::Union:
             case Type::Object:
             case Type::Array:
-                emitOp(proc, IL_ldfld_vt,e->d->f.off);
-                emitOp(proc, IL_vt_size,t->getByteSize(pointerWidth));
+                emitOp(proc, LL_ldfld_vt,e->d->f.off);
+                emitOp(proc, LL_vt_size,t->getByteSize(pointerWidth));
                 break;
             default:
                 Q_ASSERT(false);
@@ -2097,56 +2097,56 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             }
             break;
         case Tok_LDFLDA:
-            emitOp(proc, IL_ldflda, e->d->f.off);
+            emitOp(proc, LL_ldflda, e->d->f.off);
             break;
         case Tok_LDVAR:
             switch(t->kind)
             {
             case Type::INT8:
-                emitOp(proc, IL_ldvar_i1,e->d->off);
+                emitOp(proc, LL_ldvar_i1,e->d->off);
                 break;
             case Type::INT16:
-                emitOp(proc, IL_ldvar_i2,e->d->off);
+                emitOp(proc, LL_ldvar_i2,e->d->off);
                 break;
             case Type::INT32:
-                emitOp(proc, IL_ldvar_i4,e->d->off);
+                emitOp(proc, LL_ldvar_i4,e->d->off);
                 break;
             case Type::INT64:
-                emitOp(proc, IL_ldvar_i8,e->d->off);
+                emitOp(proc, LL_ldvar_i8,e->d->off);
                 break;
             case Type::UINT8:
             case Type::BOOL:
             case Type::CHAR:
-                emitOp(proc, IL_ldvar_u1,e->d->off);
+                emitOp(proc, LL_ldvar_u1,e->d->off);
                 break;
             case Type::UINT16:
-                emitOp(proc, IL_ldvar_u2,e->d->off);
+                emitOp(proc, LL_ldvar_u2,e->d->off);
                 break;
             case Type::UINT32:
-                emitOp(proc, IL_ldvar_u4,e->d->off);
+                emitOp(proc, LL_ldvar_u4,e->d->off);
                 break;
             case Type::UINT64:
-                emitOp(proc, IL_ldvar_u8,e->d->off);
+                emitOp(proc, LL_ldvar_u8,e->d->off);
                 break;
             case Type::FLOAT32:
-                emitOp(proc, IL_ldvar_r4,e->d->off);
+                emitOp(proc, LL_ldvar_r4,e->d->off);
                 break;
             case Type::FLOAT64:
-                emitOp(proc, IL_ldvar_r8,e->d->off);
+                emitOp(proc, LL_ldvar_r8,e->d->off);
                 break;
             case Type::Pointer:
             case Type::Proc:
                 if(t->typebound)
-                    emitOp(proc, IL_ldvar_pp,e->d->off);
+                    emitOp(proc, LL_ldvar_pp,e->d->off);
                 else
-                    emitOp(proc, IL_ldvar_p,e->d->off);
+                    emitOp(proc, LL_ldvar_p,e->d->off);
                 break;
             case Type::Struct:
             case Type::Union:
             case Type::Object:
             case Type::Array:
-                emitOp(proc, IL_ldvar_vt,e->d->off);
-                emitOp(proc, IL_vt_size,t->getByteSize(pointerWidth));
+                emitOp(proc, LL_ldvar_vt,e->d->off);
+                emitOp(proc, LL_vt_size,t->getByteSize(pointerWidth));
                 break;
             default:
                 Q_ASSERT(false);
@@ -2154,17 +2154,17 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
             }
             break;
         case Tok_LDVARA:
-            emitOp(proc, IL_ldvara, e->d->off);
+            emitOp(proc, LL_ldvara, e->d->off);
             break;
         case Tok_NEWOBJ:
         case Tok_NEWARR:
         case Tok_INITOBJ: {
                 Type* tt = deref(e->d->getType());
                 const int len = tt->getByteSize(pointerWidth);
-                const IL_op op = e->kind == Tok_NEWOBJ ? IL_alloc1 :
+                const LL_op op = e->kind == Tok_NEWOBJ ? LL_alloc1 :
                                  e->kind == Tok_NEWARR ?
-                                                       IL_allocN : // N is on stack
-                                                             IL_initobj;
+                                                       LL_allocN : // N is on stack
+                                                             LL_initobj;
                 if( tt->objectInit || tt->pointerInit )
                 {
                     int id = findTemplate(tt);
@@ -2186,7 +2186,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
         case Tok_CASTPTR:
             break; // NOP
         case Tok_DUP:
-            emitOp(proc,IL_dup, e->getType()->getByteSize(pointerWidth));
+            emitOp(proc,LL_dup, e->getType()->getByteSize(pointerWidth));
             break;
         case Tok_CALL:
         case Tok_CALLVIRT:
@@ -2200,26 +2200,26 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                     return false;
                 }
                 if( e->kind == Tok_CALL )
-                    emitOp(proc, IL_call, id);
+                    emitOp(proc, LL_call, id);
                 else
-                    emitOp(proc, IL_callvirt, id);
+                    emitOp(proc, LL_callvirt, id);
             }
             break;
         case Tok_CALLI:
-            emitOp(proc, IL_calli);
+            emitOp(proc, LL_calli);
             break;
         case Tok_CALLVI:
-            emitOp(proc, IL_callvi);
+            emitOp(proc, LL_callvi);
             break;
         case Tok_IIF:
             {
                 if( !translateExprSeq(proc, e->e) )
                     return false;
                 const int iif = deref(e->lhs->getType())->isInt64() ?
-                            emitOp(proc,IL_brfalse_i8) : emitOp(proc,IL_brfalse_i4);
+                            emitOp(proc,LL_brfalse_i8) : emitOp(proc,LL_brfalse_i4);
                 if( !translateExprSeq(proc, e->next->e) )
                     return false;
-                const int end_of_then = emitOp(proc, IL_br);
+                const int end_of_then = emitOp(proc, LL_br);
                 branch_here(proc,iif);
                 if( !translateExprSeq(proc, e->next->next->e) )
                     return false;
@@ -2234,7 +2234,7 @@ bool Interpreter::Imp::translateExprSeq(Procedure& proc, Expression* e)
                     qCritical() << "cannot find vtable of" << t->decl->toPath();
                     return false;
                 }
-                emitOp(proc, IL_isinst, id);
+                emitOp(proc, LL_isinst, id);
             }
             break;
         case Tok_SIZEOF:
@@ -2304,19 +2304,19 @@ bool Interpreter::Imp::execute(Frame* frame)
 {
 #ifdef _USE_JUMP_TABLE
 #define vmdispatch(x)     goto *disptab[x];
-#define vmcase(l)     L_IL_##l:
+#define vmcase(l)     L_LL_##l:
 #define vmbreak		 if( pc >= frame->proc->ops.size() ) return true; vmdispatch(frame->proc->ops[pc].op);
 
-    static const void *const disptab[IL_NUM_OF_OPS] = {
-        &&L_IL_invalid,
-        #define OPDEF(op, x) &&L_IL_##op
+    static const void *const disptab[LL_NUM_OF_OPS] = {
+        &&L_LL_invalid,
+        #define OPDEF(op, x) &&L_LL_##op
         #include "MilVmOps.h"
         #undef OPDEF
     };
 
 #else
 #define vmdispatch(o)	switch(o)
-#define vmcase(l)	case IL_##l:
+#define vmcase(l)	case LL_##l:
 #define vmbreak		break
 #endif
 

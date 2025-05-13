@@ -7,11 +7,11 @@ SOURCES += \
     MicParser2.cpp \
     MicAst.cpp \
     MicMilEmitter.cpp \
-    MicMilOp.cpp \
     MicEvaluator.cpp \
     $$PWD/MicMilLoader.cpp \
     $$PWD/MicBuiltins.cpp \
-    $$PWD/MicMilLoader2.cpp
+    $$PWD/MicMilLoader2.cpp \
+    $$PWD/MilOps.cpp
 
 HEADERS += \
     MicLexer.h \
@@ -21,9 +21,9 @@ HEADERS += \
     MicParser2.h \
     MicAst.h \
     MicMilEmitter.h \
-    MicMilOp.h \
     MicEvaluator.h \
     $$PWD/MicMilLoader.h \
     $$PWD/MicBuiltins.h \
-    $$PWD/MicMilLoader2.h
+    $$PWD/MicMilLoader2.h \
+    $$PWD/MilOps.h
 
