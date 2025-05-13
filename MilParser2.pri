@@ -13,7 +13,8 @@ SOURCES += \
     $$PWD/runtime/MIC++.c \
     $$PWD/oakwood/Input+.c \
     $$PWD/oakwood/MathL+.c \
-    $$PWD/oakwood/Out+.c
+    $$PWD/oakwood/Out+.c \
+    $$PWD/MilVmCode.cpp
 
 HEADERS += \
     MilLexer.h \
@@ -25,4 +26,5 @@ HEADERS += \
     MilValidator.h \
     MilCeeGen.h \
     MilInterpreter.h \
-    $$PWD/MilVmOps.h
+    $$PWD/MilVmOps.h \
+    $$PWD/MilVmCode.h

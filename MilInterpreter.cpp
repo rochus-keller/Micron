@@ -24,7 +24,6 @@ extern "C" {
 }
 #include <QVector>
 #include <QtDebug>
-#include <deque>
 using namespace Mil;
 
 enum OpArgCode {
@@ -166,7 +165,7 @@ public:
         sp += len;
         return res;
     }
-    inline void push(void* what, int len)
+    inline void push(const void* what, int len)
     {
         void* ptr = alloc(len);
         memcpy(ptr,what,len);
@@ -391,7 +390,7 @@ struct Interpreter::Imp
     AstModel* mdl;
     // accessing std::vector is cheaper than QVector or QByteArray
     std::vector<std::string> strings;
-    std::vector<QByteArray> objects;
+    std::vector< std::vector<char> > objects;
     std::vector<double> doubles;
     std::vector<qint64> ints;
     std::vector<Procedure*> procs;
@@ -695,18 +694,20 @@ struct Interpreter::Imp
 
     quint32 addObject(Constant* c)
     {
-        QByteArray obj;
+        const quint32 id = objects.size();
+        objects.push_back(std::vector<char>());
+        std::vector<char>& obj = objects.back();
         if( c->kind == Constant::B )
-            obj = QByteArray::fromRawData((const char*)c->b->b, c->b->len);
-        else
+        {
+            obj.resize(c->b->len);
+            memcpy( obj.data(), (const char*)c->b->b,c->b->len);
+        }else
         {
             ComponentList* cl = c->c;
             Q_ASSERT( cl->type );
             obj.resize(deref(cl->type)->getByteSize(sizeof(void*)));
             render(obj.data(), 0, cl);
         }
-        const quint32 id = objects.size();
-        objects.push_back(obj);
         return id;
     }
 
@@ -920,10 +921,11 @@ bool Interpreter::dumpProc(QTextStream& out, Declaration* proc)
         case StrArg:
             out << " \"" << imp->strings[p->ops[pc].val].c_str() << "\"";
             break;
-        case ByteArrayArg:
-            out << " $" << imp->objects[p->ops[pc].val].toHex().left(40) << " (" <<
-                   imp->objects[p->ops[pc].val].size() << ")";
-            break;
+        case ByteArrayArg: {
+                const std::vector<char>& tmp = imp->objects[p->ops[pc].val];
+                QByteArray buf = QByteArray::fromRawData(tmp.data(),tmp.size());
+                out << " $" << buf.toHex().left(40) << " (" << buf.size() << ")";
+            } break;
         case ProcArg:
             if( p->ops[pc].val < imp->procs.size() )
                 out << " " << imp->procs[p->ops[pc].val]->decl->toPath();
@@ -3207,7 +3209,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldobj) {
-                QByteArray& obj = objects[frame->proc->ops[pc].val];
+                const std::vector<char>& obj = objects[frame->proc->ops[pc].val];
                 frame->push(obj.data(),obj.size());
                 pc++;
             } vmbreak;
