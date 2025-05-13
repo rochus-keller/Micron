@@ -24,6 +24,7 @@ const char* s_opName[] =
 {
     "invalid",
     // expressions
+    "",
     "add", "abs", "and", "call", "calli", "callvi", "callvirt", "castptr",
     "ceq", "cgt", "cgt_un", "clt", "clt_un",
     "conv_i1", "conv_i2", "conv_i4", "conv_i8", "conv_r4", "conv_r8",
@@ -48,6 +49,7 @@ const char* s_opName[] =
     "not", "or", "rem", "rem_un", "shl", "shr", "shr_un",
     "sizeof", "sub", "xor", "ptroff", "nop",
     // statements
+    "",
     "free", "repeat", "until",
     "exit", "goto", "if", "then", "else", "end",
     "label", "line", "loop", "pop", "ret",
@@ -56,6 +58,7 @@ const char* s_opName[] =
     "stelem_r4", "stelem_r8", "stelem_ip", "stelem_ipp", "stfld",
     "stind_i1", "stind_i2", "stind_i4", "stind_i8", "stind_r4", "stind_r8", "stind_ip", "stind_ipp",
     "stloc", "stloc_s", "stloc_0", "stloc_1", "stloc_2", "stloc_3",
-    "stind", "strcpy", "stvar", "switch", "case", "while", "do"
+    "stind", "strcpy", "stvar", "switch", "case", "while", "do",
+    ""
 };
 }

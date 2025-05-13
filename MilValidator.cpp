@@ -154,7 +154,7 @@ void Validator::visitStatSeq(Statement* stat)
                     {
                         // split ExprStat
                         Statement* s = new Statement();
-                        s->kind = (TokenType)Statement::ExprStat;
+                        s->kind = (IL_op)Statement::ExprStat;
                         s->pos = e->next->pos;
                         s->e = e->next;
                         e->next = 0;
@@ -168,16 +168,16 @@ void Validator::visitStatSeq(Statement* stat)
                 }
             }
             break;
-        case Tok_EXIT:
-        case Tok_GOTO:
-        case Tok_LABEL:
-        case Tok_LINE:
+        case IL_exit:
+        case IL_goto:
+        case IL_label:
+        case IL_line:
             expectN(0, stat); // TODO
             break;
-        case Tok_POP:
+        case IL_pop:
             expectN(1, stat); // we have no reference type information to check here
             break;
-        case Tok_FREE:
+        case IL_free:
             if( expectN(1, stat) )
             {
                 Type* t = deref(stat->args->getType());
@@ -188,7 +188,7 @@ void Validator::visitStatSeq(Statement* stat)
                 }
             }
             break;
-        case Tok_STARG:
+        case IL_starg:
             if( expectN(1, stat) )
             {
                 DeclList params = curProc->getParams();
@@ -202,12 +202,12 @@ void Validator::visitStatSeq(Statement* stat)
                     error(stat->pos, "argument type not compatible with value on stack");
             }
             break;
-        case Tok_STLOC:
-        case Tok_STLOC_S:
-        case Tok_STLOC_0:
-        case Tok_STLOC_1:
-        case Tok_STLOC_2:
-        case Tok_STLOC_3:
+        case IL_stloc:
+        case IL_stloc_s:
+        case IL_stloc_0:
+        case IL_stloc_1:
+        case IL_stloc_2:
+        case IL_stloc_3:
             if( expectN(1, stat) )
             {
                 DeclList locals = curProc->getLocals();
@@ -221,7 +221,7 @@ void Validator::visitStatSeq(Statement* stat)
                     error(stat->pos, "local variable type not compatible with value on stack");
             }
             break;
-        case Tok_STVAR:
+        case IL_stvar:
             if( expectN(1, stat) )
             {
                 Type* lhsT = deref(stat->d->getType());
@@ -229,19 +229,19 @@ void Validator::visitStatSeq(Statement* stat)
                     error(stat->pos, "module variable type not compatible with value on stack");
             }
             break;
-        case Tok_IF:
+        case IL_if:
             expectN(0, stat);
             stat = visitIfThenElse(stat);
             break;
-        case Tok_LOOP:
+        case IL_loop:
             expectN(0, stat);
             visitLoop(stat);
             break;
-        case Tok_REPEAT:
+        case IL_repeat:
             expectN(0, stat);
             visitRepeat(stat);
             break;
-        case Tok_RET:
+        case IL_ret:
             if( curProc && curProc->getType() )
             {
                 if( expectN(1, stat) && !assigCompat(deref(curProc->getType()), stat->args) )
@@ -253,15 +253,15 @@ void Validator::visitStatSeq(Statement* stat)
                     error(stat->pos,"return requires a value");
             }
             break;
-        case Tok_STELEM:
-        case Tok_STELEM_I1:
-        case Tok_STELEM_I2:
-        case Tok_STELEM_I4:
-        case Tok_STELEM_I8:
-        case Tok_STELEM_R4:
-        case Tok_STELEM_R8:
-        case Tok_STELEM_IP:
-        case Tok_STELEM_IPP:
+        case IL_stelem:
+        case IL_stelem_i1:
+        case IL_stelem_i2:
+        case IL_stelem_i4:
+        case IL_stelem_i8:
+        case IL_stelem_r4:
+        case IL_stelem_r8:
+        case IL_stelem_ip:
+        case IL_stelem_ipp:
             if( expectN(3, stat) )
             {
                 Type* aptr = deref(stat->args->next->rhs->getType());
@@ -277,7 +277,7 @@ void Validator::visitStatSeq(Statement* stat)
 
                 Type* etOs = deref(aptr->getType()); // element type on stack
                 Type* refT = tokToBasicType(mdl, stat->kind);
-                if( stat->kind == Tok_STELEM )
+                if( stat->kind == IL_stelem )
                     refT = deref(stat->d->getType());
 
                 if( etOs && !equal(etOs,refT) )
@@ -289,7 +289,7 @@ void Validator::visitStatSeq(Statement* stat)
                     error(stat->pos,"value on stack is not compatible with the element type");
             }
             break;
-        case Tok_STFLD:
+        case IL_stfld:
             if( expectN(2, stat) )
             {
                 Type* objptr = deref(stat->args->lhs->getType());
@@ -309,7 +309,7 @@ void Validator::visitStatSeq(Statement* stat)
                     error(stat->pos,"value on stack is not compatible with the pointer base type");
             }
             break;
-        case Tok_STRCPY:
+        case IL_strcpy:
             if( expectN(2, stat) )
             {
                 Type* lhsT = deref(stat->args->lhs->getType());
@@ -328,15 +328,15 @@ void Validator::visitStatSeq(Statement* stat)
                     error(stat->pos,"second argument must be a pointer to an open char array or string literal");
             }
             break;
-        case Tok_STIND:
-        case Tok_STIND_I1:
-        case Tok_STIND_I2:
-        case Tok_STIND_I4:
-        case Tok_STIND_I8:
-        case Tok_STIND_R4:
-        case Tok_STIND_R8:
-        case Tok_STIND_IP:
-        case Tok_STIND_IPP:
+        case IL_stind:
+        case IL_stind_i1:
+        case IL_stind_i2:
+        case IL_stind_i4:
+        case IL_stind_i8:
+        case IL_stind_r4:
+        case IL_stind_r8:
+        case IL_stind_ip:
+        case IL_stind_ipp:
             if( expectN(2, stat) )
             {
                 Type* ptrT = deref(stat->args->lhs->getType());
@@ -346,7 +346,7 @@ void Validator::visitStatSeq(Statement* stat)
                 Type* baseOs = deref(ptrT->getType()); // pointer basetype on stack
 
                 Type* refT = tokToBasicType(mdl, stat->kind);
-                if( stat->kind == Tok_STIND )
+                if( stat->kind == IL_stind )
                     refT = deref(stat->d->getType());
 
                 if( baseOs && !equal(baseOs,refT) )
@@ -360,16 +360,16 @@ void Validator::visitStatSeq(Statement* stat)
                 }
             }
             break;
-        case Tok_SWITCH:
+        case IL_switch:
             expectN(0, stat);
             stat = visitSwitch(stat); // TODO
             break;
-        case Tok_WHILE:
+        case IL_while:
             expectN(0, stat);
             visitWhile(stat);
             break;
         default:
-            error(stat->pos, QString("unexpected statement operator '%1'").arg(tokenTypeString(stat->kind)));
+            error(stat->pos, QString("unexpected statement operator '%1'").arg(s_opName[stat->kind]));
             break;
         }
         stat = nextStat(stat);
@@ -378,14 +378,14 @@ void Validator::visitStatSeq(Statement* stat)
 
 Statement* Validator::visitIfThenElse(Statement* stat)
 {
-    Q_ASSERT( stat && stat->kind == Tok_IF );
+    Q_ASSERT( stat && stat->kind == IL_if );
     visitExpr(stat->e);
     pc++; // THEN
     expectN(1, stat); // IF args points to the boolean expression,
     if( !isInt32(deref(stat->args->getType())) )
         error(stat->pos,"expecting a 32 bit result of boolean expression");
     visitStatSeq(stat->body);
-    if( stat->next && stat->next->kind == Tok_ELSE )
+    if( stat->next && stat->next->kind == IL_else )
     {
         stat = nextStat(stat);
         visitStatSeq(stat->body);
@@ -396,14 +396,14 @@ Statement* Validator::visitIfThenElse(Statement* stat)
 
 void Validator::visitLoop(Statement* stat)
 {
-    Q_ASSERT( stat && stat->kind == Tok_LOOP );
+    Q_ASSERT( stat && stat->kind == IL_loop );
     visitStatSeq(stat->body);
     pc++; // END
 }
 
 void Validator::visitRepeat(Statement* stat)
 {
-    Q_ASSERT( stat && stat->kind == Tok_REPEAT );
+    Q_ASSERT( stat && stat->kind == IL_repeat );
     visitStatSeq(stat->body);
     pc++; // UNTIL
     visitExpr(stat->e);
@@ -415,17 +415,17 @@ void Validator::visitRepeat(Statement* stat)
 
 Statement*Validator::visitSwitch(Statement* stat)
 {
-    Q_ASSERT( stat && stat->kind == Tok_SWITCH );
+    Q_ASSERT( stat && stat->kind == IL_switch );
     visitExpr(stat->e);
     expectN(1, stat);
-    while( stat->next && stat->next->kind == Tok_CASE )
+    while( stat->next && stat->next->kind == IL_case )
     {
         stat = nextStat(stat);
         // stat->e is a list of integers, each as an Expression
         pc++; // THEN
         visitStatSeq(stat->body);
     }
-    if( stat->next && stat->next->kind == Tok_ELSE )
+    if( stat->next && stat->next->kind == IL_else )
     {
         stat = nextStat(stat);
         visitStatSeq(stat->body);
@@ -436,7 +436,7 @@ Statement*Validator::visitSwitch(Statement* stat)
 
 void Validator::visitWhile(Statement* stat)
 {
-    Q_ASSERT( stat && stat->kind == Tok_WHILE );
+    Q_ASSERT( stat && stat->kind == IL_while );
     visitExpr(stat->e);
     expectN(1, stat);
     if( !isInt32(deref(stat->args->getType())) )
@@ -483,11 +483,11 @@ Expression* Validator::visitExpr(Expression* e)
     {
         switch( e->kind )
         {
-        case Tok_ADD:
-        case Tok_DIV_UN:
-        case Tok_DIV:
-        case Tok_MUL:
-        case Tok_SUB:
+        case IL_add:
+        case IL_div_un:
+        case IL_div:
+        case IL_mul:
+        case IL_sub:
             if( expectN(2,e) )
             {
                 e->lhs = stackAt(-2);
@@ -512,11 +512,11 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.last() = e;
             }
             break;
-        case Tok_AND:
-        case Tok_OR:
-        case Tok_XOR:
-        case Tok_REM:
-        case Tok_REM_UN:
+        case IL_and:
+        case IL_or:
+        case IL_xor:
+        case IL_rem:
+        case IL_rem_un:
             if( expectN(2,e) )
             {
                 e->lhs = stackAt(-2);
@@ -535,9 +535,9 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.last() = e;
             }
             break;
-        case Tok_SHL:
-        case Tok_SHR_UN:
-        case Tok_SHR:
+        case IL_shl:
+        case IL_shr_un:
+        case IL_shr:
             if( expectN(2,e) )
             {
                 e->lhs = stackAt(-2); // value
@@ -556,7 +556,7 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.last() = e;
             }
             break;
-        case Tok_NOT:
+        case IL_not:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1);
@@ -572,8 +572,8 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.last() = e;
             }
             break;
-        case Tok_NEG:
-        case Tok_ABS:
+        case IL_neg:
+        case IL_abs:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1);
@@ -593,50 +593,50 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.last() = e;
             }
             break;
-        case Tok_LDC_I4_0:
-        case Tok_LDC_I4_1:
-        case Tok_LDC_I4_2:
-        case Tok_LDC_I4_3:
-        case Tok_LDC_I4_4:
-        case Tok_LDC_I4_5:
-        case Tok_LDC_I4_6:
-        case Tok_LDC_I4_7:
-        case Tok_LDC_I4_8:
-        case Tok_LDC_I4_M1:
-        case Tok_LDC_I4_S:
-        case Tok_LDC_I4:
+        case IL_ldc_i4_0:
+        case IL_ldc_i4_1:
+        case IL_ldc_i4_2:
+        case IL_ldc_i4_3:
+        case IL_ldc_i4_4:
+        case IL_ldc_i4_5:
+        case IL_ldc_i4_6:
+        case IL_ldc_i4_7:
+        case IL_ldc_i4_8:
+        case IL_ldc_i4_m1:
+        case IL_ldc_i4_s:
+        case IL_ldc_i4:
             e->setType(mdl->getBasicType(Type::INT32));
             stack.push_back(e);
             break;
-        case Tok_LDC_I8:
+        case IL_ldc_i8:
             e->setType(mdl->getBasicType(Type::INT64));
             stack.push_back(e);
             break;
-        case Tok_LDC_R4:
+        case IL_ldc_r4:
             e->setType(mdl->getBasicType(Type::FLOAT32));
             stack.push_back(e);
             break;
-        case Tok_LDC_R8:
+        case IL_ldc_r8:
             e->setType(mdl->getBasicType(Type::FLOAT64));
             stack.push_back(e);
             break;
-        // TODO: LDC_IP
-        case Tok_LDNULL:
+        // TODO: LDC_ip
+        case IL_ldnull:
             e->setType(mdl->getBasicType(Type::NIL));
             stack.push_back(e);
             break;
-        case Tok_LDSTR:
+        case IL_ldstr:
             e->setType(mdl->getBasicType(Type::StringLit));
             stack.push_back(e);
             break;
-        case Tok_LDOBJ:
+        case IL_ldobj:
             e->setType(toType(e->c));
             stack.push_back(e);
             break;
-        case Tok_LDPROC:
+        case IL_ldproc:
             stack.push_back(e);
             break;
-        case Tok_LDMETH:
+        case IL_ldmeth:
             {
                 // expect the object instance pointer on the stack
                 e->lhs = stackAt(-1); // ptr
@@ -651,45 +651,45 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.back() = e; // replace the stack top with methref
             }
             break;
-        case Tok_SIZEOF:
+        case IL_sizeof:
             e->setType(mdl->getBasicType(Type::INT32));
             stack.push_back(e);
             break;
-        case Tok_CONV_I1:
-        case Tok_CONV_I2:
-        case Tok_CONV_I4:
-        case Tok_CONV_U1:
-        case Tok_CONV_U2:
-        case Tok_CONV_U4:
+        case IL_conv_i1:
+        case IL_conv_i2:
+        case IL_conv_i4:
+        case IL_conv_u1:
+        case IL_conv_u2:
+        case IL_conv_u4:
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
             e->setType(mdl->getBasicType(Type::INT32));
             stack.back() = e;
             break;
-        case Tok_CONV_I8:
-        case Tok_CONV_U8:
+        case IL_conv_i8:
+        case IL_conv_u8:
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
             e->setType(mdl->getBasicType(Type::INT64));
             stack.back() = e;
             break;
-        case Tok_CONV_R4:
+        case IL_conv_r4:
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
             e->setType(mdl->getBasicType(Type::FLOAT32));
             stack.back() = e;
             break;
-        case Tok_CONV_R8:
+        case IL_conv_r8:
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
             e->setType(mdl->getBasicType(Type::FLOAT64));
             stack.back() = e;
             break;
-        case Tok_CASTPTR:
+        case IL_castptr:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1); // ptr
@@ -706,7 +706,7 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.back() = e;
             }
             break;
-        case Tok_INITOBJ:
+        case IL_initobj:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1); // ptr
@@ -729,11 +729,11 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.pop_back();
             }
             break;
-        case Tok_CEQ:
-        case Tok_CGT_UN:
-        case Tok_CGT:
-        case Tok_CLT_UN:
-        case Tok_CLT:
+        case IL_ceq:
+        case IL_cgt_un:
+        case IL_cgt:
+        case IL_clt_un:
+        case IL_clt:
             if( expectN(2,e) )
             {
                 e->lhs = stackAt(-2);
@@ -758,14 +758,14 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.last() = e;
             }
             break;
-        case Tok_LDARG_0:
-        case Tok_LDARG_1:
-        case Tok_LDARG_2:
-        case Tok_LDARG_3:
-        case Tok_LDARG_S:
-        case Tok_LDARG:
-        case Tok_LDARGA_S:
-        case Tok_LDARGA:
+        case IL_ldarg_0:
+        case IL_ldarg_1:
+        case IL_ldarg_2:
+        case IL_ldarg_3:
+        case IL_ldarg_s:
+        case IL_ldarg:
+        case IL_ldarga_s:
+        case IL_ldarga:
             {
                 DeclList params = curProc->getParams();
                 if( e->id >= params.size() )
@@ -773,7 +773,7 @@ Expression* Validator::visitExpr(Expression* e)
                     error(e->pos, "the referenced parameter does not exist");
                     break;
                 }
-                if( e->kind == Tok_LDARGA_S || e->kind == Tok_LDARGA )
+                if( e->kind == IL_ldarga_s || e->kind == IL_ldarga )
                 {
                     Type* ptr = new Type();
                     ptr->kind = Type::Pointer;
@@ -784,14 +784,14 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.push_back(e);
             }
             break;
-        case Tok_LDLOC_0:
-        case Tok_LDLOC_1:
-        case Tok_LDLOC_2:
-        case Tok_LDLOC_3:
-        case Tok_LDLOC_S:
-        case Tok_LDLOC:
-        case Tok_LDLOCA_S:
-        case Tok_LDLOCA:
+        case IL_ldloc_0:
+        case IL_ldloc_1:
+        case IL_ldloc_2:
+        case IL_ldloc_3:
+        case IL_ldloc_s:
+        case IL_ldloc:
+        case IL_ldloca_s:
+        case IL_ldloca:
             {
                 DeclList locals = curProc->getLocals();
                 if( e->id >= locals.size() )
@@ -799,7 +799,7 @@ Expression* Validator::visitExpr(Expression* e)
                     error(e->pos, "the referenced local variable does not exist");
                     break;
                 }
-                if( e->kind == Tok_LDLOCA_S || e->kind == Tok_LDLOCA )
+                if( e->kind == IL_ldloca_s || e->kind == IL_ldloca )
                 {
                     Type* ptr = new Type();
                     ptr->kind = Type::Pointer;
@@ -810,20 +810,20 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.push_back(e);
             }
             break;
-        case Tok_LDELEM_I1:
-        case Tok_LDELEM_I2:
-        case Tok_LDELEM_I4:
-        case Tok_LDELEM_I8:
-        case Tok_LDELEM_IP:
-        case Tok_LDELEM_IPP:
-        case Tok_LDELEM_R4:
-        case Tok_LDELEM_R8:
-        case Tok_LDELEM_U1:
-        case Tok_LDELEM_U2:
-        case Tok_LDELEM_U4:
-        case Tok_LDELEM_U8:
-        case Tok_LDELEM:
-        case Tok_LDELEMA:
+        case IL_ldelem_i1:
+        case IL_ldelem_i2:
+        case IL_ldelem_i4:
+        case IL_ldelem_i8:
+        case IL_ldelem_ip:
+        case IL_ldelem_ipp:
+        case IL_ldelem_r4:
+        case IL_ldelem_r8:
+        case IL_ldelem_u1:
+        case IL_ldelem_u2:
+        case IL_ldelem_u4:
+        case IL_ldelem_u8:
+        case IL_ldelem:
+        case IL_ldelema:
             if( expectN(2,e) )
             {
                 e->lhs = stackAt(-2); // pointer to array
@@ -837,7 +837,7 @@ Expression* Validator::visitExpr(Expression* e)
                     break;
                 }
                 Type* et1 = tokToBasicType(mdl, e->kind);
-                if( e->kind == Tok_LDELEM )
+                if( e->kind == IL_ldelem )
                     et1 = deref(e->d->getType());
                 Type* et2 = deref(array->getType());
                 if( et1 && !equal(et1,et2) )
@@ -845,7 +845,7 @@ Expression* Validator::visitExpr(Expression* e)
                     error(e->pos, "ldelem type not compatible with array element type on the stack");
                     break;
                 }
-                if( e->kind == Tok_LDELEMA )
+                if( e->kind == IL_ldelema )
                 {
                     Type* ptr = new Type();
                     ptr->kind = Type::Pointer;
@@ -857,8 +857,8 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.back() = e;
             }
             break;
-        case Tok_LDFLD:
-        case Tok_LDFLDA:
+        case IL_ldfld:
+        case IL_ldflda:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1); // ptr
@@ -879,7 +879,7 @@ Expression* Validator::visitExpr(Expression* e)
                     break;
                 }
 
-                if( e->kind == Tok_LDFLDA )
+                if( e->kind == IL_ldflda )
                 {
                     Type* ptr = new Type();
                     ptr->kind = Type::Pointer;
@@ -890,11 +890,11 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.back() = e;
             }
             break;
-        case Tok_LDVAR:
-        case Tok_LDVARA:
+        case IL_ldvar:
+        case IL_ldvara:
             {
                 Type* t = deref(e->d->getType());
-                if( e->kind == Tok_LDVARA )
+                if( e->kind == IL_ldvara )
                 {
                     Type* ptr = new Type();
                     ptr->kind = Type::Pointer;
@@ -905,7 +905,7 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.push_back(e);
             }
             break;
-        case Tok_PTROFF:
+        case IL_ptroff:
             if( expectN(2,e) )
             {
                 e->lhs = stackAt(-2); // pointer
@@ -922,19 +922,19 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.back() = e;
             }
             break;
-        case Tok_LDIND_I1:
-        case Tok_LDIND_I2:
-        case Tok_LDIND_I4:
-        case Tok_LDIND_I8:
-        case Tok_LDIND_IP:
-        case Tok_LDIND_IPP:
-        case Tok_LDIND_R4:
-        case Tok_LDIND_R8:
-        case Tok_LDIND_U1:
-        case Tok_LDIND_U2:
-        case Tok_LDIND_U4:
-        case Tok_LDIND_U8:
-        case Tok_LDIND:
+        case IL_ldind_i1:
+        case IL_ldind_i2:
+        case IL_ldind_i4:
+        case IL_ldind_i8:
+        case IL_ldind_ip:
+        case IL_ldind_ipp:
+        case IL_ldind_r4:
+        case IL_ldind_r8:
+        case IL_ldind_u1:
+        case IL_ldind_u2:
+        case IL_ldind_u4:
+        case IL_ldind_u8:
+        case IL_ldind:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1); // ptr
@@ -944,9 +944,9 @@ Expression* Validator::visitExpr(Expression* e)
                 }
                 Type* bt1 = deref(lhsT->getType());
                 Type* bt2 = tokToBasicType(mdl, e->kind);
-                if( e->kind == Tok_LDIND )
+                if( e->kind == IL_ldind )
                     bt2 = deref(e->d->getType());
-                if( e->kind == Tok_LDIND &&
+                if( e->kind == IL_ldind &&
                         (bt1->kind == Type::Array && bt1->len == 0 && deref(bt1->getType())->kind == Type::CHAR ||
                          lhsT->kind == Type::StringLit ) &&
                         bt2->kind == Type::Array && bt2->len != 0 && deref(bt2->getType())->kind == Type::CHAR )
@@ -957,14 +957,14 @@ Expression* Validator::visitExpr(Expression* e)
                     error(e->pos, "ldind type not compatible with type on the stack");
                     break;
                 }
-                if( e->kind == Tok_LDIND )
+                if( e->kind == IL_ldind )
                     e->setType(bt2);
                 else
                     e->setType(bt1);
                 stack.back() = e;
             }
             break;
-        case Tok_NEWOBJ:
+        case IL_newobj:
             {
                 Type* t = deref(e->d->getType());
                 Type* ptr = new Type();
@@ -979,8 +979,8 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.push_back(e);
             }
             break;
-        case Tok_NEWARR:
-        case Tok_NEWVLA:
+        case IL_newarr:
+        case IL_newvla:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1); // numElems
@@ -1002,7 +1002,7 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.back() = e;
             }
             break;
-        case Tok_ISINST:
+        case IL_isinst:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1); // ptr
@@ -1017,7 +1017,7 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.back() = e;
             }
             break;
-        case Tok_DUP:
+        case IL_dup:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1);
@@ -1025,20 +1025,20 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.push_back(e);
             }
             break;
-        case Tok_NOP:
+        case IL_nop:
             break;
-        case Tok_CALLI:
-        case Tok_CALLVI:
+        case IL_calli:
+        case IL_callvi:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1); // func/methref
                 stack.pop_back();
                 Type* proc = deref(e->lhs->getType());
-                if( e->kind == Tok_CALLVI && !proc->typebound )
+                if( e->kind == IL_callvi && !proc->typebound )
                 {
                     error(e->pos, "expecting a methref on the stack");
                     break;
-                }else if(e->kind == Tok_CALLI && proc->typebound)
+                }else if(e->kind == IL_calli && proc->typebound)
                 {
                     error(e->pos, "expecting a function pointer on the stack");
                     break;
@@ -1058,8 +1058,8 @@ Expression* Validator::visitExpr(Expression* e)
                     return e;
             }
             break;
-        case Tok_CALL:
-        case Tok_CALLVIRT:
+        case IL_call:
+        case IL_callvirt:
             {
                 Declaration* proc = e->d;
                 DeclList params = proc->getParams();
@@ -1069,7 +1069,7 @@ Expression* Validator::visitExpr(Expression* e)
                 // TODO: check param compat?
                 // TODO: varargs?
 
-                if(e->kind == Tok_CALLVIRT )
+                if(e->kind == IL_callvirt )
                 {
 
                     e->rhs = eatStack(numOfParams-1); // all true params without self
@@ -1086,9 +1086,9 @@ Expression* Validator::visitExpr(Expression* e)
                     return e;
             }
             break;
-        case Tok_IIF:
+        case IL_iif:
             {
-                Q_ASSERT(e->next->kind == Tok_THEN && e->next->next->kind == Tok_ELSE);
+                Q_ASSERT(e->next->kind == IL_then && e->next->next->kind == IL_else);
                 Expression* iif_ = e;
                 Expression* then_ = e->next;
                 Expression* else_ = e->next->next;
@@ -1116,7 +1116,7 @@ Expression* Validator::visitExpr(Expression* e)
             }
             break;
         default:
-            error(e->pos, QString("unexpected expression operator '%1'").arg(tokenTypeString(e->kind)));
+            error(e->pos, QString("unexpected expression operator '%1'").arg(s_opName[e->kind]));
             break;
         }
 
@@ -1188,7 +1188,7 @@ Expression* Validator::eatStack(quint32 n)
     while( !stack.isEmpty() && n > 0 )
     {
         Expression* a = new Expression();
-        a->kind = (TokenType)Expression::Argument;
+        a->kind = (IL_op)Expression::Argument;
         a->rhs = stack.takeLast();
         n--;
         if( n && !stack.isEmpty() )
@@ -1211,83 +1211,83 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
 {
     switch(t)
     {
-    case Tok_LDELEM_I1:
-    case Tok_STELEM_I1:
-    case Tok_LDIND_I1:
-    case Tok_STIND_I1:
-    case Tok_CONV_I1:
+    case IL_ldelem_i1:
+    case IL_stelem_i1:
+    case IL_ldind_i1:
+    case IL_stind_i1:
+    case IL_conv_i1:
         return mdl->getBasicType(Type::INT8);
-    case Tok_LDELEM_I2:
-    case Tok_STELEM_I2:
-    case Tok_LDIND_I2:
-    case Tok_CONV_I2:
+    case IL_ldelem_i2:
+    case IL_stelem_i2:
+    case IL_ldind_i2:
+    case IL_conv_i2:
         return mdl->getBasicType(Type::INT16);
-    case Tok_LDELEM_I4:
-    case Tok_STELEM_I4:
-    case Tok_LDIND_I4:
-    case Tok_STIND_I4:
-    case Tok_CONV_I4:
-    case Tok_LDC_I4_0:
-    case Tok_LDC_I4_1:
-    case Tok_LDC_I4_2:
-    case Tok_LDC_I4_3:
-    case Tok_LDC_I4_4:
-    case Tok_LDC_I4_5:
-    case Tok_LDC_I4_6:
-    case Tok_LDC_I4_7:
-    case Tok_LDC_I4_8:
-    case Tok_LDC_I4_M1:
-    case Tok_LDC_I4_S:
-    case Tok_LDC_I4:
+    case IL_ldelem_i4:
+    case IL_stelem_i4:
+    case IL_ldind_i4:
+    case IL_stind_i4:
+    case IL_conv_i4:
+    case IL_ldc_i4_0:
+    case IL_ldc_i4_1:
+    case IL_ldc_i4_2:
+    case IL_ldc_i4_3:
+    case IL_ldc_i4_4:
+    case IL_ldc_i4_5:
+    case IL_ldc_i4_6:
+    case IL_ldc_i4_7:
+    case IL_ldc_i4_8:
+    case IL_ldc_i4_m1:
+    case IL_ldc_i4_s:
+    case IL_ldc_i4:
         return mdl->getBasicType(Type::INT32);
-    case Tok_LDELEM_I8:
-    case Tok_STELEM_I8:
-    case Tok_LDIND_I8:
-    case Tok_STIND_I8:
-    case Tok_CONV_I8:
-    case Tok_LDC_I8:
+    case IL_ldelem_i8:
+    case IL_stelem_i8:
+    case IL_ldind_i8:
+    case IL_stind_i8:
+    case IL_conv_i8:
+    case IL_ldc_i8:
         return mdl->getBasicType(Type::INT64);
-    case Tok_LDELEM_IP:
-    case Tok_STELEM_IP:
-    case Tok_LDIND_IP:
-    case Tok_STIND_IP:
+    case IL_ldelem_ip:
+    case IL_stelem_ip:
+    case IL_ldind_ip:
+    case IL_stind_ip:
         return mdl->getBasicType(Type::INTPTR);
-    case Tok_LDIND_IPP:
-    case Tok_STIND_IPP:
+    case IL_ldind_ipp:
+    case IL_stind_ipp:
         return mdl->getBasicType(Type::DBLINTPTR);
-    case Tok_LDELEM_R4:
-    case Tok_STELEM_R4:
-    case Tok_LDIND_R4:
-    case Tok_STIND_R4:
-    case Tok_CONV_R4:
-    case Tok_LDC_R4:
+    case IL_ldelem_r4:
+    case IL_stelem_r4:
+    case IL_ldind_r4:
+    case IL_stind_r4:
+    case IL_conv_r4:
+    case IL_ldc_r4:
         return mdl->getBasicType(Type::FLOAT32);
-    case Tok_LDELEM_R8:
-    case Tok_STELEM_R8:
-    case Tok_LDIND_R8:
-    case Tok_STIND_R8:
-    case Tok_CONV_R8:
-    case Tok_LDC_R8:
+    case IL_ldelem_r8:
+    case IL_stelem_r8:
+    case IL_ldind_r8:
+    case IL_stind_r8:
+    case IL_conv_r8:
+    case IL_ldc_r8:
         return mdl->getBasicType(Type::FLOAT64);
-    case Tok_LDELEM_U1:
-    case Tok_LDIND_U1:
-    case Tok_CONV_U1:
+    case IL_ldelem_u1:
+    case IL_ldind_u1:
+    case IL_conv_u1:
         return mdl->getBasicType(Type::UINT8);
-    case Tok_LDELEM_U2:
-    case Tok_LDIND_U2:
-    case Tok_CONV_U2:
+    case IL_ldelem_u2:
+    case IL_ldind_u2:
+    case IL_conv_u2:
         return mdl->getBasicType(Type::UINT16);
-    case Tok_LDELEM_U4:
-    case Tok_LDIND_U4:
-    case Tok_CONV_U4:
+    case IL_ldelem_u4:
+    case IL_ldind_u4:
+    case IL_conv_u4:
         return mdl->getBasicType(Type::UINT32);
-    case Tok_LDELEM_U8:
-    case Tok_LDIND_U8:
-    case Tok_CONV_U8:
+    case IL_ldelem_u8:
+    case IL_ldind_u8:
+    case IL_conv_u8:
         return mdl->getBasicType(Type::UINT64);
-    case Tok_LDNULL:
+    case IL_ldnull:
         return mdl->getBasicType(Type::NIL);
-    case Tok_LDSTR:
+    case IL_ldstr:
         return mdl->getBasicType(Type::StringLit);
     default:
         return 0;
@@ -1412,28 +1412,28 @@ bool Validator::assigCompat(Type* lhs, Expression* rhs)
 {
     switch( rhs->kind )
     {
-    case Tok_LDPROC:
-    case Tok_LDMETH:
+    case IL_ldproc:
+    case IL_ldmeth:
         return assigCompat(lhs, rhs->d);
-    case Tok_CASTPTR:
-    case Tok_CALL:
-    case Tok_CALLI:
-    case Tok_CALLVIRT:
-    case Tok_CALLVI:
-    case Tok_INITOBJ:
-    case Tok_ISINST:
-    case Tok_LDELEM:
-    case Tok_LDELEMA:
-    case Tok_LDFLD:
-    case Tok_LDFLDA:
-    case Tok_LDIND:
-    case Tok_LDVAR:
-    case Tok_LDVARA:
-    case Tok_NEWARR:
-    case Tok_NEWVLA:
-    case Tok_NEWOBJ:
-    case Tok_SIZEOF:
-    case Tok_PTROFF:
+    case IL_castptr:
+    case IL_call:
+    case IL_calli:
+    case IL_callvirt:
+    case IL_callvi:
+    case IL_initobj:
+    case IL_isinst:
+    case IL_ldelem:
+    case IL_ldelema:
+    case IL_ldfld:
+    case IL_ldflda:
+    case IL_ldind:
+    case IL_ldvar:
+    case IL_ldvara:
+    case IL_newarr:
+    case IL_newvla:
+    case IL_newobj:
+    case IL_sizeof:
+    case IL_ptroff:
     default:
         return assigCompat(lhs, deref(rhs->getType()));
     }

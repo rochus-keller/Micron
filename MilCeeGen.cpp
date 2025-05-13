@@ -118,7 +118,7 @@ void CeeGen::visitModule()
        {
            typeDecl(hout, sub);
            hout << ";" << endl;
-           if( sub->getType()->objectInit && sub->getType()->isSO() )
+           if( sub->getType()->objectInit && sub->getType()->isSOA() )
                emitInitializer(sub->getType());
        }
        sub = sub->next;
@@ -539,13 +539,13 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             }
             break;
 
-        case Tok_IF:
+        case IL_if:
             out << ws(level) << "if( ";
             expression(out, s->args, level+1);
             out << " ) {" << endl;
             statementSeq(out, s->body, level+1);
             out << ws(level) << "}";
-            if( s->next && s->next->kind == Tok_ELSE )
+            if( s->next && s->next->kind == IL_else )
             {
                 s = s->next;
                 out << " else {" << endl;
@@ -555,13 +555,13 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             out << endl;
             break;
 
-        case Tok_LOOP:
+        case IL_loop:
             out << ws(level) << "while( 1 ) {" << endl;
             statementSeq(out, s->body, level+1);
             out << ws(level) << "}" << endl;
             break;
 
-        case Tok_REPEAT:
+        case IL_repeat:
             out << ws(level) << "do {" << endl;
             statementSeq(out, s->body, level+1);
             out << ws(level) << "} while( !";
@@ -569,11 +569,11 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             out << " );" << endl;
             break;
 
-        case Tok_SWITCH:
+        case IL_switch:
             out << ws(level) << "switch( ";
             expression(out, s->args, level+1);
             out << " ) {" << endl;
-            while( s->next && s->next->kind == Tok_CASE )
+            while( s->next && s->next->kind == IL_case )
             {
                 s = s->next;
                 Expression* e = s->e;
@@ -588,7 +588,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                 statementSeq(out, s->body, level+2);
                 out << ws(level+1) << "} break;" << endl;
             }
-            if( s->next && s->next->kind == Tok_ELSE )
+            if( s->next && s->next->kind == IL_else )
             {
                 s = s->next;
                 out << "default:" << endl;
@@ -599,23 +599,23 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             out << endl;
             break;
 
-        case Tok_WHILE:
+        case IL_while:
             out << ws(level) << "while( ";
             expression(out, s->args, level+1);
             out << " ) {" << endl;
             statementSeq(out, s->body, level+1);
             out << ws(level) << "}" << endl;
             break;
-        case Tok_EXIT:
+        case IL_exit:
             out << ws(level) << "break;" << endl;
             break;
 
-        case Tok_STLOC:
-        case Tok_STLOC_S:
-        case Tok_STLOC_0:
-        case Tok_STLOC_1:
-        case Tok_STLOC_2:
-        case Tok_STLOC_3:
+        case IL_stloc:
+        case IL_stloc_s:
+        case IL_stloc_0:
+        case IL_stloc_1:
+        case IL_stloc_2:
+        case IL_stloc_3:
             {
                 DeclList locals = curProc->getLocals();
                 Q_ASSERT(s->id < locals.size());
@@ -625,7 +625,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             }
             break;
 
-        case Tok_STARG:
+        case IL_starg:
             {
                 DeclList params = curProc->getParams();
                 Q_ASSERT(s->id < params.size());
@@ -635,13 +635,13 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             }
             break;
 
-        case Tok_STIND:
-        case Tok_STIND_I1:
-        case Tok_STIND_I4:
-        case Tok_STIND_I8:
-        case Tok_STIND_R4:
-        case Tok_STIND_R8:
-        case Tok_STIND_IP:
+        case IL_stind:
+        case IL_stind_i1:
+        case IL_stind_i4:
+        case IL_stind_i8:
+        case IL_stind_r4:
+        case IL_stind_r8:
+        case IL_stind_ip:
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
                 out << ws(level) << "*";
@@ -652,27 +652,27 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             }
             break;
 
-        case Tok_STIND_IPP:
+        case IL_stind_ipp:
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
                 out << ws(level) << "*";
                 expression(out, s->args->lhs, level+1);
                 out << " = ";
-                if( s->args->rhs->kind == Tok_LDMETH )
+                if( s->args->rhs->kind == IL_ldmeth )
                     out << "(" << typeRef(s->args->lhs->getType()->getType()) << ")";
                 expression(out, s->args->rhs, level+1);
                 out << ";" << endl;
             }
             break;
 
-        case Tok_STELEM:
-        case Tok_STELEM_I1:
-        case Tok_STELEM_I2:
-        case Tok_STELEM_I4:
-        case Tok_STELEM_I8:
-        case Tok_STELEM_R4:
-        case Tok_STELEM_R8:
-        case Tok_STELEM_IP:
+        case IL_stelem:
+        case IL_stelem_i1:
+        case IL_stelem_i2:
+        case IL_stelem_i4:
+        case IL_stelem_i8:
+        case IL_stelem_r4:
+        case IL_stelem_r8:
+        case IL_stelem_ip:
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument &&
                           s->args->lhs && s->args->rhs &&
@@ -688,7 +688,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             }
             break;
 
-        case Tok_STFLD:
+        case IL_stfld:
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
                 out << ws(level) << "(";
@@ -701,14 +701,14 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             }
             break;
 
-        case Tok_STVAR:
+        case IL_stvar:
             out << ws(level) << qualident(s->d);
             out << " = ";
             expression(out, s->args, level+1);
             out << ";" << endl;
             break;
 
-        case Tok_RET:
+        case IL_ret:
             out << ws(level) << "return";
             if( s->args )
             {
@@ -718,25 +718,25 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             out << ";" << endl;
             break;
 
-        case Tok_POP:
+        case IL_pop:
             expression(out, s->args, level+1);
             break;
 
-        case Tok_FREE:
+        case IL_free:
             out << ws(level) << "free(";
             expression(out, s->args, level+1);
             out << ");" << endl;
             break;
 
-        case Tok_LABEL:
+        case IL_label:
             out << ws(level) << s->name << ":" << endl;
             break;
 
-        case Tok_GOTO:
+        case IL_goto:
             out << ws(level) << "goto " << s->name << ";" << endl;
             break;
 
-        case Tok_LINE:
+        case IL_line:
             // TODO
             break;
 
@@ -823,6 +823,11 @@ void CeeGen::emitInitializer(Type* t)
 
     if( t->kind == Type::Object )
         bout << ws(1) << "obj[i].class$ = &" << qualident(t->decl) << "$class$;" << endl;
+    else if( t->kind == Type::Array && t->len && t->objectInit )
+    {
+        Type* et = deref(t->getType());
+        bout << ws(1) << qualident(et->decl) << "$init$(obj, " << t->len << ");" << endl;
+    }
 
     foreach( Declaration* field, t->subs )
     {
@@ -848,48 +853,48 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
 {
     switch(e->kind)
     {
-    case Tok_ADD:
+    case IL_add:
         emitBinOP(out, e, "+", level+1);
         break;
-    case Tok_DIV_UN:
-    case Tok_DIV:
+    case IL_div_un:
+    case IL_div:
         emitBinOP(out, e, "/", level+1); // TODO: UN
         break;
-    case Tok_MUL:
+    case IL_mul:
         emitBinOP(out, e, "*", level+1);
         break;
-    case Tok_REM:
-    case Tok_REM_UN:
+    case IL_rem:
+    case IL_rem_un:
         emitBinOP(out, e, "%", level+1); // TODO: UN
         break;
-    case Tok_SUB:
+    case IL_sub:
         emitBinOP(out, e, "-", level+1);
         break;
 
-    case Tok_AND:
+    case IL_and:
         emitBinOP(out, e, "&", level+1);
         break;
-    case Tok_OR:
+    case IL_or:
         emitBinOP(out, e, "|", level+1);
         break;
-    case Tok_XOR:
+    case IL_xor:
         emitBinOP(out, e, "^", level+1);
         break;
 
-    case Tok_SHL:
+    case IL_shl:
         emitBinOP(out, e, "<<", level+1);
         break;
-    case Tok_SHR_UN:
-    case Tok_SHR:
+    case IL_shr_un:
+    case IL_shr:
         emitBinOP(out, e, ">>", level+1); // TODO: UN
         break;
 
-    case Tok_NEG:
+    case IL_neg:
         out << "-";
         expression(out, e->lhs, level+1);
         break;
 
-    case Tok_ABS:
+    case IL_abs:
         if( deref(e->lhs->getType())->isInteger() )
             out << "abs(";
         else
@@ -898,183 +903,183 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         out << ")";
         break;
 
-    case Tok_NOT:
+    case IL_not:
         out << "~";
         expression(out, e->lhs, level + 1);
         break;
 
-    case Tok_LDC_I4_0:
-    case Tok_LDC_I4_1:
-    case Tok_LDC_I4_2:
-    case Tok_LDC_I4_3:
-    case Tok_LDC_I4_4:
-    case Tok_LDC_I4_5:
-    case Tok_LDC_I4_6:
-    case Tok_LDC_I4_7:
-    case Tok_LDC_I4_8:
-    case Tok_LDC_I4_M1:
-    case Tok_LDC_I4_S:
-    case Tok_LDC_I4:
-    case Tok_LDC_I8:
+    case IL_ldc_i4_0:
+    case IL_ldc_i4_1:
+    case IL_ldc_i4_2:
+    case IL_ldc_i4_3:
+    case IL_ldc_i4_4:
+    case IL_ldc_i4_5:
+    case IL_ldc_i4_6:
+    case IL_ldc_i4_7:
+    case IL_ldc_i4_8:
+    case IL_ldc_i4_m1:
+    case IL_ldc_i4_s:
+    case IL_ldc_i4:
+    case IL_ldc_i8:
         out << e->i;
         break;
 
-    case Tok_LDC_R4:
-    case Tok_LDC_R8:
+    case IL_ldc_r4:
+    case IL_ldc_r8:
         out << QByteArray::number(e->f,'e',16); // empirically optimized, 17 is too much
         break;
 
-    case Tok_LDNULL:
+    case IL_ldnull:
         out << "NULL";
         break;
 
-    case Tok_LDSTR:
-    case Tok_LDOBJ:
+    case IL_ldstr:
+    case IL_ldobj:
         constValue(out, e->c);
         break;
 
-    case Tok_CONV_I1:
-    case Tok_CONV_I2:
-    case Tok_CONV_I4:
-    case Tok_CONV_U1:
-    case Tok_CONV_U2:
-    case Tok_CONV_U4:
-    case Tok_CONV_I8:
-    case Tok_CONV_U8:
-    case Tok_CONV_R4:
-    case Tok_CONV_R8:
+    case IL_conv_i1:
+    case IL_conv_i2:
+    case IL_conv_i4:
+    case IL_conv_u1:
+    case IL_conv_u2:
+    case IL_conv_u4:
+    case IL_conv_i8:
+    case IL_conv_u8:
+    case IL_conv_r4:
+    case IL_conv_r8:
         out << "((" << typeRef(Validator::tokToBasicType(mdl, e->kind)) << ")";
         expression(out, e->lhs, level+1);
         out << ")";
         break;
 
-    case Tok_CEQ:
+    case IL_ceq:
         emitRelOP(out, e, "==", level + 1);
         break;
-    case Tok_CGT_UN: // TODO: UN
-    case Tok_CGT:
+    case IL_cgt_un: // TODO: UN
+    case IL_cgt:
         emitRelOP(out, e, ">", level + 1);
         break;
-    case Tok_CLT_UN: // TODO: UN
-    case Tok_CLT:
+    case IL_clt_un: // TODO: UN
+    case IL_clt:
         emitRelOP(out, e, "<", level + 1);
         break;
 
-    case Tok_LDVAR:
+    case IL_ldvar:
         out << qualident(e->d);
         break;
-    case Tok_LDVARA:
+    case IL_ldvara:
         out << "(" << ( !deref(e->getType())->isPtrToArray() ? "&" : "") << qualident(e->d) << ")";
         break;
 
-    case Tok_LDARG_0:
-    case Tok_LDARG_1:
-    case Tok_LDARG_2:
-    case Tok_LDARG_3:
-    case Tok_LDARG_S:
-    case Tok_LDARG:
-    case Tok_LDARGA_S:
-    case Tok_LDARGA:
+    case IL_ldarg_0:
+    case IL_ldarg_1:
+    case IL_ldarg_2:
+    case IL_ldarg_3:
+    case IL_ldarg_s:
+    case IL_ldarg:
+    case IL_ldarga_s:
+    case IL_ldarga:
         {
             DeclList params = curProc->getParams();
             Q_ASSERT( e->id < params.size() );
-            if( (e->kind == Tok_LDARGA_S || e->kind == Tok_LDARGA) && !deref(e->getType())->isPtrToArray() )
+            if( (e->kind == IL_ldarga_s || e->kind == IL_ldarga) && !deref(e->getType())->isPtrToArray() )
                 out << "(&";
             out << params[e->id]->name;
-            if( (e->kind == Tok_LDARGA_S || e->kind == Tok_LDARGA) && !deref(e->getType())->isPtrToArray() )
+            if( (e->kind == IL_ldarga_s || e->kind == IL_ldarga) && !deref(e->getType())->isPtrToArray() )
                 out << ")";
         }
         break;
 
-    case Tok_LDLOC_0:
-    case Tok_LDLOC_1:
-    case Tok_LDLOC_2:
-    case Tok_LDLOC_3:
-    case Tok_LDLOC_S:
-    case Tok_LDLOC:
-    case Tok_LDLOCA_S:
-    case Tok_LDLOCA:
+    case IL_ldloc_0:
+    case IL_ldloc_1:
+    case IL_ldloc_2:
+    case IL_ldloc_3:
+    case IL_ldloc_s:
+    case IL_ldloc:
+    case IL_ldloca_s:
+    case IL_ldloca:
         {
             DeclList locals = curProc->getLocals();
             Q_ASSERT( e->id < locals.size() );
-            if( (e->kind == Tok_LDLOCA_S || e->kind == Tok_LDLOCA) && !deref(e->getType())->isPtrToArray() )
+            if( (e->kind == IL_ldloca_s || e->kind == IL_ldloca) && !deref(e->getType())->isPtrToArray() )
                 out << "(&";
             out << locals[e->id]->name;
-            if( (e->kind == Tok_LDLOCA_S || e->kind == Tok_LDLOCA) && !deref(e->getType())->isPtrToArray() )
+            if( (e->kind == IL_ldloca_s || e->kind == IL_ldloca) && !deref(e->getType())->isPtrToArray() )
                 out << ")";
         }
         break;
 
-    case Tok_LDIND_I1:
-    case Tok_LDIND_I2:
-    case Tok_LDIND_I4:
-    case Tok_LDIND_I8:
-    case Tok_LDIND_IP:
-    case Tok_LDIND_IPP:
-    case Tok_LDIND_R4:
-    case Tok_LDIND_R8:
-    case Tok_LDIND_U1:
-    case Tok_LDIND_U2:
-    case Tok_LDIND_U4:
-    case Tok_LDIND_U8:
-    case Tok_LDIND:
+    case IL_ldind_i1:
+    case IL_ldind_i2:
+    case IL_ldind_i4:
+    case IL_ldind_i8:
+    case IL_ldind_ip:
+    case IL_ldind_ipp:
+    case IL_ldind_r4:
+    case IL_ldind_r8:
+    case IL_ldind_u1:
+    case IL_ldind_u2:
+    case IL_ldind_u4:
+    case IL_ldind_u8:
+    case IL_ldind:
         out << "*";
         expression(out, e->lhs, level+1);
         break;
 
-    case Tok_LDELEM_I1:
-    case Tok_LDELEM_I2:
-    case Tok_LDELEM_I4:
-    case Tok_LDELEM_I8:
-    case Tok_LDELEM_IP:
-    case Tok_LDELEM_R4:
-    case Tok_LDELEM_R8:
-    case Tok_LDELEM_U1:
-    case Tok_LDELEM_U2:
-    case Tok_LDELEM_U4:
-    case Tok_LDELEM_U8:
-    case Tok_LDELEM:
-    case Tok_LDELEMA:
-        if( e->kind == Tok_LDELEMA && !deref(e->getType())->isPtrToArray() )
+    case IL_ldelem_i1:
+    case IL_ldelem_i2:
+    case IL_ldelem_i4:
+    case IL_ldelem_i8:
+    case IL_ldelem_ip:
+    case IL_ldelem_r4:
+    case IL_ldelem_r8:
+    case IL_ldelem_u1:
+    case IL_ldelem_u2:
+    case IL_ldelem_u4:
+    case IL_ldelem_u8:
+    case IL_ldelem:
+    case IL_ldelema:
+        if( e->kind == IL_ldelema && !deref(e->getType())->isPtrToArray() )
             out << "(&";
         expression(out, e->lhs, level + 1);
         out << "[";
         expression(out, e->rhs, level + 1);
         out << "]";
-        if( e->kind == Tok_LDELEMA && !deref(e->getType())->isPtrToArray() )
+        if( e->kind == IL_ldelema && !deref(e->getType())->isPtrToArray() )
             out << ")";
         break;
 
-    case Tok_LDFLD:
-    case Tok_LDFLDA:
-        if( e->kind == Tok_LDFLDA && !deref(e->getType())->isPtrToArray() )
+    case IL_ldfld:
+    case IL_ldflda:
+        if( e->kind == IL_ldflda && !deref(e->getType())->isPtrToArray() )
             out << "(&";
         out << "(";
         expression(out, e->lhs, level+1 );
         out << "->" << e->d->name;
         out << ")";
-        if( e->kind == Tok_LDFLDA && !deref(e->getType())->isPtrToArray() )
+        if( e->kind == IL_ldflda && !deref(e->getType())->isPtrToArray() )
             out << ")";
         break;
 
-    case Tok_LDPROC:
+    case IL_ldproc:
         out << qualident(e->d);
         break;
 
-    case Tok_LDMETH:
+    case IL_ldmeth:
         out << "{(_ptr$ = ";
         expression(out, e->lhs, level+1);
         out << ", _ptr$), ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
         out << "->class$->" << e->d->name << "}";
         break;
 
-    case Tok_CASTPTR:
+    case IL_castptr:
         out << "((" << typeRef(e->d->getType()) << "*)";
         expression(out, e->lhs, level+1 );
         out << ")";
         break;
 
-    case Tok_CALL:
+    case IL_call:
         {
             out << qualident(e->d) << "(";
             QList<Expression*> args;
@@ -1089,7 +1094,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         }
         break;
 
-    case Tok_CALLVIRT:
+    case IL_callvirt:
         {
             out << "(_ptr$ = ";
             expression(out, e->lhs, level+1);
@@ -1106,7 +1111,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         }
         break;
 
-    case Tok_CALLI:
+    case IL_calli:
         {
             expression(out, e->lhs, level+1 );
             out << "(";
@@ -1122,7 +1127,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         }
         break;
 
-    case Tok_CALLVI:
+    case IL_callvi:
         {
             out << "(_ptr$ = &";
             expression(out, e->lhs, level+1 );
@@ -1140,7 +1145,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         break;
 
 
-    case Tok_NEWOBJ:
+    case IL_newobj:
         Q_ASSERT(e->getType()->kind == Type::Pointer);
         if( deref(e->getType())->objectInit )
         {
@@ -1161,7 +1166,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         }
         break;
 
-    case Tok_NEWARR:
+    case IL_newarr:
         if( deref(e->getType())->objectInit )
         {
             Type* et = deref(e->d->getType());
@@ -1186,7 +1191,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         break;
 
 
-    case Tok_INITOBJ:
+    case IL_initobj:
         {
             Type* t = deref(e->d->getType());
             const QByteArray name = typeRef(t);
@@ -1197,22 +1202,22 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         }
         break;
 
-    case Tok_DUP:
+    case IL_dup:
         expression(out, e->lhs, level+1);
         // TODO: temp instead of multiple eval of same exr
         break;
 
-    case Tok_NOP:
+    case IL_nop:
         break;
 
-    case Tok_PTROFF:
+    case IL_ptroff:
         expression(out, e->lhs, level + 1);
         out << " += ";
         expression(out, e->rhs, level+1);
         out << " * sizeof(" << typeRef(e->d->getType()) << ")";
         break;
 
-    case Tok_IIF:
+    case IL_iif:
         out << "(";
         expression(out, e->lhs, level + 1);
         out << " ? ";
@@ -1224,10 +1229,10 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         e = e->next; // skip ELSE
         break;
 
-    case Tok_SIZEOF:
-    case Tok_NEWVLA:
-    case Tok_ISINST:
-        out << "TODO: " << tokenTypeName(e->kind);
+    case IL_sizeof:
+    case IL_newvla:
+    case IL_isinst:
+        out << "TODO: " << s_opName[e->kind];
         break;
     default:
         Q_ASSERT(false);

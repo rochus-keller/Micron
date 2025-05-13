@@ -1574,20 +1574,23 @@ Expression* Parser2::Expression_() {
 
 Expression* Parser2::ExpInstr() {
     Expression* res = new Expression();
-    res->kind = (TokenType)la.d_code;
     res->pos = la.toRowCol();
 
     if( la.d_code == Tok_ADD ) {
         expect(Tok_ADD, true, "ExpInstr");
+        res->kind = IL_add;
     } else if( la.d_code == Tok_AND ) {
         expect(Tok_AND, true, "ExpInstr");
+        res->kind = IL_and;
     } else if( la.d_code == Tok_CALL ) {
         expect(Tok_CALL, true, "ExpInstr");
+        res->kind = IL_call;
         res->d = qualident();
         if( res->d && (res->d->kind != Declaration::Procedure || res->d->typebound) )
             error(cur, "expecting an unbound procedure");
     } else if( la.d_code == Tok_CALLI ) {
         expect(Tok_CALLI, true, "ExpInstr");
+        res->kind = IL_calli;
         res->d = qualident();
         if( res->d && res->d->getType() )
         {
@@ -1597,6 +1600,7 @@ Expression* Parser2::ExpInstr() {
         }
     } else if( la.d_code == Tok_CALLVI ) {
         expect(Tok_CALLVI, true, "ExpInstr");
+        res->kind = IL_callvi;
         res->d = qualident();
         if( res->d && res->d->getType() )
         {
@@ -1606,96 +1610,130 @@ Expression* Parser2::ExpInstr() {
         }
     } else if( la.d_code == Tok_CALLVIRT ) {
         expect(Tok_CALLVIRT, true, "ExpInstr");
+        res->kind = IL_callvirt;
         res->d = trident();
         if( res->d && (res->d->kind != Declaration::Procedure || !res->d->typebound) )
             error(cur, "expecting a bound procedure");
     } else if( la.d_code == Tok_CASTPTR ) {
         expect(Tok_CASTPTR, true, "ExpInstr");
+        res->kind = IL_castptr;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_CEQ ) {
         expect(Tok_CEQ, true, "ExpInstr");
+        res->kind = IL_ceq;
     } else if( la.d_code == Tok_CGT ) {
         expect(Tok_CGT, true, "ExpInstr");
+        res->kind = IL_cgt;
     } else if( la.d_code == Tok_CGT_UN ) {
         expect(Tok_CGT_UN, true, "ExpInstr");
+        res->kind = IL_cgt_un;
     } else if( la.d_code == Tok_CLT ) {
         expect(Tok_CLT, true, "ExpInstr");
+        res->kind = IL_clt;
     } else if( la.d_code == Tok_CLT_UN ) {
         expect(Tok_CLT_UN, true, "ExpInstr");
+        res->kind = IL_clt_un;
     } else if( la.d_code == Tok_CONV_I1 ) {
         expect(Tok_CONV_I1, true, "ExpInstr");
+        res->kind = IL_conv_i1;
     } else if( la.d_code == Tok_CONV_I2 ) {
         expect(Tok_CONV_I2, true, "ExpInstr");
+        res->kind = IL_conv_i2;
     } else if( la.d_code == Tok_CONV_I4 ) {
         expect(Tok_CONV_I4, true, "ExpInstr");
+        res->kind = IL_conv_i4;
     } else if( la.d_code == Tok_CONV_I8 ) {
         expect(Tok_CONV_I8, true, "ExpInstr");
+        res->kind = IL_conv_i8;
     } else if( la.d_code == Tok_CONV_R4 ) {
         expect(Tok_CONV_R4, true, "ExpInstr");
+        res->kind = IL_conv_r4;
     } else if( la.d_code == Tok_CONV_R8 ) {
         expect(Tok_CONV_R8, true, "ExpInstr");
+        res->kind = IL_conv_r8;
     } else if( la.d_code == Tok_CONV_U1 ) {
         expect(Tok_CONV_U1, true, "ExpInstr");
+        res->kind = IL_conv_u1;
     } else if( la.d_code == Tok_CONV_U2 ) {
         expect(Tok_CONV_U2, true, "ExpInstr");
+        res->kind = IL_conv_u2;
     } else if( la.d_code == Tok_CONV_U4 ) {
         expect(Tok_CONV_U4, true, "ExpInstr");
+        res->kind = IL_conv_u4;
     } else if( la.d_code == Tok_CONV_U8 ) {
         expect(Tok_CONV_U8, true, "ExpInstr");
+        res->kind = IL_conv_u8;
     } else if( la.d_code == Tok_DIV ) {
         expect(Tok_DIV, true, "ExpInstr");
+        res->kind = IL_div;
     } else if( la.d_code == Tok_DIV_UN ) {
         expect(Tok_DIV_UN, true, "ExpInstr");
+        res->kind = IL_div_un;
     } else if( la.d_code == Tok_DUP ) {
         expect(Tok_DUP, true, "ExpInstr");
+        res->kind = IL_dup;
     } else if( la.d_code == Tok_INITOBJ ) {
         expect(Tok_INITOBJ, true, "ExpInstr");
+        res->kind = IL_initobj;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_ISINST ) {
         expect(Tok_ISINST, true, "ExpInstr");
+        res->kind = IL_isinst;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl &&
                 res->d->getType() && res->d->getType()->kind != Type::Object )
             error(cur, "expecting an object type declaration");
     } else if( la.d_code == Tok_LDARG ) {
         expect(Tok_LDARG, true, "ExpInstr");
+        res->kind = IL_ldarg;
         res->id = numberOrIdent(true);
     } else if( la.d_code == Tok_LDARG_S ) {
         expect(Tok_LDARG_S, true, "ExpInstr");
+        res->kind = IL_ldarg_s;
         res->id = numberOrIdent(true);
     } else if( la.d_code == Tok_LDARG_0 ) {
         expect(Tok_LDARG_0, true, "ExpInstr");
+        res->kind = IL_ldarg_0;
         res->id = 0;
     } else if( la.d_code == Tok_LDARG_1 ) {
         expect(Tok_LDARG_1, true, "ExpInstr");
+        res->kind = IL_ldarg_1;
         res->id = 1;
     } else if( la.d_code == Tok_LDARG_2 ) {
         expect(Tok_LDARG_2, true, "ExpInstr");
+        res->kind = IL_ldarg_2;
         res->id = 2;
     } else if( la.d_code == Tok_LDARG_3 ) {
         expect(Tok_LDARG_3, true, "ExpInstr");
+        res->kind = IL_ldarg_3;
         res->id = 3;
     } else if( la.d_code == Tok_LDARGA ) {
         expect(Tok_LDARGA, true, "ExpInstr");
+        res->kind = IL_ldarga;
         res->id = numberOrIdent(true);
     } else if( la.d_code == Tok_LDARGA_S ) {
         expect(Tok_LDARGA_S, true, "ExpInstr");
+        res->kind = IL_ldarga_s;
         res->id = numberOrIdent(true);
     } else if( la.d_code == Tok_LDC_I4 ) {
         expect(Tok_LDC_I4, true, "ExpInstr");
+        res->kind = IL_ldc_i4;
         res->i = integer();
     } else if( la.d_code == Tok_LDC_I8 ) {
         expect(Tok_LDC_I8, true, "ExpInstr");
+        res->kind = IL_ldc_i8;
         res->i = integer();
     } else if( la.d_code == Tok_LDC_I4_S ) {
         expect(Tok_LDC_I4_S, true, "ExpInstr");
+        res->kind = IL_ldc_i4_s;
         res->i = integer();
     } else if( la.d_code == Tok_LDC_R4 ) {
         expect(Tok_LDC_R4, true, "ExpInstr");
+        res->kind = IL_ldc_r4;
         Constant c;
         number(&c);
         if( c.kind == Constant::I )
@@ -1704,6 +1742,7 @@ Expression* Parser2::ExpInstr() {
             res->f = c.d;
     } else if( la.d_code == Tok_LDC_R8 ) {
         expect(Tok_LDC_R8, true, "ExpInstr");
+        res->kind = IL_ldc_r8;
         Constant c;
         number(&c);
         if( c.kind == Constant::I )
@@ -1712,146 +1751,197 @@ Expression* Parser2::ExpInstr() {
             res->f = c.d;
     } else if( la.d_code == Tok_LDC_I4_0 ) {
         expect(Tok_LDC_I4_0, true, "ExpInstr");
+        res->kind = IL_ldc_i4_0;
         res->i = 0;
     } else if( la.d_code == Tok_LDC_I4_1 ) {
         expect(Tok_LDC_I4_1, true, "ExpInstr");
+        res->kind = IL_ldc_i4_1;
         res->i = 1;
     } else if( la.d_code == Tok_LDC_I4_2 ) {
         expect(Tok_LDC_I4_2, true, "ExpInstr");
+        res->kind = IL_ldc_i4_2;
         res->i = 2;
     } else if( la.d_code == Tok_LDC_I4_3 ) {
         expect(Tok_LDC_I4_3, true, "ExpInstr");
+        res->kind = IL_ldc_i4_3;
         res->i = 3;
     } else if( la.d_code == Tok_LDC_I4_4 ) {
         expect(Tok_LDC_I4_4, true, "ExpInstr");
+        res->kind = IL_ldc_i4_4;
         res->i = 4;
     } else if( la.d_code == Tok_LDC_I4_5 ) {
         expect(Tok_LDC_I4_5, true, "ExpInstr");
+        res->kind = IL_ldc_i4_5;
         res->i = 5;
     } else if( la.d_code == Tok_LDC_I4_6 ) {
         expect(Tok_LDC_I4_6, true, "ExpInstr");
+        res->kind = IL_ldc_i4_6;
         res->i = 6;
     } else if( la.d_code == Tok_LDC_I4_7 ) {
         expect(Tok_LDC_I4_7, true, "ExpInstr");
+        res->kind = IL_ldc_i4_7;
         res->i = 7;
     } else if( la.d_code == Tok_LDC_I4_8 ) {
         expect(Tok_LDC_I4_8, true, "ExpInstr");
+        res->kind = IL_ldc_i4_8;
         res->i = 8;
     } else if( la.d_code == Tok_LDC_I4_M1 ) {
         expect(Tok_LDC_I4_M1, true, "ExpInstr");
+        res->kind = IL_ldc_i4_m1;
         res->i = -1;
     } else if( la.d_code == Tok_LDOBJ ) {
         expect(Tok_LDOBJ, true, "ExpInstr");
+        res->kind = IL_ldobj;
         res->c = constructor();
     } else if( la.d_code == Tok_LDELEM ) {
         expect(Tok_LDELEM, true, "ExpInstr");
+        res->kind = IL_ldelem;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_LDELEMA ) {
         expect(Tok_LDELEMA, true, "ExpInstr");
+        res->kind = IL_ldelema;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_LDELEM_I1 ) {
         expect(Tok_LDELEM_I1, true, "ExpInstr");
+        res->kind = IL_ldelem_i1;
     } else if( la.d_code == Tok_LDELEM_I2 ) {
         expect(Tok_LDELEM_I2, true, "ExpInstr");
+        res->kind = IL_ldelem_i2;
     } else if( la.d_code == Tok_LDELEM_I4 ) {
         expect(Tok_LDELEM_I4, true, "ExpInstr");
+        res->kind = IL_ldelem_i4;
     } else if( la.d_code == Tok_LDELEM_I8 ) {
         expect(Tok_LDELEM_I8, true, "ExpInstr");
+        res->kind = IL_ldelem_i8;
     } else if( la.d_code == Tok_LDELEM_U1 ) {
         expect(Tok_LDELEM_U1, true, "ExpInstr");
+        res->kind = IL_ldelem_u1;
     } else if( la.d_code == Tok_LDELEM_U2 ) {
         expect(Tok_LDELEM_U2, true, "ExpInstr");
+        res->kind = IL_ldelem_u2;
     } else if( la.d_code == Tok_LDELEM_U4 ) {
         expect(Tok_LDELEM_U4, true, "ExpInstr");
+        res->kind = IL_ldelem_u4;
     } else if( la.d_code == Tok_LDELEM_U8 ) {
         expect(Tok_LDELEM_U8, true, "ExpInstr");
+        res->kind = IL_ldelem_u8;
     } else if( la.d_code == Tok_LDELEM_R4 ) {
         expect(Tok_LDELEM_R4, true, "ExpInstr");
+        res->kind = IL_ldelem_r4;
     } else if( la.d_code == Tok_LDELEM_R8 ) {
         expect(Tok_LDELEM_R8, true, "ExpInstr");
+        res->kind = IL_ldelem_r8;
     } else if( la.d_code == Tok_LDELEM_IP ) {
         expect(Tok_LDELEM_IP, true, "ExpInstr");
+        res->kind = IL_ldelem_ip;
     } else if( la.d_code == Tok_LDFLD ) {
         expect(Tok_LDFLD, true, "ExpInstr");
+        res->kind = IL_ldfld;
         res->d = trident();
         if( res->d && res->d->kind != Declaration::Field )
             error(cur, "expecting a field");
     } else if( la.d_code == Tok_LDFLDA ) {
         expect(Tok_LDFLDA, true, "ExpInstr");
+        res->kind = IL_ldflda;
         res->d = trident();
         if( res->d && res->d->kind != Declaration::Field )
             error(cur, "expecting a field");
     } else if( la.d_code == Tok_LDIND_I1 ) {
         expect(Tok_LDIND_I1, true, "ExpInstr");
+        res->kind = IL_ldind_i1;
     } else if( la.d_code == Tok_LDIND_I2 ) {
         expect(Tok_LDIND_I2, true, "ExpInstr");
+        res->kind = IL_ldind_i2;
     } else if( la.d_code == Tok_LDIND_I4 ) {
         expect(Tok_LDIND_I4, true, "ExpInstr");
+        res->kind = IL_ldind_i4;
     } else if( la.d_code == Tok_LDIND_I8 ) {
         expect(Tok_LDIND_I8, true, "ExpInstr");
+        res->kind = IL_ldind_i8;
     } else if( la.d_code == Tok_LDIND_U1 ) {
         expect(Tok_LDIND_U1, true, "ExpInstr");
+        res->kind = IL_ldind_u1;
     } else if( la.d_code == Tok_LDIND_U2 ) {
         expect(Tok_LDIND_U2, true, "ExpInstr");
+        res->kind = IL_ldind_u2;
     } else if( la.d_code == Tok_LDIND_U4 ) {
         expect(Tok_LDIND_U4, true, "ExpInstr");
+        res->kind = IL_ldind_u4;
     } else if( la.d_code == Tok_LDIND_R4 ) {
         expect(Tok_LDIND_R4, true, "ExpInstr");
+        res->kind = IL_ldind_r4;
     } else if( la.d_code == Tok_LDIND_U8 ) {
         expect(Tok_LDIND_U8, true, "ExpInstr");
+        res->kind = IL_ldind_u8;
     } else if( la.d_code == Tok_LDIND_R8 ) {
         expect(Tok_LDIND_R8, true, "ExpInstr");
+        res->kind = IL_ldind_r8;
     } else if( la.d_code == Tok_LDIND_IP ) {
         expect(Tok_LDIND_IP, true, "ExpInstr");
+        res->kind = IL_ldind_ip;
     } else if( la.d_code == Tok_LDIND_IPP ) {
         expect(Tok_LDIND_IPP, true, "ExpInstr");
+        res->kind = IL_ldind_ipp;
     } else if( la.d_code == Tok_LDLOC ) {
         expect(Tok_LDLOC, true, "ExpInstr");
+        res->kind = IL_ldloc;
         res->id = numberOrIdent(false);
     } else if( la.d_code == Tok_LDLOC_S ) {
         expect(Tok_LDLOC_S, true, "ExpInstr");
+        res->kind = IL_ldloc_s;
         res->id = numberOrIdent(false);
     } else if( la.d_code == Tok_LDLOCA ) {
         expect(Tok_LDLOCA, true, "ExpInstr");
+        res->kind = IL_ldloca;
         res->id = numberOrIdent(false);
     } else if( la.d_code == Tok_LDLOCA_S ) {
         expect(Tok_LDLOCA_S, true, "ExpInstr");
+        res->kind = IL_ldloca_s;
         res->id = numberOrIdent(false);
     } else if( la.d_code == Tok_LDLOC_0 ) {
         expect(Tok_LDLOC_0, true, "ExpInstr");
+        res->kind = IL_ldloc_0;
         res->id = 0;
     } else if( la.d_code == Tok_LDLOC_1 ) {
         expect(Tok_LDLOC_1, true, "ExpInstr");
+        res->kind = IL_ldloc_1;
         res->id = 1;
     } else if( la.d_code == Tok_LDLOC_2 ) {
         expect(Tok_LDLOC_2, true, "ExpInstr");
+        res->kind = IL_ldloc_2;
         res->id = 2;
    } else if( la.d_code == Tok_LDLOC_3 ) {
         expect(Tok_LDLOC_3, true, "ExpInstr");
+        res->kind = IL_ldloc_3;
         res->id = 3;
     } else if( la.d_code == Tok_LDNULL ) {
         expect(Tok_LDNULL, true, "ExpInstr");
+        res->kind = IL_ldnull;
     } else if( la.d_code == Tok_LDIND ) {
         expect(Tok_LDIND, true, "ExpInstr");
+        res->kind = IL_ldind;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_LDPROC ) {
         expect(Tok_LDPROC, true, "ExpInstr");
+        res->kind = IL_ldproc;
         res->d = qualident();
         if( res->d && (res->d->kind != Declaration::Procedure || res->d->typebound) )
             error(cur, "expecting an unbound procedure");
     } else if( la.d_code == Tok_LDMETH ) {
         expect(Tok_LDMETH, true, "ExpInstr");
+        res->kind = IL_ldmeth;
         res->d = trident();
         if( res->d && (res->d->kind != Declaration::Procedure || !res->d->typebound) )
             error(cur, "expecting a bound procedure");
     } else if( la.d_code == Tok_LDSTR ) {
         expect(Tok_LDSTR, true, "ExpInstr");
+        res->kind = IL_ldstr;
         if( la.d_type == Tok_string ) {
             expect(Tok_string, false, "ExpInstr");
             Constant* c = new Constant();
@@ -1873,32 +1963,40 @@ Expression* Parser2::ExpInstr() {
             invalid("ExpInstr");
     } else if( la.d_code == Tok_LDVAR ) {
         expect(Tok_LDVAR, true, "ExpInstr");
+        res->kind = IL_ldvar;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::VarDecl )
             error(cur, "expecting a module variable");
     } else if( la.d_code == Tok_LDVARA ) {
         expect(Tok_LDVARA, true, "ExpInstr");
+        res->kind = IL_ldvara;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::VarDecl )
             error(cur, "expecting a module variable");
     } else if( la.d_code == Tok_MUL ) {
         expect(Tok_MUL, true, "ExpInstr");
+        res->kind = IL_mul;
     } else if( la.d_code == Tok_NEG ) {
         expect(Tok_NEG, true, "ExpInstr");
+        res->kind = IL_neg;
     } else if( la.d_code == Tok_ABS ) {
         expect(Tok_ABS, true, "ExpInstr");
+        res->kind = IL_abs;
     } else if( la.d_code == Tok_NEWARR ) {
         expect(Tok_NEWARR, true, "ExpInstr");
+        res->kind = IL_newarr;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl ) // element type
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_NEWVLA ) {
         expect(Tok_NEWVLA, true, "ExpInstr");
+        res->kind = IL_newvla;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl ) // element type
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_NEWOBJ ) {
         expect(Tok_NEWOBJ, true, "ExpInstr");
+        res->kind = IL_newobj;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl &&
                 res->d->getType() && res->d->getType()->kind != Type::Object &&
@@ -1906,47 +2004,59 @@ Expression* Parser2::ExpInstr() {
             error(cur, "expecting a struct, union or object declaration");
     } else if( la.d_code == Tok_NOT ) {
         expect(Tok_NOT, true, "ExpInstr");
+        res->kind = IL_not;
     } else if( la.d_code == Tok_OR ) {
         expect(Tok_OR, true, "ExpInstr");
+        res->kind = IL_or;
     } else if( la.d_code == Tok_REM ) {
         expect(Tok_REM, true, "ExpInstr");
+        res->kind = IL_rem;
     } else if( la.d_code == Tok_REM_UN ) {
         expect(Tok_REM_UN, true, "ExpInstr");
+        res->kind = IL_rem_un;
     } else if( la.d_code == Tok_SHL ) {
         expect(Tok_SHL, true, "ExpInstr");
+        res->kind = IL_shl;
     } else if( la.d_code == Tok_SHR ) {
         expect(Tok_SHR, true, "ExpInstr");
+        res->kind = IL_shr;
     } else if( la.d_code == Tok_SHR_UN ) {
         expect(Tok_SHR_UN, true, "ExpInstr");
+        res->kind = IL_shr_un;
     } else if( la.d_code == Tok_SIZEOF ) {
         expect(Tok_SIZEOF, true, "ExpInstr");
+        res->kind = IL_sizeof;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_SUB ) {
         expect(Tok_SUB, true, "ExpInstr");
+        res->kind = IL_sub;
     } else if( la.d_code == Tok_XOR ) {
         expect(Tok_XOR, true, "ExpInstr");
+        res->kind = IL_xor;
     } else if( la.d_code == Tok_PTROFF ) {
         expect(Tok_PTROFF, true, "ExpInstr");
+        res->kind = IL_ptroff;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl ) // pointer base type
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_NOP ) {
         expect(Tok_NOP, true, "ExpInstr");
+        res->kind = IL_nop;
     } else if( FIRST_CondOp(la.d_type) || FIRST_CondOp(la.d_code) ) {
         expect(Tok_IIF, true, "CondOp");
         res->e = Expression_();
-        res->kind = Tok_IIF;
+        res->kind = IL_iif;
         expect(Tok_THEN, true, "CondOp");
         Expression* res2 = new Expression();
-        res2->kind = Tok_THEN;
+        res2->kind = IL_then;
         res2->pos = cur.toRowCol();
         res2->e = Expression_();
         res->next = res2;
         expect(Tok_ELSE, true, "CondOp");
         Expression* res3 = new Expression();
-        res3->kind = Tok_ELSE;
+        res3->kind = IL_else;
         res3->pos = cur.toRowCol();
         res3->e = Expression_();
         res2->next = res3;
@@ -1965,7 +2075,7 @@ Statement* Parser2::StatementSequence() {
             s = Statement_();
         } else if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
             s = new Statement();
-            s->kind = (TokenType)Statement::ExprStat;
+            s->kind = (IL_op)Statement::ExprStat;
             s->e = ExpInstr();
             if( s->e == 0 )
             {
@@ -2016,102 +2126,136 @@ Statement* Parser2::Statement_()
     }
 
     Statement* res = new Statement();
-    res->kind = (TokenType)la.d_code;
     res->pos = la.toRowCol();
 
     if( la.d_code == Tok_FREE ) {
         expect(Tok_FREE, true, "Statement");
+        res->kind = IL_free;
     } else if( la.d_code == Tok_EXIT ) {
         expect(Tok_EXIT, true, "Statement");
+        res->kind = IL_exit;
     } else if( la.d_code == Tok_GOTO ) {
         expect(Tok_GOTO, true, "Statement");
+        res->kind = IL_goto;
         expect(Tok_ident, false, "Statement");
         res->name = cur.d_val.constData();
     } else if( la.d_code == Tok_LABEL ) {
         expect(Tok_LABEL, true, "Statement");
+        res->kind = IL_label;
         expect(Tok_ident, false, "Statement");
         res->name = cur.d_val.constData();
     } else if( la.d_code == Tok_LINE ) {
         expect(Tok_LINE, true, "Statement");
+        res->kind = IL_line;
         expect(Tok_unsigned, false, "Statement");
         res->id = cur.d_val.toULong();
     } else if( la.d_code == Tok_POP ) {
         expect(Tok_POP, true, "Statement");
+        res->kind = IL_pop;
     } else if( la.d_code == Tok_RET ) {
         expect(Tok_RET, true, "Statement");
+        res->kind = IL_ret;
     } else if( la.d_code == Tok_STARG ) {
         expect(Tok_STARG, true, "Statement");
+        res->kind = IL_starg;
         res->id = numberOrIdent(true);
     } else if( la.d_code == Tok_STARG_S ) {
         expect(Tok_STARG_S, true, "Statement");
+        res->kind = IL_starg_s;
         res->id = numberOrIdent(true);
     } else if( la.d_code == Tok_STELEM ) {
         expect(Tok_STELEM, true, "Statement");
+        res->kind = IL_stelem;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_STELEM_I1 ) {
         expect(Tok_STELEM_I1, true, "Statement");
+        res->kind = IL_stelem_i1;
     } else if( la.d_code == Tok_STELEM_I2 ) {
         expect(Tok_STELEM_I2, true, "Statement");
+        res->kind = IL_stelem_i2;
     } else if( la.d_code == Tok_STELEM_I4 ) {
         expect(Tok_STELEM_I4, true, "Statement");
+        res->kind = IL_stelem_i4;
     } else if( la.d_code == Tok_STELEM_I8 ) {
         expect(Tok_STELEM_I8, true, "Statement");
+        res->kind = IL_stelem_i8;
     } else if( la.d_code == Tok_STELEM_R4 ) {
         expect(Tok_STELEM_R4, true, "Statement");
+        res->kind = IL_stelem_r4;
     } else if( la.d_code == Tok_STELEM_R8 ) {
         expect(Tok_STELEM_R8, true, "Statement");
+        res->kind = IL_stelem_r8;
     } else if( la.d_code == Tok_STELEM_IP ) {
         expect(Tok_STELEM_IP, true, "Statement");
+        res->kind = IL_stelem_ip;
     } else if( la.d_code == Tok_STFLD ) {
         expect(Tok_STFLD, true, "Statement");
+        res->kind = IL_stfld;
         res->d = trident();
         if( res->d && res->d->kind != Declaration::Field )
             error(cur, "expecting a field");
     } else if( la.d_code == Tok_STIND_I1 ) {
         expect(Tok_STIND_I1, true, "Statement");
+        res->kind = IL_stind_i1;
     } else if( la.d_code == Tok_STIND_I2 ) {
         expect(Tok_STIND_I2, true, "Statement");
+        res->kind = IL_stind_i2;
     } else if( la.d_code == Tok_STIND_I4 ) {
         expect(Tok_STIND_I4, true, "Statement");
+        res->kind = IL_stind_i4;
     } else if( la.d_code == Tok_STIND_I8 ) {
         expect(Tok_STIND_I8, true, "Statement");
+        res->kind = IL_stind_i8;
     } else if( la.d_code == Tok_STIND_R4 ) {
         expect(Tok_STIND_R4, true, "Statement");
+        res->kind = IL_stind_r4;
     } else if( la.d_code == Tok_STIND_R8 ) {
         expect(Tok_STIND_R8, true, "Statement");
+        res->kind = IL_stind_r8;
     } else if( la.d_code == Tok_STIND_IP ) {
         expect(Tok_STIND_IP, true, "Statement");
+        res->kind = IL_stind_ip;
     } else if( la.d_code == Tok_STIND_IPP ) {
         expect(Tok_STIND_IPP, true, "Statement");
+        res->kind = IL_stind_ipp;
     } else if( la.d_code == Tok_STLOC ) {
         expect(Tok_STLOC, true, "Statement");
+        res->kind = IL_stloc;
         res->id = numberOrIdent(false);
     } else if( la.d_code == Tok_STLOC_S ) {
         expect(Tok_STLOC_S, true, "Statement");
+        res->kind = IL_stloc_s;
         res->id = numberOrIdent(false);
     } else if( la.d_code == Tok_STLOC_0 ) {
         expect(Tok_STLOC_0, true, "Statement");
+        res->kind = IL_stloc_0;
         res->id = 0;
     } else if( la.d_code == Tok_STLOC_1 ) {
         expect(Tok_STLOC_1, true, "Statement");
+        res->kind = IL_stloc_1;
         res->id = 1;
     } else if( la.d_code == Tok_STLOC_2 ) {
         expect(Tok_STLOC_2, true, "Statement");
+        res->kind = IL_stloc_2;
         res->id = 2;
     } else if( la.d_code == Tok_STLOC_3 ) {
         expect(Tok_STLOC_3, true, "Statement");
+        res->kind = IL_stloc_3;
         res->id = 3;
     } else if( la.d_code == Tok_STIND ) {
         expect(Tok_STIND, true, "Statement");
+        res->kind = IL_stind;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_STRCPY ) {
         expect(Tok_STRCPY, true, "Statement");
+        res->kind = IL_strcpy;
     } else if( la.d_code == Tok_STVAR ) {
         expect(Tok_STVAR, true, "Statement");
+        res->kind = IL_stvar;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::VarDecl )
             error(cur, "expecting a module variable");
@@ -2122,7 +2266,7 @@ Statement* Parser2::Statement_()
 
 Statement* Parser2::IfThenElse() {
     Statement* res = new Statement();
-    res->kind = Tok_IF;
+    res->kind = IL_if;
     res->pos = la.toRowCol();
 	expect(Tok_IF, true, "IfThenElse");
     res->e = Expression_();
@@ -2130,7 +2274,7 @@ Statement* Parser2::IfThenElse() {
     res->body = StatementSequence();
 	if( la.d_code == Tok_ELSE ) {
         Statement* s = new Statement();
-        s->kind = Tok_ELSE;
+        s->kind = IL_else;
         s->pos = la.toRowCol();
 		expect(Tok_ELSE, true, "IfThenElse");
         s->body = StatementSequence();
@@ -2142,7 +2286,7 @@ Statement* Parser2::IfThenElse() {
 
 Statement* Parser2::Loop() {
     Statement* res = new Statement();
-    res->kind = Tok_LOOP;
+    res->kind = IL_loop;
     res->pos = la.toRowCol();
 	expect(Tok_LOOP, true, "Loop");
     res->body = StatementSequence();
@@ -2152,17 +2296,17 @@ Statement* Parser2::Loop() {
 
 Statement* Parser2::Switch() {
     Statement* res = new Statement();
-    res->kind = Tok_SWITCH;
+    res->kind = IL_switch;
     res->pos = la.toRowCol();
     expect(Tok_SWITCH, true, "Switch");
     res->e = Expression_();
 	while( la.d_code == Tok_CASE ) {
         Statement* s = new Statement();
-        s->kind = Tok_CASE;
+        s->kind = IL_case;
         s->pos = la.toRowCol();
         expect(Tok_CASE, true, "Switch");
         s->e = new Expression();
-        s->e->kind = Tok_CASE;
+        s->e->kind = IL_case;
         s->e->pos = la.toRowCol();
         s->e->i = integer();
 		while( la.d_type == Tok_Comma || FIRST_integer(la.d_type) ) {
@@ -2170,7 +2314,7 @@ Statement* Parser2::Switch() {
 				expect(Tok_Comma, false, "Switch");
 			}
             Expression* e = new Expression();
-            e->kind = Tok_CASE;
+            e->kind = IL_case;
             e->pos = la.toRowCol();
             e->i = integer();
             s->e->append(e);
@@ -2181,7 +2325,7 @@ Statement* Parser2::Switch() {
 	}
 	if( la.d_code == Tok_ELSE ) {
         Statement* s = new Statement();
-        s->kind = Tok_ELSE;
+        s->kind = IL_else;
         s->pos = la.toRowCol();
         expect(Tok_ELSE, true, "Switch");
         s->body = StatementSequence();
@@ -2193,7 +2337,7 @@ Statement* Parser2::Switch() {
 
 Statement* Parser2::RepeatUntil() {
     Statement* res = new Statement();
-    res->kind = Tok_REPEAT;
+    res->kind = IL_repeat;
     res->pos = la.toRowCol();
     expect(Tok_REPEAT, true, "RepeatUntil");
     res->body = StatementSequence();
@@ -2205,7 +2349,7 @@ Statement* Parser2::RepeatUntil() {
 
 Statement* Parser2::WhileDo() {
     Statement* res = new Statement();
-    res->kind = Tok_WHILE;
+    res->kind = IL_while;
     res->pos = la.toRowCol();
     expect(Tok_WHILE, true, "WhileDo");
     res->e = Expression_();

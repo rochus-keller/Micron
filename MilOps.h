@@ -27,6 +27,7 @@ enum IL_op
 {
     IL_invalid,
     // expressions
+    IL_EXPRESSIONS,
     IL_add, IL_abs, IL_and, IL_call, IL_calli, IL_callvi, IL_callvirt, IL_castptr,
     IL_ceq, IL_cgt, IL_cgt_un, IL_clt, IL_clt_un,
     IL_conv_i1, IL_conv_i2, IL_conv_i4, IL_conv_i8, IL_conv_r4, IL_conv_r8,
@@ -51,6 +52,7 @@ enum IL_op
     IL_not, IL_or, IL_rem, IL_rem_un, IL_shl, IL_shr, IL_shr_un,
     IL_sizeof, IL_sub, IL_xor, IL_ptroff, IL_nop,
     // statements
+    IL_STATEMENTS,
     IL_free, IL_repeat, IL_until,
     IL_exit, IL_goto, IL_if, IL_then, IL_else, IL_end,
     IL_label, IL_line, IL_loop, IL_pop, IL_ret,

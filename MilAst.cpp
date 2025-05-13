@@ -19,7 +19,6 @@
 
 #include "MilAst.h"
 #include "MicSymbol.h"
-#include "MilTokenType.h"
 #include <QtDebug>
 using namespace Mil;
 
@@ -563,9 +562,9 @@ Declaration*Declaration::findInitProc() const
 
 Expression::~Expression()
 {
-    if( (kind == Tok_LDOBJ || kind == Tok_LDSTR) && c != 0 )
+    if( (kind == IL_ldobj || kind == IL_ldstr) && c != 0 )
         delete c;
-    else if( (kind == Tok_IIF || kind == Tok_THEN || kind == Tok_ELSE ) && e != 0 )
+    else if( (kind == IL_iif || kind == IL_then || kind == IL_else ) && e != 0 )
         delete e;
     if( next )
         delete next;
@@ -955,8 +954,8 @@ Statement::~Statement()
 {
     if( body )
         delete body;
-    if( (kind == ExprStat || kind == Tok_IF || kind == Tok_SWITCH || kind == Tok_CASE ||
-         kind == Tok_REPEAT || kind == Tok_WHILE) && e )
+    if( (kind == ExprStat || kind == IL_if || kind == IL_switch || kind == IL_case ||
+         kind == IL_repeat || kind == IL_while) && e )
         delete e;
     if( next )
         delete next;

@@ -20,6 +20,7 @@
 #include "MicMilLoader2.h"
 #include "MicSymbol.h"
 #include "MilOps.h"
+#include "MilTokenType.h"
 #include <QtDebug>
 using namespace Mic;
 using namespace Mil;
@@ -335,254 +336,20 @@ Type*InMemRenderer2::derefType(const Quali& q) const
         return type->getType();
 }
 
-static inline TokenType opToTok(int op)
-{
-    switch( op )
-    {
-    case IL_add:
-        return Tok_ADD;
-    case IL_abs:
-        return Tok_ABS;
-    case IL_and:
-        return Tok_AND;
-    case IL_call:
-        return Tok_CALL;
-    case IL_calli:
-        return Tok_CALLI;
-    case IL_callvi:
-        return Tok_CALLVI;
-    case IL_callvirt:
-        return Tok_CALLVIRT;
-    case IL_castptr:
-        return Tok_CASTPTR;
-    case IL_ceq:
-        return Tok_CEQ;
-    case IL_cgt:
-        return Tok_CGT;
-    case IL_cgt_un:
-        return Tok_CGT_UN;
-    case IL_clt:
-        return Tok_CLT;
-    case IL_clt_un:
-        return Tok_CLT_UN;
-    case IL_conv_i1:
-        return Tok_CONV_I1;
-    case IL_conv_i2:
-        return Tok_CONV_I2;
-    case IL_conv_i4:
-        return Tok_CONV_I4;
-    case IL_conv_i8:
-        return Tok_CONV_I8;
-    case IL_conv_r4:
-        return Tok_CONV_R4;
-    case IL_conv_r8:
-        return Tok_CONV_R8;
-    case IL_conv_u1:
-        return Tok_CONV_U1;
-    case IL_conv_u2:
-        return Tok_CONV_U2;
-    case IL_conv_u4:
-        return Tok_CONV_U4;
-    case IL_conv_u8:
-        return Tok_CONV_U8;
-    case IL_div:
-        return Tok_DIV;
-    case IL_div_un:
-        return Tok_DIV_UN;
-    case IL_dup:
-        return Tok_DUP;
-    case IL_iif:
-        return Tok_IIF;
-    case IL_initobj:
-        return Tok_INITOBJ;
-    case IL_isinst:
-        return Tok_ISINST;
-    case IL_ldarg:
-        return Tok_LDARG;
-    case IL_ldarg_s:
-        return Tok_LDARG_S;
-    case IL_ldarg_0:
-        return Tok_LDARG_0;
-    case IL_ldarg_1:
-        return Tok_LDARG_1;
-    case IL_ldarg_2:
-        return Tok_LDARG_2;
-    case IL_ldarg_3:
-        return Tok_LDARG_3;
-    case IL_ldarga:
-        return Tok_LDARGA;
-    case IL_ldarga_s:
-        return Tok_LDARGA_S;
-    case IL_ldc_i4:
-        return Tok_LDC_I4;
-    case IL_ldc_i8:
-        return Tok_LDC_I8;
-    case IL_ldc_i4_s:
-        return Tok_LDC_I4_S;
-    case IL_ldc_r4:
-        return Tok_LDC_R4;
-    case IL_ldc_r8:
-        return Tok_LDC_R8;
-    case IL_ldc_i4_0:
-        return Tok_LDC_I4_0;
-    case IL_ldc_i4_1:
-        return Tok_LDC_I4_1;
-    case IL_ldc_i4_2:
-        return Tok_LDC_I4_2;
-    case IL_ldc_i4_3:
-        return Tok_LDC_I4_3;
-    case IL_ldc_i4_4:
-        return Tok_LDC_I4_4;
-    case IL_ldc_i4_5:
-        return Tok_LDC_I4_5;
-    case IL_ldc_i4_6:
-        return Tok_LDC_I4_6;
-    case IL_ldc_i4_7:
-        return Tok_LDC_I4_7;
-    case IL_ldc_i4_8:
-        return Tok_LDC_I4_8;
-    case IL_ldc_i4_m1:
-        return Tok_LDC_I4_M1;
-    case IL_ldobj:
-        return Tok_LDOBJ;
-    case IL_ldelem:
-        return Tok_LDELEM;
-    case IL_ldelema:
-        return Tok_LDELEMA;
-    case IL_ldelem_i1:
-        return Tok_LDELEM_I1;
-    case IL_ldelem_i2:
-        return Tok_LDELEM_I2;
-    case IL_ldelem_i4:
-        return Tok_LDELEM_I4;
-    case IL_ldelem_i8:
-        return Tok_LDELEM_I8;
-    case IL_ldelem_u1:
-        return Tok_LDELEM_U1;
-    case IL_ldelem_u2:
-        return Tok_LDELEM_U2;
-    case IL_ldelem_u4:
-        return Tok_LDELEM_U4;
-    case IL_ldelem_u8:
-        return Tok_LDELEM_U8;
-    case IL_ldelem_r4:
-        return Tok_LDELEM_R4;
-    case IL_ldelem_r8:
-        return Tok_LDELEM_R8;
-    case IL_ldelem_ip:
-        return Tok_LDELEM_IP;
-    case IL_ldelem_ipp:
-        return Tok_LDELEM_IPP;
-    case IL_ldfld:
-        return Tok_LDFLD;
-    case IL_ldflda:
-        return Tok_LDFLDA;
-    case IL_ldind_i1:
-        return Tok_LDIND_I1;
-    case IL_ldind_i2:
-        return Tok_LDIND_I2;
-    case IL_ldind_i4:
-        return Tok_LDIND_I4;
-    case IL_ldind_i8:
-        return Tok_LDIND_I8;
-    case IL_ldind_u1:
-        return Tok_LDIND_U1;
-    case IL_ldind_u2:
-        return Tok_LDIND_U2;
-    case IL_ldind_u4:
-        return Tok_LDIND_U4;
-    case IL_ldind_r4:
-        return Tok_LDIND_R4;
-    case IL_ldind_u8:
-        return Tok_LDIND_U8;
-    case IL_ldind_r8:
-        return Tok_LDIND_R8;
-    case IL_ldind_ip:
-        return Tok_LDIND_IP;
-    case IL_ldind_ipp:
-        return Tok_LDIND_IPP;
-    case IL_ldloc:
-        return Tok_LDLOC;
-    case IL_ldloc_s:
-        return Tok_LDLOC_S;
-    case IL_ldloca:
-        return Tok_LDLOCA;
-    case IL_ldloca_s:
-        return Tok_LDLOCA_S;
-    case IL_ldloc_0:
-        return Tok_LDLOC_0;
-    case IL_ldloc_1:
-        return Tok_LDLOC_1;
-    case IL_ldloc_2:
-        return Tok_LDLOC_2;
-    case IL_ldloc_3:
-        return Tok_LDLOC_3;
-    case IL_ldnull:
-        return Tok_LDNULL;
-    case IL_ldind:
-        return Tok_LDIND;
-    case IL_ldproc:
-        return Tok_LDPROC;
-    case IL_ldmeth:
-        return Tok_LDMETH;
-    case IL_ldstr:
-        return Tok_LDSTR;
-    case IL_ldvar:
-        return Tok_LDVAR;
-    case IL_ldvara:
-        return Tok_LDVARA;
-    case IL_mul:
-        return Tok_MUL;
-    case IL_neg:
-        return Tok_NEG;
-    case IL_newarr:
-        return Tok_NEWARR;
-    case IL_newvla:
-        return Tok_NEWVLA;
-    case IL_newobj:
-        return Tok_NEWOBJ;
-    case IL_not:
-        return Tok_NOT;
-    case IL_or:
-        return Tok_OR;
-    case IL_rem:
-        return Tok_OR;
-    case IL_rem_un:
-        return Tok_REM_UN;
-    case IL_shl:
-        return Tok_SHL;
-    case IL_shr:
-        return Tok_SHR;
-    case IL_shr_un:
-        return Tok_SHR_UN;
-    case IL_sizeof:
-        return Tok_SIZEOF;
-    case IL_sub:
-        return Tok_SUB;
-    case IL_xor:
-        return Tok_XOR;
-    case IL_ptroff:
-        return Tok_PTROFF;
-    case IL_nop:
-        return Tok_NOP;
-    default:
-        return Tok_Invalid;
-    }
-}
-
 Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32& pc)
 {
     Statement* res = 0;
     while( pc < ops.size() )
     {
         Statement* tmp = new Statement();
+        tmp->kind = (IL_op)ops[pc].op;
         if( res )
             res->append(tmp);
         else
             res = tmp;
-        if( opToTok(ops[pc].op) != Tok_Invalid )
+        if( ops[pc].op > IL_EXPRESSIONS && ops[pc].op < IL_STATEMENTS )
         {
-            tmp->kind = (TokenType)Statement::ExprStat;
+            tmp->kind = (IL_op)Statement::ExprStat;
             tmp->e = translateExpr(ops, pc);
             continue;
         }
@@ -590,7 +357,6 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
         {
         case IL_while:
             {
-                tmp->kind = Tok_WHILE;
                 tmp->e = translateExpr(ops, pc);
                 if( !expect(ops, pc, IL_do) )
                     return res;
@@ -601,7 +367,6 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
             break;
         case IL_repeat:
             {
-                tmp->kind = Tok_REPEAT;
                 tmp->body = translateStat(ops, pc);
                 if( !expect(ops, pc, IL_until) )
                     return res;
@@ -612,7 +377,6 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
             break;
         case IL_loop:
             {
-                tmp->kind = Tok_LOOP;
                 tmp->body = translateStat(ops, pc);
                 if( !expect(ops, pc, IL_end) )
                     return res;
@@ -620,7 +384,6 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
             break;
         case IL_if:
             {
-                tmp->kind = Tok_IF;
                 tmp->e = translateExpr(ops, pc);
                 if( !expect(ops, pc, IL_then) )
                     return res;
@@ -629,7 +392,7 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
                 {
                     expect(ops, pc, IL_else);
                     tmp = new Statement();
-                    tmp->kind = Tok_ELSE;
+                    tmp->kind = IL_else;
                     res->append(tmp);
                     tmp->body = translateStat(ops, pc);
                 }
@@ -639,7 +402,6 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
             break;
         case IL_switch:
             {
-                tmp->kind = Tok_SWITCH;
                 tmp->e = translateExpr(ops, pc);
                 while( pc+1 < ops.size() && ops[pc+1].op == IL_case )
                 {
@@ -647,19 +409,19 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
                     CaseLabelList cll = ops[pc].arg.value<CaseLabelList>();
                     tmp = new Statement();
                     res->append(tmp);
-                    tmp->kind = Tok_CASE;
+                    tmp->kind = IL_case;
                     if( cll.isEmpty() )
                     {
                         qCritical() << "empty case label list" << pc;
                         return res;
                     }
                     tmp->e = new Expression();
-                    tmp->e->kind = Tok_CASE;
+                    tmp->e->kind = IL_case;
                     tmp->e->i = cll.first();
                     for( int i = 1; i < cll.size(); i++ )
                     {
                         Expression* e = new Expression();
-                        e->kind = Tok_CASE;
+                        e->kind = IL_case;
                         e->i = cll[i];
                         tmp->e->append(e);
                     }
@@ -670,7 +432,7 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
                     {
                         expect(ops, pc, IL_else);
                         tmp = new Statement();
-                        tmp->kind = Tok_ELSE;
+                        tmp->kind = IL_else;
                         res->append(tmp);
                         tmp->body = translateStat(ops, pc);
                     }
@@ -681,40 +443,26 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
             break;
         case IL_end:
             return res;
-        case IL_free:
-            tmp->kind = Tok_FREE;
-            break;
-        case IL_exit:
-            tmp->kind = Tok_EXIT;
-            break;
         case IL_goto:
-            tmp->kind = Tok_GOTO;
             tmp->name = ops[pc].arg.toByteArray();
             break;
         case IL_label:
-            tmp->kind = Tok_LABEL;
             tmp->name = ops[pc].arg.toByteArray();
             break;
         case IL_line:
-            tmp->kind = Tok_LINE;
             tmp->id = ops[pc].arg.toUInt();
             break;
         case IL_pop:
-            tmp->kind = Tok_POP;
             break;
         case IL_ret:
-            tmp->kind = Tok_RET;
             break;
         case IL_starg:
-            tmp->kind = Tok_STARG;
             tmp->id = ops[pc].arg.toUInt();
             break;
         case IL_starg_s:
-            tmp->kind = Tok_STARG_S;
             tmp->id = ops[pc].arg.toUInt();
             break;
         case IL_stelem:
-            tmp->kind = Tok_STELEM;
             tmp->d = loader->mdl.resolve(ops[pc].arg.value<MilQuali>());
             if( tmp->d == 0 || tmp->d->kind != Declaration::TypeDecl)
             {
@@ -723,31 +471,22 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
             }
             break;
         case IL_stelem_i1:
-            tmp->kind = Tok_STELEM_I1;
             break;
         case IL_stelem_i2:
-            tmp->kind = Tok_STELEM_I2;
             break;
         case IL_stelem_i4:
-            tmp->kind = Tok_STELEM_I4;
             break;
         case IL_stelem_i8:
-            tmp->kind = Tok_STELEM_I8;
             break;
         case IL_stelem_r4:
-            tmp->kind = Tok_STELEM_R4;
             break;
         case IL_stelem_r8:
-            tmp->kind = Tok_STELEM_R8;
             break;
         case IL_stelem_ip:
-            tmp->kind = Tok_STELEM_IP;
             break;
         case IL_stelem_ipp:
-            tmp->kind = Tok_STELEM_IPP;
             break;
         case IL_stfld: {
-                tmp->kind = Tok_STFLD;
                 MilTrident td = ops[pc].arg.value<MilTrident>();
                 Declaration* d = derefTrident(td);
                 if( d == 0 || d->kind != Declaration::Field)
@@ -757,7 +496,6 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
                 }
             } break;
         case IL_stind:
-            tmp->kind = Tok_STIND;
             tmp->d = loader->mdl.resolve(ops[pc].arg.value<MilQuali>());
             if( tmp->d == 0 || tmp->d->kind != Declaration::TypeDecl)
             {
@@ -766,54 +504,38 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
             }
             break;
         case IL_stind_i1:
-            tmp->kind = Tok_STIND_I1;
             break;
         case IL_stind_i2:
-            tmp->kind = Tok_STIND_I2;
             break;
         case IL_stind_i4:
-            tmp->kind = Tok_STIND_I4;
             break;
         case IL_stind_i8:
-            tmp->kind = Tok_STIND_I8;
             break;
         case IL_stind_r4:
-            tmp->kind = Tok_STIND_R4;
             break;
         case IL_stind_r8:
-            tmp->kind = Tok_STIND_R8;
             break;
         case IL_stind_ip:
-            tmp->kind = Tok_STIND_IP;
             break;
         case IL_stind_ipp:
-            tmp->kind = Tok_STIND_IPP;
             break;
         case IL_stloc:
-            tmp->kind = Tok_STLOC;
             tmp->id = ops[pc].arg.toUInt();
             break;
         case IL_stloc_s:
-            tmp->kind = Tok_STLOC_S;
             tmp->id = ops[pc].arg.toUInt();
             break;
         case IL_stloc_0:
-            tmp->kind = Tok_STLOC_0;
             break;
         case IL_stloc_1:
-            tmp->kind = Tok_STLOC_1;
             break;
         case IL_stloc_2:
-            tmp->kind = Tok_STLOC_2;
             break;
         case IL_stloc_3:
-            tmp->kind = Tok_STLOC_3;
             break;
         case IL_strcpy:
-            tmp->kind = Tok_STRCPY;
             break;
         case IL_stvar:
-            tmp->kind = Tok_STVAR;
             tmp->d = loader->mdl.resolve(ops[pc].arg.value<MilQuali>());
             if( tmp->d == 0 || tmp->d->kind != Declaration::VarDecl)
             {
@@ -839,11 +561,8 @@ Expression* InMemRenderer2::translateExpr(const QList<MilOperation>& ops, quint3
     Expression* res = 0;
     while(pc < ops.size() )
     {
-        const TokenType tok = opToTok(ops[pc].op);
-        if(tok == Tok_Invalid)
-            return res;
         Expression* tmp = new Expression();
-        tmp->kind = tok;
+        tmp->kind = (IL_op)ops[pc].op;
 
         if( res )
             res->append(tmp);

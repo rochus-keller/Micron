@@ -23,7 +23,7 @@
 
 #include <QByteArray>
 #include <Micron/MicRowCol.h>
-#include <Micron/MilTokenType.h>
+#include <Micron/MilOps.h>
 #include <QVariant>
 
 namespace Mil
@@ -122,6 +122,7 @@ namespace Mil
         bool isPointer() const { return kind == INTPTR || kind == NIL || kind == Pointer; }
         bool isSUO() const { return kind == Struct || kind == Union || kind == Object; }
         bool isSO() const { return kind == Struct || kind == Object; }
+        bool isSOA() const { return isSO() || (kind == Array && len); }
         bool isSUOA() const { return isSUO() || (kind == Array && len); }
         bool isInt32OnStack() const;
         bool isFuncOnStack() const;
@@ -250,9 +251,9 @@ namespace Mil
     class Expression : public Node
     {
     public:
-        enum Kind { Argument = TT_Specials,  };
+        enum Kind { Argument = IL_NUM_OF_OPS,  };
 #ifdef _DEBUG
-        TokenType kind;
+        IL_op kind;
 #endif
         // Kind corresponds to the TokenType
         Expression* next;
@@ -276,9 +277,9 @@ namespace Mil
     class Statement : public Node
     {
     public:
-        enum Kind { ExprStat = TT_Specials,  };
+        enum Kind { ExprStat = IL_NUM_OF_OPS,  };
 #ifdef _DEBUG
-        TokenType kind;
+        IL_op kind;
 #endif
         // Kind corresponds to the TokenType
         Statement* next;
