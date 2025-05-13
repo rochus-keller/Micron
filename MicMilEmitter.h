@@ -41,7 +41,7 @@ namespace Mic
         MilQuali type;
         uint offset : 25;
         uint isPublic : 1;
-        uint bits : 6;
+        uint bits : 6; // optional bit width for fields
         MilVariable():offset(0),isPublic(0),bits(0) {}
         MilVariable(const MilQuali& type, const QByteArray& name):type(type),name(name),offset(0),isPublic(0),bits(0){}
     };

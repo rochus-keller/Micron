@@ -106,7 +106,7 @@ namespace Mil
         union {
             quint32 bytesize;
             quint32 len; // array length
-            Quali* quali; // unresolved NameRef
+            Quali* quali; // NameRef
         };
         // type: array/pointer base type, return type
         QList<Declaration*> subs; // list of record fields or enum elements, or params for proc type, owned
@@ -129,7 +129,7 @@ namespace Mil
         Declaration* findSubByName(const QByteArray& name, bool recursive = true) const;
         int numOfNonFwdNonOverrideProcs() const;
         Type* getBaseObject() const;
-        QList<Declaration*> getMethodTable() const;
+        QList<Declaration*> getMethodTable(bool recursive = true) const;
         QList<Declaration*> getFieldList(bool recursive) const;
         Type* deref() const;
         bool isPtrToArray() const;
@@ -137,6 +137,7 @@ namespace Mil
         quint32 getByteSize(quint8 pointerWidth) const;
         quint32 getAlignment(quint8 pointerWidth) const;
         static bool isA(Type* sub, Type* super);
+        Quali toQuali() const;
     };
 
     struct Constant;
@@ -193,6 +194,7 @@ namespace Mil
         int indexOf(Declaration*) const;
         static void append(Declaration* list, Declaration* next);
         QByteArray toPath() const;
+        Quali toQuali() const;
         Declaration* forwardToProc() const;
         Declaration* getModule() const;
         Declaration* findInitProc() const;
@@ -225,6 +227,7 @@ namespace Mil
         unsigned char* b; // hexstring
 
         ByteString():len(0),b(0){}
+        ByteString(const QByteArray&);
         ~ByteString();
     };
 
@@ -241,6 +244,7 @@ namespace Mil
         };
         Constant():kind(Invalid) {}
         ~Constant();
+        QVariant toVariant() const;
     };
 
     class Expression : public Node
@@ -321,6 +325,7 @@ namespace Mil
         DeclList& getModules() { return modules; }
         Type* getBasicType(quint8) const;
         quint8 getPointerWidth() const { return pointerWidth; }
+        Declaration* resolve(const Quali&) const;
 
         static inline int align(int off, int alignment )
         {

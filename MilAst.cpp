@@ -136,6 +136,17 @@ Type* AstModel::getBasicType(quint8 k) const
         return basicTypes[0];
 }
 
+Declaration*AstModel::resolve(const Quali& q) const
+{
+    if( q.first.isEmpty() || q.second.isEmpty() )
+        return 0;
+    Declaration* module = findModuleByName(q.first);
+    if( module == 0 )
+        return 0;
+
+    return module->findSubByName(q.second);
+}
+
 void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment)
 {
     DeclList done;
@@ -494,6 +505,28 @@ QByteArray Declaration::toPath() const
         return res;
 }
 
+Quali Declaration::toQuali() const
+{
+    Quali res;
+    if( (kind == Procedure && typebound) || kind == Field || kind == LocalDecl || kind == ParamDecl )
+    {
+        res.second = "." + name;
+    }else if( kind != Module )
+    {
+        res.second = name;
+        if( outer && outer->kind != Module )
+            res.second = "$" + res.second;
+    }else
+        res.first = name;
+    if( outer )
+    {
+        Quali tmp = outer->toQuali();
+        res.first = tmp.first + res.first;
+        res.second = tmp.second;
+    }
+    return res;
+}
+
 Declaration*Declaration::forwardToProc() const
 {
     if( kind == Procedure && forward )
@@ -576,12 +609,41 @@ Constant::~Constant()
     }
 }
 
+QVariant Constant::toVariant() const
+{
+    switch(kind)
+    {
+    case D:
+        return d;
+    case I:
+        return i;
+    case S:
+        return QByteArray(s);
+    case B:
+        return QByteArray((char*)b->b, b->len);
+    case R:
+        return r->c->toVariant();
+    case C:
+        break; // TODO
+    default:
+        Q_ASSERT(false);
+    }
+    return QVariant();
+}
+
 ComponentList::~ComponentList()
 {
     if( c )
         delete c;
     if( type )
         delete type;
+}
+
+ByteString::ByteString(const QByteArray& ba)
+{
+    b = (unsigned char*)malloc(ba.size());
+    memcpy(b, ba.data(), ba.size());
+    len = ba.size();
 }
 
 ByteString::~ByteString()
@@ -676,20 +738,23 @@ Type* Type::getBaseObject() const
         return 0;
 }
 
-QList<Declaration*> Type::getMethodTable() const
+QList<Declaration*> Type::getMethodTable(bool recursive) const
 {
     DeclList tbl;
     if( kind != Object )
         return tbl;
-    Type* base = getBaseObject();
-    if( base )
-        tbl = base->getMethodTable();
+    if( recursive )
+    {
+        Type* base = getBaseObject();
+        if( base )
+            tbl = base->getMethodTable();
+    }
     for( int i = 0; i < subs.size(); i++ )
     {
         Declaration* p = subs[i];
         if( p->kind != Declaration::Procedure || p->forward )
             continue;
-        if( p->override_)
+        if( recursive && p->override_)
         {
             bool found = false;
             for( int j = 0; j < tbl.size(); j++ )
@@ -872,6 +937,18 @@ bool Type::isA(Type* sub, Type* super)
         if( sub ) sub = sub->deref();
     }
     return false;
+}
+
+Quali Type::toQuali() const
+{
+    if( kind == NameRef )
+    {
+        Q_ASSERT(quali);
+        return *quali;
+    }else if( decl )
+        return decl->toQuali();
+    else
+        return Quali();
 }
 
 Statement::~Statement()
