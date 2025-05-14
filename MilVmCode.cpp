@@ -9,6 +9,13 @@ const char* VmCode::op_names[] = {
     #undef OPDEF
 };
 
+static const int op_args[] = {
+    0,
+    #define OPDEF(op, n) n
+    #include "MilVmOps.h"
+    #undef OPDEF
+};
+
 VmCode::VmCode(AstModel* mdl, quint8 pointerWidth, quint8 stackAlignment):
     mdl(mdl),pointerWidth(pointerWidth), stackAlignment(stackAlignment), curProc(0)
 {
@@ -21,6 +28,11 @@ VmCode::~VmCode()
         delete procs[i];
     for( int i = 0; i < vtables.size(); i++ )
         delete vtables[i];
+}
+
+void VmCode::addExternal(const char* module, const char* name, quint32 id)
+{
+    externals[module].insert(name, id);
 }
 
 bool VmCode::compile(Declaration* procOrModule)
@@ -146,15 +158,16 @@ bool VmCode::translateProc(Procedure& proc)
         }
         Declaration* module = proc.decl->getModule();
 
-#if 0
-        // TODO
-        proc.ffi = ffiProcs.value(module->name.constData()).value(proc.decl->name.constData());
-        if( proc.ffi == 0 )
+        const int id = externals.value(module->name.constData()).value(proc.decl->name.constData(), -1);
+        if( id < 0 )
         {
             qCritical() << "cannot find external implementation for" << proc.decl->toPath();
             return false;
+        }else
+        {
+            proc.external = true;
+            proc.id = id;
         }
-#endif
         return true;
     }else
     {
@@ -1246,8 +1259,6 @@ bool VmCode::translateExprSeq(Procedure& proc, Expression* e)
                                  e->kind == IL_newarr ?
                                                        LL_allocN : // N is on stack
                                                              LL_initobj;
-#if 0
-                // TODO
                 if( tt->objectInit || tt->pointerInit )
                 {
                     int id = findTemplate(tt);
@@ -1262,7 +1273,6 @@ bool VmCode::translateExprSeq(Procedure& proc, Expression* e)
                     }
                     emitOp(proc,op, id, true);
                 }else
-#endif
                     emitOp(proc,op, len);
             }
             break;
@@ -1488,3 +1498,117 @@ void VmCode::downcopy(Vtable* vt)
     }
 }
 
+bool VmCode::dumpProc(QTextStream& out, Declaration* proc)
+{
+    if( proc->forward )
+        return false;
+    const int i = findProc(proc);
+    if( i == -1 )
+        return false; // there is no implementation for this proc, not an error
+    Procedure* p = getProc(i);
+    out << "proc " << p->decl->toPath() << endl;
+    for( int pc = 0; pc < p->ops.size(); pc++ )
+    {
+        out << "    " << QString("%1: ").arg(pc,2) << VmCode::op_names[p->ops[pc].op];
+        switch(op_args[p->ops[pc].op])
+        {
+        case NoOpArgs:
+            break;
+        case OffArg:
+            out << " " << p->ops[pc].val;
+            break;
+        case SizeArg:
+            out << " " << p->ops[pc].val;
+            break;
+        case IntArg:
+            out << " " << ints[p->ops[pc].val];
+            break;
+        case FloatArg:
+            out << " " << doubles[p->ops[pc].val];
+            break;
+        case StrArg:
+            out << " \"" << strings[p->ops[pc].val].c_str() << "\"";
+            break;
+        case ByteArrayArg: {
+                const std::vector<char>& tmp = objects[p->ops[pc].val];
+                QByteArray buf = QByteArray::fromRawData(tmp.data(),tmp.size());
+                out << " $" << buf.toHex().left(40) << " (" << buf.size() << ")";
+            } break;
+        case ProcArg:
+            if( p->ops[pc].val < procs.size() )
+                out << " " << procs[p->ops[pc].val]->decl->toPath();
+            else
+                out << " invalid proc " << p->ops[pc].val;
+            break;
+        case JumpArg:
+            out << " " << (p->ops[pc].minus ? "-" : "") << p->ops[pc].val << " -> "
+                << QString("%1").arg(pc + 1 + (p->ops[pc].minus?-1:1) * p->ops[pc].val);
+            break;
+        case OffSizeArgs:
+            Q_ASSERT(pc+1 < p->ops.size());
+            out << " " << p->ops[pc].val;
+            out << " " << p->ops[pc+1].val;
+            pc++;
+           break;
+        default:
+            Q_ASSERT(false);
+        }
+
+        out << endl;
+    }
+    return true;
+}
+
+bool VmCode::dumpModule(QTextStream& out, Declaration* module)
+{
+    Declaration* d = module->subs;
+    while(d)
+    {
+        if(d->kind == Declaration::Procedure)
+            dumpProc(out, d);
+        d = d->next;
+    }
+    return true;
+}
+
+bool VmCode::dumpAll(QTextStream& out)
+{
+    DeclList& modules = mdl->getModules();
+    foreach( Declaration* module, modules )
+        dumpModule(out, module);
+    return true;
+}
+
+void VmCode::initMemory(char* mem, Type* t, bool doPointerInit )
+{
+    if( doPointerInit && t->pointerInit )
+        memset(mem, 0, t->getByteSize(sizeof(void*)));
+    if( !t->objectInit )
+        return;
+    if( t->kind == Type::Object )
+    {
+        *((Vtable**) mem) = getVtable(t);
+    }
+    if( t->kind == Type::Struct || t->kind == Type::Object )
+    {
+        DeclList fields = t->getFieldList(true);
+        int off = 0;
+        foreach(Declaration* field, fields)
+        {
+
+            Type* tt = deref(field->getType());
+            if( tt->objectInit )
+                initMemory(mem + off, tt, false);
+            off += field->f.off;
+        }
+    }else if( t->kind == Type::Array && t->len != 0)
+    {
+        Type* et = deref(t->getType());
+        int off = 0;
+        for(int i = 0; i < t->len; i++ )
+        {
+            initMemory(mem + off, et, false);
+            off += et->getByteSize(sizeof(void*));
+        }
+    }
+}

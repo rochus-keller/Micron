@@ -3,6 +3,8 @@
 
 #include <Micron/MilAst.h>
 
+class QTextStream;
+
 namespace Mil
 {
 
@@ -42,9 +44,14 @@ struct Procedure
 {
     std::vector<Operation> ops; // std::vector because QVector.detach() is very expensive
     Declaration* decl;
+    uint init : 1;
+    uint called : 1;
+    uint external : 1;
+    uint id: 29;
     quint32 localsSize;
     quint32 fixArgSize, returnSize;
-    Procedure():decl(0),localsSize(0),fixArgSize(0),returnSize(0),ops(0){}
+    Procedure():decl(0),init(0), called(0), external(0), id(0),
+        localsSize(0),fixArgSize(0),returnSize(0),ops(0){}
 };
 
 struct Vtable
@@ -52,6 +59,13 @@ struct Vtable
     Vtable* parent;
     Type* type;
     std::vector<Procedure*> methods;
+};
+
+struct Template
+{
+    Type* type;
+    std::vector<char> mem; // preinitialized memory for type
+    Template():type(0){}
 };
 
 struct MethRef
@@ -67,27 +81,17 @@ public:
     VmCode(AstModel*, quint8 pointerWidth, quint8 stackAlignment);
     ~VmCode();
 
+    void addExternal(const char* module, const char* name, quint32 id);
+
     bool compile(Declaration* procOrModule);
 
-    int findVtable(Type* object) const
-    {
-        for( int i = 0; i < vtables.size(); i++ )
-        {
-            if( vtables[i]->type == object )
-                return i;
-        }
-        return -1;
-    }
-
-    Vtable* getVtable(Type* object) const
-    {
-        for( int i = 0; i < vtables.size(); i++ )
-        {
-            if( vtables[i]->type == object )
-                return vtables[i];
-        }
-        return 0;
-    }
+    qint64 getInt(quint32 n) const { return ints[n]; }
+    double getDouble(quint32 n) const { return doubles[n]; }
+    Procedure* getProc(quint32 n) const { return procs[n]; }
+    Vtable* getVtable(quint32 n) const { return vtables[n]; }
+    const char* getString(quint32 n) const { return strings[n].c_str(); }
+    const std::vector<char>& getObject(quint32 n) const { return objects[n]; }
+    const Template& getTemplate(quint32 n) const { return templates[n]; }
 
     int findProc(Declaration* proc) const
     {
@@ -106,6 +110,50 @@ public:
         }
         return -1;
     }
+
+    inline int stackAligned(int off)
+    {
+        return AstModel::align(off, stackAlignment );
+    }
+
+    void initMemory(char* mem, Type* t, bool doPointerInit );
+
+    bool dumpAll(QTextStream& out);
+    bool dumpModule(QTextStream& out, Declaration* module);
+    bool dumpProc(QTextStream& out, Declaration* proc);
+
+    static const char* op_names[];
+
+protected:
+    bool translateModule(Declaration* m);
+    bool translateProc(Declaration* proc);
+    bool translateProc(Procedure& proc);
+    bool translateStatSeq(Procedure& proc, Statement* s);
+    bool translateExprSeq(Procedure& proc, Expression* e);
+    bool translateInit(Procedure& proc, quint32 id);
+    void render(char* data, quint32 off, Type* t, Constant* c);
+    void render(char* data, quint32 start, ComponentList* cl );
+    Type* deref(Type* t)
+    {
+        if( t && t->kind == Type::NameRef )
+            return deref(t->getType());
+        else if( t )
+            return t;
+        else
+            return mdl->getBasicType(Type::Undefined);
+    }
+    int emitOp(Procedure& proc, LL_op op, quint32 v = 0, bool minus = false )
+    {
+        const int res = proc.ops.size();
+        proc.ops.push_back(Operation(op, v, minus));
+        return res;
+    }
+    void inline branch_here(Procedure& proc, int pc)
+    {
+        Q_ASSERT(pc >= 0 && pc < proc.ops.size());
+        proc.ops[pc].val = proc.ops.size() - pc - 1;
+    }
+    void downcopy(Vtable* vt);
 
     template<typename T>
     int appendUnique(std::vector<T>& vec, const T& val)
@@ -151,43 +199,33 @@ public:
         }
         return id;
     }
+    int findVtable(Type* object) const
+    {
+        for( int i = 0; i < vtables.size(); i++ )
+        {
+            if( vtables[i]->type == object )
+                return i;
+        }
+        return -1;
+    }
 
-    static const char* op_names[];
+    Vtable* getVtable(Type* object) const
+    {
+        for( int i = 0; i < vtables.size(); i++ )
+        {
+            if( vtables[i]->type == object )
+                return vtables[i];
+        }
+        return 0;
+    }
 
-protected:
-    bool translateModule(Declaration* m);
-    bool translateProc(Declaration* proc);
-    bool translateProc(Procedure& proc);
-    bool translateStatSeq(Procedure& proc, Statement* s);
-    bool translateExprSeq(Procedure& proc, Expression* e);
-    bool translateInit(Procedure& proc, quint32 id);
-    void render(char* data, quint32 off, Type* t, Constant* c);
-    void render(char* data, quint32 start, ComponentList* cl );
-    Type* deref(Type* t)
+    int findTemplate(Type* t) const
     {
-        if( t && t->kind == Type::NameRef )
-            return deref(t->getType());
-        else if( t )
-            return t;
-        else
-            return mdl->getBasicType(Type::Undefined);
+        for( int i = 0; i < templates.size(); i++ )
+            if( templates[i].type == t )
+                return i;
+        return -1;
     }
-    int emitOp(Procedure& proc, LL_op op, quint32 v = 0, bool minus = false )
-    {
-        const int res = proc.ops.size();
-        proc.ops.push_back(Operation(op, v, minus));
-        return res;
-    }
-    void inline branch_here(Procedure& proc, int pc)
-    {
-        Q_ASSERT(pc >= 0 && pc < proc.ops.size());
-        proc.ops[pc].val = proc.ops.size() - pc - 1;
-    }
-    inline int stackAligned(int off)
-    {
-        return AstModel::align(off, stackAlignment );
-    }
-    void downcopy(Vtable* vt);
 private:
     const quint8 pointerWidth;
     const quint8 stackAlignment;
@@ -199,7 +237,9 @@ private:
     std::vector<qint64> ints;
     std::vector<Procedure*> procs;
     std::vector<Vtable*> vtables;
+    std::vector<Template> templates;
     QList< QList<int> > loopStack; // temp
+    QMap<const char*,QMap<const char*, int> > externals;
     Procedure* curProc;
 };
 

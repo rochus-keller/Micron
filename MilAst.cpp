@@ -148,6 +148,7 @@ Declaration*AstModel::resolve(const Quali& q) const
 
 void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment)
 {
+    varOff = 0;
     DeclList done;
     foreach( Declaration* m, modules )
     {
@@ -219,7 +220,6 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
 {
     // RISK: this function assumes that declaration order reflects dependency order, besides pointers
     Declaration* sub = module->subs;
-    int varOff = 0;
     while(sub)
     {
         Type* type = sub->getType();

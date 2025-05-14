@@ -344,6 +344,7 @@ namespace Mil
             return (alignment - (off % alignment)) % alignment;
         }
         void calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment);
+        quint32 getVarMemSize() const { return varOff; }
 
         struct BitFieldUnit
         {
@@ -361,6 +362,7 @@ namespace Mil
         Declaration globals;
         Type* basicTypes[Type::MaxBasicType];
         quint8 pointerWidth;
+        quint32 varOff;
     };
 }
 
