@@ -39,20 +39,18 @@ namespace Mic
     {
         QByteArray name;
         MilQuali type;
-        uint offset : 25;
         uint isPublic : 1;
         uint bits : 6; // optional bit width for fields
-        MilVariable():offset(0),isPublic(0),bits(0) {}
-        MilVariable(const MilQuali& type, const QByteArray& name):type(type),name(name),offset(0),isPublic(0),bits(0){}
+        MilVariable():isPublic(0),bits(0) {}
+        MilVariable(const MilQuali& type, const QByteArray& name):type(type),name(name),isPublic(0),bits(0){}
     };
 
     struct MilOperation
     {
-        uint op : 8;
-        uint index : 24; // used for jumps, field access
+        quint8 op;
         QVariant arg;
-        MilOperation():op(0),index(0){}
-        MilOperation(quint8 ilop, const QVariant& arg = QVariant(), quint32 i = 0 ):op(ilop),index(i),arg(arg){}
+        MilOperation():op(0){}
+        MilOperation(quint8 ilop, const QVariant& arg = QVariant(), quint32 i = 0 ):op(ilop),arg(arg){}
     };
 
     struct MilObject
@@ -71,9 +69,6 @@ namespace Mic
         uint kind : 4;
         uint isPublic : 1;
         uint isVararg : 1;
-        uint stackDepth: 12;
-        uint compiled: 1;
-        uint offset : 12;
         QByteArray name;
         QList<MilOperation> body, finally;
         QList<MilVariable> params;
@@ -81,44 +76,7 @@ namespace Mic
         MilQuali retType;
         QByteArray binding; // if not empty, the first param is receiver
         QByteArray origName; // extern
-        MilProcedure():kind(Invalid),isPublic(0),isVararg(0),stackDepth(0),compiled(0),offset(0) {}
-    };
-
-    struct MilType
-    {
-        QByteArray name;
-        quint8 kind; // MilEmitter::TypeKind
-        bool isPublic;
-        MilQuali base; // for arrays, pointers and proctypes
-        quint32 len;
-        QList<MilVariable> fields; // also proctype params
-        QList<MilProcedure> methods;
-        int indexOfField(const QByteArray& name) const;
-        const MilVariable* findField(const QByteArray& name) const;
-    };
-
-    struct MilConst
-    {
-        QByteArray name;
-        MilQuali type;
-        QVariant val;
-    };
-
-    struct MilModule
-    {
-        QByteArray fullName; // concatenation of path, name and suffix as symbol
-        QByteArrayList metaParams; // just names, pointing to const or type decls
-
-        enum What { Invalid, Type, Variable, Proc, Import, Const };
-        QMap<const char*,QPair<What,quint32> >  symbols;
-        typedef QPair<What,quint32> Order;
-        QList<Order> order;
-        QList<MilType> types;
-        QList<MilProcedure> procs;
-        QList<QByteArray> imports; // paths
-        QList<MilVariable> vars;
-        QList<MilConst> consts;
-        int indexOfVar(const QByteArray&) const;
+        MilProcedure():kind(Invalid),isPublic(0),isVararg(0) {}
     };
 
     struct MilMetaParam {

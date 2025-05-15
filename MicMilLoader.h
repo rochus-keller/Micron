@@ -26,6 +26,43 @@
 namespace Mic
 {
 
+struct MilType
+{
+    QByteArray name;
+    quint8 kind; // MilEmitter::TypeKind
+    bool isPublic;
+    MilQuali base; // for arrays, pointers and proctypes
+    quint32 len;
+    QList<MilVariable> fields; // also proctype params
+    QList<MilProcedure> methods;
+    int indexOfField(const QByteArray& name) const;
+    const MilVariable* findField(const QByteArray& name) const;
+};
+
+struct MilConst
+{
+    QByteArray name;
+    MilQuali type;
+    QVariant val;
+};
+
+struct MilModule
+{
+    QByteArray fullName; // concatenation of path, name and suffix as symbol
+    QByteArrayList metaParams; // just names, pointing to const or type decls
+
+    enum What { Invalid, Type, Variable, Proc, Import, Const };
+    QMap<const char*,QPair<What,quint32> >  symbols;
+    typedef QPair<What,quint32> Order;
+    QList<Order> order;
+    QList<MilType> types;
+    QList<MilProcedure> procs;
+    QList<QByteArray> imports; // paths
+    QList<MilVariable> vars;
+    QList<MilConst> consts;
+    int indexOfVar(const QByteArray&) const;
+};
+
 class MilLoader
 {
 public:

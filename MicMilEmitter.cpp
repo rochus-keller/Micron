@@ -1455,8 +1455,6 @@ void IlAsmRenderer::render(const MilProcedure& m)
         case IL_switch:
         case IL_while:
             out << ws() << s_opName[op.op];
-            if( op.index )
-                out << " // " << op.index;
             out << endl;
             level++;
             break;
@@ -1466,23 +1464,17 @@ void IlAsmRenderer::render(const MilProcedure& m)
         case IL_do:
             level--;
             out << ws() << s_opName[op.op];
-            if( op.index )
-                out << " // " << op.index;
             out << endl;
             level++;
             break;
         case IL_end:
             level--;
             out << ws() << s_opName[op.op];
-            if( op.index )
-                out << " // " << op.index;
             out << endl;
             break;
         case IL_case:
             level--;
             out << ws() << s_opName[op.op];
-            if( op.index )
-                out << " // " << op.index;
             out << endl;
             level++;
             out << ws();
@@ -1644,32 +1636,3 @@ void MilSplitter::addField(const QByteArray& fieldName, const MilQuali& typeRef,
 }
 
 
-int MilType::indexOfField(const QByteArray& name) const
-{
-    for( int i = 0; i < fields.size(); i++ )
-    {
-        if( fields[i].name.constData() == name.constData() )
-            return i;
-    }
-    return -1;
-}
-
-const MilVariable*MilType::findField(const QByteArray& name) const
-{
-    for( int i = 0; i < fields.size(); i++ )
-    {
-        if( fields[i].name.constData() == name.constData() )
-            return &fields[i];
-    }
-    return 0;
-}
-
-int MilModule::indexOfVar(const QByteArray& name) const
-{
-    for( int i = 0; i < vars.size(); i++ )
-    {
-        if( vars[i].name.constData() == name.constData() )
-            return i;
-    }
-    return -1;
-}

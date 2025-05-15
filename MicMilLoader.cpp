@@ -303,3 +303,33 @@ bool MilLoader::render(MilRenderer* r, const MilModule* m)
     r->endModule();
     return true;
 }
+
+int MilType::indexOfField(const QByteArray& name) const
+{
+    for( int i = 0; i < fields.size(); i++ )
+    {
+        if( fields[i].name.constData() == name.constData() )
+            return i;
+    }
+    return -1;
+}
+
+const MilVariable*MilType::findField(const QByteArray& name) const
+{
+    for( int i = 0; i < fields.size(); i++ )
+    {
+        if( fields[i].name.constData() == name.constData() )
+            return &fields[i];
+    }
+    return 0;
+}
+
+int MilModule::indexOfVar(const QByteArray& name) const
+{
+    for( int i = 0; i < vars.size(); i++ )
+    {
+        if( vars[i].name.constData() == name.constData() )
+            return i;
+    }
+    return -1;
+}

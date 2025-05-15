@@ -16,14 +16,12 @@ include(MicParser.pri)
 
 SOURCES += \
     MicMain.cpp \
-    MicEiGen.cpp \
+    MicEiGen.cpp
     #MicCilGen.cpp \
-    MicMilInterpreter.cpp
 
 HEADERS += \
-    MicEiGen.h \
+    MicEiGen.h
     #MicCilGen.h \
-    MicMilInterpreter.h
 
 
 include( MicUtils.pri )
