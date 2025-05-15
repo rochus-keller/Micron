@@ -355,7 +355,7 @@ void Validator::visitStatSeq(Statement* stat)
                     baseOs = refT;
                 if( !assigCompat(baseOs, stat->args->rhs) )
                 {
-                    assigCompat(baseOs, stat->args->rhs);
+                    assigCompat(baseOs, stat->args->rhs); // TEST
                     error(stat->pos,"value on stack is not compatible with the pointer base type");
                 }
             }

@@ -51,8 +51,8 @@ namespace Mic
         uint op : 8;
         uint index : 24; // used for jumps, field access
         QVariant arg;
-        MilOperation(quint8 ilop = 0):op(ilop),index(0){}
-        MilOperation(quint8 ilop, const QVariant& arg, quint32 i = 0 ):op(ilop),index(i),arg(arg){}
+        MilOperation():op(0),index(0){}
+        MilOperation(quint8 ilop, const QVariant& arg = QVariant(), quint32 i = 0 ):op(ilop),index(i),arg(arg){}
     };
 
     struct MilObject

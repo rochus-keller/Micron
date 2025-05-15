@@ -14,7 +14,8 @@ SOURCES += \
     $$PWD/oakwood/Input+.c \
     $$PWD/oakwood/MathL+.c \
     $$PWD/oakwood/Out+.c \
-    $$PWD/MilVmCode.cpp
+    $$PWD/MilVmCode.cpp \
+    $$PWD/MilVmOakwood.cpp
 
 HEADERS += \
     MilLexer.h \
@@ -27,4 +28,5 @@ HEADERS += \
     MilCeeGen.h \
     MilInterpreter.h \
     $$PWD/MilVmOps.h \
-    $$PWD/MilVmCode.h
+    $$PWD/MilVmCode.h \
+    $$PWD/MilVmOakwood.h

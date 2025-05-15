@@ -28,8 +28,9 @@ static void addTypeDecl(Declaration* globals, Type* t, const QByteArray& name)
     res->kind = Declaration ::TypeDecl;
     res->name = Mic::Symbol::getSymbol(name);
     res->public_ = true;
-    res->outer = globals;
+    // NO, otherwise INT32 gets a $ prefix: res->outer = globals;
     res->setType(t);
+    t->decl = res;
     globals->appendSub(res);
 }
 
@@ -510,18 +511,18 @@ Quali Declaration::toQuali() const
     if( (kind == Procedure && typebound) || kind == Field || kind == LocalDecl || kind == ParamDecl )
     {
         res.second = "." + name;
-    }else if( kind != Module )
-    {
-        res.second = name;
-        if( outer && outer->kind != Module )
-            res.second = "$" + res.second;
-    }else
+    }else if( kind == Module )
         res.first = name;
+    else if( outer && outer->kind != Module )
+        res.second = "$" + name;
+    else
+        res.second = name;
+
     if( outer )
     {
         Quali tmp = outer->toQuali();
         res.first = tmp.first + res.first;
-        res.second = tmp.second;
+        res.second = tmp.second + res.second;
     }
     return res;
 }
@@ -942,9 +943,12 @@ Quali Type::toQuali() const
 {
     if( kind == NameRef )
     {
-        Q_ASSERT(quali);
-        return *quali;
-    }else if( decl )
+        if( quali )
+            return *quali;
+        else if( type )
+            return type->toQuali();
+    }
+    if( decl )
         return decl->toQuali();
     else
         return Quali();

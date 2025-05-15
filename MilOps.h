@@ -67,6 +67,11 @@ enum IL_op
 
 extern const char* s_opName[];
 
+static inline bool isExprOp(IL_op op)
+{
+    return op > IL_EXPRESSIONS && op < IL_STATEMENTS;
+}
+
 }
 
 #endif // MICMILOPS_H

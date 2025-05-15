@@ -20,14 +20,81 @@
 #include "MicMilLoader2.h"
 #include "MicSymbol.h"
 #include "MilOps.h"
-#include "MilTokenType.h"
+#include "MilParser2.h"
+#include "MilLexer.h"
+#include "MilValidator.h"
 #include <QtDebug>
 using namespace Mic;
 using namespace Mil;
 
+class Lex : public Scanner2
+{
+public:
+    Lexer lex;
+    Token next()
+    {
+        return lex.nextToken();
+    }
+
+    Token peek(int offset)
+    {
+        return lex.peekToken(offset);
+    }
+
+    QString sourcePath() const
+    {
+        return lex.getSourcePath();
+    }
+};
+
+static inline QByteArray format(const MilQuali& q )
+{
+    if( !q.first.isEmpty() )
+        return q.first + "!" + q.second;
+    else
+        return q.second;
+}
+
 MilLoader2::MilLoader2()
 {
 
+}
+
+Declaration* MilLoader2::loadFromFile(const QString& file)
+{
+    Lex lex;
+    lex.lex.setStream(file);
+    Parser2 p(&mdl, &lex, this);
+    qDebug() << "**** parsing" << file;
+    Declaration* module = 0;
+    if( p.parseModule() ) // we only parse one module here
+    {
+        if( !p.errors.isEmpty() )
+        {
+            foreach( const Parser2::Error& e, p.errors )
+                qCritical() << e.path << e.row << e.col << e.msg;
+            p.errors.clear();
+        }else
+        {
+            module = p.takeModule();
+            qDebug() << "module" << module->name;
+            Validator v(&mdl);
+            if( !v.validate(module) )
+            {
+                foreach( const Validator::Error& e, v.errors )
+                    qCritical() << e.where << e.pos.d_row << e.pos.d_col << e.pc << e.msg;
+                v.errors.clear();
+                delete module;
+                module = 0;
+            }
+            if( module && !mdl.addModule(module) )
+            {
+                delete module;
+                module = 0;
+            }
+        }
+    }
+    return 0;
 }
 
 static void visitImports(AstModel* loader, Declaration* top, QList<Declaration*>& res )
@@ -35,10 +102,11 @@ static void visitImports(AstModel* loader, Declaration* top, QList<Declaration*>
     Declaration* sub = top->subs;
     while(sub)
     {
-        if( res.contains(sub) )
-            continue;
-        visitImports(loader, sub, res);
-        res.append(sub);
+        if( sub->kind == Declaration::Import && !res.contains(sub->imported) )
+        {
+            res.append(sub->imported);
+            visitImports(loader, sub->imported, res);
+        }
         sub = sub->next;
     }
 }
@@ -57,39 +125,74 @@ QList<Declaration*> MilLoader2::getModulesInDependencyOrder()
     return res;
 }
 
-InMemRenderer2::InMemRenderer2(MilLoader2* loader):loader(loader), module(0), type(0)
+InMemRenderer2::InMemRenderer2(MilLoader2* loader):loader(loader), module(0), type(0), curProc(0)
 {
     Q_ASSERT( loader );
 }
 
 void InMemRenderer2::beginModule(const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& mp)
 {
+    hasError = false;
     module = new Declaration();
     module->kind = Declaration::Module;
-    if( !loader->mdl.addModule(module) )
-        qWarning() << "cannot add module" << moduleName;
     module->name = moduleName;
     // TODO module->metaParams = mp;
 }
 
 void InMemRenderer2::endModule()
 {
-    if( module && loader->mdl.findModuleByName(module->name) != module )
+    if( hasError )
         delete module;
+    else
+    {
+        foreach( Type* t, unresolved)
+        {
+            if( t->getType() == 0 && t->quali )
+            {
+                Declaration* d = resolve(*t->quali);
+                if( d && d->kind != Declaration::TypeDecl )
+                    qCritical() << "the reference is no type declaration";
+                else if( d )
+                    t->setType(d->getType());
+            }
+        }
+        unresolved.clear();
+
+        Validator v(&loader->mdl);
+#if 1
+        if( !v.validate(module) )
+        {
+            foreach( const Validator::Error& e, v.errors )
+                qCritical() << e.where << e.pos.d_row << e.pos.d_col << e.pc << e.msg;
+            delete module;
+        }else
+#endif
+            if( !loader->mdl.addModule(module) )
+        {
+            error(QString("cannot add module: %1").arg(module->name.constData()) );
+            delete module;
+        }
+    }
+
     module = 0;
 }
 
 void InMemRenderer2::addImport(const QByteArray& path)
 {
     Q_ASSERT(module);
-    Declaration* import = new Declaration();
-    import->kind = Declaration::Import;
-    import->name = path;
-    module->appendSub(import);
-    import->imported = loader->mdl.findModuleByName(path);
-    import->outer = module;
-    if( import->imported == 0 )
-        qWarning() << "cannot import" << path;
+
+    Declaration* imported = loader->mdl.findModuleByName(path);
+    if( imported == 0 )
+        error(QString("cannot import: %1").arg(path.constData()));
+    else
+    {
+        Declaration* import = new Declaration();
+        import->kind = Declaration::Import;
+        import->name = path;
+        module->appendSub(import);
+        import->imported = imported;
+        import->outer = module;
+    }
 }
 
 void InMemRenderer2::addVariable(const MilQuali& typeRef, QByteArray name,  bool isPublic)
@@ -145,27 +248,27 @@ void InMemRenderer2::addConst(const MilQuali& typeRef, const QByteArray& name, c
     }
 }
 
-void InMemRenderer2::addProcedure(const Mic::MilProcedure& method)
+void InMemRenderer2::addProcedure(const Mic::MilProcedure& proc)
 {
     Q_ASSERT(module);
-    if( method.kind == Mic::MilProcedure::ProcType || method.kind == Mic::MilProcedure::MethType )
+    if( proc.kind == Mic::MilProcedure::ProcType || proc.kind == Mic::MilProcedure::MethType )
     {
         Type* t = new Type();
         t->kind = Type::Proc;
-        if( method.kind == Mic::MilProcedure::MethType )
+        if( proc.kind == Mic::MilProcedure::MethType )
             t->typebound = true;
-        t->setType(derefType(method.retType));
+        t->setType(derefType(proc.retType));
 
         Declaration* decl = new Declaration();
         decl->kind = Declaration::TypeDecl;
-        decl->name = method.name;
-        decl->public_ = method.isPublic;
+        decl->name = proc.name;
+        decl->public_ = proc.isPublic;
         decl->outer = module;
         module->appendSub(decl);
         decl->setType( t );
         t->decl = decl;
 
-        foreach( const MilVariable& param, method.params )
+        foreach( const MilVariable& param, proc.params )
         {
             Declaration* p = new Declaration();
             p->kind = Declaration::ParamDecl;
@@ -178,11 +281,33 @@ void InMemRenderer2::addProcedure(const Mic::MilProcedure& method)
     {
         Declaration* decl = new Declaration();
         decl->kind = Declaration::Procedure;
-        decl->name = method.name;
-        decl->public_ = method.isPublic;
+        decl->name = proc.name;
+        decl->public_ = proc.isPublic;
         decl->outer = module;
+        curProc = decl;
 
-        foreach( const MilVariable& param, method.params )
+        decl->setType( derefType(proc.retType));
+
+        switch(proc.kind)
+        {
+        case Mic::MilProcedure::Forward:
+            decl->forward = true;
+            break;
+        case Mic::MilProcedure::Extern:
+            decl->extern_ = true;
+            break;
+        case Mic::MilProcedure::Inline:
+            decl->inline_ = true;
+            break;
+        case Mic::MilProcedure::Invar:
+            decl->invar = true;
+            break;
+        case Mic::MilProcedure::ModuleInit:
+            decl->init = true;
+            break;
+        }
+
+        foreach( const MilVariable& param, proc.params )
         {
             Declaration* p = new Declaration();
             p->kind = Declaration::ParamDecl;
@@ -192,7 +317,7 @@ void InMemRenderer2::addProcedure(const Mic::MilProcedure& method)
             p->setType( derefType(param.type) );
         }
 
-        foreach( const MilVariable& local, method.locals )
+        foreach( const MilVariable& local, proc.locals )
         {
             Declaration* p = new Declaration();
             p->kind = Declaration::LocalDecl;
@@ -202,15 +327,12 @@ void InMemRenderer2::addProcedure(const Mic::MilProcedure& method)
             p->setType( derefType(local.type) );
         }
 
-        quint32 pc = 0;
-        decl->body = translateStat(method.body, pc);
-
-        if( !method.binding.isEmpty() )
+        if( !proc.binding.isEmpty() )
         {
-            Declaration* receiver = module->findSubByName(method.binding);
+            Declaration* receiver = module->findSubByName(proc.binding);
             if( receiver == 0 || receiver->kind != Declaration::TypeDecl || receiver->getType()->kind != Type::Object )
             {
-                qCritical() << "InMemRenderer2::addProcedure: invalid receiver:" << method.binding;
+                error(QString("invalid receiver: %1").arg(proc.binding.constData()));
                 delete decl;
             }else
             {
@@ -219,6 +341,10 @@ void InMemRenderer2::addProcedure(const Mic::MilProcedure& method)
             }
         }else
             module->appendSub(decl);
+
+        quint32 pc = 0;
+        decl->body = translateStat(proc.body, pc);
+        curProc = 0;
     }
 }
 
@@ -249,14 +375,7 @@ void InMemRenderer2::beginType(const QByteArray& name, bool isPublic, quint8 typ
         type->kind = Type::Object;
         type->setType(derefType(super));
         if( type->getType() == 0 && !super.second.isEmpty() )
-            qCritical() << "cannot resolve base type" << super;
-        break;
-    case MilEmitter::ProcType:
-        type->kind = Type::Proc;
-        break;
-    case MilEmitter::MethType:
-        type->kind = Type::Proc;
-        type->typebound = true;
+            error(QString("cannot resolve base type: %1").arg(format(super).constData()));
         break;
     default:
         Q_ASSERT(false);
@@ -293,11 +412,11 @@ void InMemRenderer2::addType(const QByteArray& name, bool isPublic, const MilQua
         *t->quali = baseType;
         break;
     default:
-        t->kind = Type::Array;
+        t->kind = typeKind == MilEmitter::Pointer ? Type::Pointer : Type::Array;
         t->len = len;
         t->setType(derefType(baseType));
         if( t->getType() == 0 && !baseType.second.isEmpty() )
-            qCritical() << "cannot resolve base type" << baseType;
+            error(QString("cannot resolve base type: %1").arg(format(baseType).constData()));
         break;
     }
 }
@@ -320,10 +439,10 @@ Type*InMemRenderer2::derefType(const Quali& q) const
 {
     if( q.first.isEmpty() && q.second.isEmpty() )
         return 0;
-    Declaration* type = loader->mdl.resolve(q);
+    Declaration* type = resolve(q);
     if( type && type->kind != Declaration::TypeDecl )
     {
-        qWarning() << "not a type declaration:" << type->toPath();
+        error(QString("not a type declaration: %1").arg(type->toPath().constData()));
         return 0;
     }else if( type == 0 )
     {
@@ -331,6 +450,7 @@ Type*InMemRenderer2::derefType(const Quali& q) const
         ref->kind = Type::NameRef;
         ref->quali = new Quali();
         *ref->quali = q;
+        unresolved << ref;
         return ref;
     }else
         return type->getType();
@@ -341,69 +461,88 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
     Statement* res = 0;
     while( pc < ops.size() )
     {
+        const IL_op op = (IL_op)ops[pc].op;
+
+        switch(op)
+        {
+        case IL_case:
+        case IL_do:
+        case IL_until:
+        case IL_then:
+        case IL_else:
+        case IL_end:
+            return res;
+        }
+
         Statement* tmp = new Statement();
-        tmp->kind = (IL_op)ops[pc].op;
+        tmp->kind = op;
         if( res )
             res->append(tmp);
         else
             res = tmp;
-        if( ops[pc].op > IL_EXPRESSIONS && ops[pc].op < IL_STATEMENTS )
+
+        if( op > IL_EXPRESSIONS && op < IL_STATEMENTS )
         {
             tmp->kind = (IL_op)Statement::ExprStat;
             tmp->e = translateExpr(ops, pc);
             continue;
         }
-        switch(ops[pc].op)
+
+        switch(op)
         {
-        case IL_while:
-            {
+        case IL_while: {
+                pc++;
                 tmp->e = translateExpr(ops, pc);
                 if( !expect(ops, pc, IL_do) )
                     return res;
+                pc++;
                 tmp->body = translateStat(ops, pc);
                 if( !expect(ops, pc, IL_end) )
                     return res;
             }
             break;
-        case IL_repeat:
-            {
+        case IL_repeat: {
+                pc++;
                 tmp->body = translateStat(ops, pc);
                 if( !expect(ops, pc, IL_until) )
                     return res;
+                pc++;
                 tmp->e = translateExpr(ops, pc);
                 if( !expect(ops, pc, IL_end) )
                     return res;
             }
             break;
-        case IL_loop:
-            {
+        case IL_loop: {
+                pc++;
                 tmp->body = translateStat(ops, pc);
                 if( !expect(ops, pc, IL_end) )
                     return res;
             }
             break;
-        case IL_if:
-            {
+        case IL_if: {
+                pc++;
                 tmp->e = translateExpr(ops, pc);
                 if( !expect(ops, pc, IL_then) )
                     return res;
+                pc++;
                 tmp->body = translateStat(ops, pc);
-                if( pc+1 < ops.size() && ops[pc+1].op == IL_else )
+                if( pc < ops.size() && ops[pc].op == IL_else )
                 {
                     expect(ops, pc, IL_else);
                     tmp = new Statement();
                     tmp->kind = IL_else;
                     res->append(tmp);
+                    pc++;
                     tmp->body = translateStat(ops, pc);
                 }
                 if( !expect(ops, pc, IL_end) )
                     return res;
             }
             break;
-        case IL_switch:
-            {
+        case IL_switch: {
+                pc++;
                 tmp->e = translateExpr(ops, pc);
-                while( pc+1 < ops.size() && ops[pc+1].op == IL_case )
+                while( pc < ops.size() && ops[pc].op == IL_case )
                 {
                     expect(ops, pc, IL_case);
                     CaseLabelList cll = ops[pc].arg.value<CaseLabelList>();
@@ -412,7 +551,7 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
                     tmp->kind = IL_case;
                     if( cll.isEmpty() )
                     {
-                        qCritical() << "empty case label list" << pc;
+                        error("empty case label list", pc);
                         return res;
                     }
                     tmp->e = new Expression();
@@ -425,10 +564,12 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
                         e->i = cll[i];
                         tmp->e->append(e);
                     }
+                    pc++;
                     if( !expect(ops, pc, IL_then) )
                         return res;
+                    pc++;
                     tmp->body = translateStat(ops, pc);
-                    if( pc+1 < ops.size() && ops[pc+1].op == IL_else )
+                    if( pc < ops.size() && ops[pc].op == IL_else )
                     {
                         expect(ops, pc, IL_else);
                         tmp = new Statement();
@@ -441,8 +582,6 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
                 }
             }
             break;
-        case IL_end:
-            return res;
         case IL_goto:
             tmp->name = ops[pc].arg.toByteArray();
             break;
@@ -452,10 +591,6 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
         case IL_line:
             tmp->id = ops[pc].arg.toUInt();
             break;
-        case IL_pop:
-            break;
-        case IL_ret:
-            break;
         case IL_starg:
             tmp->id = ops[pc].arg.toUInt();
             break;
@@ -463,61 +598,29 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
             tmp->id = ops[pc].arg.toUInt();
             break;
         case IL_stelem:
-            tmp->d = loader->mdl.resolve(ops[pc].arg.value<MilQuali>());
+            tmp->d = resolve(ops[pc].arg.value<MilQuali>());
             if( tmp->d == 0 || tmp->d->kind != Declaration::TypeDecl)
             {
-                qCritical() << "invalid type declaration reference at pc" << pc;
+                error("invalid type declaration reference",pc);
                 return res;
             }
-            break;
-        case IL_stelem_i1:
-            break;
-        case IL_stelem_i2:
-            break;
-        case IL_stelem_i4:
-            break;
-        case IL_stelem_i8:
-            break;
-        case IL_stelem_r4:
-            break;
-        case IL_stelem_r8:
-            break;
-        case IL_stelem_ip:
-            break;
-        case IL_stelem_ipp:
             break;
         case IL_stfld: {
                 MilTrident td = ops[pc].arg.value<MilTrident>();
                 Declaration* d = derefTrident(td);
                 if( d == 0 || d->kind != Declaration::Field)
                 {
-                    qCritical() << "invalid field declaration reference at pc" << pc;
+                    error("invalid field declaration reference",pc);
                     return res;
                 }
             } break;
         case IL_stind:
-            tmp->d = loader->mdl.resolve(ops[pc].arg.value<MilQuali>());
+            tmp->d = resolve(ops[pc].arg.value<MilQuali>());
             if( tmp->d == 0 || tmp->d->kind != Declaration::TypeDecl)
             {
-                qCritical() << "invalid type declaration reference at pc" << pc;
+                error("invalid type declaration reference", pc);
                 return res;
             }
-            break;
-        case IL_stind_i1:
-            break;
-        case IL_stind_i2:
-            break;
-        case IL_stind_i4:
-            break;
-        case IL_stind_i8:
-            break;
-        case IL_stind_r4:
-            break;
-        case IL_stind_r8:
-            break;
-        case IL_stind_ip:
-            break;
-        case IL_stind_ipp:
             break;
         case IL_stloc:
             tmp->id = ops[pc].arg.toUInt();
@@ -525,33 +628,51 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
         case IL_stloc_s:
             tmp->id = ops[pc].arg.toUInt();
             break;
-        case IL_stloc_0:
-            break;
-        case IL_stloc_1:
-            break;
-        case IL_stloc_2:
-            break;
-        case IL_stloc_3:
-            break;
-        case IL_strcpy:
-            break;
         case IL_stvar:
-            tmp->d = loader->mdl.resolve(ops[pc].arg.value<MilQuali>());
+            tmp->d = resolve(ops[pc].arg.value<MilQuali>());
             if( tmp->d == 0 || tmp->d->kind != Declaration::VarDecl)
             {
-                qCritical() << "invalid variable declaration reference at pc" << pc;
+                error("invalid variable declaration reference",pc);
                 return res;
             }
             break;
-        case IL_case:
-        case IL_do:
-        case IL_until:
-        case IL_then:
-        case IL_else:
+        case IL_stloc_1:
+            tmp->id = 1;
+            break;
+        case IL_stloc_2:
+            tmp->id = 2;
+            break;
+        case IL_stloc_3:
+            tmp->id = 3;
+            break;
+        case IL_stloc_0:
+        case IL_stind_i1:
+        case IL_stind_i2:
+        case IL_stind_i4:
+        case IL_stind_i8:
+        case IL_stind_r4:
+        case IL_stind_r8:
+        case IL_stind_ip:
+        case IL_stind_ipp:
+        case IL_stelem_i1:
+        case IL_stelem_i2:
+        case IL_stelem_i4:
+        case IL_stelem_i8:
+        case IL_stelem_r4:
+        case IL_stelem_r8:
+        case IL_stelem_ip:
+        case IL_stelem_ipp:
+        case IL_pop:
+        case IL_ret:
+        case IL_strcpy:
+        case IL_free:
+        case IL_exit:
+            break;
         default:
-            qCritical() << "unexpected operation" << s_opName[ops[pc].op] << "at pc" << pc;
+            error(QString("unexpected operation '%1'").arg(s_opName[ops[pc].op]), pc);
             return res;
         }
+        pc++;
     }
     return res;
 }
@@ -559,7 +680,7 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
 Expression* InMemRenderer2::translateExpr(const QList<MilOperation>& ops, quint32& pc)
 {
     Expression* res = 0;
-    while(pc < ops.size() )
+    while(pc < ops.size() && isExprOp((IL_op)ops[pc].op) )
     {
         Expression* tmp = new Expression();
         tmp->kind = (IL_op)ops[pc].op;
@@ -571,6 +692,29 @@ Expression* InMemRenderer2::translateExpr(const QList<MilOperation>& ops, quint3
 
         switch(ops[pc].op)
         {
+        case IL_iif: {
+                pc++;
+                tmp->e = translateExpr(ops, pc);
+                if( !expect(ops, pc, IL_then) )
+                    return res;
+                pc++;
+                Expression* res2 = new Expression();
+                res2->kind = IL_then;
+                res2->e = translateExpr(ops, pc);
+                tmp->next = res2;
+
+                if( !expect(ops, pc, IL_else) )
+                    return res;
+                pc++;
+                Expression* res3 = new Expression();
+                res3->kind = IL_else;
+                res3->e = translateExpr(ops, pc);
+                res2->next = res3;
+
+                if( !expect(ops, pc, IL_end) )
+                    return res;
+            }
+            break;
         case IL_call:
         case IL_calli:
         case IL_callvi:
@@ -587,25 +731,28 @@ Expression* InMemRenderer2::translateExpr(const QList<MilOperation>& ops, quint3
         case IL_newvla:
         case IL_newarr:
         case IL_ptroff:
-        case IL_sizeof:
-            tmp->d = loader->mdl.resolve(ops[pc].arg.value<MilQuali>());
-            if(tmp->d == 0)
-            {
-                qCritical() << "cannot resolve qualident at pc" << pc;
-                return res;
-            }
-            break;
+        case IL_sizeof: {
+                MilQuali q = ops[pc].arg.value<MilQuali>();
+                tmp->d = resolve(q);
+                if(tmp->d == 0)
+                {
+                    error(QString("cannot resolve qualident: %1").arg(format(q).constData()),pc++);
+                    return res;
+                }
+            } break;
         case IL_callvirt:
         case IL_ldfld:
         case IL_ldflda:
-        case IL_ldmeth:
-            tmp->d = derefTrident(ops[pc].arg.value<MilTrident>());
-            if(tmp->d == 0 )
-            {
-                qCritical() << "cannot resolve trident at pc" << pc;
-                return res;
-            }
-            break;
+        case IL_ldmeth: {
+                MilTrident td = ops[pc].arg.value<MilTrident>();
+                tmp->d = derefTrident(td);
+                if(tmp->d == 0 )
+                {
+                    error(QString("cannot resolve trident: %1.%2").arg(format(td.first).constData()).
+                          arg(td.second.constData()), pc++);
+                    return res;
+                }
+            } break;
         case IL_ldarg_s:
         case IL_ldarg:
         case IL_ldarga_s:
@@ -621,12 +768,65 @@ Expression* InMemRenderer2::translateExpr(const QList<MilOperation>& ops, quint3
         case IL_ldstr: {
             Constant* c = new Constant();
             c->kind = Constant::S;
-            QByteArray str = ops[pc].arg.toByteArray();
-            str = str.mid(1, str.size()-2); // dequote
+            const QByteArray str = ops[pc].arg.toByteArray();
             c->s = (char*)malloc( str.size() + 1);
             strcpy(c->s, str.constData());
             tmp->c = c;
             }
+            break;
+        case IL_ldc_i4:
+        case IL_ldc_i8:
+        case IL_ldc_i4_s:
+            tmp->i = ops[pc].arg.toLongLong();
+            break;
+        case IL_ldc_r4:
+        case IL_ldc_r8:
+            tmp->f = ops[pc].arg.toDouble();
+            break;
+        case IL_ldarg_1:
+            tmp->id = 1;
+            break;
+        case IL_ldarg_2:
+            tmp->id = 2;
+            break;
+        case IL_ldarg_3:
+            tmp->id = 3;
+            break;
+        case IL_ldc_i4_1:
+            tmp->i = 1;
+            break;
+        case IL_ldloc_1:
+            tmp->id = 1;
+            break;
+        case IL_ldloc_2:
+            tmp->id = 2;
+            break;
+        case IL_ldloc_3:
+            tmp->id = 3;
+            break;
+        case IL_ldc_i4_2:
+            tmp->i = 2;
+            break;
+        case IL_ldc_i4_3:
+            tmp->i = 3;
+            break;
+        case IL_ldc_i4_4:
+            tmp->i = 4;
+            break;
+        case IL_ldc_i4_5:
+            tmp->i = 5;
+            break;
+        case IL_ldc_i4_6:
+            tmp->i = 6;
+            break;
+        case IL_ldc_i4_7:
+            tmp->i = 7;
+            break;
+        case IL_ldc_i4_8:
+            tmp->i = 8;
+            break;
+        case IL_ldc_i4_m1:
+            tmp->i = -1;
             break;
         }
 
@@ -637,10 +837,10 @@ Expression* InMemRenderer2::translateExpr(const QList<MilOperation>& ops, quint3
 
 bool InMemRenderer2::expect(const QList<MilOperation>& ops, quint32& pc, int op)
 {
-    pc++;
+    // pc is not changed in here!
     if( pc >= ops.size() || ops[pc].op != op )
     {
-        qCritical() << "expecting" << s_opName[op] << "at pc" << pc;
+        error(QString("expecting '%1', instead got '%2'").arg(s_opName[op]).arg(s_opName[ops[pc].op]), pc);
         return false;
     }else
         return true;
@@ -648,11 +848,36 @@ bool InMemRenderer2::expect(const QList<MilOperation>& ops, quint32& pc, int op)
 
 Declaration*InMemRenderer2::derefTrident(const MilTrident& td) const
 {
-    Declaration* d = loader->mdl.resolve(td.first);
+    Declaration* d = resolve(td.first);
     if( d == 0 || d->kind != Declaration::TypeDecl || d->getType() == 0)
         return 0;
     d = d->getType()->findSubByName(td.second);
     return d;
+}
+
+Declaration*InMemRenderer2::resolve(const Quali& q) const
+{
+    if( q.first.isEmpty() )
+    {
+        Declaration* res = module->findSubByName(q.second);
+        if( res == 0 )
+            res = loader->mdl.getGlobals()->findSubByName(q.second);
+        return res;
+    }else
+        return loader->mdl.resolve(q);
+}
+
+void InMemRenderer2::error(const QString& msg, int pc) const
+{
+    QByteArray where;
+    if( curProc )
+        where = curProc->toPath();
+    else if( module )
+        where = module->toPath();
+    if( pc >= 0 )
+        where += " pc " + QByteArray::number(pc);
+    qCritical() << where.constData() << msg.toUtf8().constData();
+    hasError = true;
 }
 
 static void renderType(const Declaration* d, MilRenderer* r)
@@ -692,14 +917,22 @@ static void renderType(const Declaration* d, MilRenderer* r)
                 proc.kind = Mic::MilProcedure::MethType;
             else
                 proc.kind = Mic::MilProcedure::ProcType;
-            // TODO proc.params = d->fields;
+
+            foreach( Declaration* sub, t->subs )
+            {
+                MilVariable param;
+                param.name = sub->name;
+                param.type = sub->getType()->toQuali();
+                proc.params.append(param);
+            }
+
             if( t->getType() )
                 proc.retType = t->getType()->toQuali();
             r->addProcedure(proc);
         }
         break;
     case Type::NameRef:
-        r->addType(d->name,d->public_,t->getType()->toQuali(),MilEmitter::Alias);
+        r->addType(d->name,d->public_,t->toQuali(),MilEmitter::Alias);
         break;
     case Type::Pointer:
         r->addType(d->name,d->public_,t->getType()->toQuali(),MilEmitter::Pointer);
@@ -722,6 +955,236 @@ static void renderConst(const Declaration* v, MilRenderer* r)
     r->addConst(v->getType()->toQuali(),v->name,v->c->toVariant()); // TODO: handle constructors
 }
 
+static void renderExprs(MilProcedure& proc, Expression* e)
+{
+    while(e)
+    {
+        switch(e->kind)
+        {
+        case IL_call:
+        case IL_calli:
+        case IL_callvi:
+        case IL_castptr:
+        case IL_initobj:
+        case IL_isinst:
+        case IL_ldelema:
+        case IL_ldelem:
+        case IL_ldind:
+        case IL_ldproc:
+        case IL_ldvar:
+        case IL_ldvara:
+        case IL_newobj:
+        case IL_newvla:
+        case IL_newarr:
+        case IL_ptroff:
+        case IL_sizeof: {
+                MilQuali q = e->d->toQuali();
+                proc.body << MilOperation(e->kind, QVariant::fromValue(q));
+            } break;
+        case IL_callvirt:
+        case IL_ldfld:
+        case IL_ldflda:
+        case IL_ldmeth: {
+                MilTrident td;
+                td.second = e->d->name;
+                td.first = e->d->outer->toQuali();
+                proc.body << MilOperation(e->kind, QVariant::fromValue(td));
+            } break;
+        case IL_ldarg_s:
+        case IL_ldarg:
+        case IL_ldarga_s:
+        case IL_ldarga:
+        case IL_ldloc_s:
+        case IL_ldloca_s:
+        case IL_ldloca:
+        case IL_ldloc:
+            proc.body << MilOperation(e->kind, e->id);
+            break;
+        case IL_ldobj:
+            proc.body << MilOperation(e->kind);
+            break; // MilObject TODO
+        case IL_ldstr:
+            proc.body << MilOperation(e->kind, e->c->s);
+            break;
+        case IL_ldc_i4:
+        case IL_ldc_i8:
+        case IL_ldc_i4_s:
+            proc.body << MilOperation(e->kind, e->i);
+            break;
+        case IL_ldc_r4:
+        case IL_ldc_r8:
+            proc.body << MilOperation(e->kind, e->f);
+            break;
+        case IL_iif:
+            proc.body << MilOperation(e->kind);
+            renderExprs(proc, e->e);
+            Q_ASSERT(e->next && e->next->kind == IL_then);
+            e = e->next;
+            proc.body << MilOperation(e->kind);
+            renderExprs(proc, e->e);
+            Q_ASSERT(e->next && e->next->kind == IL_else);
+            e = e->next;
+            proc.body << MilOperation(e->kind);
+            renderExprs(proc, e->e);
+            proc.body << MilOperation(IL_end);
+           break;
+        default:
+            proc.body << MilOperation(e->kind);
+            break;
+        }
+
+        e = e->next;
+    }
+}
+
+static void renderStats(MilProcedure& proc, Statement* s)
+{
+    while(s)
+    {
+        if( s->kind == Statement::ExprStat )
+        {
+            renderExprs(proc, s->e);
+        }else
+        {
+            switch( s->kind )
+            {
+            case IL_while:
+                proc.body << MilOperation(IL_while);
+                renderExprs(proc, s->e);
+                proc.body << MilOperation(IL_do);
+                renderStats(proc, s->body);
+                proc.body << MilOperation(IL_end);
+                break;
+            case IL_repeat:
+                proc.body << MilOperation(IL_repeat);
+                renderStats(proc, s->body);
+                proc.body << MilOperation(IL_until);
+                renderExprs(proc, s->e);
+                proc.body << MilOperation(IL_end);
+                break;
+            case IL_loop:
+                proc.body << MilOperation(IL_loop);
+                renderStats(proc, s->body);
+                proc.body << MilOperation(IL_end);
+                break;
+            case IL_if:
+                proc.body << MilOperation(IL_if);
+                renderExprs(proc, s->e);
+                proc.body << MilOperation(IL_then);
+                renderStats(proc, s->body);
+                if( s->next && s->next->kind == IL_else )
+                {
+                    s = s->next;
+                    proc.body << MilOperation(IL_else);
+                    renderStats(proc, s->body);
+                }
+                proc.body << MilOperation(IL_end);
+                break;
+            case IL_switch:
+                proc.body << MilOperation(IL_repeat);
+                renderExprs(proc, s->e);
+                while( s->next && s->next->kind == IL_case )
+                {
+                    s = s->next;
+                    CaseLabelList cll;
+                    Expression* e = s->e;
+                    while(e)
+                    {
+                        cll << e->i;
+                        e = e->next;
+                    }
+                    proc.body << MilOperation(IL_case, QVariant::fromValue(cll));
+                    renderStats(proc, s->body);
+                }
+                if( s->next && s->next->kind == IL_else )
+                {
+                    s = s->next;
+                    proc.body << MilOperation(IL_else);
+                    renderStats(proc, s->body);
+                }
+                proc.body << MilOperation(IL_end);
+                break;
+            case IL_goto:
+            case IL_label:
+                proc.body << MilOperation(s->kind, s->name);
+                break;
+            case IL_line:
+            case IL_starg:
+            case IL_starg_s:
+            case IL_stloc:
+            case IL_stloc_s:
+                proc.body << MilOperation(s->kind, s->id);
+                break;
+            case IL_stelem:
+            case IL_stind:
+            case IL_stvar:
+                proc.body << MilOperation(s->kind, QVariant::fromValue(s->d->toQuali()));
+                break;
+            case IL_stfld: {
+                    MilTrident td;
+                    td.second = s->d->name;
+                    td.first = s->d->outer->toQuali();
+                    proc.body << MilOperation(s->kind, QVariant::fromValue(td));
+                } break;
+            default:
+                proc.body << MilOperation(s->kind);
+                break;
+            }
+        }
+        s = s->next;
+    }
+}
+
+static void renderProc( const Declaration* p, MilRenderer* r)
+{
+    MilProcedure proc;
+    proc.name = p->name;
+    proc.isPublic = p->public_;
+    // TODO proc.isVararg
+
+    if( p->init )
+        proc.kind = MilProcedure::ModuleInit;
+    else if(p->extern_ )
+        proc.kind = MilProcedure::Extern;
+    else if(p->forward )
+        proc.kind = MilProcedure::Forward;
+    else if(p->inline_ )
+        proc.kind = MilProcedure::Inline;
+    else if(p->invar)
+        proc.kind = MilProcedure::Invar;
+    else
+        proc.kind = MilProcedure::Normal;
+
+    if( p->getType() )
+        proc.retType = p->getType()->toQuali();
+
+    Declaration* sub = p->subs;
+    while(sub)
+    {
+        switch( sub->kind )
+        {
+        case Declaration::ParamDecl:{
+                MilVariable param;
+                param.name = sub->name;
+                param.type = sub->getType()->toQuali();
+                proc.params.append(param);
+            } break;
+        case Declaration::LocalDecl: {
+                MilVariable local;
+                local.name = sub->name;
+                local.type = sub->getType()->toQuali();
+                proc.locals.append(local);
+            } break;
+        }
+
+        sub = sub->next;
+    }
+
+    renderStats(proc, p->body);
+
+    r->addProcedure(proc);
+}
+
 bool MilLoader2::render(MilRenderer* r, const Mil::Declaration* module)
 {
     Q_ASSERT(r && module);
@@ -739,7 +1202,7 @@ bool MilLoader2::render(MilRenderer* r, const Mil::Declaration* module)
             renderVar(sub,r);
             break;
         case Declaration::Procedure:
-            // TODO r->addProcedure(module->procs[i.second]);
+            renderProc(sub, r);
             break;
         case Declaration::Import:
             r->addImport(sub->imported->name);
@@ -752,4 +1215,10 @@ bool MilLoader2::render(MilRenderer* r, const Mil::Declaration* module)
     }
     r->endModule();
     return true;
+}
+
+Declaration*MilLoader2::loadModule(const Import& imp)
+{
+    // TODO in future parse and load mil file if not already here, using library search paths
+    return mdl.findModuleByName(imp.moduleName);
 }

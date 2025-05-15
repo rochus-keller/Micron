@@ -19,6 +19,7 @@
 
 #include "MicEiGen.h"
 #include "MicMilLoader.h"
+#include "MicMilLoader2.h"
 #if 0
 #include "MicMilInterpreter.h"
 #endif
@@ -41,6 +42,8 @@
 #include <QBuffer>
 #include <QCommandLineParser>
 #include <QTemporaryFile>
+
+#define USE_MILLOADER2
 
 class Lex2 : public Mic::Scanner2
 {
@@ -108,14 +111,22 @@ public:
     QList<QDir> searchPath;
     QString rootPath;
 
-    Manager() {}
+    Manager() {
+#ifdef USE_MILLOADER2
+        loader.loadFromFile(":/runtime/MIC+.mil");
+#endif
+    }
     ~Manager() {
         Modules::const_iterator i;
         for( i = modules.begin(); i != modules.end(); ++i )
             delete (*i).decl;
     }
 
+#ifdef USE_MILLOADER2
+    Mic::MilLoader2 loader;
+#else
     Mic::MilLoader loader;
+#endif
 
     ModuleSlot* find(const Mic::Import& imp)
     {
@@ -172,7 +183,11 @@ public:
 #endif
         Mic::EiGen r(&loader, &out);
 #else
+#ifdef USE_MILLOADER2
+        Mic::InMemRenderer2 r(&loader);
+#else
         Mic::InMemRenderer r(&loader);
+#endif
 #endif
         Lex2 lex;
         lex.sourcePath = file; // to keep file name if invalid
@@ -246,12 +261,23 @@ static void process(const QStringList& files, const QStringList& searchPaths, bo
         imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
         Mic::Declaration* module = mgr.loadModule(imp); // recursively compiles all imported files
 
+#ifdef USE_MILLOADER2
+        foreach( Mil::Declaration* m, mgr.loader.getModulesInDependencyOrder() )
+        {
+            if( m->name == "MIC$" )
+                continue;
+            Mic::IlAsmRenderer r(&milout);
+            Mic::MilLoader2::render(&r,m);
+            milout.putChar('\n');
+        }
+#else
         foreach( Mic::MilModule* m, mgr.loader.getModulesInDependencyOrder() )
         {
             Mic::IlAsmRenderer r(&milout);
             Mic::MilLoader::render(&r,m);
             milout.putChar('\n');
         }
+#endif
 
         all += mgr.modules.size();
         foreach( const ModuleSlot& m, mgr.modules )

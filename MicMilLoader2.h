@@ -27,14 +27,18 @@
 namespace Mic
 {
 
-class MilLoader2
+class MilLoader2 : public Mil::Importer
 {
 public:
     MilLoader2();
 
+    Mil::Declaration* loadFromFile( const QString& path);
     Mil::AstModel& getModel() { return mdl; }
     QList<Mil::Declaration*> getModulesInDependencyOrder();
     static bool render(MilRenderer*, const Mil::Declaration* module);
+protected:
+    Mil::Declaration* loadModule( const Mil::Import& imp );
+
 private:
     friend class InMemRenderer2;
     Mil::AstModel mdl;
@@ -72,11 +76,16 @@ protected:
     Mil::Expression* translateExpr(const QList<MilOperation>& ops, quint32& pc);
     bool expect(const QList<MilOperation>& ops, quint32& pc, int op);
     Mil::Declaration* derefTrident(const MilTrident& ) const;
+    Mil::Declaration* resolve(const Mil::Quali&) const;
+    void error(const QString&, int pc = -1) const;
 
 private:
     MilLoader2* loader;
     Mil::Declaration* module;
     Mil::Type* type;
+    Mil::Declaration* curProc;
+    mutable QList<Mil::Type*> unresolved;
+    mutable bool hasError;
 };
 
 }

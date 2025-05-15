@@ -868,6 +868,8 @@ Declaration* Parser2::qualident(Quali* q) {
         if( q )
             q->first = cur.d_val;
         m = mdl->findModuleByName(cur.d_val);
+        if( m == 0 && cur.d_val.constData() == curMod->name.constData() )
+            m = curMod;
         if( m == 0 && q == 0 )
             error(cur,QString("cannot find module '%1'").arg(cur.d_val.constData()));
 		expect(Tok_Bang, false, "qualident");
@@ -891,6 +893,8 @@ Declaration* Parser2::qualident2(const Quali& q, const RowCol& pos) {
     if( !q.first.isEmpty() )
     {
         m = mdl->findModuleByName(q.first);
+        if( m == 0 && q.first.constData() == curMod->name.constData() )
+            m = curMod;
         if( m == 0 )
             error(pos,QString("cannot find module '%1'").arg(q.first.constData()));
     }
@@ -908,6 +912,8 @@ Declaration* Parser2::trident() {
     if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Bang )  ) {
 		expect(Tok_ident, false, "trident");
         m = mdl->findModuleByName(cur.d_val);
+        if( m == 0 && cur.d_val.constData() == curMod->name.constData() )
+            m = curMod;
         if( m == 0 )
         {
             error(cur,QString("cannot find module '%1'").arg(cur.d_val.constData()));
