@@ -15,12 +15,10 @@ DEFINES += _DEBUG
 include(MicParser.pri)
 
 SOURCES += \
-    MicMain.cpp \
-    MicEiGen.cpp
+    MicMain.cpp
     #MicCilGen.cpp \
 
-HEADERS += \
-    MicEiGen.h
+HEADERS +=
     #MicCilGen.h \
 
 

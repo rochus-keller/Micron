@@ -17,14 +17,11 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
-#include "MicEiGen.h"
-#include "MicMilLoader.h"
 #include "MicMilLoader2.h"
-#if 0
-#include "MicMilInterpreter.h"
-#endif
 #include "MicAst.h"
-#include "MilProject.h"
+#include "MilInterpreter.h"
+#include "MilVmCode.h"
+#include "MilVmOakwood.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -39,11 +36,7 @@
 #include <MilLexer.h>
 #include <MilParser.h>
 #include <MilToken.h>
-#include <QBuffer>
 #include <QCommandLineParser>
-#include <QTemporaryFile>
-
-#define USE_MILLOADER2
 
 class Lex2 : public Mic::Scanner2
 {
@@ -112,9 +105,7 @@ public:
     QString rootPath;
 
     Manager() {
-#ifdef USE_MILLOADER2
         loader.loadFromFile(":/runtime/MIC+.mil");
-#endif
     }
     ~Manager() {
         Modules::const_iterator i;
@@ -122,11 +113,7 @@ public:
             delete (*i).decl;
     }
 
-#ifdef USE_MILLOADER2
     Mic::MilLoader2 loader;
-#else
-    Mic::MilLoader loader;
-#endif
 
     ModuleSlot* find(const Mic::Import& imp)
     {
@@ -181,13 +168,8 @@ public:
         QFile out;
         out.open(stdout, QIODevice::WriteOnly);
 #endif
-        Mic::EiGen r(&loader, &out);
 #else
-#ifdef USE_MILLOADER2
         Mic::InMemRenderer2 r(&loader);
-#else
-        Mic::InMemRenderer r(&loader);
-#endif
 #endif
         Lex2 lex;
         lex.sourcePath = file; // to keep file name if invalid
@@ -235,87 +217,75 @@ public:
     }
 };
 
-static void process(const QStringList& files, const QStringList& searchPaths, bool run, bool dump)
+static void process(const QString& file, const QStringList& searchPaths, bool run, bool dumpIL, bool dumpLL)
 {
     int ok = 0;
     int all = 0;
     QElapsedTimer timer;
     timer.start();
 
-    QBuffer milout;
-    milout.open(QIODevice::WriteOnly);
+    Manager mgr;
 
-    foreach( const QString& file, files )
+    QFileInfo info(file);
+    mgr.rootPath = info.absolutePath();
+    mgr.searchPath.append(info.absoluteDir());
+
+    for( int i = 0; i < searchPaths.size(); i++ )
     {
-        Manager mgr;
-        QFileInfo info(file);
-        mgr.rootPath = info.absolutePath();
-        mgr.searchPath.append(info.absoluteDir());
-        for( int i = 0; i < searchPaths.size(); i++ )
-        {
-            const QString path = searchPaths[i];
-            mgr.searchPath.append(path);
-        }
-
-        Mic::Import imp;
-        imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
-        Mic::Declaration* module = mgr.loadModule(imp); // recursively compiles all imported files
-
-#ifdef USE_MILLOADER2
-        foreach( Mil::Declaration* m, mgr.loader.getModulesInDependencyOrder() )
-        {
-            if( m->name == "MIC$" )
-                continue;
-            Mic::IlAsmRenderer r(&milout);
-            Mic::MilLoader2::render(&r,m);
-            milout.putChar('\n');
-        }
-#else
-        foreach( Mic::MilModule* m, mgr.loader.getModulesInDependencyOrder() )
-        {
-            Mic::IlAsmRenderer r(&milout);
-            Mic::MilLoader::render(&r,m);
-            milout.putChar('\n');
-        }
-#endif
-
-        all += mgr.modules.size();
-        foreach( const ModuleSlot& m, mgr.modules )
-            ok += m.decl ? 1 : 0;
-#if 0
-        if( run && module )
-        {
-            Mic::MilInterpreter intp(&mgr.loader);
-            intp.run(imp.path.back());
-        }
-#endif
+        const QString path = searchPaths[i];
+        mgr.searchPath.append(path);
     }
+
+    Mic::Import imp;
+    imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
+    mgr.loadModule(imp); // recursively compiles all required files
+
+
+    all += mgr.modules.size();
+    foreach( const ModuleSlot& m, mgr.modules )
+        ok += m.decl ? 1 : 0;
+
     Mic::Expression::killArena();
     Mic::AstModel::cleanupGlobals();
-    qDebug() << "#### finished with" << ok << "files ok of total" << all << "files" << "in" << timer.elapsed() << " [ms]";
+    qDebug() << "#### finished with" << ok << "modules ok of total" << all << "modules" << "in" << timer.elapsed() << " [ms]";
 
-    milout.close();
-
-    if( dump )
+    if( dumpIL )
     {
         QFile out;
         out.open(stdout, QIODevice::WriteOnly);
         out.write("\n");
-        out.write(milout.buffer());
+        foreach( Mil::Declaration* m, mgr.loader.getModulesInDependencyOrder() )
+        {
+            if( m->name == "MIC$" )
+                continue;
+            Mic::IlAsmRenderer r(&out);
+            Mic::MilLoader2::render(&r,m);
+            out.putChar('\n');
+        }
     }
     if( all == ok && run )
     {
-        QTemporaryFile out;
-        out.open();
-        out.write(milout.buffer());
-        Mil::AstModel mdl;
-        Mil::Project pro(&mdl);
-        pro.setFiles(QStringList() << out.fileName());
-        out.flush();
+        Mil::Interpreter r(&mgr.loader.getModel());
 
-        const bool result = pro.parse();
-        if( result )
-            pro.interpret(true);
+        Mil::VmOakwood::addTo(&r);
+
+        mgr.loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
+
+        foreach( Mil::Declaration* module, mgr.loader.getModel().getModules() )
+        {
+            if( !r.precompile(module) )
+                return;
+        }
+        if( dumpLL )
+        {
+            QTextStream out(stdout);
+            r.dumpAll(out);
+        }
+        foreach( Mil::Declaration* module, mgr.loader.getModel().getModules() )
+        {
+            if( !r.run(module) )
+                break;
+        }
     }
 }
 
@@ -335,6 +305,8 @@ int main(int argc, char *argv[])
     cp.addOption(run);
     QCommandLineOption dump("d", "dump MIL code");
     cp.addOption(dump);
+    QCommandLineOption dump2("l", "dump interpreter low-level bytecode");
+    cp.addOption(dump2);
 
     cp.process(a);
     const QStringList args = cp.positionalArguments();
@@ -342,7 +314,8 @@ int main(int argc, char *argv[])
         return -1;
     const QStringList searchPaths = cp.values(sp);
 
-    process(args, searchPaths, cp.isSet(run), cp.isSet(dump));
+    // TODO: what to do with more than one file?
+    process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2));
 
     return 0;
 }

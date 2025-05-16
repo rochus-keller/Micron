@@ -455,6 +455,21 @@ bool Interpreter::precompile(Declaration* proc)
     return imp->code.compile(module);
 }
 
+bool Interpreter::dumpProc(QTextStream& out, Declaration* proc)
+{
+    return imp->code.dumpProc(out, proc);
+}
+
+bool Interpreter::dumpModule(QTextStream& out, Declaration* module)
+{
+    return imp->code.dumpModule(out, module);
+}
+
+bool Interpreter::dumpAll(QTextStream& out)
+{
+    return imp->code.dumpAll(out);
+}
+
 bool Interpreter::run(Declaration* proc)
 {
     Q_ASSERT(proc && (proc->kind == Declaration::Procedure || proc->kind == Declaration::Module));

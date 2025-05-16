@@ -336,11 +336,28 @@ void InMemRenderer2::addProcedure(const Mic::MilProcedure& proc)
                 delete decl;
             }else
             {
-                receiver->getType()->subs.append(decl);
+                Type* rt = receiver->getType();
+                Declaration* forward = rt->findSubByName(decl->name, false);
+                if( forward && forward->forward && forward->kind == Declaration::Procedure )
+                {
+                    forward->name.clear();
+                    forward->forwardTo = decl;
+                }else if( forward )
+                    error(QString("duplicate name: %1").arg(decl->name.constData()));
+                rt->subs.append(decl);
                 decl->outer = receiver;
             }
         }else
+        {
+            Declaration* forward = module->findSubByName(decl->name);
+            if( forward && forward->forward && forward->kind == Declaration::Procedure )
+            {
+                forward->name.clear();
+                forward->forwardTo = decl;
+            }else if( forward )
+                error(QString("duplicate name: %1").arg(decl->name.constData()));
             module->appendSub(decl);
+        }
 
         quint32 pc = 0;
         decl->body = translateStat(proc.body, pc);
