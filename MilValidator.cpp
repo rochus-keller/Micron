@@ -122,9 +122,20 @@ void Validator::visitProcedure(Declaration* proc)
                  deref(deref(params.first()->getType())->getType()) != proc->outer->getType() ) )
             error(params.first()->pos, "the SELF parameter must be a pointer to the bound object type");
     }
+    gotos.clear(); labels.clear();
     visitStatSeq(proc->body);
     if( !stack.isEmpty() )
         error(proc->pos, "stack not empty at the end of the procedure");
+
+    foreach( const NamePos& np, gotos )
+    {
+        const int label = findLabel(np.name->name);
+        if( label == -1 )
+            error(np.name->pos, QString("cannot find label: '%1'").arg(np.name->name));
+        else if( !np.pos.contains( labels[label].pos.last() ) )
+            error(np.name->pos, QString("cannot cannot jump to this label: '%1'").arg(np.name->name));
+    }
+
     curProc = 0;
 }
 
@@ -138,6 +149,8 @@ static inline bool isInt32(Type* t)
 
 void Validator::visitStatSeq(Statement* stat)
 {
+    blockStack.push_back(stat);
+
     while(stat)
     {
         switch(stat->kind)
@@ -168,11 +181,18 @@ void Validator::visitStatSeq(Statement* stat)
                 }
             }
             break;
-        case IL_exit:
         case IL_goto:
+            gotos << NamePos(stat, blockStack);
+            break;
         case IL_label:
+            labels << NamePos(stat, blockStack);
+            break;
         case IL_line:
             expectN(0, stat); // TODO
+            break;
+        case IL_exit:
+            if( loopStack.isEmpty() )
+                error(stat->pos, "exit requires enclosing loop");
             break;
         case IL_pop:
             expectN(1, stat); // we have no reference type information to check here
@@ -362,7 +382,7 @@ void Validator::visitStatSeq(Statement* stat)
             break;
         case IL_switch:
             expectN(0, stat);
-            stat = visitSwitch(stat); // TODO
+            stat = visitSwitch(stat);
             break;
         case IL_while:
             expectN(0, stat);
@@ -372,8 +392,13 @@ void Validator::visitStatSeq(Statement* stat)
             error(stat->pos, QString("unexpected statement operator '%1'").arg(s_opName[stat->kind]));
             break;
         }
+        if( stat->kind != Statement::ExprStat && stack.size() != 0 )
+            error(stat->pos,QString("evaluation stack not empty after statement"));
+
         stat = nextStat(stat);
     }
+
+    blockStack.pop_back();
 }
 
 Statement* Validator::visitIfThenElse(Statement* stat)
@@ -397,7 +422,9 @@ Statement* Validator::visitIfThenElse(Statement* stat)
 void Validator::visitLoop(Statement* stat)
 {
     Q_ASSERT( stat && stat->kind == IL_loop );
+    loopStack.push_back(stat);
     visitStatSeq(stat->body);
+    loopStack.pop_back();
     pc++; // END
 }
 
@@ -418,10 +445,21 @@ Statement*Validator::visitSwitch(Statement* stat)
     Q_ASSERT( stat && stat->kind == IL_switch );
     visitExpr(stat->e);
     expectN(1, stat);
+    Type* t = deref(stat->args->getType());
+    if( !isInt32(t) && !t->isInt64() )
+        error(stat->pos,"expecting a 32 or 64 bit integer expression");
     while( stat->next && stat->next->kind == IL_case )
     {
         stat = nextStat(stat);
-        // stat->e is a list of integers, each as an Expression
+        Expression* e = stat->e;
+        while( e )
+        {
+            // stat->e is a list of integers, each as an Expression
+            Type* tt = deref(e->getType());
+            if( !isInt32(tt) && !tt->isInt64() )
+                error(stat->pos,"expecting a 32 or 64 bit integer expression");
+            e = e->next;
+        }
         pc++; // THEN
         visitStatSeq(stat->body);
     }
@@ -634,6 +672,10 @@ Expression* Validator::visitExpr(Expression* e)
             stack.push_back(e);
             break;
         case IL_ldproc:
+            if( e->d && (e->d->kind != Declaration::Procedure || e->d->typebound) )
+                error(e->pos, "expecting an unbound procedure");
+            if( e->d && e->d->inline_ )
+                error(e->pos, "cannot take address of inline procedure");
             stack.push_back(e);
             break;
         case IL_ldmeth:
@@ -647,6 +689,8 @@ Expression* Validator::visitExpr(Expression* e)
                     error(e->pos, "expecting a pointer to object on the stack");
                     break;
                 }
+                if( e->d && (e->d->kind != Declaration::Procedure || !e->d->typebound) )
+                    error(e->pos, "expecting a bound procedure");
                 // TODO: check whether object on stack is compat with e->d
                 stack.back() = e; // replace the stack top with methref
             }
@@ -1149,7 +1193,7 @@ bool Validator::expectN(quint32 n, Expression* e)
 
 bool Validator::expectN(quint32 n, Statement* stat)
 {
-    if( stack.size() < n )
+    if( stack.size() != n )
     {
         error(stat->pos,QString("expecting %1 values on expression stack").arg(n));
         return false;
@@ -1508,5 +1552,15 @@ bool Validator::checkIfPointerInit(Type* t)
     default:
         return false;
     }
+}
+
+int Validator::findLabel(const char* name) const
+{
+    for( int i = 0; i < labels.size(); i++ )
+    {
+        if( labels[i].name->name == name )
+            return i;
+    }
+    return -1;
 }
 

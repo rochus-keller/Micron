@@ -2,10 +2,31 @@ module Goto
 
 proc P1()
 begin
-	if true then
-		label:
+	println("begin P1")
+	while true do
 		goto label
+		println("not printed")
 	end
+	label:
+	println("end P1")
 end P1
 
+proc P2()
+var i: integer
+begin
+	println("begin P2")
+	i := 0
+	start:
+	
+	println(i)
+	inc(i)
+	if i < 10 then goto start end
+
+	println("end P2")
+end P2
+	
+
+begin
+	P1
+	P2
 end Goto

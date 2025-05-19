@@ -36,7 +36,7 @@ static const int op_args[] = {
 };
 
 VmCode::VmCode(AstModel* mdl, quint8 pointerWidth, quint8 stackAlignment):
-    mdl(mdl),pointerWidth(pointerWidth), stackAlignment(stackAlignment), curProc(0)
+    mdl(mdl),pointerWidth(pointerWidth), stackAlignment(stackAlignment)
 {
 
 }
@@ -191,10 +191,27 @@ bool VmCode::translateProc(Procedure& proc)
     }else
     {
         Statement* s = proc.decl->body;
-        Procedure* oldProc = curProc;
-        curProc = &proc;
+        ctxStack.push_back(Context());
+        Context& ctx = ctxStack.back();
+        ctx.curProc = &proc;
         const bool res = translateStatSeq(proc, s);
-        curProc = oldProc;
+
+        foreach( const Where& pos, ctx.gotos )
+        {
+            const int label = ctx.findLabel(pos.name);
+            if( label == -1 )
+            {
+                qCritical() << "cannot find label" << pos.name;
+                return false;
+            }
+            if( ctx.labels[label].pc < pos.pc)
+            {
+                proc.ops[pos.pc].minus = true;
+                proc.ops[pos.pc].val = pos.pc + 1 - ctx.labels[label].pc;
+            }else
+                proc.ops[pos.pc].val = ctx.labels[label].pc - pos.pc - 1;
+        }
+        ctxStack.pop_back();
         return res;
     }
 }
@@ -207,8 +224,8 @@ bool VmCode::translateStatSeq(Procedure& proc, Statement* s)
         {
         case IL_starg:
             {
-                Q_ASSERT(curProc);
-                DeclList params = curProc->decl->getParams();
+                Q_ASSERT(ctxStack.back().curProc);
+                DeclList params = ctxStack.back().curProc->decl->getParams();
                 Q_ASSERT(s->id < params.size());
                 Type* t = deref(params[s->id]->getType());
                 switch(t->kind)
@@ -264,8 +281,8 @@ bool VmCode::translateStatSeq(Procedure& proc, Statement* s)
         case IL_stloc_2:
         case IL_stloc_3:
             {
-                Q_ASSERT(curProc);
-                DeclList locals = curProc->decl->getLocals();
+                Q_ASSERT(ctxStack.back().curProc);
+                DeclList locals = ctxStack.back().curProc->decl->getLocals();
                 Q_ASSERT(s->id < locals.size());
                 Type* t = deref(locals[s->id]->getType());
                 switch(t->kind)
@@ -468,7 +485,7 @@ bool VmCode::translateStatSeq(Procedure& proc, Statement* s)
             {
                 if( !translateExprSeq(proc, s->e) )
                     return false;
-                const int ifnot = emitOp(proc, deref(s->e->getType())->isInt64() ? LL_brfalse_i8 : LL_brfalse_i4);
+                const int ifnot = emitOp(proc, LL_brfalse_i4);
                 if( !translateStatSeq(proc, s->body) )
                     return false;
                 const int after_if = emitOp(proc, LL_br);
@@ -484,16 +501,16 @@ bool VmCode::translateStatSeq(Procedure& proc, Statement* s)
             break;
         case IL_loop:
             {
-                loopStack.push_back(QList<int>());
+                ctxStack.back().loopStack.push_back(QList<int>());
                 if( !translateStatSeq(proc, s->body) )
                     return false;
-                foreach( int pc, loopStack.back() )
+                foreach( int pc, ctxStack.back().loopStack.back() )
                     branch_here(proc,pc);
-                loopStack.pop_back();
+                ctxStack.back().loopStack.pop_back();
             }
             break;
         case IL_exit:
-            loopStack.back() << emitOp(proc,LL_br);
+            ctxStack.back().loopStack.back() << emitOp(proc,LL_br);
             break;
         case IL_repeat:
             {
@@ -502,7 +519,7 @@ bool VmCode::translateStatSeq(Procedure& proc, Statement* s)
                     return false;
                 if( !translateExprSeq(proc, s->e) )
                     return false;
-                emitOp(proc, s->e->getType()->isInt64() ? LL_brfalse_i8 : LL_brfalse_i4, proc.ops.size()-start+1, true );
+                emitOp(proc, LL_brfalse_i4, proc.ops.size()-start+1, true );
             }
             break;
         case IL_while:
@@ -510,7 +527,7 @@ bool VmCode::translateStatSeq(Procedure& proc, Statement* s)
                 const int start = proc.ops.size();
                 if( !translateExprSeq(proc, s->e) )
                     return false;
-                const int while_ = emitOp(proc, s->e->getType()->isInt64() ? LL_brfalse_i8 : LL_brfalse_i4 );
+                const int while_ = emitOp(proc, LL_brfalse_i4 );
                 if( !translateStatSeq(proc, s->body) )
                     return false;
                 emitOp(proc, LL_br, proc.ops.size()-start+1, true);
@@ -529,9 +546,14 @@ bool VmCode::translateStatSeq(Procedure& proc, Statement* s)
         case IL_free:
             emitOp(proc, LL_free );
             break;
-        case IL_switch:
         case IL_label:
-        case IL_goto:
+            ctxStack.back().labels << Where(s->name, proc.ops.size() );
+            break;
+        case IL_goto: {
+                const int pc = emitOp(proc, LL_br );
+                ctxStack.back().gotos << Where(s->name,pc);
+            } break;
+        case IL_switch:
             qCritical() << "ERROR: not yet implemented in interpreter:" << s_opName[s->kind];
             return false;
        default:
@@ -993,8 +1015,8 @@ bool VmCode::translateExprSeq(Procedure& proc, Expression* e)
         case IL_ldarga_s:
         case IL_ldarga:
             {
-                Q_ASSERT(curProc);
-                DeclList params = curProc->decl->getParams();
+                Q_ASSERT(ctxStack.back().curProc);
+                DeclList params = ctxStack.back().curProc->decl->getParams();
                 Q_ASSERT(e->id < params.size());
                 emitOp(proc, LL_ldarga,params[e->id]->off);
             }
@@ -1306,7 +1328,7 @@ bool VmCode::translateExprSeq(Procedure& proc, Expression* e)
             {
                 if( !translateProc(e->d) )
                     return false;
-                const int id =  findProc(e->d);
+                const int id = findProc(e->d);
                 if( id < 0 )
                 {
                     qCritical() << "cannot find implementation of" << e->d->toPath();
@@ -1328,8 +1350,7 @@ bool VmCode::translateExprSeq(Procedure& proc, Expression* e)
             {
                 if( !translateExprSeq(proc, e->e) )
                     return false;
-                const int iif = deref(e->lhs->getType())->isInt64() ?
-                            emitOp(proc,LL_brfalse_i8) : emitOp(proc,LL_brfalse_i4);
+                const int iif = emitOp(proc,LL_brfalse_i4);
                 if( !translateExprSeq(proc, e->next->e) )
                     return false;
                 const int end_of_then = emitOp(proc, LL_br);
@@ -1366,31 +1387,6 @@ bool VmCode::translateExprSeq(Procedure& proc, Expression* e)
 bool VmCode::translateInit(Procedure& proc, quint32 id)
 {
     Q_ASSERT( proc.decl && (proc.decl->kind == Declaration::Module || proc.decl->kind == Declaration::Procedure) );
-
-    Declaration* module;
-    if( proc.decl->kind == Declaration::Procedure )
-        module = proc.decl->getModule();
-    else
-        module = proc.decl;
-
-#if 0
-    DeclList vars = module->getVars();
-    if( !vars.isEmpty() )
-    {
-        const int off = moduleData.size();
-        const int len = vars.last()->off + vars.last()->getType()->getByteSize(sizeof(void*));
-        moduleData.resize(off + len + AstModel::padding(len, sizeof(void*)));
-        // relocate module var addresses, init vars if necessary
-        foreach( Declaration* d, vars )
-        {
-            Type* t = deref(d->getType());
-            d->off += off;
-            initMemory(moduleData.data()+d->off, t,true);
-        }
-    }
-#endif
-    // first check if already called
-    // proc.init = true;
 
     Declaration* d = proc.decl->subs;
     while(d)

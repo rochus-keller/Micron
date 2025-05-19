@@ -177,6 +177,7 @@ namespace Mil
             } f;
             int off;  // method vtbl slot, LocalDecl & ParamDecl offset in bytes
             Declaration* forwardTo; // Procedure if forward==true, not owned
+            Statement* finally; // Procedure if forward==false, optionally, owned
             Declaration* imported; // Import, not owned
             ToDelete* toDelete; // Module, all args to be deleted
         };

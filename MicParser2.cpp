@@ -1952,20 +1952,15 @@ void Parser2::beginFinallyEnd(bool finally)
         else
         {
             j.value().used = true;
-            if( (*i).first.size() < j.value().depth.size() )
-                error((*i).second,"goto cannot jump into a structured statement");
-            else if( !(*i).first.isEmpty() && (*i).first.size() == j.value().depth.size() &&
-                     !((*i).first.last() == j.value().depth.last()) )
-                error((*i).second,"goto cannot jump into another structured statement");
+            if( !(*i).first.contains(j.value().depth.last()) )
+                error((*i).second,"cannot jump to this label");
         }
     }
     Labels::const_iterator j;
     for( j = labels.begin(); j != labels.end(); ++j )
     {
         if( !j.value().used )
-        {
-            error(j.value().tok,"goto label declared but not used");
-        }
+            error(j.value().tok,"goto label declared but not used"); // TODO should this really be an error?
     }
     inFinally = false;
     out->toFinallySection(false);

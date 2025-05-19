@@ -130,16 +130,13 @@ InMemRenderer2::InMemRenderer2(MilLoader2* loader):loader(loader), module(0), ty
     Q_ASSERT( loader );
 }
 
-void InMemRenderer2::beginModule(const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& mp)
+InMemRenderer2::~InMemRenderer2()
 {
-    hasError = false;
-    module = new Declaration();
-    module->kind = Declaration::Module;
-    module->name = moduleName;
-    // TODO module->metaParams = mp;
+    if( module )
+        delete module;
 }
 
-void InMemRenderer2::endModule()
+void InMemRenderer2::commit()
 {
     if( hasError )
         delete module;
@@ -175,6 +172,21 @@ void InMemRenderer2::endModule()
     }
 
     module = 0;
+}
+
+void InMemRenderer2::beginModule(const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& mp)
+{
+    Q_ASSERT(module == 0);
+    hasError = false;
+    module = new Declaration();
+    module->kind = Declaration::Module;
+    module->name = moduleName;
+    // TODO module->metaParams = mp;
+}
+
+void InMemRenderer2::endModule()
+{
+    // NOP, see commit/rollback
 }
 
 void InMemRenderer2::addImport(const QByteArray& path)

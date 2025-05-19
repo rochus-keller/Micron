@@ -115,8 +115,7 @@ OPDEF(ldnull, NoOpArgs), OPDEF(ldstr, StrArg),
 OPDEF(ldobj, ByteArrayArg),
 
 OPDEF(br, JumpArg),
-OPDEF(brtrue_i4, JumpArg), OPDEF(brtrue_i8, JumpArg),
-OPDEF(brfalse_i4, JumpArg), OPDEF(brfalse_i8, JumpArg),
+OPDEF(brfalse_i4, JumpArg),
 
 OPDEF(ldproc, ProcArg), OPDEF(ldmeth, ProcArg),
 OPDEF(sizeof, 1), // TODO

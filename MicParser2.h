@@ -196,7 +196,7 @@ namespace Mic {
         QList<QPair<Type*,Token> > deferred;
         QList<RowCol> loopStack;
         typedef QList<RowCol> Depth;
-        Depth blockDepth;
+        Depth blockDepth; // stack of RowCol, top is current StatSeq
         struct Label {
             Depth depth;
             Token tok;

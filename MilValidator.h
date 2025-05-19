@@ -65,6 +65,7 @@ namespace Mil
         bool assigCompat(Type* lhs, Declaration* rhs);
         bool checkIfObjectInit(Type* t);
         bool checkIfPointerInit(Type* t);
+        int findLabel(const char* name) const;
 
     private:
         AstModel* mdl;
@@ -72,6 +73,17 @@ namespace Mil
         Declaration* curProc;
         QList<Expression*> stack;
         QList<Expression*> newExprs;
+        typedef QList<Statement*> StatList;
+        StatList loopStack, blockStack;
+
+        struct NamePos
+        {
+            Statement* name;
+            StatList pos;
+            NamePos(Statement* name, const StatList& pos):name(name),pos(pos){}
+        };
+        QList<NamePos> gotos, labels;
+
         quint32 pc;
         bool needsPointerInit;
     };

@@ -144,8 +144,8 @@ public:
     static const char* op_names[];
 
 protected:
-    bool translateModule(Declaration* m);
     bool translateProc(Declaration* proc);
+    bool translateModule(Declaration* m);
     bool translateProc(Procedure& proc);
     bool translateStatSeq(Procedure& proc, Statement* s);
     bool translateExprSeq(Procedure& proc, Expression* e);
@@ -245,10 +245,12 @@ protected:
                 return i;
         return -1;
     }
+
 private:
     const quint8 pointerWidth;
     const quint8 stackAlignment;
     AstModel* mdl;
+
     // accessing std::vector is cheaper than QVector or QByteArray
     std::vector<std::string> strings;
     std::vector< std::vector<char> > objects;
@@ -257,9 +259,30 @@ private:
     std::vector<Procedure*> procs;
     std::vector<Vtable*> vtables;
     std::vector<Template> templates;
-    QList< QList<int> > loopStack; // temp
+
+    // the following are only used during compilation:
+    struct Where {
+        const char* name;
+        int pc;
+        Where(const char* name, int pc):name(name),pc(pc){}
+    };
+    struct Context {
+        QList< QList<int> > loopStack;
+        QList<Where> gotos, labels;
+        Procedure* curProc;
+
+        int findLabel(const char* name) const
+        {
+            for( int i = 0; i < labels.size(); i++ )
+            {
+                if( labels[i].name == name )
+                    return i;
+            }
+            return -1;
+        }
+    };
+    QList<Context> ctxStack; // because translateProc is called recursively
     QMap<const char*,QMap<const char*, int> > externals;
-    Procedure* curProc;
 };
 
 }

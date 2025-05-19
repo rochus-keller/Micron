@@ -169,13 +169,13 @@ public:
         out.open(stdout, QIODevice::WriteOnly);
 #endif
 #else
-        Mic::InMemRenderer2 r(&loader);
+        Mic::InMemRenderer2 imr(&loader);
 #endif
         Lex2 lex;
         lex.sourcePath = file; // to keep file name if invalid
         lex.lex.setStream(file);
         qDebug() << "**** parsing" << QFileInfo(file).fileName();
-        Mic::MilEmitter e(&r);
+        Mic::MilEmitter e(&imr);
         Mic::AstModel mdl;
         Mic::Parser2 p(&mdl,&lex, &e, this);
         p.RunParser(imp.metaActuals);
@@ -187,6 +187,7 @@ public:
         }else
         {
             res = p.takeModule();
+            imr.commit();
         }
         // TODO: uniquely extend the name of generic module instantiations
 

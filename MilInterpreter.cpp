@@ -1122,14 +1122,14 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_STFLD(void*, P)
             vmbreak;
         vmcase(stfld_pp){
-            const int lenonstack = stackAligned(sizeof(MethRef));
-            const int flen = sizeof(MethRef);
-            quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
-            quint8* obj = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
-            memcpy(obj + frame->proc->ops[pc].val, v, flen);
-            frame->pop(lenonstack + Frame::stackAlig);
-            pc++;
-        } vmbreak;
+                const int lenonstack = stackAligned(sizeof(MethRef));
+                const int flen = sizeof(MethRef);
+                quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
+                quint8* obj = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
+                memcpy(obj + frame->proc->ops[pc].val, v, flen);
+                frame->pop(lenonstack + Frame::stackAlig);
+                pc++;
+            } vmbreak;
         vmcase(stfld_vt) {
                 const int lenonstack = stackAligned(frame->proc->ops[pc+1].val);
                 const int flen = frame->proc->ops[pc+1].val;
@@ -1478,26 +1478,8 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(br)
                 pc = pc + 1 + (frame->proc->ops[pc].minus ? -1 : 1 ) * frame->proc->ops[pc].val;
             vmbreak;
-        vmcase(brtrue_i4)
-                if( frame->popI4() )
-                    pc = pc + 1 + (frame->proc->ops[pc].minus ? -1 : 1 ) * frame->proc->ops[pc].val;
-                else
-                    pc++;
-             vmbreak;
-        vmcase(brtrue_i8)
-                if( frame->popI8() )
-                    pc = pc + 1 + (frame->proc->ops[pc].minus ? -1 : 1 ) * frame->proc->ops[pc].val;
-                else
-                    pc++;
-             vmbreak;
         vmcase(brfalse_i4)
                 if( !frame->popI4() )
-                    pc = pc + 1 + (frame->proc->ops[pc].minus ? -1 : 1 ) * frame->proc->ops[pc].val;
-                else
-                    pc++;
-             vmbreak;
-        vmcase(brfalse_i8)
-                if( !frame->popI8() )
                     pc = pc + 1 + (frame->proc->ops[pc].minus ? -1 : 1 ) * frame->proc->ops[pc].val;
                 else
                     pc++;

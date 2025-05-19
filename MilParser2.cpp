@@ -1939,6 +1939,8 @@ Expression* Parser2::ExpInstr() {
         res->d = qualident();
         if( res->d && (res->d->kind != Declaration::Procedure || res->d->typebound) )
             error(cur, "expecting an unbound procedure");
+        if( res->d && res->d->inline_ )
+            error(cur, "cannot take address of inline procedure");
     } else if( la.d_code == Tok_LDMETH ) {
         expect(Tok_LDMETH, true, "ExpInstr");
         res->kind = IL_ldmeth;
