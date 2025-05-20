@@ -909,6 +909,8 @@ void InMemRenderer2::error(const QString& msg, int pc) const
     hasError = true;
 }
 
+static void renderProc( const Declaration* p, MilRenderer* r);
+
 static void renderType(const Declaration* d, MilRenderer* r)
 {
     Type* t = d->getType();
@@ -935,7 +937,7 @@ static void renderType(const Declaration* d, MilRenderer* r)
             r->endType();
             DeclList methods = t->getMethodTable(false);
             foreach( Declaration* p, methods )
-                ; // TODO r->addProcedure(p);
+                renderProc(p, r);
             } break;
     case Type::Proc:
         {
@@ -1007,7 +1009,7 @@ static void renderExprs(MilProcedure& proc, Expression* e)
         case IL_newarr:
         case IL_ptroff:
         case IL_sizeof: {
-                MilQuali q = e->d->toQuali();
+                MilQuali q = e->d->forwardToProc()->toQuali();
                 proc.body << MilOperation(e->kind, QVariant::fromValue(q));
             } break;
         case IL_callvirt:
@@ -1015,7 +1017,7 @@ static void renderExprs(MilProcedure& proc, Expression* e)
         case IL_ldflda:
         case IL_ldmeth: {
                 MilTrident td;
-                td.second = e->d->name;
+                td.second = e->d->forwardToProc()->name;
                 td.first = e->d->outer->toQuali();
                 proc.body << MilOperation(e->kind, QVariant::fromValue(td));
             } break;
@@ -1167,7 +1169,7 @@ static void renderStats(MilProcedure& proc, Statement* s)
 static void renderProc( const Declaration* p, MilRenderer* r)
 {
     MilProcedure proc;
-    proc.name = p->name;
+    proc.name = p->forwardToProc()->name;
     proc.isPublic = p->public_;
     // TODO proc.isVararg
 

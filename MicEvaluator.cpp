@@ -297,6 +297,27 @@ bool Evaluator::assign()
     return err.isEmpty();
 }
 
+bool Evaluator::assign(Expression* lhs, Expression* rhs)
+{
+    if( lhs->getType()->isCharArray() && lhs->getType()->len != 0  &&
+            ( (rhs->getType()->isCharArray() && rhs->getType()->len == 0) || rhs->getType()->kind == Type::String ) )
+        return stind(lhs, rhs);
+
+    switch( lhs->kind )
+    {
+    case Expression::Index:
+        return stelem(lhs, rhs);
+    case Expression::Select:
+    case Expression::LocalVar:
+    case Expression::Param:
+    case Expression::ModuleVar:
+        // TODO
+    default:
+        return stind(lhs, rhs);
+    }
+    return true;
+}
+
 bool Evaluator::derefPointer(bool byVal)
 {
     err.clear();
@@ -498,7 +519,7 @@ bool Evaluator::desigIndex(bool byVal)
     if( rhs.isConst() )
     {
         const qint64 idx = rhs.val.toLongLong();
-        if( idx < 0  || rhs.type->len && rhs.type->len <= idx )
+        if( idx < 0  || lhs.type->len && lhs.type->len <= idx )
         {
             err = "index out of range";
             return false;
@@ -1860,4 +1881,54 @@ void Evaluator::recurseConstConstructor(Expression* e)
             break;
         }
     }
+}
+
+bool Evaluator::stind(Expression* lhs, Expression* rhs)
+{
+    if( !evaluate(lhs) )
+        return false;
+    if( rhs && !evaluate(rhs) )
+        return false;         // value is pushed in assign
+    if( rhs && !assign() )
+        return false;
+    return true;
+}
+
+bool Evaluator::stelem(Expression* lhs, Expression* rhs)
+{
+    if( lhs == 0 || lhs->lhs == 0 || lhs->rhs == 0 || rhs == 0 )
+        return false;
+
+    if( !evaluate(lhs->lhs) ) // array
+        return false;
+    Value array = stack.takeLast();
+    if( !array.ref || array.type == 0 || array.type->kind != Type::Array)
+        return false;
+    Q_ASSERT(array.ref && array.type && array.type->kind == Type::Array);
+
+    if( !evaluate(lhs->rhs) ) // index
+        return false;
+    Value index = stack.takeLast();
+    if( index.isConst() )
+    {
+        const qint64 idx = index.val.toLongLong();
+        if( idx < 0  || array.type->len && array.type->len <= idx )
+        {
+            err = "index out of range";
+            return false;
+        }
+        pushMilStack(index);
+    }
+
+    if( !evaluate(rhs) ) // value
+        return false;
+
+    if( !prepareRhs( array.type->getType(), true ) )
+        return false;
+
+    Value value = stack.takeLast();
+
+    out->stelem_(toQuali(array.type->getType()));
+
+    return err.isEmpty();
 }

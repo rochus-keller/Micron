@@ -292,10 +292,10 @@ void Validator::visitStatSeq(Statement* stat)
                     error(stat->pos,"first argument must be a pointer to array");
 
                 Type* index = deref(stat->args->lhs->getType());
-                if( isInt32(index) )
+                if( !isInt32(index) )
                     error(stat->pos,"second argument must be a 32 bit integer");
 
-                Type* etOs = deref(aptr->getType()); // element type on stack
+                Type* etOs = deref(aos->getType()); // element type on stack
                 Type* refT = tokToBasicType(mdl, stat->kind);
                 if( stat->kind == IL_stelem )
                     refT = deref(stat->d->getType());

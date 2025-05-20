@@ -37,6 +37,7 @@ public:
 
     bool prepareRhs(Type* lhs, bool assig = false);
     bool assign(); // move rhs (top) to lhs (top-1)
+    bool assign( Expression* lhs, Expression* rhs );
 
     Value pop();
     Value top();
@@ -54,6 +55,10 @@ protected:
     bool recursiveRun(Expression*);
     void constructor(Expression*);
     void recurseConstConstructor(Expression*);
+
+    // assign
+    bool stind( Expression* lhs, Expression* rhs );
+    bool stelem( Expression* lhs, Expression* rhs );
 
     // expression:
     bool unaryOp(quint8 op); // Tok_Tilde, Tok_NOT, Tok_Plus, Tok_Minus, Tok_At

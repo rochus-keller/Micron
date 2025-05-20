@@ -950,24 +950,28 @@ void MilEmitter::starg_(quint16 arg)
 void MilEmitter::stelem_(const MilQuali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    if( equals( typeRef.second,  I1) ||
-            typeRef.second.constData() == char_sym || typeRef.second.constData() == bool_sym)
-        ops->append(MilOperation(IL_stelem_i1));
-    else if( equals( typeRef.second,  I2) )
-        ops->append(MilOperation(IL_stelem_i2));
-    else if( equals( typeRef.second,  I4) )
-        ops->append(MilOperation(IL_stelem_i4));
-    else if( equals( typeRef.second,  I8) )
-        ops->append(MilOperation(IL_stelem_i8));
-    else if( equals( typeRef.second,  R4) )
-        ops->append(MilOperation(IL_stelem_r4));
-    else if( equals( typeRef.second,  R8) )
-        ops->append(MilOperation(IL_stelem_r8));
-    else if( equals( typeRef.second,  IntPtr) )
-        ops->append(MilOperation(IL_stelem_ip));
-    else if( equals( typeRef.second,  IPP) )
-        ops->append(MilOperation(IL_stelem_ipp));
-    else
+    if( typeRef.first.isEmpty() )
+    {
+        if( equals( typeRef.second,  I1) ||
+                typeRef.second.constData() == char_sym || typeRef.second.constData() == bool_sym)
+            ops->append(MilOperation(IL_stelem_i1));
+        else if( equals( typeRef.second,  I2) )
+            ops->append(MilOperation(IL_stelem_i2));
+        else if( equals( typeRef.second,  I4) )
+            ops->append(MilOperation(IL_stelem_i4));
+        else if( equals( typeRef.second,  I8) )
+            ops->append(MilOperation(IL_stelem_i8));
+        else if( equals( typeRef.second,  R4) )
+            ops->append(MilOperation(IL_stelem_r4));
+        else if( equals( typeRef.second,  R8) )
+            ops->append(MilOperation(IL_stelem_r8));
+        else if( equals( typeRef.second,  IntPtr) )
+            ops->append(MilOperation(IL_stelem_ip));
+        else if( equals( typeRef.second,  IPP) )
+            ops->append(MilOperation(IL_stelem_ipp));
+        else
+            ops->append(MilOperation(IL_stelem,QVariant::fromValue(typeRef)));
+    }else
         ops->append(MilOperation(IL_stelem,QVariant::fromValue(typeRef)));
     delta(-3);
 }
@@ -1175,7 +1179,7 @@ void IlAsmRenderer::addImport(const QByteArray& path)
 
 void IlAsmRenderer::addVariable(const MilQuali& typeRef, QByteArray name, bool isPublic)
 {
-    out << ws() << "var " << name << ": " << MilEmitter::toString(typeRef) << endl;
+    out << ws() << "var " << name << ": " << toString(typeRef) << endl;
 }
 
 void IlAsmRenderer::addProcedure(const MilProcedure& m)
@@ -1234,16 +1238,16 @@ void IlAsmRenderer::addType(const QByteArray& name, bool isPublic, const MilQual
     switch(typeKind)
     {
     case MilEmitter::Alias:
-        out << MilEmitter::toString(baseType) << endl;
+        out << toString(baseType) << endl;
         break;
     case MilEmitter::Pointer:
-        out << "pointer to " << MilEmitter::toString(baseType) << endl;
+        out << "pointer to " << toString(baseType) << endl;
         break;
     case MilEmitter::Array:
         out << "array ";
         if( len )
             out << len << " ";
-        out << "of " << MilEmitter::toString(baseType) << endl;
+        out << "of " << toString(baseType) << endl;
         break;
     }
 }
@@ -1262,7 +1266,7 @@ void IlAsmRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRe
         if( isPublic )
             out << "*";
 
-        out << ": " << MilEmitter::toString(typeRef);
+        out << ": " << toString(typeRef);
         if( bits && state == Struct )
             out << " : " << bits;
     }
@@ -1389,14 +1393,14 @@ void IlAsmRenderer::render(const MilProcedure& m)
             out << m.params[i].name;
         else
             out << i;
-        out << ": "<< MilEmitter::toString(m.params[i].type);
+        out << ": "<< toString(m.params[i].type);
     }
     if( m.isVararg )
         out << ", .. ";
 
     out << ")";
     if( !m.retType.second.isEmpty() )
-        out << ":" << MilEmitter::toString(m.retType);
+        out << ":" << toString(m.retType);
 
     switch( m.kind)
     {
@@ -1433,7 +1437,7 @@ void IlAsmRenderer::render(const MilProcedure& m)
                 out << m.locals[i].name;
             else
                 out << i;
-            out << ": " << MilEmitter::toString(m.locals[i].type) << "; ";
+            out << ": " << toString(m.locals[i].type) << "; ";
         }
         out << endl;
         level--;
@@ -1490,7 +1494,7 @@ void IlAsmRenderer::render(const MilProcedure& m)
                           obj.data.type() == QVariant::List ||
                           obj.data.type() == QVariant::Map );
                 if( obj.data.type() != QVariant::ByteArray )
-                    out << MilEmitter::toString(obj.typeRef);
+                    out << toString(obj.typeRef);
                 renderComponents(out,obj.data);
                 out << endl;
             }
@@ -1536,10 +1540,12 @@ void IlAsmRenderer::render(const MilProcedure& m)
                 if( op.arg.canConvert<MilQuali>() )
                 {
                     MilQuali q = op.arg.value<MilQuali>();
-                    out << MilEmitter::toString(q);
+                    out << toString(q);
                 }else if( op.arg.canConvert<MilTrident>() )
                 {
                     MilTrident td = op.arg.value<MilTrident>();
+                    if( td.first.first.constData() == d_moduleName.constData() )
+                        td.first.first.clear();
                     out << MilEmitter::toString(td);
                 }else
                     out << op.arg.toByteArray();
@@ -1554,11 +1560,19 @@ void IlAsmRenderer::render(const MilProcedure& m)
     state = old;
 }
 
+QByteArray IlAsmRenderer::toString(const MilQuali& q)
+{
+    if(q.first.constData() == d_moduleName.constData())
+        return q.second;
+    else
+        return MilEmitter::toString(q);
+}
+
 void IlAsmRenderer::addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val)
 {
     out << ws() << "const " << name;
     if( !typeRef.second.isEmpty() )
-        out << " : " << MilEmitter::toString(typeRef);
+        out << " : " << toString(typeRef);
     if( !val.isNull() )
     {
         out << " = ";
@@ -1566,7 +1580,7 @@ void IlAsmRenderer::addConst(const MilQuali& typeRef, const QByteArray& name, co
         {
             const MilObject obj = val.value<MilObject>();
             if( obj.data.type() != QVariant::ByteArray )
-                out << MilEmitter::toString(obj.typeRef);
+                out << toString(obj.typeRef);
             renderComponents(out,obj.data);
         }else
             renderComponents(out, val );

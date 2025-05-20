@@ -53,7 +53,8 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    Mil::AstModel mdl( cp.isSet(m32) ? 32 : cp.isSet(m64) ? 64 : sizeof(void*) * 8);
+    // TODO cp.isSet(m32) ? 32 : cp.isSet(m64) ? 64 : sizeof(void*) * 8
+    Mil::AstModel mdl;
     Mil::Project pro(&mdl);
     QFileInfo info(args.first());
     if( info.isDir() )

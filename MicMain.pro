@@ -24,6 +24,7 @@ HEADERS +=
 
 include( MicUtils.pri )
 include( MilParser2.pri )
+include( ../EiGen/Common.pri )
 
 RESOURCES += \
     MilCompiler.qrc

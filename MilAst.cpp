@@ -30,11 +30,12 @@ static void addTypeDecl(Declaration* globals, Type* t, const QByteArray& name)
     res->public_ = true;
     // NO, otherwise INT32 gets a $ prefix: res->outer = globals;
     res->setType(t);
-    t->decl = res;
+    if( t->decl == 0 )
+        t->decl = res;
     globals->appendSub(res);
 }
 
-AstModel::AstModel(quint8 ptrWidth):pointerWidth(ptrWidth)
+AstModel::AstModel()
 {
     for( int i = 0; i < Type::MaxBasicType; i++ )
     {
@@ -43,54 +44,54 @@ AstModel::AstModel(quint8 ptrWidth):pointerWidth(ptrWidth)
         t->owned = true;
         basicTypes[i] = t;
     }
-    addTypeDecl(&globals, basicTypes[Type::Any], "ANY");
     addTypeDecl(&globals, basicTypes[Type::Any], "any");
-    addTypeDecl(&globals, basicTypes[Type::BOOL], "BOOL");
+    addTypeDecl(&globals, basicTypes[Type::Any], "ANY");
     addTypeDecl(&globals, basicTypes[Type::BOOL], "bool");
-    addTypeDecl(&globals, basicTypes[Type::CHAR], "CHAR");
+    addTypeDecl(&globals, basicTypes[Type::BOOL], "BOOL");
     addTypeDecl(&globals, basicTypes[Type::CHAR], "char");
-    addTypeDecl(&globals, basicTypes[Type::INT8], "INT8");
+    addTypeDecl(&globals, basicTypes[Type::CHAR], "CHAR");
     addTypeDecl(&globals, basicTypes[Type::INT8], "int8");
+    addTypeDecl(&globals, basicTypes[Type::INT8], "INT8");
     addTypeDecl(&globals, basicTypes[Type::INT8], "I1");
     addTypeDecl(&globals, basicTypes[Type::INT8], "i1");
-    addTypeDecl(&globals, basicTypes[Type::INT16], "INT16");
     addTypeDecl(&globals, basicTypes[Type::INT16], "int16");
+    addTypeDecl(&globals, basicTypes[Type::INT16], "INT16");
     addTypeDecl(&globals, basicTypes[Type::INT16], "I2");
     addTypeDecl(&globals, basicTypes[Type::INT16], "i2");
-    addTypeDecl(&globals, basicTypes[Type::INT32], "INT32");
     addTypeDecl(&globals, basicTypes[Type::INT32], "int32");
+    addTypeDecl(&globals, basicTypes[Type::INT32], "INT32");
     addTypeDecl(&globals, basicTypes[Type::INT32], "I4");
     addTypeDecl(&globals, basicTypes[Type::INT32], "i4");
-    addTypeDecl(&globals, basicTypes[Type::INT64], "INT64");
     addTypeDecl(&globals, basicTypes[Type::INT64], "int64");
+    addTypeDecl(&globals, basicTypes[Type::INT64], "INT64");
     addTypeDecl(&globals, basicTypes[Type::INT64], "I8");
     addTypeDecl(&globals, basicTypes[Type::INT64], "i8");
-    addTypeDecl(&globals, basicTypes[Type::UINT8], "UINT8");
     addTypeDecl(&globals, basicTypes[Type::UINT8], "uint8");
+    addTypeDecl(&globals, basicTypes[Type::UINT8], "UINT8");
     addTypeDecl(&globals, basicTypes[Type::UINT8], "U1");
     addTypeDecl(&globals, basicTypes[Type::UINT8], "u1");
-    addTypeDecl(&globals, basicTypes[Type::UINT16], "UINT16");
     addTypeDecl(&globals, basicTypes[Type::UINT16], "uint16");
+    addTypeDecl(&globals, basicTypes[Type::UINT16], "UINT16");
     addTypeDecl(&globals, basicTypes[Type::UINT16], "U2");
     addTypeDecl(&globals, basicTypes[Type::UINT16], "u2");
-    addTypeDecl(&globals, basicTypes[Type::UINT32], "UINT32");
     addTypeDecl(&globals, basicTypes[Type::UINT32], "uint32");
+    addTypeDecl(&globals, basicTypes[Type::UINT32], "UINT32");
     addTypeDecl(&globals, basicTypes[Type::UINT32], "U4");
     addTypeDecl(&globals, basicTypes[Type::UINT32], "u4");
-    addTypeDecl(&globals, basicTypes[Type::UINT64], "UINT64");
     addTypeDecl(&globals, basicTypes[Type::UINT64], "uint64");
+    addTypeDecl(&globals, basicTypes[Type::UINT64], "UINT64");
     addTypeDecl(&globals, basicTypes[Type::UINT64], "U8");
     addTypeDecl(&globals, basicTypes[Type::UINT64], "u8");
-    addTypeDecl(&globals, basicTypes[Type::FLOAT32], "FLOAT32");
     addTypeDecl(&globals, basicTypes[Type::FLOAT32], "float32");
+    addTypeDecl(&globals, basicTypes[Type::FLOAT32], "FLOAT32");
     addTypeDecl(&globals, basicTypes[Type::FLOAT32], "R4");
     addTypeDecl(&globals, basicTypes[Type::FLOAT32], "r4");
-    addTypeDecl(&globals, basicTypes[Type::FLOAT64], "FLOAT64");
     addTypeDecl(&globals, basicTypes[Type::FLOAT64], "float64");
+    addTypeDecl(&globals, basicTypes[Type::FLOAT64], "FLOAT64");
     addTypeDecl(&globals, basicTypes[Type::FLOAT64], "R8");
     addTypeDecl(&globals, basicTypes[Type::FLOAT64], "r8");
-    addTypeDecl(&globals, basicTypes[Type::INTPTR], "INTPTR");
     addTypeDecl(&globals, basicTypes[Type::INTPTR], "intptr");
+    addTypeDecl(&globals, basicTypes[Type::INTPTR], "INTPTR");
 }
 
 AstModel::~AstModel()

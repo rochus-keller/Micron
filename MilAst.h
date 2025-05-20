@@ -316,7 +316,7 @@ namespace Mil
     class AstModel
     {
     public:
-        AstModel(quint8 ptrWidth = sizeof(void*)*8);
+        AstModel();
         ~AstModel();
 
         void clear();
@@ -326,7 +326,6 @@ namespace Mil
         const Declaration* getGlobals() const { return &globals; }
         DeclList& getModules() { return modules; }
         Type* getBasicType(quint8) const;
-        quint8 getPointerWidth() const { return pointerWidth; }
         Declaration* resolve(const Quali&) const;
 
         static inline int align(int off, int alignment )
@@ -362,7 +361,6 @@ namespace Mil
         DeclList modules;
         Declaration globals;
         Type* basicTypes[Type::MaxBasicType];
-        quint8 pointerWidth;
         quint32 varOff;
     };
 }

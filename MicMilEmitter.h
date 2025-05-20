@@ -276,6 +276,7 @@ namespace Mic
     protected:
         inline QByteArray ws() { return QByteArray(level*2,' '); }
         void render(const MilProcedure&);
+        QByteArray toString(const MilQuali& q);
     private:
         enum State { Idle, Module, Struct, Proc } state;
         QTextStream out;

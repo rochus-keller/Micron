@@ -2822,16 +2822,23 @@ void Parser2::assignmentOrProcedureCall() {
     if( la.d_type == Tok_ColonEq ) {
         const Token tok = la;
         expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
-        if( !ev->evaluate(lhs) )
-            error(t, ev->getErr());
         Expression* rhs = expression(lhs->getType());
-        if( rhs && !ev->evaluate(rhs) )
-            error(tok, ev->getErr());         // value is pushed in ev->assign
         // TODO: avoid assigning to structured return values of functions on left side
         if( rhs && !assigCompat( lhs->getType(), rhs ) )
             error(tok, "right side is not assignment compatible with left side");
-        else if( rhs && !ev->assign() )
+#if 0
+        if( !ev->evaluate(lhs) )
+            error(t, ev->getErr());
+        if( rhs && !ev->evaluate(rhs) )
+            error(tok, ev->getErr());         // value is pushed in ev->assign
+        if( rhs && !ev->assign() )
             error(tok, ev->getErr() );
+#else
+        // now both lhs and rhs expression ASTs are ready; do analysis to recognize
+        // array element and field assignments
+        if( rhs && !ev->assign(lhs,rhs) )
+            error(tok, ev->getErr() );
+#endif
         Expression::deleteAllExpressions();
     }else
     {
