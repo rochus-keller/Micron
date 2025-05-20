@@ -308,6 +308,7 @@ bool Evaluator::assign(Expression* lhs, Expression* rhs)
     case Expression::Index:
         return stelem(lhs, rhs);
     case Expression::Select:
+        return stfld(lhs, rhs);
     case Expression::LocalVar:
     case Expression::Param:
     case Expression::ModuleVar:
@@ -1896,6 +1897,7 @@ bool Evaluator::stind(Expression* lhs, Expression* rhs)
 
 bool Evaluator::stelem(Expression* lhs, Expression* rhs)
 {
+    err.clear();
     if( lhs == 0 || lhs->lhs == 0 || lhs->rhs == 0 || rhs == 0 )
         return false;
 
@@ -1929,6 +1931,35 @@ bool Evaluator::stelem(Expression* lhs, Expression* rhs)
     Value value = stack.takeLast();
 
     out->stelem_(toQuali(array.type->getType()));
+
+    return err.isEmpty();
+}
+
+bool Evaluator::stfld(Expression* lhs, Expression* rhs)
+{
+    err.clear();
+    if( lhs == 0 || lhs->lhs == 0 || rhs == 0 )
+        return false;
+
+    if( !evaluate(lhs->lhs) ) // pointer to record
+        return false;
+    Value pointer = stack.takeLast(); // record reference
+    Q_ASSERT(pointer.ref && pointer.type && (pointer.type->kind == Type::Record || pointer.type->kind == Type::Object));
+
+    Declaration* field = lhs->val.value<Declaration*>();
+    Q_ASSERT(field);
+    const MilTrident desig = qMakePair(toQuali(pointer.type),field->name);
+
+    if( !evaluate(rhs) ) // value
+        return false;
+
+    if( !prepareRhs( field->getType(), true ) )
+        return false;
+
+    Value value = stack.takeLast();
+
+
+    out->stfld_(desig);
 
     return err.isEmpty();
 }

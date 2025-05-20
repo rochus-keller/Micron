@@ -59,6 +59,7 @@ protected:
     // assign
     bool stind( Expression* lhs, Expression* rhs );
     bool stelem( Expression* lhs, Expression* rhs );
+    bool stfld( Expression* lhs, Expression* rhs );
 
     // expression:
     bool unaryOp(quint8 op); // Tok_Tilde, Tok_NOT, Tok_Plus, Tok_Minus, Tok_At

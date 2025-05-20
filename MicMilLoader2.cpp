@@ -642,6 +642,7 @@ Statement* InMemRenderer2::translateStat(const QList<MilOperation>& ops, quint32
                     error("invalid field declaration reference",pc);
                     return res;
                 }
+                tmp->d = d;
             } break;
         case IL_stind:
             tmp->d = resolve(ops[pc].arg.value<MilQuali>());
