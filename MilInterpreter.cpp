@@ -970,14 +970,16 @@ bool Interpreter::Imp::execute(Frame* frame)
             vmbreak;
         vmcase(starg_pp)
                 frame->copy(VM_ARG_ADDR, // to
-                            stackAligned(sizeof(MethRef)), // size on stack
+                            -stackAligned(sizeof(MethRef)), // size on stack
                             sizeof(MethRef)); // true size
+                frame->pop(stackAligned(sizeof(MethRef)));
                 pc++;
                 vmbreak;
         vmcase(starg_vt)
                 frame->copy(VM_ARG_ADDR, // to
-                            stackAligned(frame->proc->ops[pc+1].val), // size on stack
+                            -stackAligned(frame->proc->ops[pc+1].val), // size on stack
                             frame->proc->ops[pc+1].val); // true size
+                frame->pop(stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(ldelem_i1)
@@ -1300,14 +1302,16 @@ bool Interpreter::Imp::execute(Frame* frame)
             vmbreak;
         vmcase(stloc_pp)
                 frame->copy(VM_LOCAL_ADDR, // to
-                            stackAligned(sizeof(MethRef)), // size on stack
+                            -stackAligned(sizeof(MethRef)), // size on stack
                             sizeof(MethRef)); // true size
+                frame->pop(stackAligned(sizeof(MethRef)));
                 pc++;
                 vmbreak;
         vmcase(stloc_vt)
                 frame->copy(VM_LOCAL_ADDR, // to
-                            stackAligned(frame->proc->ops[pc+1].val), // size on stack
+                            -stackAligned(frame->proc->ops[pc+1].val), // size on stack
                             frame->proc->ops[pc+1].val); // true size
+                frame->pop(stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(ldvar_i1)
@@ -1396,14 +1400,16 @@ bool Interpreter::Imp::execute(Frame* frame)
             vmbreak;
         vmcase(stvar_pp)
                 frame->copy(VM_VAR_ADDR, // to
-                            stackAligned(sizeof(MethRef)), // size on stack
+                            -stackAligned(sizeof(MethRef)), // size on stack
                             sizeof(MethRef)); // true size
+                frame->pop(stackAligned(sizeof(MethRef)));
                 pc++;
                 vmbreak;
         vmcase(stvar_vt)
                 frame->copy(VM_VAR_ADDR, // to
-                            stackAligned(frame->proc->ops[pc+1].val), // size on stack
+                            -stackAligned(frame->proc->ops[pc+1].val), // size on stack
                             frame->proc->ops[pc+1].val); // true size
+                frame->pop(stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(ldc_i4)

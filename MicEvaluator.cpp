@@ -310,7 +310,21 @@ bool Evaluator::assign(Expression* lhs, Expression* rhs)
     case Expression::Select:
         return stfld(lhs, rhs);
     case Expression::LocalVar:
+        if( !evaluate(rhs) ) // value
+            return false;
+        if( !prepareRhs( lhs->getType(), true ) )
+            return false;
+        stack.takeLast();
+        out->stloc_(lhs->val.toUInt());
+        break;
     case Expression::Param:
+        if( !evaluate(rhs) ) // value
+            return false;
+        if( !prepareRhs( lhs->getType(), true ) )
+            return false;
+        stack.takeLast();
+        out->starg_(lhs->val.toUInt());
+        break;
     case Expression::ModuleVar:
         // TODO
     default:
