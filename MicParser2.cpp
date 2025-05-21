@@ -3158,11 +3158,7 @@ void Parser2::ForStatement() {
     {
         // i := start
         Expression* lhs = toExpr(idxvar, tok.toRowCol());
-        if( !ev->evaluate(lhs) )
-            error(tok, ev->getErr());
-        if( !ev->evaluate(expression(0)) )
-            error(tok, ev->getErr());         // rhs
-        ev->assign();
+        ev->assign(lhs, expression(0));
         Expression::deleteAllExpressions();
     }
 
@@ -3172,12 +3168,7 @@ void Parser2::ForStatement() {
     {
         // to := end
         Expression* lhs = toExpr(to, tok.toRowCol());
-        if( lhs && !ev->evaluate(lhs) )
-            error(tok, ev->getErr());
-        Expression* rhs = expression(0);
-        if( rhs && !ev->evaluate(rhs) )
-            error(tok, ev->getErr());         // rhs
-        ev->assign();
+        ev->assign(lhs, expression(0));
         Expression::deleteAllExpressions();
     }
 
@@ -3222,8 +3213,6 @@ void Parser2::ForStatement() {
     // i := i + 1
     {
         Expression* lhs = toExpr(idxvar, tok.toRowCol());
-        if( !ev->evaluate(lhs) )
-            error(tok, ev->getErr());
 
         Expression* l = toExpr(idxvar, tok.toRowCol());
         l->byVal = true;
@@ -3236,10 +3225,8 @@ void Parser2::ForStatement() {
         rhs->lhs = l;
         rhs->rhs = r;
         rhs->setType(idxvar->getType());
-        if( !ev->evaluate(rhs) )
-            error(tok, ev->getErr());
 
-        ev->assign();
+        ev->assign(lhs, rhs);
         Expression::deleteAllExpressions();
     }
 
