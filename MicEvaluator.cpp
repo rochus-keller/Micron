@@ -326,7 +326,13 @@ bool Evaluator::assign(Expression* lhs, Expression* rhs)
         out->starg_(lhs->val.toUInt());
         break;
     case Expression::ModuleVar:
-        // TODO
+        if( !evaluate(rhs) ) // value
+            return false;
+        if( !prepareRhs( lhs->getType(), true ) )
+            return false;
+        stack.takeLast();
+        out->stvar_(lhs->val.value<Qualident>());
+        break;
     default:
         return stind(lhs, rhs);
     }
