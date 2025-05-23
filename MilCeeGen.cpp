@@ -534,6 +534,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             if( s->args )
             {
                 out << ws(level);
+                // NOTE: s->args points to the expr in a sequence after which the stack is empty
                 expression(out, s->args, level);
                 out << ";" << endl;
             }
@@ -1217,17 +1218,20 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         out << " * sizeof(" << typeRef(e->d->getType()) << ")";
         break;
 
-    case IL_iif:
-        out << "(";
-        expression(out, e->lhs, level + 1);
-        out << " ? ";
-        e = e->next;
-        expression(out, e->lhs, level + 1);
-        out << " : ";
-        expression(out, e->rhs, level + 1);
-        out << ") ";
-        e = e->next; // skip ELSE
-        break;
+    case IL_iif: {
+            Expression* if_ = e->e;
+            Q_ASSERT(if_ && if_->kind == IL_if && if_->next->kind == IL_then && if_->next->next->kind == IL_else &&
+                     if_->next->next->next == 0); // no IL_end
+            Expression* then_ = if_->next;
+            Expression* else_ = if_->next->next;
+            out << "(";
+            expression(out, if_->lhs, level + 1);
+            out << " ? ";
+            expression(out, then_->lhs, level + 1);
+            out << " : ";
+            expression(out, else_->lhs, level + 1);
+            out << ") ";
+        } break;
 
     case IL_sizeof:
     case IL_newvla:

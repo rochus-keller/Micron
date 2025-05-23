@@ -125,6 +125,9 @@ QList<Declaration*> MilLoader2::getModulesInDependencyOrder()
     return res;
 }
 
+
+// NOTE keep InMemRenderer2 in sync with Mil::Parser2
+
 InMemRenderer2::InMemRenderer2(MilLoader2* loader):loader(loader), module(0), type(0), curProc(0)
 {
     Q_ASSERT( loader );
@@ -723,23 +726,31 @@ Expression* InMemRenderer2::translateExpr(const QList<MilOperation>& ops, quint3
         switch(ops[pc].op)
         {
         case IL_iif: {
+                // we use this compound to assure next always points to the next expression,
+                // not to the inner of the compound
+                // IIF next ...
+                //  e  IF next THEN next ELSE
+                //     e       e         e
                 pc++;
-                tmp->e = translateExpr(ops, pc);
+                Expression* if_ = new Expression();
+                if_->kind = IL_if;
+                if_->pos = tmp->pos;
+                if_->e = translateExpr(ops, pc);
+                tmp->e = if_;
                 if( !expect(ops, pc, IL_then) )
                     return res;
                 pc++;
-                Expression* res2 = new Expression();
-                res2->kind = IL_then;
-                res2->e = translateExpr(ops, pc);
-                tmp->next = res2;
-
+                Expression* then_ = new Expression();
+                then_->kind = IL_then;
+                then_->e = translateExpr(ops, pc);
+                if_->next = then_;
                 if( !expect(ops, pc, IL_else) )
                     return res;
                 pc++;
-                Expression* res3 = new Expression();
-                res3->kind = IL_else;
-                res3->e = translateExpr(ops, pc);
-                res2->next = res3;
+                Expression* else_ = new Expression();
+                else_->kind = IL_else;
+                else_->e = translateExpr(ops, pc);
+                then_->next = else_;
 
                 if( !expect(ops, pc, IL_end) )
                     return res;
@@ -1047,19 +1058,22 @@ static void renderExprs(MilProcedure& proc, Expression* e)
         case IL_ldc_r8:
             proc.body << MilOperation(e->kind, e->f);
             break;
-        case IL_iif:
-            proc.body << MilOperation(e->kind);
-            renderExprs(proc, e->e);
-            Q_ASSERT(e->next && e->next->kind == IL_then);
-            e = e->next;
-            proc.body << MilOperation(e->kind);
-            renderExprs(proc, e->e);
-            Q_ASSERT(e->next && e->next->kind == IL_else);
-            e = e->next;
-            proc.body << MilOperation(e->kind);
-            renderExprs(proc, e->e);
-            proc.body << MilOperation(IL_end);
-           break;
+        case IL_iif: {
+                proc.body << MilOperation(e->kind);
+
+                Expression* if_ = e->e;
+                Q_ASSERT(if_ && if_->kind == IL_if && if_->next->kind == IL_then && if_->next->next->kind == IL_else &&
+                         if_->next->next->next == 0); // no IL_end
+                Expression* then_ = if_->next;
+                Expression* else_ = if_->next->next;
+
+                renderExprs(proc, if_);
+                proc.body << MilOperation(then_->kind);
+                renderExprs(proc, then_);
+                proc.body << MilOperation(else_->kind);
+                renderExprs(proc, else_);
+                proc.body << MilOperation(IL_end);
+            } break;
         default:
             proc.body << MilOperation(e->kind);
             break;

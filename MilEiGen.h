@@ -27,7 +27,13 @@ namespace Mil
     class EiGen
     {
     public:
-        EiGen(AstModel*);
+        typedef enum {NoTarget, AMD32Linux, AMD64Linux, ARMA32Linux, ARMA64Linux, ARMT32Linux, ARMT32FPELinux,
+                      BIOS16, BIOS32, BIOS64, DOS, EFI32, EFI64, OSX32, OSX64, RPi2B, Win32, Win64,
+                      BareAmd16, BareAmd32, BareAmd64, BareArmA32, BareArmT32, BareArmA64,
+                      MaxTarget} TargetCode;
+        typedef enum { NoProcessor, Amd16, Amd32, Amd64, Arma32, Armt32, Arma64} ProcessorCode;
+
+        EiGen(AstModel*, TargetCode);
         ~EiGen();
 
         bool generate(Declaration* module, QIODevice* out);

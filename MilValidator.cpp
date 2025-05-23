@@ -158,26 +158,26 @@ void Validator::visitStatSeq(Statement* stat)
         case Statement::ExprStat:
             {
                 expectN(0, stat);
-                Expression* e = visitExpr(stat->e);
+                Expression* lastExprInSeq = visitExpr(stat->e);
                 if( stack.isEmpty() )
                 {
                     Q_ASSERT( stat->args == 0 );
-                    stat->args = e;
-                    if( e->next )
+                    stat->args = lastExprInSeq;
+                    if( lastExprInSeq->next )
                     {
                         // split ExprStat
                         Statement* s = new Statement();
                         s->kind = (IL_op)Statement::ExprStat;
-                        s->pos = e->next->pos;
-                        s->e = e->next;
-                        e->next = 0;
+                        s->pos = lastExprInSeq->next->pos;
+                        s->e = lastExprInSeq->next;
+                        lastExprInSeq->next = 0;
                         s->next = stat->next;
                         stat->next = s;
                     }
-                }else if( e != 0 && e->next != 0 )
+                }else if( lastExprInSeq != 0 && lastExprInSeq->next != 0 )
                 {
                     // visitExpr returned after non-function call and we would expect the stack to be empty
-                    error(e->pos,QString("stack is not empty (%1 elements on stack)").arg(stack.size()));
+                    error(lastExprInSeq->pos,QString("stack is not empty (%1 elements on stack)").arg(stack.size()));
                 }
             }
             break;
@@ -1132,31 +1132,34 @@ Expression* Validator::visitExpr(Expression* e)
             break;
         case IL_iif:
             {
-                Q_ASSERT(e->next->kind == IL_then && e->next->next->kind == IL_else);
-                Expression* iif_ = e;
-                Expression* then_ = e->next;
-                Expression* else_ = e->next->next;
+                Expression* if_ = e->e;
 
-                visitExpr(iif_->e);
-                if( !expectN(1, iif_) )
+                Q_ASSERT(if_ && if_->kind == IL_if && if_->next->kind == IL_then &&
+                         if_->next->next->kind == IL_else &&
+                         if_->next->next->next == 0); // no IL_end
+
+                Expression* then_ = if_->next;
+                Expression* else_ = if_->next->next;
+
+                visitExpr(if_->e);
+                if( !expectN(1, if_) )
                     break;
-                iif_->lhs = eatStack(1);
-                if( !isInt32(deref(iif_->lhs->getType())) )
-                    error(iif_->lhs->pos,"expecting a 32 bit result of boolean expression");
+                if_->lhs = eatStack(1);
+                if( !isInt32(deref(if_->lhs->getType())) )
+                    error(if_->lhs->pos,"expecting a 32 bit result of boolean expression");
 
-                iif_->rhs = then_;
                 visitExpr(then_->e);
                 if( !expectN(1, then_) )
                     break;
                 then_->lhs = eatStack(1);
+
                 visitExpr(else_->e);
                 if( !expectN(1, else_) )
                     break;
-                then_->rhs = eatStack(1);
+                else_->lhs = eatStack(1);
+
                 e->setType(then_->lhs->getType());
                 stack.push_back(e);
-                pc += 2;
-                e = else_;
             }
             break;
         default:

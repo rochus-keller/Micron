@@ -2054,20 +2054,33 @@ Expression* Parser2::ExpInstr() {
         res->kind = IL_nop;
     } else if( FIRST_CondOp(la.d_type) || FIRST_CondOp(la.d_code) ) {
         expect(Tok_IIF, true, "CondOp");
-        res->e = Expression_();
+        // we use this compound to assure next always points to the next expression,
+        // not to the inner of the compound
+        // IIF next ...
+        //  e  IF next THEN next ELSE
+        //     e       e         e
         res->kind = IL_iif;
+
+        Expression* if_ = new Expression();
+        if_->kind = IL_if;
+        if_->pos = res->pos;
+        if_->e = Expression_();
+        res->e = if_;
+
         expect(Tok_THEN, true, "CondOp");
-        Expression* res2 = new Expression();
-        res2->kind = IL_then;
-        res2->pos = cur.toRowCol();
-        res2->e = Expression_();
-        res->next = res2;
+        Expression* then_ = new Expression();
+        then_->kind = IL_then;
+        then_->pos = cur.toRowCol();
+        then_->e = Expression_();
+        if_->next = then_;
+
         expect(Tok_ELSE, true, "CondOp");
-        Expression* res3 = new Expression();
-        res3->kind = IL_else;
-        res3->pos = cur.toRowCol();
-        res3->e = Expression_();
-        res2->next = res3;
+        Expression* else_ = new Expression();
+        else_->kind = IL_else;
+        else_->pos = cur.toRowCol();
+        else_->e = Expression_();
+        then_->next = else_;
+
         expect(Tok_END, true, "CondOp");
     } else
         invalid("ExpInstr");

@@ -1348,17 +1348,21 @@ bool VmCode::translateExprSeq(Procedure& proc, Expression* e)
             break;
         case IL_iif:
             {
-                if( !translateExprSeq(proc, e->e) )
+                Expression* if_ = e->e;
+                Q_ASSERT(if_ && if_->kind == IL_if && if_->next->kind == IL_then && if_->next->next->kind == IL_else &&
+                         if_->next->next->next == 0); // no IL_end
+                Expression* then_ = if_->next;
+                Expression* else_ = if_->next->next;
+               if( !translateExprSeq(proc, if_->e) )
                     return false;
                 const int iif = emitOp(proc,LL_brfalse_i4);
-                if( !translateExprSeq(proc, e->next->e) )
+                if( !translateExprSeq(proc, then_->e) )
                     return false;
                 const int end_of_then = emitOp(proc, LL_br);
                 branch_here(proc,iif);
-                if( !translateExprSeq(proc, e->next->next->e) )
+                if( !translateExprSeq(proc, else_->e) )
                     return false;
                 branch_here(proc,end_of_then);
-                e = e->next->next;
             }
             break;
         case IL_isinst: {
