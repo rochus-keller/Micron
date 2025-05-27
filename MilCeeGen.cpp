@@ -434,16 +434,16 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
             }
             out << "}";
             break;
-        case Type::Object:
-            out << "struct " << qualident(d) << " {" << endl;
-            out << ws(0) << qualident(d) << "$Class$* class$;" << endl;
-            foreach( Declaration* field, t->subs )
-            {
-                if( field->kind == Declaration::Field )
-                    out << ws(0) << typeRef(field->getType()) << " " << field->name << ";" << endl;
-            }
-            out << "}";
-            break;
+        case Type::Object: {
+                out << "struct " << qualident(d) << " {" << endl;
+                out << ws(0) << qualident(d) << "$Class$* class$;" << endl;
+                QList<Declaration*> fields = t->getFieldList(true);
+                foreach( Declaration* field, fields ) // TODO: was t->subs, but this cannot be correct
+                {
+                     out << ws(0) << typeRef(field->getType()) << " " << field->name << ";" << endl;
+                }
+                out << "}";
+            } break;
         case Type::NameRef:
             out << typeRef(t->getType());
             break;

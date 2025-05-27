@@ -26,6 +26,7 @@
 #include "EiGen/strdiagnostics.hpp"
 #include "EiGen/cdgenerator.hpp"
 #include <iostream>
+#include <deque>
 #include <QTextStream>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -128,6 +129,11 @@ public:
     TargetCode target;
     Code::Type types[MaxType];
     QHash<QByteArray, const char*> strings;
+    QList<MyEmitter::Label*> loopStack;
+    std::vector<MyEmitter::Label> labels;
+    QHash<const char*, MyEmitter::Label*> labelRefs;
+    MyEmitter::Label* endOfProc;
+    bool hasDebugInfo;
 
     Imp(AstModel* mdl, TargetCode tg);
 
@@ -135,28 +141,24 @@ public:
     Code::Type getCodeType(Type*) const;
     void loc( const Mic::RowCol& ) const;
     static EcsType ilToEcsType(IL_op op);
-    void ldind(Type * ty, Smop& tmp, const Mic::RowCol& pos);
+    Smop ldind(Type * ty, const Smop& addr, const Mic::RowCol& pos);
 
-
-    QTextStream hout, bout; // TEMP
-    bool generate(Declaration* module, QIODevice* header, QIODevice* body = 0);
+    bool generate(Declaration* module);
     void visitModule();
     void visitProcedure(Declaration*);
     void visitMetaDecl(Declaration*);
     QByteArray typeRef(Type*);
-    void procHeader(QTextStream& out, Declaration* proc);
-    void parameter(QTextStream& out, Declaration* param);
-    void variable(QTextStream& out, Declaration* var);
-    void typeDecl(QTextStream& out, Declaration* type);
-    void pointerTo(QTextStream& out, Type* type);
+    void parameter(Declaration* param);
+    void variable(Declaration* var);
     void constValue(QTextStream& out, Constant* c);
-    void statementSeq(QTextStream& out, Statement* s, int level = 0);
+    void statementSeq(Statement* s);
     Smop expression(Expression* e);
     Smop emitBinOP(Expression* e);
-    void emitSoapInit(QTextStream& out, const QByteArray& name, Type* t, int level);
-    void emitSoaInit(QTextStream& out, const QByteArray& name, bool nameIsPtr, Type* t, int level);
+    void emitSoapInit(const QByteArray& name, Type* t, int level);
+    void emitSoaInit(const QByteArray& name, bool nameIsPtr, Type* t, int level);
     Type* deref(Type* t);
     void emitInitializer(Type*);
+    void typeDecl(Type*);
 
     // Round up `n` to the nearest multiple of `align`. For instance,
     // align_to(5, 8) returns 8 and align_to(11, 8) returns 16.
@@ -165,22 +167,48 @@ public:
         return (n + align - 1) / align * align;
     }
 
-    int push_struct(Type *ty, const Smop& reg) {
+    int push(Type *valueType, const Smop& reg) {
+        if( valueType->isSUOA() || (valueType->kind == Type::Proc && valueType->typebound) )
+        {
+            const int sizeOnStack = align_to(valueType->getByteSize(target_data[target].pointer_width),
+                                    target_data[target].stack_align);
+            // make enough space on stack
+            emitter.ctx.Subtract(Code::Reg(types[ptr],Code::RSP),
+                                 Code::Reg(types[ptr],Code::RSP),
+                        Code::Imm(types[ptr],sizeOnStack));
+            // copy the data to stack
+            emitter.ctx.Copy(Code::Reg(types[ptr],Code::RSP), reg, Code::Imm(types[ptr],sizeOnStack));
+            return sizeOnStack;
+        }
 
-        const int sz = align_to(ty->getByteSize(target_data[target].pointer_width), target_data[target].stack_align);
-        emitter.ctx.Subtract(Code::Reg(types[ptr],Code::RSP), Code::Reg(types[ptr],Code::RSP),
-                    Code::Imm(types[ptr],sz));
-        emitter.ctx.Copy(Code::Reg(types[ptr],Code::RSP), reg, Code::Imm(types[ptr],sz));
-        return sz;
-    }
-
-    int pushRes(const Code::Type& type, const Smop& reg) {
-
+        const Code::Type type = getCodeType(valueType);
         emitter.ctx.Push(emitter.ctx.Convert(type,reg));
         const int aligned_size = align_to(type.size,target_data[target].stack_align);
         return aligned_size;
     }
 
+    void store(Type *valueType, const Smop& lhs, const Smop& rhs, const Mic::RowCol& pos) {
+        if( valueType->isSUOA() || (valueType->kind == Type::Proc && valueType->typebound) )
+        {
+            loc(pos);
+            emitter.ctx.Copy(lhs, rhs, Code::Imm(types[ptr],valueType->getByteSize(target_data[target].pointer_width)));
+            return;
+        }
+
+        const Code::Type type = getCodeType(valueType);
+        loc(pos);
+        emitter.ctx.Move(emitter.ctx.MakeMemory(type,lhs), emitter.ctx.Convert(type,rhs));
+    }
+
+    void release(Smop& smop)
+    {
+        smop = Smop();
+    }
+
+    static inline ECS::Position toPos(const Mic::RowCol& pos)
+    {
+        return ECS::Position(pos.d_row, pos.d_col);
+    }
 };
 
 EiGen::EiGen(AstModel* mdl, TargetCode tg)
@@ -193,10 +221,60 @@ EiGen::~EiGen()
     delete imp;
 }
 
+// modified version of http://www.josuttis.com/cppcode/fdstream.hpp
+class fdoutbuf : public std::streambuf {
+  protected:
+    QIODevice* fd;    // file descriptor
+  public:
+    // constructor
+    fdoutbuf (QIODevice* _fd) : fd(_fd) {}
+  protected:
+    // write one character
+    virtual int_type overflow (int_type c) {
+        if( !fd->putChar(c) )
+            return EOF;
+        else
+            return c;
+    }
+    // write multiple characters
+    virtual
+    std::streamsize xsputn (const char* s, std::streamsize num) {
+        return fd->write(s, num);
+    }
+};
+
+class fdostream : public std::ostream {
+  protected:
+    fdoutbuf buf;
+  public:
+    fdostream (QIODevice* fd) : std::ostream(0), buf(fd) {
+        rdbuf(&buf);
+    }
+};
+
 bool EiGen::generate(Declaration* module, QIODevice* out)
 {
+    Q_ASSERT(module && module->kind == Declaration::Module);
 
-    return false;
+    // TODO: calc offsets in AST of module
+
+    const bool res = imp->generate(module);
+    if( res && out )
+    {
+        fdostream out_stream(out);
+
+        out_stream << "; this is Eigen intermediate code, generated by ECC" << std::endl;
+        out_stream << "; see https://github.com/rochus-keller/EiGen/tree/master/ecc for more information" << std::endl;
+        out_stream << "; assuming pointer size " << (int)target_data[imp->target].pointer_width
+          << ", int size " << (int)target_data[imp->target].int_width
+          << ", stack alignment " << (int)target_data[imp->target].stack_align << " bytes, "
+          << (target_data[imp->target].has_linkregister ? "with" : "no") << " link reg" << std::endl;
+
+        Code::Generator cdgen(imp->layout,imp->platform);
+
+        cdgen.Generate(imp->emitter.s, target_data[imp->target].name,out_stream);
+    }
+    return res;
 }
 
 static QByteArray qualident(Declaration* d)
@@ -356,34 +434,31 @@ EiGen::Imp::EcsType EiGen::Imp::ilToEcsType(IL_op op)
     return ptr;
 }
 
-void EiGen::Imp::ldind(Type* ty, Smop& tmp, const Mic::RowCol& pos)
+Smop EiGen::Imp::ldind(Type* lhsValueType, const Smop& addr, const Mic::RowCol& pos)
 {
-     ty = ty->deref();
-     switch (ty->kind)
-     {
-     case Type::Array:
-     case Type::Struct:
-     case Type::Union:
-     case Type::Object:
-         // If it is an array, do not attempt to load a value to the
-         // register because in general we can't load an entire array to a
-         // register. As a result, the result of an evaluation of an array
-         // becomes not the array itself but the address of the array.
-         // This is where "array is automatically converted to a pointer to
-         // the first element of the array in C" occurs.
-         return;
+     Q_ASSERT(lhsValueType && lhsValueType->kind != Type::NameRef); // lhsValueType is already derefed
+
+     if( lhsValueType->isSUO() || lhsValueType->kind == Type::Array ) {
+         // If it is a structured value, do not attempt to load the value to the
+         // register because in general we can't load an entire array or struct to a
+         // register. As a result, the result of an evaluation of an array or struct
+         // becomes the address of the array or struct.
+         return addr;
      }
 
-     if( ty->kind == Type::Pointer && ty->getType()->deref()->kind == Type::Array )
-         return; // not really a pointer, but actually an array
+#if 0
+     // TODO ?
+     if( lhsValueType->kind == Type::Pointer && lhsValueType->getType()->deref()->kind == Type::Array )
+         return addr; // not really a pointer, but actually an array
+#endif
 
      loc(pos);
-     const Code::Type type = getCodeType(ty);
-     tmp = emitter.ctx.MakeMemory(type,tmp);
+     const Code::Type type = getCodeType(lhsValueType);
+     return emitter.ctx.MakeMemory(type,addr);
 }
 
 EiGen::Imp::Imp(AstModel* mdl, TargetCode tg):mdl(mdl),curMod(0), curProc(0),
-    diagnostics(std::cerr),
+    diagnostics(std::cerr), endOfProc(0), hasDebugInfo(true),
     layout(
         {target_data[tg].int_width, 1, 8},
         {4, 4, 8},
@@ -459,42 +534,42 @@ void EiGen::Imp::loc(const Mic::RowCol&) const
     // TODO
 }
 
-bool EiGen::Imp::generate(Declaration* module, QIODevice* header, QIODevice* body)
+bool EiGen::Imp::generate(Declaration* module)
 {
-    Q_ASSERT( module && header );
+    Q_ASSERT( module );
     curMod = module;
-    hout.setDevice(header);
-    QString dummy;
-    if( body )
-        bout.setDevice(body);
-    else
-        bout.setString(&dummy, QIODevice::WriteOnly);
-
-    const QByteArray guard = "__" + module->name.toUpper() + "_INCLUDED__";
-    const QString dedication = "// this file was generated by " + QCoreApplication::applicationName() + " "
-                                + QCoreApplication::applicationVersion() + " on " + QDateTime::currentDateTime().toString();
-
-    hout << "#ifndef " << guard << endl;
-    hout << "#define " << guard << endl << endl;
-    hout << "// " << module->name << ".h" << endl;
-    hout << dedication << endl << endl;
-
-    bout << "// " << module->name << ".c" << endl;
-    bout << dedication << endl << endl;
-    bout << "#include \"" << Project::escapeFilename(module->name) << ".h\"" << endl;
-    bout << "#include <stdlib.h>" << endl;
-    bout << "#include <string.h>" << endl;
-    bout << "#include <math.h>" << endl << endl;
 
     visitModule();
 
-    hout << endl << "#endif // " << guard << endl << endl;
+    QHash<QByteArray, const char*>::const_iterator i;
+    for( i = strings.begin(); i != strings.end(); ++i )
+    {
+        emitter.ctx.Begin(Code::Section::Data, i.key().toStdString(),
+                 1,
+                 false, // required
+                 true, // duplicable
+                 false // replaceable
+                 );
+        std::string str(i.value());
+        for( int j = 0; j < str.size(); j++ )
+        {
+            if( str[j] == '\n' || str[j] == '\r' )
+                str[j] = ' ';
+        }
+        const std::string cmt = "\"" + str + "\"";
+        emitter.ctx.Comment(cmt.c_str());
+        for( int j = 0; j <= str.size(); j++ )
+            emitter.ctx.Define(Code::Imm(types[s1],i.value()[j]));
+    }
+
     return true;
 }
 
 void EiGen::Imp::visitModule()
 {
    Declaration* sub = curMod->subs;
+#if 0
+   // not necessary
    while( sub )
    {
        if( sub->kind == Declaration::Import )
@@ -503,21 +578,39 @@ void EiGen::Imp::visitModule()
        }
        sub = sub->next;
    }
-   hout << endl;
+#endif
 
    sub = curMod->subs;
    while( sub )
    {
        if( sub->kind == Declaration::TypeDecl )
        {
-           typeDecl(hout, sub);
-           hout << ";" << endl;
+           emitter.ctx.Begin(Code::Section::TypeSection, qualident(sub).toStdString());
+           emitter.ctx.Locate(curMod->name.toStdString(), toPos(sub->pos));
+           typeDecl(sub->getType());
+
            if( sub->getType()->objectInit && sub->getType()->isSOA() )
                emitInitializer(sub->getType());
        }
        sub = sub->next;
    }
 
+   for( int i = 0; i < ptr; i++ )
+   {
+       emitter.ctx.Begin(Code::Section::TypeSection,ecsTypes[i].dbgname);
+       emitter.ctx.DeclareType(types[i]);
+   }
+
+   emitter.ctx.Begin(Code::Section::Data, curMod->name.toStdString() + "#init_run#",
+            1,
+            false, // required
+            true, // duplicable
+            false // replaceable
+            );
+   emitter.ctx.Define(Code::Imm(types[s1],0));
+
+#if 0
+   // not necessary
    sub = curMod->subs;
    while( sub )
    {
@@ -529,6 +622,8 @@ void EiGen::Imp::visitModule()
        }
        sub = sub->next;
    }
+#endif
+
    bool initFound = false;
    sub = curMod->subs;
    while( sub )
@@ -550,11 +645,7 @@ void EiGen::Imp::visitModule()
            }
            break;
        case Declaration::VarDecl:
-           variable(bout, sub);
-           bout << ";" << endl << endl;
-           hout << "extern ";
-           variable(hout, sub);
-           hout << ";" << endl;
+           variable(sub);
            break;
        case Declaration::Procedure:
            visitProcedure(sub);
@@ -572,64 +663,97 @@ void EiGen::Imp::visitModule()
         proc.kind = Declaration::Procedure;
         proc.init = true;
         proc.outer = curMod;
-        proc.name = "begin$";
+        proc.name = "begin#";
         visitProcedure(&proc);
    }
 }
 
-static inline QByteArray ws(int level)
-{
-    return QByteArray((level+1)*4,' ');
-}
-
 void EiGen::Imp::visitProcedure(Declaration* proc)
 {
+    labels.clear();
+    labelRefs.clear();
+    MyEmitter::Label lbl = emitter.ctx.CreateLabel();
+    endOfProc = &lbl;
     curProc = proc;
-    hout << "extern ";
-    procHeader(hout, proc);
-    hout << ";" << endl;
+
     if( !proc->forward && !proc->extern_ )
     {
-        procHeader(bout, proc);
-        bout << " {" << endl;
+        emitter.ctx.Begin(Code::Section::Code, qualident(proc->forwardToProc()).toStdString() );
+
+        if( hasDebugInfo )
+        {
+            emitter.ctx.Locate(proc->name.toStdString(),toPos(proc->pos));
+            Type* retType = deref(proc->getType());
+            if( retType->kind != Type::Undefined )
+            {
+                if( retType->isSUO() || retType->kind == Type::Array )
+                    emitter.ctx.DeclareVoid(); // instead we have a hidden parameter
+                else
+                    emitter.ctx.DeclareType(getCodeType(retType));
+            }else
+                emitter.ctx.DeclareVoid();
+
+            DeclList params = proc->getParams();
+            for( int i = 0; i < params.size(); i++ )
+                parameter(params[i]);
+
+            Declaration* sub = proc->subs;
+            while(sub)
+            {
+                if( sub->kind == Declaration::LocalDecl )
+                {
+                    parameter(sub);
+                }
+                sub = sub->next;
+            }
+        }
+
         if( proc->init && !curMod->nobody )
         {
-            bout << ws(0) << "static int done$ = 0;" << endl;
-            bout << ws(0) << "if(!done$) {" << endl;
-            bout << ws(1) <<     "done$ = 1;" << endl;
+            // if( !module#init_run# )
+            MyEmitter::Label afterend = emitter.ctx.CreateLabel();
+            Smop to = emitter.ctx.MakeMemory(types[u1], Code::Adr(types[u1], curMod->name.toStdString() + "#init_run#"));
+            emitter.ctx.BranchNotEqual(afterend, to, Code::Imm(types[u1], 0) );
+            emitter.ctx.Move(to, Code::Imm(types[u1],1));
+            release(to);
+
             Declaration* sub = curMod->subs;
             while( sub )
             {
                 if( sub->kind == Declaration::Import && !sub->imported->nobody )
-                     bout << ws(1) << sub->imported->name << "$begin$();" << endl;
+                {
+                     Smop f = Code::Adr(types[fun], sub->imported->name.toStdString() + "#begin#");
+                     emitter.ctx.Call(f, 0);
+                }
                 else if( sub->kind == Declaration::VarDecl )
-                    emitSoapInit(bout, qualident(sub), sub->getType(), 1 );
+                    emitSoapInit( qualident(sub), sub->getType(), 1 );
                 sub = sub->next;
             }
-            bout << ws(0) << "}" << endl;
+
+            afterend();
         }
-        bout << ws(0) << "void* _ptr$;" << endl;
-        bout << ws(0) << "unsigned int _len$;" << endl;
+
         Declaration* sub = proc->subs;
         while(sub)
         {
             if( sub->kind == Declaration::LocalDecl )
             {
-                bout << ws(0);
-                parameter(bout, sub);
-                bout << ";" << endl;
-                emitSoapInit(bout, sub->name, sub->getType(), 0 );
+                emitSoapInit( sub->name, sub->getType(), 0 );
             }
             sub = sub->next;
         }
-        statementSeq(bout, proc->body);
-        bout << "}" << endl << endl;
+        statementSeq(proc->body);
     }
+
+    lbl();
+    endOfProc = 0;
     curProc = 0;
 }
 
 void EiGen::Imp::visitMetaDecl(Declaration* d)
 {
+#if 0
+    // TODO
     const QByteArray className = qualident(d);
     hout << "struct " << className << "$Class$ {" << endl;
     bout << "struct " << className << "$Class$ " << className << "$class$ = { " << endl;
@@ -666,7 +790,7 @@ void EiGen::Imp::visitMetaDecl(Declaration* d)
     bout << "};" << endl << endl;
     hout << "};" << endl;
     hout << "extern struct " << className << "$Class$ " << className << "$class$;" << endl;
-
+#endif
 }
 
 QByteArray EiGen::Imp::typeRef(Type* t)
@@ -731,139 +855,31 @@ QByteArray EiGen::Imp::typeRef(Type* t)
         return "?TYPE";
 }
 
-void EiGen::Imp::procHeader(QTextStream& out, Declaration* proc)
+void EiGen::Imp::parameter(Declaration* param)
 {
-    out << typeRef(proc->getType()) << " ";
-    out << qualident(proc->forwardToProc());
-    out << "(";
-    DeclList params = proc->getParams();
-    for( int i = 0; i < params.size(); i++ )
-    {
-        if( i != 0 )
-            out << ", ";
-        parameter(out, params[i]);
-    }
-    out << ")";
+    emitter.ctx.DeclareSymbol(*endOfProc, param->name.toStdString(),
+                     Code::Mem(types[ptr],Code::RFP, param->off));
+    emitter.ctx.Locate(param->name.toStdString(),toPos(param->pos));
+    typeDecl(deref(param->getType()));
 }
 
-void EiGen::Imp::parameter(QTextStream& out, Declaration* param)
+void EiGen::Imp::variable(Declaration* var)
 {
-    out << typeRef(param->getType()) << " " << param->name;
-}
-
-void EiGen::Imp::variable(QTextStream& out, Declaration* var)
-{
-    out << typeRef(var->getType()) << " " << qualident(var);
-}
-
-void EiGen::Imp::typeDecl(QTextStream& out, Declaration* d)
-{
-    Type* t = deref(d->getType());
-    if( t == 0 )
+    Type* t = deref(var->getType());
+    emitter.ctx.Begin(Code::Section::Data, qualident(var).toStdString(),
+             t->getAlignment(target_data[target].pointer_width),
+             false, // required
+             true, // duplicable
+             false // replaceable
+             );
+    if( hasDebugInfo )
     {
-        out << "// undeclared type " << d->name;
-        return;
+        emitter.ctx.Locate(curMod->name.toStdString(),
+                  toPos(var->pos));
+        typeDecl(var->getType());
     }
 
-    if( t->kind == Type::Object )
-    {
-        // forward declaration for class objects
-        out << "typedef struct " << qualident(d) << "$Class$ " << qualident(d) << "$Class$;" << endl;
-    }
-
-    out << "typedef ";
-    if( t->kind < Type::MaxBasicType )
-        out << typeRef(t);
-    else
-        switch( t->kind )
-        {
-        case Type::Pointer:
-            pointerTo(out, t);
-            break;
-        case Type::Proc:
-            if( t->typebound )
-            {
-                out << "struct " << qualident(d) << " {" << endl;
-                out << ws(0) << "void* self;" << endl;
-                out << ws(0) << typeRef(t->getType()) << " (*proc)(void* self";
-                DeclList params = t->subs;
-                for( int i = 0; i < params.size(); i++ )
-                {
-                    if( t->typebound || i != 0 )
-                        out << ", ";
-                    parameter(out, params[i]);
-                }
-                out << ");" << endl;
-                out << "}";
-            }else
-            {
-                out << typeRef(t->getType()) << " (*";
-                out << qualident(d);
-                out << ")(";
-                DeclList params = t->subs;
-                for( int i = 0; i < params.size(); i++ )
-                {
-                    if( i != 0 )
-                        out << ", ";
-                    parameter(out, params[i]);
-                }
-                out << ")";
-                return;
-            }
-            break;
-        case Type::Array:
-            out << typeRef(t->getType()) << " " << qualident(d) << "[";
-            if( t->len != 0 )
-                out << t->len;
-            out << "]";
-            return;
-
-        case Type::Union:
-        case Type::Struct:
-            out << (t->kind == Type::Struct ? "struct " : "union ") << qualident(d) << " {" << endl;
-            foreach( Declaration* field, t->subs )
-            {
-                if( field->kind == Declaration::Field )
-                    out << ws(0) << typeRef(field->getType()) << " " << field->name << ";" << endl;
-            }
-            out << "}";
-            break;
-        case Type::Object:
-            out << "struct " << qualident(d) << " {" << endl;
-            out << ws(0) << qualident(d) << "$Class$* class$;" << endl;
-            foreach( Declaration* field, t->subs )
-            {
-                if( field->kind == Declaration::Field )
-                    out << ws(0) << typeRef(field->getType()) << " " << field->name << ";" << endl;
-            }
-            out << "}";
-            break;
-        case Type::NameRef:
-            out << typeRef(t->getType());
-            break;
-        }
-    out << " " << qualident(d);
-}
-
-void EiGen::Imp::pointerTo(QTextStream& out, Type* ptr)
-{
-    Type* to = ptr->getType();
-    Type* to2 = deref(to);
-    if( to2 && to2->kind == Type::Array )
-    {
-        // Pointer to array is translated to pointer to array element
-        ptr = to2;
-        to = ptr->getType();
-        to2 = deref(to);
-    }
-    if( to2 && to2->isSUO() )
-    {
-        if( deref(to)->kind == Type::Union )
-            out << "union ";
-        else
-            out << "struct ";
-    }
-    out << typeRef(ptr->getType()) << "*";
+    emitter.ctx.Reserve(t->getByteSize(target_data[target].pointer_width));
 }
 
 void EiGen::Imp::constValue(QTextStream& out, Constant* c)
@@ -918,7 +934,7 @@ void EiGen::Imp::constValue(QTextStream& out, Constant* c)
     }
 }
 
-void EiGen::Imp::statementSeq(QTextStream& out, Statement* s, int level)
+void EiGen::Imp::statementSeq(Statement* s)
 {
     while(s)
     {
@@ -929,75 +945,112 @@ void EiGen::Imp::statementSeq(QTextStream& out, Statement* s, int level)
                 expression(s->args);
             break;
 
-        case IL_if:
-            out << ws(level) << "if( ";
-            expression(s->args);
-            out << " ) {" << endl;
-            statementSeq(out, s->body);
-            out << ws(level) << "}";
-            if( s->next && s->next->kind == IL_else )
-            {
-                s = s->next;
-                out << " else {" << endl;
-                statementSeq(out, s->body);
-                out << ws(level) << "}";
-            }
-            out << endl;
-            break;
-
-        case IL_loop:
-            out << ws(level) << "while( 1 ) {" << endl;
-            statementSeq(out, s->body);
-            out << ws(level) << "}" << endl;
-            break;
-
-        case IL_repeat:
-            out << ws(level) << "do {" << endl;
-            statementSeq(out, s->body);
-            out << ws(level) << "} while( !";
-            expression(s->args);
-            out << " );" << endl;
-            break;
-
-        case IL_switch:
-            out << ws(level) << "switch( ";
-            expression(s->args);
-            out << " ) {" << endl;
-            while( s->next && s->next->kind == IL_case )
-            {
-                s = s->next;
-                Expression* e = s->e;
-                while(e)
+        case IL_if: {
+                Smop cond = expression(s->args);
+                const Code::Type type = getCodeType(deref(s->args->getType()));
+                MyEmitter::Label lelse = emitter.ctx.CreateLabel();
+                MyEmitter::Label lend = emitter.ctx.CreateLabel();
+                emitter.ctx.BranchEqual(lelse,Code::Imm(type,0),emitter.ctx.Convert(type,cond));
+                release(cond);
+                statementSeq(s->body);
+                emitter.ctx.Branch(lend);
+                lelse();
+                if( s->next && s->next->kind == IL_else )
                 {
-                    out << ws(level) << "case ";
-                    expression(e);
-                    out << ":" << endl;
-                    e = e->next;
+                    s = s->next;
+                    statementSeq(s->body);
                 }
-                out << ws(level+1) << "{" << endl;
-                statementSeq(out, s->body, level+2);
-                out << ws(level+1) << "} break;" << endl;
+                lend();
             }
-            if( s->next && s->next->kind == IL_else )
-            {
-                s = s->next;
-                out << "default:" << endl;
-                out << ws(level+1) << "{" << endl;
-                statementSeq(out, s->body, level+2);
-                out << ws(level+1) << "} break;" << endl;
-            }
-            out << endl;
             break;
 
-        case IL_while:
-            out << ws(level) << "while( ";
-            expression(s->args);
-            out << " ) {" << endl;
-            statementSeq(out, s->body);
-            out << ws(level) << "}" << endl;
+        case IL_loop: {
+                MyEmitter::Label lbegin = emitter.ctx.CreateLabel();
+                MyEmitter::Label lend = emitter.ctx.CreateLabel();
+                loopStack.push_back(&lend);
+                lbegin();
+                statementSeq(s->body);
+                emitter.ctx.Branch(lbegin);
+                lend();
+                loopStack.pop_back();
+            }
             break;
+
+        case IL_repeat: {
+                MyEmitter::Label lbegin = emitter.ctx.CreateLabel();
+                lbegin();
+                statementSeq(s->body);
+                Smop cond = expression(s->args);
+                const Code::Type type = getCodeType(deref(s->args->getType()));
+                emitter.ctx.BranchEqual(lbegin,Code::Imm(type,0),emitter.ctx.Convert(type,cond));
+            }
+            break;
+
+        case IL_switch: {
+                Smop cond = expression(s->args);
+
+                const Code::Type cond_type = getCodeType(deref(s->args->getType()));
+                cond = emitter.ctx.Convert(cond_type,cond);
+
+                Statement* stat = s;
+
+                // TODO: create jump table instead
+                std::deque<MyEmitter::Label> case_labels;
+                while( s->next && s->next->kind == IL_case )
+                {
+                    s = s->next;
+                    case_labels.push_back(emitter.ctx.CreateLabel());
+                    Expression* e = s->e;
+                    while(e)
+                    {
+                        emitter.ctx.BranchEqual(case_labels.back(), Code::Imm(cond_type,e->i), cond);
+                        e = e->next;
+                    }
+                }
+                release(cond);
+
+                MyEmitter::Label lend = emitter.ctx.CreateLabel();
+
+                // if none of the jumps were taken, we get here
+                if( s->next && s->next->kind == IL_else )
+                {
+                    s = s->next;
+                    statementSeq(s->body);
+                }
+                emitter.ctx.Branch(lend);
+
+                Statement* next = s;
+
+                s = stat;
+                int i = 0;
+                while( s->next && s->next->kind == IL_case )
+                {
+                    s = s->next;
+                    case_labels[i++]();
+                    statementSeq(s->body);
+                    emitter.ctx.Branch(lend);
+                }
+
+                lend();
+                s = next;
+            }
+            break;
+
+        case IL_while: {
+                MyEmitter::Label lbegin = emitter.ctx.CreateLabel();
+                MyEmitter::Label lbreak = emitter.ctx.CreateLabel();
+                lbegin();
+                Smop cond = expression(s->args);
+                const Code::Type type = getCodeType(deref(s->args->getType()));
+                emitter.ctx.BranchEqual(lbreak,Code::Imm(type,0),emitter.ctx.Convert(type,cond));
+                statementSeq(s->body);
+                emitter.ctx.Branch(lbegin);
+                lbreak();
+            }
+            break;
+
         case IL_exit:
-            out << ws(level) << "break;" << endl;
+            emitter.ctx.Branch(*loopStack.back());
             break;
 
         case IL_stloc:
@@ -1005,23 +1058,23 @@ void EiGen::Imp::statementSeq(QTextStream& out, Statement* s, int level)
         case IL_stloc_0:
         case IL_stloc_1:
         case IL_stloc_2:
-        case IL_stloc_3:
-            {
+        case IL_stloc_3: {
+                Smop value = expression(s->args);
                 DeclList locals = curProc->getLocals();
                 Q_ASSERT(s->id < locals.size());
-                out << ws(level) << locals[s->id]->name << " = ";
-                expression(s->args);
-                out << ";" << endl;
+                Smop addr = Code::Reg(types[ptr],Code::RFP, locals[s->id]->off);
+                loc(s->pos);
+                store(deref(s->args->getType()), addr, value, s->pos);
             }
             break;
 
-        case IL_starg:
-            {
+        case IL_starg: {
+                Smop value = expression(s->args);
                 DeclList params = curProc->getParams();
                 Q_ASSERT(s->id < params.size());
-                out << ws(level) << params[s->id]->name << " = ";
-                expression(s->args);
-                out << ";" << endl;
+                Smop addr = Code::Reg(types[ptr],Code::RFP, params[s->id]->off);
+                loc(s->pos);
+                store(deref(s->args->getType()), addr, value, s->pos);
             }
             break;
 
@@ -1032,26 +1085,17 @@ void EiGen::Imp::statementSeq(QTextStream& out, Statement* s, int level)
         case IL_stind_r4:
         case IL_stind_r8:
         case IL_stind_ip:
-            {
+        case IL_stind_ipp: {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
-                out << ws(level) << "*";
-                expression(s->args->lhs);
-                out << " = ";
-                expression(s->args->rhs);
-                out << ";" << endl;
-            }
-            break;
-
-        case IL_stind_ipp:
-            {
-                Q_ASSERT( s->args && s->args->kind == Expression::Argument );
-                out << ws(level) << "*";
-                expression(s->args->lhs);
-                out << " = ";
-                if( s->args->rhs->kind == IL_ldmeth )
-                    out << "(" << typeRef(s->args->lhs->getType()->getType()) << ")";
-                expression(s->args->rhs);
-                out << ";" << endl;
+                Smop lhs = expression(s->args->lhs);
+                emitter.ctx.SaveRegister(lhs);
+                Smop rhs = expression(s->args->rhs);
+                emitter.ctx.RestoreRegister(lhs);
+                loc(s->pos);
+                Type* ptrT = deref(s->args->lhs->getType());
+                Q_ASSERT(ptrT->kind == Type::Pointer);
+                Type* base = deref(ptrT->getType());
+                store(base, lhs, rhs, s->pos);
             }
             break;
 
@@ -1068,62 +1112,108 @@ void EiGen::Imp::statementSeq(QTextStream& out, Statement* s, int level)
                           s->args->lhs && s->args->rhs &&
                           s->args->next && s->args->next->kind == Expression::Argument &&
                           s->args->next->rhs && s->args->next->lhs == 0);
-                out << ws(level);
-                expression(s->args->next->rhs);
-                out << "[";
-                expression(s->args->lhs);
-                out << "] = ";
-                expression(s->args->rhs);
-                out << ";" << endl;
+
+                Smop arr = expression(s->args->next->rhs);
+                emitter.ctx.SaveRegister(arr);
+                Smop idx = expression(s->args->lhs);
+                emitter.ctx.RestoreRegister(arr);
+
+                Type* aptr = deref(s->args->next->rhs->getType());
+                Q_ASSERT( aptr->kind == Type::Pointer );
+                Type* aos = deref(aptr->getType());
+                Q_ASSERT( aos->kind == Type::Array );
+                Type* et = deref(aos->getType());
+
+                idx = emitter.ctx.Multiply(idx, Code::Imm(idx.type,et->getByteSize(target_data[target].pointer_width)));
+                loc(s->pos);
+                Smop lhs = emitter.ctx.Add(arr,emitter.ctx.Convert(types[ptr],idx));
+                release(arr);
+                release(idx);
+                emitter.ctx.SaveRegister(lhs);
+                Smop rhs = expression(s->args->rhs);
+                emitter.ctx.RestoreRegister(lhs);
+                store(et, lhs, rhs, s->pos);
             }
             break;
 
-        case IL_stfld:
-            {
+        case IL_stfld: {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
-                out << ws(level) << "(";
-                expression(s->args->lhs);
-                out << ")->";
-                out << s->d->name;
-                out << " = ";
-                expression(s->args->rhs);
-                out << ";" << endl;
+
+                Smop tmp = expression(s->args->lhs);
+                loc(s->pos);
+                tmp = emitter.ctx.Add(emitter.ctx.Convert(types[ptr],tmp), Code::Imm(types[ptr],s->d->f.off));
+
+                emitter.ctx.SaveRegister(tmp);
+                Smop rhs = expression(s->args->rhs);
+                emitter.ctx.RestoreRegister(tmp);
+
+                store(deref(s->d->getType()), tmp, rhs, s->pos);
             }
             break;
 
-        case IL_stvar:
-            out << ws(level) << qualident(s->d);
-            out << " = ";
-            expression(s->args);
-            out << ";" << endl;
-            break;
+        case IL_stvar: {
+                Smop value = expression(s->args);
+                Smop var = Code::Adr(types[ptr],qualident(s->d).toStdString());
+                loc(s->pos);
+                store(deref(s->args->getType()), var, value, s->pos);
+            } break;
 
         case IL_ret:
-            out << ws(level) << "return";
             if( s->args )
             {
-                out << " ";
-                expression(s->args);
+                Smop rhs = expression(s->args);
+                Type* rt = deref(s->args->getType());
+                if( !rt->isSUOA() )
+                {
+                    Code::Type type = getCodeType(rt);
+                    emitter.ctx.Move (Code::Reg(type, Code::RRes), emitter.ctx.Convert(type,rhs));
+                } // else TODO
             }
-            out << ";" << endl;
+            loc(s->pos);
+            Q_ASSERT(endOfProc);
+            emitter.ctx.Branch(*endOfProc);
             break;
 
         case IL_pop:
             expression(s->args);
             break;
 
-        case IL_free:
-            out << ws(level) << "free(";
-            expression(s->args);
-            out << ");" << endl;
+        case IL_free: {
+                const MyEmitter::RestoreRegisterState restore(emitter.ctx);
+                Q_ASSERT(deref(s->args->getType())->kind == Type::Pointer);
+                Smop f = Code::Adr(types[fun],"free");
+                emitter.ctx.Push(expression(s->args));
+                const int aligned_size = align_to(types[ptr].size,target_data[target].stack_align);
+                emitter.ctx.Call(f,aligned_size);
+            }
             break;
 
-        case IL_label:
-            out << ws(level) << s->name << ":" << endl;
+        case IL_label: {
+                MyEmitter::Label* l = labelRefs.value(s->name);
+                if(l == 0)
+                {
+                    labels.push_back(emitter.ctx.CreateLabel());
+                    labelRefs.insert(s->name, &labels.back());
+                    labels.back()();
+                }else {
+                    (*l)();
+                }
+            }
             break;
 
-        case IL_goto:
-            out << ws(level) << "goto " << s->name << ";" << endl;
+        case IL_goto: {
+                MyEmitter::Label* l = labelRefs.value(s->name);
+                if(l == 0)
+                {
+                    labels.push_back(emitter.ctx.CreateLabel());
+                    labelRefs.insert(s->name, &labels.back());
+                    loc(s->pos);
+                    emitter.ctx.Branch(labels.back());
+                }else {
+                    loc(s->pos);
+                    emitter.ctx.Branch(*l);
+                }
+            }
             break;
 
         case IL_line:
@@ -1221,8 +1311,10 @@ Smop EiGen::Imp::emitBinOP(Expression* e)
     return Smop();
 }
 
-void EiGen::Imp::emitSoapInit(QTextStream& out, const QByteArray& name, Type* t, int level)
+void EiGen::Imp::emitSoapInit(const QByteArray& name, Type* t, int level)
 {
+#if 0
+    // TODO
     t = deref(t);
     if( t->kind == Type::Pointer && t->pointerInit )
         out << ws(level) << name << " = NULL;" << endl;
@@ -1232,10 +1324,13 @@ void EiGen::Imp::emitSoapInit(QTextStream& out, const QByteArray& name, Type* t,
             out << ws(level) << "memset(" << (t->isSUO() ? "&" : "") << name << ", 0, sizeof(" << typeRef(t) << "));" << endl;
     }
     //emitSoaInit(out, name, false, t);
+#endif
 }
 
-void EiGen::Imp::emitSoaInit(QTextStream& out, const QByteArray& name, bool nameIsPtr, Type* t, int level)
+void EiGen::Imp::emitSoaInit(const QByteArray& name, bool nameIsPtr, Type* t, int level)
 {
+#if 0
+    // TODO
     t = deref(t);
     if( !t->objectInit )
         return;
@@ -1243,6 +1338,7 @@ void EiGen::Imp::emitSoaInit(QTextStream& out, const QByteArray& name, bool name
         out << ws(level) << qualident(t->decl) << "$init$(" << (nameIsPtr ? "" : "&") << name << ", 1);" << endl;
     else if( t->kind == Type::Array && t->len && deref(t->getType())->isSO() )
         out << ws(level) << qualident(deref(t->getType())->decl) << "$init$(" << name << ", " << t->len << ");" << endl;
+#endif
 }
 
 static void collectArgs(Expression* e, QList<Expression*>& args)
@@ -1270,6 +1366,8 @@ Type*EiGen::Imp::deref(Type* t)
 
 void EiGen::Imp::emitInitializer(Type* t)
 {
+#if 0
+    // TODO
     t = deref(t);
     hout << "void " << qualident(t->decl) << "$init$(" << typeRef(t) << "* obj, unsigned int n);" << endl;
     bout << "void " << qualident(t->decl) << "$init$(" << typeRef(t) << "* obj, unsigned int n) {" << endl;
@@ -1302,6 +1400,70 @@ void EiGen::Imp::emitInitializer(Type* t)
 
     bout << ws(0) << "}" << endl;
     bout << "}" << endl << endl;
+#endif
+}
+
+void EiGen::Imp::typeDecl(Type* ty)
+{
+    if( ty == 0 )
+    {
+        emitter.ctx.DeclareVoid();
+        return;
+    }
+
+    if( ty->kind == Type::NameRef )
+    {
+        Quali q = ty->toQuali();
+        if( q.first.isEmpty() )
+            q.first = curMod->name;
+        emitter.ctx.DeclareType(q.first.toStdString() + "#" + q.second.toStdString());
+        return;
+    }
+
+    if( ty->kind > Type::NIL && ty->kind < Type::MaxBasicType )
+    {
+        emitter.ctx.DeclareType(std::string(ecsTypes[getEcsType(ty)].dbgname));
+        return;
+    }
+
+    switch(ty->kind)
+    {
+    case Type::Undefined:
+        emitter.ctx.DeclareVoid();
+        break;
+    case Type::Pointer:
+        emitter.ctx.DeclarePointer();
+        typeDecl(ty->getType());
+       break;
+    case Type::Proc: {
+        MyEmitter::Label ext = emitter.ctx.CreateLabel();
+        emitter.ctx.DeclareFunction(ext);
+        typeDecl(ty->getType());
+        foreach(Declaration* param, ty->subs)
+            // TODO: typebound
+            typeDecl(param->getType());
+        ext();
+        break;
+    }
+    case Type::Array:
+        emitter.ctx.DeclareArray(0,ty->len);
+        typeDecl(ty->getType());
+        break;
+    case Type::Struct:
+    case Type::Union:
+    case Type::Object: {
+            MyEmitter::Label ext = emitter.ctx.CreateLabel();
+            emitter.ctx.DeclareRecord(ext,ty->getByteSize(target_data[target].pointer_width));
+            // TODO: vptr ref for Object
+            QList<Declaration*> fields = ty->getFieldList(true);
+            foreach(Declaration* field, fields)
+                ; // TODO print_member(mem);
+            ext();
+        break;
+    }
+    default:
+        assert(0);
+    }
 }
 
 Smop EiGen::Imp::expression(Expression* e)
@@ -1325,18 +1487,38 @@ Smop EiGen::Imp::expression(Expression* e)
 
     case IL_neg: {
             Smop tmp = expression(e->lhs);
-            const Code::Type type = getCodeType(e->lhs->getType()->deref());
+            const Code::Type type = getCodeType(deref(e->lhs->getType()));
             loc(e->pos);
             return emitter.ctx.Negate(emitter.ctx.Convert(type,tmp));
         }
 
-    case IL_abs:
-        expression(e->lhs); // TODO
-        break;
+    case IL_abs: {
+            const MyEmitter::RestoreRegisterState restore(emitter.ctx);
+            Smop value = expression(e->lhs);
+            Type* t = deref(e->lhs->getType());
+            Smop f;
+            Code::Type ct;
+            if( t->isFloat() )
+            {
+                ct = types[f8];
+                f = Code::Adr(types[fun],"fabs");
+            }else if( t->isInt32OnStack() )
+            {
+                ct = types[s4];
+                f = Code::Adr(types[fun],"abs");
+            }else
+            {
+                ct = types[s8];
+                f = Code::Adr(types[fun],"llabs");
+            }
+            emitter.ctx.Push(emitter.ctx.Convert(ct, value));
+            const int aligned_size = align_to(ct.size,target_data[target].stack_align);
+            return emitter.ctx.Call(ct, f,aligned_size);
+        }
 
     case IL_not: {
             Smop tmp = expression(e->lhs);
-            const Code::Type type = getCodeType(e->lhs->getType()->deref());
+            const Code::Type type = getCodeType(deref(e->lhs->getType()));
             loc(e->pos);
             return emitter.ctx.Complement(emitter.ctx.Convert(type,tmp));
         }
@@ -1411,8 +1593,8 @@ Smop EiGen::Imp::expression(Expression* e)
 
     case IL_ldvar: {
             Smop tmp = Code::Adr(types[ptr],qualident(e->d).toStdString());
-            ldind(e->getType(), tmp, e->pos);
-            return tmp;
+            Type* varType = deref(e->getType());
+            return ldind(varType, tmp, e->pos);
         }
 
     case IL_ldvara:
@@ -1428,12 +1610,12 @@ Smop EiGen::Imp::expression(Expression* e)
     case IL_ldarga: {
             DeclList params = curProc->getParams();
             Q_ASSERT( e->id < params.size() );
-            Smop tmp = (Code::Reg(types[ptr],Code::RFP, params[e->id]->off));
-
+            Smop argAddr = Code::Reg(types[ptr],Code::RFP, params[e->id]->off);
+            Type* argVarType = deref(e->getType());
             if( e->kind != IL_ldarga_s && e->kind != IL_ldarga )
-                ldind(e->getType(), tmp, e->pos);
-
-            return tmp;
+                return ldind(argVarType, argAddr, e->pos);
+            else
+                return argAddr;
         }
 
     case IL_ldloc_0:
@@ -1446,12 +1628,12 @@ Smop EiGen::Imp::expression(Expression* e)
     case IL_ldloca:{
             DeclList locals = curProc->getLocals();
             Q_ASSERT( e->id < locals.size() );
-            Smop tmp = (Code::Reg(types[ptr],Code::RFP, locals[e->id]->off));
-
+            Smop localAddr = Code::Reg(types[ptr],Code::RFP, locals[e->id]->off);
+            Type* localVarType = deref(e->getType());
             if( e->kind != IL_ldloca_s && e->kind != IL_ldloca )
-                ldind(e->getType(), tmp, e->pos);
-
-            return tmp;
+                return ldind(localVarType, localAddr, e->pos);
+            else
+                return localAddr;
         }
 
     case IL_ldind_i1:
@@ -1467,9 +1649,9 @@ Smop EiGen::Imp::expression(Expression* e)
     case IL_ldind_u4:
     case IL_ldind_u8:
     case IL_ldind: {
-            Smop tmp = expression(e->lhs);
-            ldind(e->getType(), tmp, e->pos);
-            return tmp;
+            Smop addr = expression(e->lhs);
+            Type* baseType = deref(e->getType());
+            return ldind(baseType, addr, e->pos);
         }
 
     case IL_ldelem_i1:
@@ -1485,32 +1667,39 @@ Smop EiGen::Imp::expression(Expression* e)
     case IL_ldelem_u8:
     case IL_ldelem:
     case IL_ldelema: {
-            Smop arr = expression(e->lhs);
-            emitter.ctx.SaveRegister(arr);
+            Smop arrayAddr = expression(e->lhs);
+            emitter.ctx.SaveRegister(arrayAddr);
             Smop idx = expression(e->rhs);
-            emitter.ctx.RestoreRegister(arr);
-            Type* lhsT = deref(e->lhs->getType()); // pointer
-            lhsT = deref(lhsT->getType()); // array
-            lhsT = deref(lhsT->getType()); // element type
-            idx = emitter.ctx.Multiply(idx, Code::Imm(idx.type,lhsT->getByteSize(target_data[target].pointer_width)));
+            emitter.ctx.RestoreRegister(arrayAddr);
+            Type* ptrToArrT = deref(e->lhs->getType());
+            Type* arrayT = deref(ptrToArrT->getType());
+            Type* elementT = deref(arrayT->getType());
+            Smop offset = emitter.ctx.Multiply(idx,
+                        Code::Imm(idx.type,elementT->getByteSize(target_data[target].pointer_width)));
+            release(idx);
             loc(e->pos);
-            arr = emitter.ctx.Add(arr,emitter.ctx.Convert(types[ptr],idx));
+            Smop elemAddr = emitter.ctx.Add(arrayAddr,emitter.ctx.Convert(types[ptr],offset));
+            release(arrayAddr);
+            release(offset);
             if( e->kind == IL_ldelema )
-                return arr;
-            ldind(lhsT, arr, e->pos);
-            return arr;
+                return elemAddr;
+            else
+                return ldind(elementT, elemAddr, e->pos);
         }
 
     case IL_ldfld:
     case IL_ldflda: {
-            Smop tmp = expression(e->lhs);
-            Type* ft = deref(e->d->getType()); // field type
+            Smop structAddr = expression(e->lhs);
             loc(e->pos);
-            tmp = emitter.ctx.Add(emitter.ctx.Convert(types[ptr],tmp), Code::Imm(types[ptr],e->d->f.off));
+            Smop fieldAddr = emitter.ctx.Add(emitter.ctx.Convert(types[ptr],structAddr),
+                                             Code::Imm(types[ptr],e->d->f.off));
             if( e->kind == IL_ldflda )
-                return tmp;
-            ldind(ft, tmp, e->pos);
-            return tmp;
+                return fieldAddr;
+            else
+            {
+                Type* fieldType = deref(e->d->getType());
+                return ldind(fieldType, fieldAddr, e->pos);
+            }
         }
 
     case IL_ldproc:
@@ -1530,20 +1719,10 @@ Smop EiGen::Imp::expression(Expression* e)
             int aligned_size = 0;
             for( int i = args.size()-1; i >= 0; i-- )
             {
-                Smop arg = expression(args[i]);
+                Smop actual = expression(args[i]);
                 Type* argT = deref(args[i]->getType());
-                switch( argT->kind )
-                {
-                case Type::Struct:
-                case Type::Union:
-                case Type::Object:
-                    aligned_size += push_struct(argT, arg);
-                    break;
-                default:
-                    aligned_size += pushRes(getCodeType(argT), arg);
-                    // TODO: convert types of varargs
-                    break;
-                }
+                aligned_size += push(argT, actual);
+                // TODO: convert types of varargs
             }
 #if 0 // TODO
             // If the return type is a large struct/union, the caller passes
@@ -1595,54 +1774,30 @@ Smop EiGen::Imp::expression(Expression* e)
             return res;
         }
 
-    case IL_newobj:
-        Q_ASSERT(e->getType()->kind == Type::Pointer);
-#if 0
-        if( deref(e->getType())->objectInit )
-        {
-            const QByteArray name = typeRef(e->d->getType());
-            out << "(_ptr$ = calloc(1, sizeof(";
-            out << name;
-            out << ")),\n\t\t";
-            out << name << "$init$(" << "((" + name + "*)_ptr$)" << ", 1), (";
-            out << typeRef(e->getType());
-            out << ")_ptr$)";
-        }else
-        {
-            out << "(";
-            out << typeRef(e->getType());
-            out << ")calloc(1, sizeof(";
-            out << typeRef(e->getType()->getType());
-            out << "))";
+    case IL_newobj: {
+            const MyEmitter::RestoreRegisterState restore(emitter.ctx);
+            Q_ASSERT(e->getType()->kind == Type::Pointer);
+            // TODO if( deref(e->getType())->objectInit ) $init$
+            // calloc(1, sizeof(e->getType()->getType()))
+            Smop f = Code::Adr(types[fun],"calloc");
+            emitter.ctx.Push(Code::Imm(types[ptr],e->getType()->getType()->getByteSize(target_data[target].pointer_width)));
+            emitter.ctx.Push(Code::Imm(types[ptr],1));
+            const int aligned_size = 2 * align_to(types[ptr].size,target_data[target].stack_align);
+            return emitter.ctx.Call(types[ptr], f,aligned_size);
         }
-#endif
-        break;
 
-    case IL_newarr:
-#if 0
-        if( deref(e->getType())->objectInit )
-        {
+    case IL_newarr: {
+            const MyEmitter::RestoreRegisterState restore(emitter.ctx);
+            // TODO if( deref(e->getType())->objectInit ) $init$
+            // calloc(n, sizeof(element_type))
             Type* et = deref(e->d->getType());
-            const QByteArray name = typeRef(et);
-            out << "(_len$ = ";
-            expression(e->lhs);
-            out << ", _ptr$ = calloc(_len$,sizeof(";
-            out << name << ")),\n\t\t";
-            out << name << "$init$(" << "((" << name << "*)_ptr$)" << ", _len$), (";
-            out << typeRef(et);
-            out << "*)_ptr$)";
-        }else
-        {
-            Type* et = deref(e->d->getType());
-            out << "(";
-            out << typeRef(et);
-            out << "*)calloc(";
-            expression(e->lhs);
-            out << ",sizeof(";
-            out << typeRef(et) << "))";
+            Smop len = expression(e->lhs);
+            Smop f = Code::Adr(types[fun],"calloc");
+            emitter.ctx.Push(Code::Imm(types[ptr],et->getByteSize(target_data[target].pointer_width)));
+            emitter.ctx.Push(len);
+            const int aligned_size = 2 * align_to(types[ptr].size,target_data[target].stack_align);
+            return emitter.ctx.Call(types[ptr], f,aligned_size);
         }
-#endif
-        break;
 
     case IL_dup:
         return expression(e->lhs);
@@ -1663,7 +1818,7 @@ Smop EiGen::Imp::expression(Expression* e)
             MyEmitter::Label lend = emitter.ctx.CreateLabel();
             loc(if_->pos);
             emitter.ctx.BranchEqual(lelse,Code::Imm(type,0),emitter.ctx.Convert(type,cond));
-            cond = Smop(); // release cond
+            release(cond);
             Smop res;
             Smop lhs = expression(then_->lhs);
             // apparently C allows x ? (void)a : (void)b or mixed

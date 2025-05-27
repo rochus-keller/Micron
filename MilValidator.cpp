@@ -817,14 +817,15 @@ Expression* Validator::visitExpr(Expression* e)
                     error(e->pos, "the referenced parameter does not exist");
                     break;
                 }
+                Type* paramType = params[e->id]->getType();
                 if( e->kind == IL_ldarga_s || e->kind == IL_ldarga )
                 {
                     Type* ptr = new Type();
                     ptr->kind = Type::Pointer;
-                    ptr->setType(params[e->id]->getType());
+                    ptr->setType(paramType);
                     e->setType(ptr);
                 }else
-                    e->setType(params[e->id]->getType());
+                    e->setType(paramType);
                 stack.push_back(e);
             }
             break;
@@ -937,15 +938,15 @@ Expression* Validator::visitExpr(Expression* e)
         case IL_ldvar:
         case IL_ldvara:
             {
-                Type* t = deref(e->d->getType());
+                Type* varType = deref(e->d->getType());
                 if( e->kind == IL_ldvara )
                 {
                     Type* ptr = new Type();
                     ptr->kind = Type::Pointer;
-                    ptr->setType(t);
+                    ptr->setType(varType);
                     e->setType(ptr);
                 }else
-                    e->setType(t);
+                    e->setType(varType);
                 stack.push_back(e);
             }
             break;
@@ -982,29 +983,31 @@ Expression* Validator::visitExpr(Expression* e)
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1); // ptr
-                Type* lhsT = deref(e->lhs->getType());
-                if( lhsT->kind != Type::Pointer && lhsT->kind != Type::StringLit ) {
+                Type* ptrT = deref(e->lhs->getType());
+                if( ptrT->kind != Type::Pointer && ptrT->kind != Type::StringLit ) {
                     error(e->pos, "expecting a pointer on the stack"); break;
                 }
-                Type* bt1 = deref(lhsT->getType());
-                Type* bt2 = tokToBasicType(mdl, e->kind);
+                Type* baseOnStack = deref(ptrT->getType());
+                Type* baseInOp = tokToBasicType(mdl, e->kind);
                 if( e->kind == IL_ldind )
-                    bt2 = deref(e->d->getType());
+                    baseInOp = deref(e->d->getType());
                 if( e->kind == IL_ldind &&
-                        (bt1->kind == Type::Array && bt1->len == 0 && deref(bt1->getType())->kind == Type::CHAR ||
-                         lhsT->kind == Type::StringLit ) &&
-                        bt2->kind == Type::Array && bt2->len != 0 && deref(bt2->getType())->kind == Type::CHAR )
+                        (baseOnStack->kind == Type::Array && baseOnStack->len == 0 &&
+                            deref(baseOnStack->getType())->kind == Type::CHAR ||
+                            ptrT->kind == Type::StringLit ) &&
+                        baseInOp->kind == Type::Array && baseInOp->len != 0 &&
+                            deref(baseInOp->getType())->kind == Type::CHAR )
                 {
                     ; // ok to store an open char array or strlit in a non-open char array on stack.
-                }else if( !equal(bt2, bt1) )
+                }else if( !equal(baseInOp, baseOnStack) )
                 {
                     error(e->pos, "ldind type not compatible with type on the stack");
                     break;
                 }
                 if( e->kind == IL_ldind )
-                    e->setType(bt2);
+                    e->setType(baseInOp);
                 else
-                    e->setType(bt1);
+                    e->setType(baseOnStack);
                 stack.back() = e;
             }
             break;
