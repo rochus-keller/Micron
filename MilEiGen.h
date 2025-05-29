@@ -22,6 +22,8 @@
 
 #include <Micron/MilAst.h>
 
+class QIODevice;
+
 namespace Mil
 {
     class EiGen
@@ -37,6 +39,8 @@ namespace Mil
         ~EiGen();
 
         bool generate(Declaration* module, QIODevice* out);
+
+        static TargetCode translate(const char*);
 
     private:
         class Imp;

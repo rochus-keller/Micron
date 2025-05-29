@@ -21,8 +21,8 @@
 */
 
 #include <QString>
-#include <MicTokenType.h>
-#include <MicRowCol.h>
+#include <Micron/MicTokenType.h>
+#include <Micron/MicRowCol.h>
 
 namespace Mic
 {

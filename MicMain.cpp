@@ -22,6 +22,7 @@
 #include "MilInterpreter.h"
 #include "MilVmCode.h"
 #include "MilVmOakwood.h"
+#include "MilEiGen.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -30,12 +31,12 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QElapsedTimer>
-#include <MicPpLexer.h>
-#include <MicParser2.h>
-#include <MicMilEmitter.h>
-#include <MilLexer.h>
-#include <MilParser.h>
-#include <MilToken.h>
+#include "MicPpLexer.h"
+#include "MicParser2.h"
+#include "MicMilEmitter.h"
+#include "MilLexer.h"
+#include "MilParser.h"
+#include "MilToken.h"
 #include <QCommandLineParser>
 
 class Lex2 : public Mic::Scanner2
@@ -59,12 +60,12 @@ static QByteArray getModuleName(const QString& file)
     Mic::Lexer lex;
     lex.setStream(file);
     Mic::Token t = lex.nextToken();
-    while( t.isValid() && t.d_tokenType != Mic::Tok_MODULE )
+    while( t.isValid() && t.d_type != Mic::Tok_MODULE )
         t = lex.nextToken();
-    if( t.d_tokenType == Mic::Tok_MODULE )
+    if( t.d_type == Mic::Tok_MODULE )
     {
         t = lex.nextToken();
-        if( t.d_tokenType == Mic::Tok_ident )
+        if( t.d_type == Mic::Tok_ident )
             return t.d_val;
     }
     return QByteArray();
@@ -218,7 +219,8 @@ public:
     }
 };
 
-static void process(const QString& file, const QStringList& searchPaths, bool run, bool dumpIL, bool dumpLL)
+static void process(const QString& file, const QStringList& searchPaths,
+                    bool run, bool dumpIL, bool dumpLL, const QString& arch)
 {
     int ok = 0;
     int all = 0;
@@ -264,6 +266,27 @@ static void process(const QString& file, const QStringList& searchPaths, bool ru
             out.putChar('\n');
         }
     }
+    if( all == ok && !arch.isEmpty() )
+    {
+        Mil::EiGen::TargetCode target = Mil::EiGen::translate(arch.toUtf8().constData());
+        if( target == Mil::EiGen::NoTarget )
+            qCritical() << "unknown architecture:" << arch;
+        else
+        {
+            mgr.loader.getModel().calcMemoryLayouts(sizeof(void*), 4);
+
+            Mil::EiGen gen(&mgr.loader.getModel(), target);
+
+            foreach( Mil::Declaration* module, mgr.loader.getModel().getModules() )
+            {
+                QFile out(module->name + ".cod");
+                if( !out.open(QIODevice::WriteOnly) )
+                    qCritical() << "cannot open file for writing:" << out.fileName();
+                else if( !gen.generate(module, &out) )
+                    qCritical() << "error generating module" << module->name;
+            }
+        }
+    }
     if( all == ok && run )
     {
         Mil::Interpreter r(&mgr.loader.getModel());
@@ -306,8 +329,10 @@ int main(int argc, char *argv[])
     cp.addOption(run);
     QCommandLineOption dump("d", "dump MIL code");
     cp.addOption(dump);
-    QCommandLineOption dump2("l", "dump interpreter low-level bytecode");
+    QCommandLineOption dump2("l", "dump low-level bytecode"); // interpreter or eigen
     cp.addOption(dump2);
+    QCommandLineOption arch("a", "generate code for the given architecture", "arch");
+    cp.addOption(arch);
 
     cp.process(a);
     const QStringList args = cp.positionalArguments();
@@ -316,7 +341,7 @@ int main(int argc, char *argv[])
     const QStringList searchPaths = cp.values(sp);
 
     // TODO: what to do with more than one file?
-    process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2));
+    process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2), cp.value(arch));
 
     return 0;
 }

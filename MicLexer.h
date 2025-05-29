@@ -23,7 +23,7 @@
 // Adopted from Oberon+
 
 #include <QObject>
-#include <MicToken.h>
+#include <Micron/MicToken.h>
 #include <QDateTime>
 
 class QIODevice;

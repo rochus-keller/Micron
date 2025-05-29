@@ -21,8 +21,8 @@
 */
 
 #include <QString>
-#include <MilTokenType.h>
-#include <MicRowCol.h>
+#include <Micron/MilTokenType.h>
+#include <Micron/MicRowCol.h>
 
 namespace Mil
 {

@@ -3873,7 +3873,7 @@ void Parser2::import() {
 		expect(Tok_ident, false, "import");
         path << cur;
     }
-    if( localName.d_tokenType == 0 )
+    if( localName.d_type == 0 )
         localName = path.last();
 
     bool doublette;

@@ -1,0 +1,110 @@
+# author: Rochus Keller (me@rochus-keller.ch)
+# License: GPL
+# See https://github.com/rochus-keller/LeanQt and https://github.com/rochus-keller/BUSY/blob/main/README.md on how to use this file
+
+if busy_version < "2023-01-15" {
+    error("this version of BUSY is not compatible with this build")
+}
+
+let mtconf : Config {
+    .cflags = [ "/O2", "/MT" ]
+}
+
+if (build_mode == `optimized) && (target_toolchain == `msvc) {
+    set_defaults(target_toolchain,mtconf)
+}
+
+submod qt = ../LeanQt (HAVE_FILEIO, HAVE_COREAPP, HAVE_CMDLINE)
+submod eigen = ../EiGen
+
+let config : Config {
+    .configs += [ qt.core_client_config eigen.config]
+    .include_dirs += ..
+    if build_mode == `debug {
+        .defines += "_DEBUG"
+    }
+}
+
+let utils : SourceSet {
+    .configs += config;
+    .sources += [
+        ./MicRowCol.cpp
+        ./MicSymbol.cpp
+        ./MilOps.cpp
+        ./MicRowCol.h
+        ./MicSymbol.h
+        ./MilOps.h
+    ]
+}
+
+let micParser : SourceSet {
+    .configs += config;
+    .sources += [
+        ./MicLexer.cpp
+        ./MicLexer.h
+        ./MicPpLexer.cpp
+        ./MicPpLexer.h
+        ./MicToken.cpp
+        ./MicToken.h
+        ./MicTokenType.cpp
+        ./MicTokenType.h
+        ./MicParser2.cpp
+        ./MicParser2.h
+        ./MicAst.cpp
+        ./MicAst.h
+        ./MicMilEmitter.cpp
+        ./MicMilEmitter.h
+        ./MicEvaluator.cpp
+        ./MicEvaluator.h
+        ./MicBuiltins.cpp
+        ./MicBuiltins.h
+        ./MicMilLoader2.cpp
+        ./MicMilLoader2.h
+    ]
+}
+
+let milParser : SourceSet {
+    .configs += config;
+    .sources += [
+        ./MilLexer.cpp
+        ./MilToken.cpp
+        ./MilTokenType.cpp
+        ./MilParser2.cpp
+        ./MilAst.cpp
+        ./MilProject.cpp
+        ./MilValidator.cpp
+        ./MilCeeGen.cpp
+        ./MilInterpreter.cpp
+        ./runtime/MIC++.c
+        ./oakwood/Input+.c
+        ./oakwood/MathL+.c
+        ./oakwood/Out+.c
+        ./MilVmCode.cpp
+        ./MilVmOakwood.cpp
+        ./MilEiGen.cpp
+        ./MilLexer.h
+        ./MilToken.h
+        ./MilTokenType.h
+        ./MilParser2.h
+        ./MilAst.h
+        ./MilProject.h
+        ./MilValidator.h
+        ./MilCeeGen.h
+        ./ilInterpreter.h
+        ./MilVmOps.h
+        ./MilVmCode.h
+        ./MilVmOakwood.h
+        ./MilEiGen.h
+    ]
+}
+
+let rcc : Rcc {
+    .sources += [ ./MilCompiler.qrc ]
+    .deps += qt.copy_rcc
+}
+
+let compiler ! : Executable {
+    .sources += [ ./MicMain.cpp ]
+    .deps += [ utils micParser milParser rcc eigen.common eigen.emitter qt.core_sources ]
+    .configs += config
+}

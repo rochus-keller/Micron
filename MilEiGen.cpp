@@ -140,7 +140,7 @@ public:
     EcsType getEcsType(Type*) const;
     Code::Type getCodeType(Type*) const;
     void loc( const Mic::RowCol& ) const;
-    static EcsType ilToEcsType(IL_op op);
+    static EcsType ilToEcsType(quint8 op);
     Smop ldind(Type * ty, const Smop& addr, const Mic::RowCol& pos);
 
     bool generate(Declaration* module);
@@ -277,6 +277,16 @@ bool EiGen::generate(Declaration* module, QIODevice* out)
     return res;
 }
 
+EiGen::TargetCode EiGen::translate(const char* name)
+{
+    for( int i = 1; i < MaxTarget; i++ )
+    {
+        if( strcmp(target_data[i].name, name) == 0 )
+            return TargetCode(i);
+    }
+    return NoTarget;
+}
+
 static QByteArray qualident(Declaration* d)
 {
     if( d->outer )
@@ -353,7 +363,7 @@ static void cast(Type* from, Type* to, Smop& reg) {
 }
 #endif
 
-EiGen::Imp::EcsType EiGen::Imp::ilToEcsType(IL_op op)
+EiGen::Imp::EcsType EiGen::Imp::ilToEcsType(quint8 op)
 {
     switch(op)
     {
@@ -458,7 +468,7 @@ Smop EiGen::Imp::ldind(Type* lhsValueType, const Smop& addr, const Mic::RowCol& 
 }
 
 EiGen::Imp::Imp(AstModel* mdl, TargetCode tg):mdl(mdl),curMod(0), curProc(0),
-    diagnostics(std::cerr), endOfProc(0), hasDebugInfo(true),
+    diagnostics(std::cerr), endOfProc(0), hasDebugInfo(false), target(tg),
     layout(
         {target_data[tg].int_width, 1, 8},
         {4, 4, 8},
@@ -672,13 +682,13 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
 {
     labels.clear();
     labelRefs.clear();
-    MyEmitter::Label lbl = emitter.ctx.CreateLabel();
-    endOfProc = &lbl;
     curProc = proc;
 
     if( !proc->forward && !proc->extern_ )
     {
         emitter.ctx.Begin(Code::Section::Code, qualident(proc->forwardToProc()).toStdString() );
+        MyEmitter::Label lbl = emitter.ctx.CreateLabel();
+        endOfProc = &lbl;
 
         if( hasDebugInfo )
         {
@@ -712,7 +722,7 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
         {
             // if( !module#init_run# )
             MyEmitter::Label afterend = emitter.ctx.CreateLabel();
-            Smop to = emitter.ctx.MakeMemory(types[u1], Code::Adr(types[u1], curMod->name.toStdString() + "#init_run#"));
+            Smop to = emitter.ctx.MakeMemory(types[u1], Code::Adr(types[ptr], curMod->name.toStdString() + "#init_run#"));
             emitter.ctx.BranchNotEqual(afterend, to, Code::Imm(types[u1], 0) );
             emitter.ctx.Move(to, Code::Imm(types[u1],1));
             release(to);
@@ -743,9 +753,9 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
             sub = sub->next;
         }
         statementSeq(proc->body);
+        lbl();
     }
 
-    lbl();
     endOfProc = 0;
     curProc = 0;
 }
