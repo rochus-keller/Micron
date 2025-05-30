@@ -343,7 +343,8 @@ namespace Mil
                 return 0;
             return (alignment - (off % alignment)) % alignment;
         }
-        void calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment);
+        void calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment,
+                               quint8 firstParamOffset = 0, bool reverseParamOrder = false);
         quint32 getVarMemSize() const { return varOff; }
 
         struct BitFieldUnit
@@ -353,9 +354,12 @@ namespace Mil
         static BitFieldUnit collectBitFields(const DeclList& fields, int start, quint8 pointerWidth);
 
     protected:
-        void walkImports(Declaration* module, DeclList& done, quint8 pointerWidth, quint8 stackAlignment);
-        void calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quint8 stackAlignment);
-        void calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, quint8 stackAlignment);
+        void walkImports(Declaration* module, DeclList& done, quint8 pointerWidth,
+                         quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder);
+        void calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth,
+                                quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder);
+        void calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth,
+                                    quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder);
 
     private:
         DeclList modules;

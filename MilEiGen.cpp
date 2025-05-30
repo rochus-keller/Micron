@@ -148,7 +148,7 @@ public:
     void visitProcedure(Declaration*);
     void visitMetaDecl(Declaration*);
     QByteArray typeRef(Type*);
-    void parameter(Declaration* param);
+    void locPar(Declaration* param);
     void variable(Declaration* var);
     void constValue(QTextStream& out, Constant* c);
     void statementSeq(Statement* s);
@@ -285,6 +285,16 @@ EiGen::TargetCode EiGen::translate(const char* name)
             return TargetCode(i);
     }
     return NoTarget;
+}
+
+quint8 EiGen::pointer_width(EiGen::TargetCode t)
+{
+    return target_data[t].pointer_width;
+}
+
+quint8 EiGen::stack_align(EiGen::TargetCode t)
+{
+    return target_data[t].stack_align;
 }
 
 static QByteArray qualident(Declaration* d)
@@ -593,7 +603,7 @@ void EiGen::Imp::visitModule()
    sub = curMod->subs;
    while( sub )
    {
-       if( sub->kind == Declaration::TypeDecl )
+       if( hasDebugInfo && sub->kind == Declaration::TypeDecl )
        {
            emitter.ctx.Begin(Code::Section::TypeSection, qualident(sub).toStdString());
            emitter.ctx.Locate(curMod->name.toStdString(), toPos(sub->pos));
@@ -605,11 +615,12 @@ void EiGen::Imp::visitModule()
        sub = sub->next;
    }
 
-   for( int i = 0; i < ptr; i++ )
-   {
-       emitter.ctx.Begin(Code::Section::TypeSection,ecsTypes[i].dbgname);
-       emitter.ctx.DeclareType(types[i]);
-   }
+   if( hasDebugInfo )
+       for( int i = 0; i < ptr; i++ )
+       {
+           emitter.ctx.Begin(Code::Section::TypeSection,ecsTypes[i].dbgname);
+           emitter.ctx.DeclareType(types[i]);
+       }
 
    emitter.ctx.Begin(Code::Section::Data, curMod->name.toStdString() + "#init_run#",
             1,
@@ -641,6 +652,7 @@ void EiGen::Imp::visitModule()
        switch( sub->kind )
        {
        case Declaration::TypeDecl:
+           if( hasDebugInfo )
            {
                Type* t = deref(sub->getType());
                if( t && t->kind == Type::Object )
@@ -673,7 +685,7 @@ void EiGen::Imp::visitModule()
         proc.kind = Declaration::Procedure;
         proc.init = true;
         proc.outer = curMod;
-        proc.name = "begin#";
+        proc.name = "begin$";
         visitProcedure(&proc);
    }
 }
@@ -690,6 +702,26 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
         MyEmitter::Label lbl = emitter.ctx.CreateLabel();
         endOfProc = &lbl;
 
+        Declaration* sub = proc->subs;
+        while(sub)
+        {
+            if( sub->kind == Declaration::LocalDecl && sub->off >= 0 )
+            {
+                Q_ASSERT( sub->off >= 0);
+                // off allocated so far starts with 0 and assumes addresses growing from low to high;
+                // EiGen assumes a stack which grows from higher to lower addresses;
+                // so we have to adjust each off that it points "to the other end" of the variable slot, and
+                // then make it negative, so it gets the right address relative to the frame pointer;
+                // if off is negative up front, we assume that this change has already be done.
+                int off = sub->getType()->getByteSize(target_data[target].pointer_width);
+                off = AstModel::align(off, target_data[target].stack_align);
+                off = sub->off + off;
+                sub->off = -1 * off;
+            }
+            sub = sub->next;
+        }
+
+
         if( hasDebugInfo )
         {
             emitter.ctx.Locate(proc->name.toStdString(),toPos(proc->pos));
@@ -705,14 +737,14 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
 
             DeclList params = proc->getParams();
             for( int i = 0; i < params.size(); i++ )
-                parameter(params[i]);
+                locPar(params[i]);
 
-            Declaration* sub = proc->subs;
+            sub = proc->subs;
             while(sub)
             {
                 if( sub->kind == Declaration::LocalDecl )
                 {
-                    parameter(sub);
+                    locPar(sub);
                 }
                 sub = sub->next;
             }
@@ -732,7 +764,7 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
             {
                 if( sub->kind == Declaration::Import && !sub->imported->nobody )
                 {
-                     Smop f = Code::Adr(types[fun], sub->imported->name.toStdString() + "#begin#");
+                     Smop f = Code::Adr(types[fun], sub->imported->name.toStdString() + "#begin$");
                      emitter.ctx.Call(f, 0);
                 }
                 else if( sub->kind == Declaration::VarDecl )
@@ -743,7 +775,7 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
             afterend();
         }
 
-        Declaration* sub = proc->subs;
+        sub = proc->subs;
         while(sub)
         {
             if( sub->kind == Declaration::LocalDecl )
@@ -865,12 +897,12 @@ QByteArray EiGen::Imp::typeRef(Type* t)
         return "?TYPE";
 }
 
-void EiGen::Imp::parameter(Declaration* param)
+void EiGen::Imp::locPar(Declaration* var)
 {
-    emitter.ctx.DeclareSymbol(*endOfProc, param->name.toStdString(),
-                     Code::Mem(types[ptr],Code::RFP, param->off));
-    emitter.ctx.Locate(param->name.toStdString(),toPos(param->pos));
-    typeDecl(deref(param->getType()));
+    emitter.ctx.DeclareSymbol(*endOfProc, var->name.toStdString(),
+                     Code::Mem(types[ptr],Code::RFP, var->off));
+    emitter.ctx.Locate(var->name.toStdString(),toPos(var->pos));
+    typeDecl(deref(var->getType()));
 }
 
 void EiGen::Imp::variable(Declaration* var)

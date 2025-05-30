@@ -20,6 +20,7 @@
 #include "MilAst.h"
 #include "MicSymbol.h"
 #include <QtDebug>
+#include <algorithm>
 using namespace Mil;
 
 static void addTypeDecl(Declaration* globals, Type* t, const QByteArray& name)
@@ -148,7 +149,7 @@ Declaration*AstModel::resolve(const Quali& q) const
     return module->findSubByName(q.second);
 }
 
-void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment)
+void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder)
 {
     varOff = 0;
     DeclList done;
@@ -157,12 +158,12 @@ void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment)
         if( done.contains(m) )
             continue;
         done << m;
-        walkImports(m, done, pointerWidth, stackAlignment);
-        calcMemoryLayoutOf(m, pointerWidth, stackAlignment);
+        walkImports(m, done, pointerWidth, stackAlignment, firstParamOffset, reverseParamOrder);
+        calcMemoryLayoutOf(m, pointerWidth, stackAlignment, firstParamOffset, reverseParamOrder);
     }
 }
 
-void AstModel::walkImports(Declaration* m, DeclList& done, quint8 pointerWidth, quint8 stackAlignment)
+void AstModel::walkImports(Declaration* m, DeclList& done, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder)
 {
     Declaration* sub = m->subs;
     while(sub)
@@ -172,7 +173,7 @@ void AstModel::walkImports(Declaration* m, DeclList& done, quint8 pointerWidth, 
             if( sub->imported && !done.contains(sub->imported) )
             {
                 done << sub->imported;
-                calcMemoryLayoutOf(sub->imported, pointerWidth, stackAlignment);
+                calcMemoryLayoutOf(sub->imported, pointerWidth, stackAlignment, firstParamOffset, reverseParamOrder);
             }
         }
         sub = sub->next;
@@ -218,7 +219,7 @@ AstModel::BitFieldUnit AstModel::collectBitFields(const DeclList& fields, int st
     return res;
 }
 
-void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quint8 stackAlignment)
+void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder)
 {
     // RISK: this function assumes that declaration order reflects dependency order, besides pointers
     Declaration* sub = module->subs;
@@ -307,7 +308,7 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
                     foreach( Declaration* sub, type->subs )
                     {
                         if( sub->kind == Declaration::Procedure )
-                            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment);
+                            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment, firstParamOffset, reverseParamOrder);
                     }
                 }
                 break;
@@ -317,7 +318,7 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
             }
             break;
         case Declaration::Procedure:
-            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment );
+            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment, firstParamOffset, reverseParamOrder);
             break;
         case Declaration::VarDecl:
             {
@@ -335,10 +336,10 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
     }
 }
 
-void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, quint8 stackAlignment)
+void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder)
 {
-    int off_p = 0;
     int off_l = 0;
+    QList<Declaration*> params;
     Declaration* subsub = proc->subs;
     while(subsub)
     {
@@ -346,13 +347,7 @@ void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, qu
         switch( subsub->kind )
         {
         case Declaration::ParamDecl:
-            {
-                const int size = t->getByteSize(pointerWidth);
-                const int alig = t->getAlignment(pointerWidth);
-                off_p += AstModel::padding(off_p, alig);
-                subsub->off = off_p;
-                off_p += qMax(size,(int)stackAlignment);
-            }
+            params.append(subsub);
             break;
         case Declaration::LocalDecl:
             {
@@ -365,6 +360,18 @@ void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, qu
             break;
         }
         subsub = subsub->next;
+    }
+    int off_p = firstParamOffset;
+    if( reverseParamOrder )
+        std::reverse(params.begin(), params.end());
+    foreach( Declaration* p, params )
+    {
+        Type* t = p->getType();
+        const int size = t->getByteSize(pointerWidth);
+        const int alig = t->getAlignment(pointerWidth);
+        off_p += AstModel::padding(off_p, alig);
+        p->off = off_p;
+        off_p += qMax(size,(int)stackAlignment);
     }
 }
 

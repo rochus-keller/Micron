@@ -273,7 +273,9 @@ static void process(const QString& file, const QStringList& searchPaths,
             qCritical() << "unknown architecture:" << arch;
         else
         {
-            mgr.loader.getModel().calcMemoryLayouts(sizeof(void*), 4);
+            const qint8 alig = Mil::EiGen::stack_align(target);
+            mgr.loader.getModel().calcMemoryLayouts(Mil::EiGen::pointer_width(target),
+                                                    alig, 2 * alig, true);
 
             Mil::EiGen gen(&mgr.loader.getModel(), target);
 
