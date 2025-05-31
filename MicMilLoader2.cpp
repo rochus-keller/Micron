@@ -139,8 +139,9 @@ InMemRenderer2::~InMemRenderer2()
         delete module;
 }
 
-void InMemRenderer2::commit()
+bool InMemRenderer2::commit()
 {
+    bool success = false;
     if( hasError )
         delete module;
     else
@@ -171,10 +172,12 @@ void InMemRenderer2::commit()
         {
             error(QString("cannot add module: %1").arg(module->name.constData()) );
             delete module;
-        }
+        }else
+            success = true;
     }
 
     module = 0;
+    return success;
 }
 
 void InMemRenderer2::beginModule(const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& mp)

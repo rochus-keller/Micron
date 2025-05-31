@@ -187,8 +187,9 @@ public:
                 qCritical() << QFileInfo(e.path).fileName() << e.row << e.col << e.msg;
         }else
         {
-            res = p.takeModule();
-            imr.commit();
+            if( imr.commit() )
+                res = p.takeModule();
+            // else return 0
         }
         // TODO: uniquely extend the name of generic module instantiations
 
@@ -241,7 +242,10 @@ static void process(const QString& file, const QStringList& searchPaths,
 
     Mic::Import imp;
     imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
-    mgr.loadModule(imp); // recursively compiles all required files
+    Mic::Declaration* top = mgr.loadModule(imp); // recursively compiles all required files
+    if( top )
+        mgr.loader.getModel().getModules().last()->init = true; // top-level module is entry point
+
 
 
     all += mgr.modules.size();
@@ -266,7 +270,7 @@ static void process(const QString& file, const QStringList& searchPaths,
             out.putChar('\n');
         }
     }
-    if( all == ok && !arch.isEmpty() )
+    if( all == ok )
     {
         Mil::EiGen::TargetCode target = Mil::EiGen::translate(arch.toUtf8().constData());
         if( target == Mil::EiGen::NoTarget )
@@ -281,6 +285,8 @@ static void process(const QString& file, const QStringList& searchPaths,
 
             foreach( Mil::Declaration* module, mgr.loader.getModel().getModules() )
             {
+                if( module->name == "MIC$" )
+                    continue;
                 QFile out(module->name + ".cod");
                 if( !out.open(QIODevice::WriteOnly) )
                     qCritical() << "cannot open file for writing:" << out.fileName();

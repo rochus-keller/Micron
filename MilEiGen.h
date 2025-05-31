@@ -40,7 +40,7 @@ namespace Mil
 
         bool generate(Declaration* module, QIODevice* out);
 
-        static TargetCode translate(const char*);
+        static TargetCode translate(const char*, bool defaultToHost = true );
         static quint8 pointer_width(TargetCode);
         static quint8 stack_align(TargetCode);
 

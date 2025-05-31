@@ -21,6 +21,7 @@ int MIC$$relop1(const char* l, const char* r, int op)
 	case 6: // GEQ
 		return strcmp(l,r) >= 0;
 	}
+	return 0;
 }
 
 int MIC$$relop2(const char* lhs, char rhs, int op)
@@ -58,12 +59,12 @@ uint32_t MIC$$SetIn( uint32_t lhs, uint32_t rhs )
 
 void MIC$$printI8(int64_t i)
 {
-	printf("%" PRId64, i);
+    printf("%lld", i);
 }
 
 void MIC$$printU8(uint64_t i)
 {
-	printf("%" PRIu64, i);
+    printf("%llu", i);
 }
 
 void MIC$$printF8(double d)
@@ -94,6 +95,6 @@ void MIC$$printSet(uint32_t s)
 void MIC$$assert(uint8_t cond, uint32_t line, const char* file)
 {
     if(!cond)
-        fprintf(stderr,"assertion failed in %s line %d\n", file, line);
+        fprintf(stderr,"assertion failed in %s line %u\n", file, line);
 	assert(cond);
 }

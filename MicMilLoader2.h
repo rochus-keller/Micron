@@ -50,7 +50,7 @@ public:
     InMemRenderer2(MilLoader2*);
     ~InMemRenderer2();
 
-    void commit();
+    bool commit();
 
     void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& );
     void endModule();

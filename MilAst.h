@@ -69,7 +69,7 @@ namespace Mil
         uint forward : 1;
         uint override_ : 1;
         uint validated : 1;
-        uint init : 1; // procedure begin$
+        uint init : 1; // procedure: begin$; module: top entry
 
         Mic::RowCol pos; // Declaration, Expression
 

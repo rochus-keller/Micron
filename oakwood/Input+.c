@@ -33,7 +33,9 @@ int gettimeofday(struct timeval * tp, struct timezone * tzp)
     return 0;
 }
 #else
+#ifndef _USE_CPU_TIME_
 #include <sys/time.h>
+#endif
 #endif
 
 static struct timeval start;
