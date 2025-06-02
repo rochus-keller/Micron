@@ -40,7 +40,7 @@ namespace Mil
     #endif
             meta(m),anonymous(false),objectInit(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),forward(false),validated(false),
-            type(0),public_(0),init(0),owned(0),nobody(0),pointerInit(0),override_(0) {}
+            type(0),public_(0),entryPoint(0),owned(0),nobody(0),pointerInit(0),override_(0),translated(0) {}
         virtual ~Node();
 
         enum Meta { Inval, T, D, E, S };
@@ -69,7 +69,10 @@ namespace Mil
         uint forward : 1;
         uint override_ : 1;
         uint validated : 1;
-        uint init : 1; // procedure: begin$; module: top entry
+        uint translated : 1; // module
+        uint entryPoint : 1; // procedure: begin$; module: top entry
+
+        // 27 bits
 
         Mic::RowCol pos; // Declaration, Expression
 
@@ -154,6 +157,15 @@ namespace Mil
         void append(ToDelete*);
     };
 
+    struct ModuleData
+    {
+        QString source;
+        ToDelete* toDelete;
+
+        ModuleData():toDelete(0){}
+        ~ModuleData();
+    };
+
     class Declaration : public Node
     {
     public:
@@ -179,7 +191,7 @@ namespace Mil
             Declaration* forwardTo; // Procedure if forward==true, not owned
             Statement* finally; // Procedure if forward==false, optionally, owned
             Declaration* imported; // Import, not owned
-            ToDelete* toDelete; // Module, all args to be deleted
+            ModuleData* md; // Module
         };
         // QVariant data; // value for Const, path for Import, name for Extern
         Declaration():Node(D),next(0),subs(0),outer(0),c(0),body(0){

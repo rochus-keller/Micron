@@ -27,11 +27,10 @@
 #include <QList>
 #include <QIODevice>
 #include <QTextStream>
+#include <Micron/MicRowCol.h>
 
 namespace Mic
 {
-    class RowCol;
-
     typedef QPair<QByteArray,QByteArray> MilQuali; // [module '!'] element
     typedef QPair<MilQuali,QByteArray> MilTrident;
 
@@ -39,10 +38,12 @@ namespace Mic
     {
         QByteArray name;
         MilQuali type;
+        quint32 line;
         uint isPublic : 1;
         uint bits : 6; // optional bit width for fields
-        MilVariable():isPublic(0),bits(0) {}
-        MilVariable(const MilQuali& type, const QByteArray& name):type(type),name(name),isPublic(0),bits(0){}
+        MilVariable():isPublic(0),bits(0),line(0) {}
+        MilVariable(const MilQuali& type, const QByteArray& name, quint32 line):
+            type(type),name(name),isPublic(0),bits(0),line(line){}
     };
 
     struct MilOperation
@@ -110,42 +111,45 @@ namespace Mic
         virtual void addField( const QByteArray& fieldName, // on top level or in class
                        const MilQuali& typeRef,
                        bool isPublic = true, quint8 bits = 0 ) {}
+
+        virtual void line(quint32) {}
     };
 
     class MilEmitter
     {
     public:
-        MilEmitter(MilRenderer*);
+        enum DbgInfo { None, RowsOnly, RowsAndCols };
+        MilEmitter(MilRenderer*, DbgInfo = None);
 
-        void beginModule( const QByteArray& fullName, const QString& sourceFile, const MilMetaParams& = MilMetaParams() );
-        void endModule();
+        void beginModule( const QByteArray& fullName, const QString& sourceFile, const RowCol& );
+        void endModule(const RowCol&);
 
-        void addImport(const QByteArray& fullName);
+        void addImport(const QByteArray& fullName, const RowCol&);
 
-        void addVariable( const MilQuali& typeRef, QByteArray name, bool isPublic = true );
+        void addVariable( const MilQuali& typeRef, QByteArray name, const RowCol&, bool isPublic = true );
 
-        void addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val ); // always public
+        void addConst(const MilQuali& typeRef, const QByteArray& name, const RowCol&, const QVariant& val ); // always public
 
-        void beginProc(const QByteArray& procName, bool isPublic = true, quint8 kind = MilProcedure::Normal,
+        void beginProc(const QByteArray& procName, const RowCol&, bool isPublic = true, quint8 kind = MilProcedure::Normal,
                        const QByteArray& objectType = QByteArray() );
-        void toFinallySection(bool);
-        void endProc();
+        void toFinallySection(bool, const RowCol&);
+        void endProc(const RowCol&);
 
         enum TypeKind { Invalid, Struct, Union, Object, ProcType, MethType, Alias, Pointer, Array, Generic, MaxType };
-        void beginType(const QByteArray& name, bool isPublic = true, quint8 typeKind = Struct,
+        void beginType(const QByteArray& name, const RowCol&, bool isPublic = true, quint8 typeKind = Struct,
                        const MilQuali& super = MilQuali() );
             // use for Struct, Union, Object, ProcType, MethType
             // supports addField, addArgument, setReturnType, setVararg depending on typeKind
         void endType();
 
-        void addType( const QByteArray& name, bool isPublic, const MilQuali& baseType,
+        void addType( const QByteArray& name, const RowCol&, bool isPublic, const MilQuali& baseType,
                       quint8 typeKind = Alias, quint32 len = 0);
             // use for Alias, Pointer, Array
 
-        void addField(const QByteArray& fieldName, // on top level or in struct/union
+        void addField(const QByteArray& fieldName, const RowCol&, // on top level or in struct/union
                        const MilQuali& typeRef, bool isPublic = true, quint8 bits = 0);
-        quint32 addLocal( const MilQuali& typeRef, QByteArray name = QByteArray() );
-        quint32 addArgument(const MilQuali& typeRef, QByteArray name = QByteArray() ); // SELF is explicit
+        quint32 addLocal( const MilQuali& typeRef, QByteArray name = QByteArray(), const RowCol& = RowCol() );
+        quint32 addArgument(const MilQuali& typeRef, QByteArray name = QByteArray(), const RowCol& = RowCol() ); // SELF is explicit
         void setReturnType(const MilQuali& typeRef);
         void setExtern( const QByteArray& origName = QByteArray() );
         void setVararg();
@@ -205,7 +209,7 @@ namespace Mic
         void ldvar_(const MilQuali& memberRef); // CIL ldsfld
         void ldvara_(const MilQuali& memberRef); // CIL ldsflda
         void ldstr_(const QByteArray& str);
-        void line_(quint32);
+        void line_(const Mic::RowCol &pos);
         void loop_();
         void mul_();
         void neg_();
@@ -239,6 +243,8 @@ namespace Mic
         void xor_();
     protected:
         void delta(int d);
+        void lineout(const RowCol&);
+        quint32 lineset(const RowCol&);
     private:
         quint8 d_typeKind;
         quint16 d_stackDepth;
@@ -247,12 +253,14 @@ namespace Mic
         QList<MilOperation>* ops;
         QByteArray d_library, d_origName;
         MilRenderer* d_out;
+        quint32 lastLine, firstLine;
+        DbgInfo dbgInfo;
     };
 
     class IlAsmRenderer : public MilRenderer
     {
     public:
-        IlAsmRenderer(QIODevice*);
+        IlAsmRenderer(QIODevice*, bool renderLineInfo = true);
 
         virtual void beginModule(const QByteArray& moduleName,const QString& sourceFile, const QByteArrayList& mp );
         virtual void endModule();
@@ -271,19 +279,24 @@ namespace Mic
         virtual void addField( const QByteArray& fieldName,
                        const MilQuali& typeRef,
                        bool isPublic = true, quint8 bits = 0);
+        void line(quint32);
 
         static QString formatDouble(const QVariant& v);
+
     protected:
         inline QByteArray ws() { return QByteArray(level*2,' '); }
         void render(const MilProcedure&);
         QByteArray toString(const MilQuali& q);
+        void lineout();
+
     private:
         enum State { Idle, Module, Struct, Proc } state;
         QTextStream out;
         int level;
         QString source;
         QByteArray d_moduleName;
-        bool sourceRendered;
+        quint32 curLine, lastLine;
+        bool renderLineInfo;
     };
 
     class MilSplitter : public MilRenderer
@@ -308,6 +321,7 @@ namespace Mic
         virtual void addField( const QByteArray& fieldName, // on top level or in class
                        const MilQuali& typeRef,
                        bool isPublic = true, quint8 bits = 0 );
+        void line(quint32);
     private:
         QList<MilRenderer*> renderer;
     };

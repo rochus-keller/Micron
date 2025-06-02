@@ -174,6 +174,7 @@ namespace Mil {
 		Tok_SHR,
 		Tok_SHR_UN,
 		Tok_SIZEOF,
+		Tok_SOURCE,
 		Tok_STARG,
 		Tok_STARG_S,
 		Tok_STELEM,

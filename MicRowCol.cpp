@@ -26,6 +26,12 @@ RowCol::RowCol(quint32 row, quint32 col)
         qWarning() << "invalid row or column number";
 }
 
+RowCol::RowCol(quint32 rowCol)
+{
+    d_row = unpackRow2(rowCol);
+    d_col = unpackCol2(rowCol);
+}
+
 bool RowCol::setRowCol(quint32 row, quint32 col)
 {
     static const quint32 maxRow = ( 1 << ROW_BIT_LEN ) - 1;

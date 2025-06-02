@@ -70,6 +70,8 @@ public:
                    const MilQuali& typeRef,
                    bool isPublic = true, quint8 bits = 0 );
 
+    void line(quint32);
+
     Mil::Declaration* getCurrentModule() const { return module; }
     Mil::Type* getCurrentType() const { return type; }
 
@@ -87,6 +89,7 @@ private:
     Mil::Declaration* module;
     Mil::Type* type;
     Mil::Declaration* curProc;
+    Mic::RowCol curPos;
     mutable QList<Mil::Type*> unresolved;
     mutable bool hasError;
 };

@@ -79,10 +79,10 @@ bool VmCode::translateModule(Declaration* m)
 {
     Q_ASSERT(m && m->kind == Declaration::Module);
 
-    if( m->init )
+    if( m->translated )
         return true; // the module was already translated
 
-    m->init = true; // re/misuse this flag to indicate that we already translated
+    m->translated = true; // re/misuse this flag to indicate that we already translated
 
     Declaration* sub = m->subs;
     while(sub)
@@ -132,7 +132,7 @@ bool VmCode::translateProc(Declaration* proc)
     procs.push_back(cur);
     cur->decl = proc;
 
-    if( proc->init && !translateInit(*cur, procs.size()-1) )
+    if( proc->entryPoint && !translateInit(*cur, procs.size()-1) )
         // add a prefix which calls imports if not already called
         return false;
     if( proc->typebound )
@@ -556,7 +556,9 @@ bool VmCode::translateStatSeq(Procedure& proc, Statement* s)
         case IL_switch:
             qCritical() << "ERROR: not yet implemented in interpreter:" << s_opName[s->kind];
             return false;
-       default:
+        case IL_line:
+            break; // NOP
+        default:
             Q_ASSERT(false);
         }
 

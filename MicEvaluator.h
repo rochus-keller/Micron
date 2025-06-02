@@ -35,9 +35,9 @@ public:
 
     bool evaluate(Expression*, bool assureOnMilStack = false);
 
-    bool prepareRhs(Type* lhs, bool assig = false);
-    bool assign(); // move rhs (top) to lhs (top-1)
-    bool assign( Expression* lhs, Expression* rhs );
+    bool prepareRhs(Type* lhs, bool assig, const RowCol &pos);
+    bool assign(const RowCol &pos); // move rhs (top) to lhs (top-1)
+    bool assign(Expression* lhs, Expression* rhs , const RowCol &pos);
 
     Value pop();
     Value top();
@@ -57,41 +57,40 @@ protected:
     void recurseConstConstructor(Expression*);
 
     // assign
-    bool stind( Expression* lhs, Expression* rhs );
-    bool stelem( Expression* lhs, Expression* rhs );
-    bool stfld( Expression* lhs, Expression* rhs );
+    bool stind(Expression* lhs, Expression* rhs, const RowCol &pos);
+    bool stelem( Expression* lhs, Expression* rhs, const RowCol &pos );
+    bool stfld( Expression* lhs, Expression* rhs, const RowCol &pos );
 
     // expression:
-    bool unaryOp(quint8 op); // Tok_Tilde, Tok_NOT, Tok_Plus, Tok_Minus, Tok_At
-    bool binaryOp(quint8 op); // push lhs first
-    void assureTopOnMilStack(bool pop = false); // send current top const to mil stack
+    bool unaryOp(quint8 op, const RowCol& pos); // Tok_Tilde, Tok_NOT, Tok_Plus, Tok_Minus, Tok_At
+    bool binaryOp(quint8 op, const RowCol &pos); // push lhs first
+    void assureTopOnMilStack(bool pop, const RowCol &pos); // send current top const to mil stack
     void shortCircuitAnd(Expression*);
     void shortCircuitOr(Expression*);
 
     // designator:
     bool derefPointer(bool byVal); // unary op
-    bool desigField(Declaration* field, bool byVal); // binary op
-    bool desigIndex(bool byVal); // binary op
-    bool call(int nArgs); // n-ary op, callee top on stack
-    bool castPtr(Type* to); // unary op
-    bool castNum(Type* to); // unary op
-    bool desigVar(bool byVal); // unary op
+    bool desigField(Declaration* field, bool byVal, const RowCol &pos); // binary op
+    bool desigIndex(bool byVal, const RowCol &pos); // binary op
+    bool call(int nArgs, const RowCol &pos); // n-ary op, callee top on stack
+    bool castPtr(Type* to, const RowCol &pos); // unary op
+    bool castNum(Type* to, const RowCol &pos); // unary op
+    bool desigVar(bool byVal, const RowCol &pos); // unary op
     bool derefValue(); // unary op
     void assureTopIsValue();
 
-    void notOp(Value&);
-    Value logicOp(quint8 op, const Value& lhs, const Value& rhs);
-    Value arithOp(quint8 op, const Value& lhs, const Value& rhs);
-    Value relationOp(quint8 op, const Value& lhs, const Value& rhs);
-    Value inOp(const Value& lhs, const Value& rhs);
-    Value isOp(const Value& lhs, const Value& rhs);
-    void unaryMinusOp(Value&);
-    void unaryPlusOp(Value&);
-    bool pushMilStack(const Value&);
-    void emitRelOp(quint8 op, bool unsig);
-    void emitArithOp(quint8 op, bool unsig = false, bool i64 = false);
+    void notOp(Value&, const RowCol &pos);
+    Value logicOp(quint8 op, const Value& lhs, const Value& rhs, const RowCol &pos);
+    Value arithOp(quint8 op, const Value& lhs, const Value& rhs, const RowCol &pos);
+    Value relationOp(quint8 op, const Value& lhs, const Value& rhs, const RowCol &pos);
+    Value inOp(const Value& lhs, const Value& rhs, const RowCol &pos);
+    Value isOp(const Value& lhs, const Value& rhs, const RowCol &pos);
+    void unaryMinusOp(Value&, const RowCol &pos);
+    void unaryPlusOp(Value&, const RowCol &pos);
+    bool pushMilStack(const Value&, const RowCol &pos);
+    void emitRelOp(quint8 op, bool unsig, const RowCol &pos);
+    void emitArithOp(quint8 op, bool unsig, bool i64, const RowCol& pos);
     void adjustNumType(Type* me, Type* other);
-
 
 private:
     AstModel* mdl;

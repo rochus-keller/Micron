@@ -46,11 +46,11 @@ static inline bool FIRST_identdef(int tt) {
 }
 
 static inline bool FIRST_ConstDeclaration(int tt) {
-	return tt == Tok_ident;
+    return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_TypeDeclaration(int tt) {
-	return tt == Tok_ident;
+    return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_type(int tt) {
@@ -87,11 +87,11 @@ static inline bool FIRST_StructUnionType(int tt) {
 }
 
 static inline bool FIRST_FieldList(int tt) {
-	return tt == Tok_ident || tt == Tok_2Dot;
+    return tt == Tok_LINE || tt == Tok_ident || tt == Tok_2Dot;
 }
 
 static inline bool FIRST_IdentList(int tt) {
-	return tt == Tok_ident;
+    return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_ObjectType(int tt) {
@@ -99,7 +99,7 @@ static inline bool FIRST_ObjectType(int tt) {
 }
 
 static inline bool FIRST_MemberList(int tt) {
-	return tt == Tok_ident;
+    return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_PointerType(int tt) {
@@ -111,7 +111,7 @@ static inline bool FIRST_ProcedureType(int tt) {
 }
 
 static inline bool FIRST_VariableDeclaration(int tt) {
-	return tt == Tok_ident;
+    return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_ProcedureDeclaration(int tt) {
@@ -127,7 +127,7 @@ static inline bool FIRST_ProcedureBody(int tt) {
 }
 
 static inline bool FIRST_LocalDeclaration(int tt) {
-	return tt == Tok_ident;
+    return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_FormalParameters(int tt) {
@@ -139,7 +139,7 @@ static inline bool FIRST_ReturnType(int tt) {
 }
 
 static inline bool FIRST_FPSection(int tt) {
-	return tt == Tok_ident;
+    return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_module(int tt) {
@@ -151,7 +151,7 @@ static inline bool FIRST_ImportList(int tt) {
 }
 
 static inline bool FIRST_import(int tt) {
-	return tt == Tok_ident;
+    return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_DeclarationSequence(int tt) {
@@ -160,6 +160,7 @@ static inline bool FIRST_DeclarationSequence(int tt) {
 
 static inline bool FIRST_Expression(int tt) {
 	switch(tt){
+    case Tok_LINE:
 	case Tok_LDELEM_U1:
 	case Tok_LDC_I8:
 	case Tok_SHL:
@@ -402,6 +403,7 @@ static inline bool FIRST_CondOp(int tt) {
 
 static inline bool FIRST_StatementSequence(int tt) {
 	switch(tt){
+    case Tok_LINE:
 	case Tok_ISINST:
 	case Tok_STIND_I4:
 	case Tok_STELEM_I2:
@@ -436,7 +438,6 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_NEWVLA:
 	case Tok_LDIND_I4:
 	case Tok_LDFLDA:
-	case Tok_LINE:
 	case Tok_LABEL:
 	case Tok_STIND_R4:
 	case Tok_LDC_I4_8:
@@ -570,7 +571,6 @@ static inline bool FIRST_Statement(int tt) {
 	case Tok_STLOC_0:
 	case Tok_STIND_R8:
 	case Tok_STELEM_I1:
-	case Tok_LINE:
 	case Tok_EXIT:
 	case Tok_STIND_I1:
 	case Tok_STELEM_I4:
@@ -710,6 +710,9 @@ bool Parser2::parseModule()
         if( curMod )
             delete curMod;
         curMod = 0;
+        source.clear();
+        lineFound = false;
+        curPos = RowCol();
         module();
         foreach( Type* t, unresolved)
         {
@@ -722,10 +725,16 @@ bool Parser2::parseModule()
                     t->setType(d->getType());
             }
         }
+        if( !source.isEmpty() && !lineFound )
+            error(cur, "SOURCE set without any LINE clause");
         unresolved.clear();
         return true;
     }else
+    {
+        if( la.d_type != Tok_Eof )
+            expect(Tok_MODULE, false, "file");
         return false;
+    }
 }
 
 Declaration*Parser2::takeModule()
@@ -739,7 +748,7 @@ void Parser2::next() {
 	cur = la;
 	la = scanner->next();
 	while( la.d_type == Tok_Invalid ) {
-		errors << Error(la.d_val, la.d_lineNr, la.d_colNr, la.d_sourcePath);
+        errors << Error(la.d_val, la.toRowCol(), la.d_sourcePath);
 		la = scanner->next();
 	}
 }
@@ -754,29 +763,29 @@ Token Parser2::peek(int off) {
 }
 
 void Parser2::invalid(const char* what) {
-	errors << Error(QString("invalid %1").arg(what),la.d_lineNr, la.d_colNr, la.d_sourcePath);
+    errors << Error(QString("invalid %1").arg(what),la.toRowCol(), la.d_sourcePath);
 }
 
 bool Parser2::expect(int tt, bool pkw, const char* where) {
 	if( la.d_type == tt || la.d_code == tt) { next(); return true; }
-    else { errors << Error(QString("'%1' expected in %2").arg(tokenTypeString(tt)).arg(where),la.d_lineNr, la.d_colNr, la.d_sourcePath); return false; }
+    else { errors << Error(QString("'%1' expected in %2").arg(tokenTypeString(tt)).arg(where),la.toRowCol(), la.d_sourcePath); return false; }
 }
 
 void Parser2::error(const Token& t, const QString& msg)
 {
     Q_ASSERT(!msg.isEmpty());
-    errors << Error(msg,t.d_lineNr, t.d_colNr, t.d_sourcePath);
+    errors << Error(msg,t.toRowCol(), t.d_sourcePath);
 }
 
 void Parser2::error(const Mic::RowCol& pos, const QString& msg)
 {
     Q_ASSERT(!msg.isEmpty());
-    errors << Error(msg, pos.d_row, pos.d_col, scanner->sourcePath());
+    errors << Error(msg, pos, scanner->sourcePath());
 }
 
 Declaration*Parser2::addDecl(const Token& id, Declaration::Kind k, bool public_)
 {
-    return addDecl(id.d_val, id.toRowCol(), k, public_);
+    return addDecl(id.d_val, select(id.toRowCol()), k, public_);
 }
 
 Declaration*Parser2::addDecl(const QByteArray& name, const Mic::RowCol& pos, Declaration::Kind k, bool public_)
@@ -907,6 +916,15 @@ Declaration* Parser2::qualident2(const Quali& q, const RowCol& pos) {
     return res;
 }
 
+bool Parser2::nextIsLine()
+{
+    if( peek(1).d_code == Tok_LINE && peek(2).d_type == Tok_unsigned )
+        return true;
+    if( peek(1).d_type == Tok_LINE && peek(2).d_type == Tok_unsigned )
+        return true;
+    return false;
+}
+
 Declaration* Parser2::trident() {
     Declaration* m = curMod;
     if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Bang )  ) {
@@ -960,7 +978,10 @@ Declaration* Parser2::identdef(Declaration::Kind k) {
 }
 
 void Parser2::ConstDeclaration() {
-	expect(Tok_ident, false, "ConstDeclaration");
+    if( nextIsLine() ) {
+        Line();
+    }
+    expect(Tok_ident, false, "ConstDeclaration");
     Declaration* d = addDecl(cur, Declaration::ConstDecl);
     if( d == 0 )
         return;
@@ -978,6 +999,9 @@ void Parser2::ConstDeclaration() {
 }
 
 void Parser2::TypeDeclaration() {
+    if( nextIsLine() ) {
+        Line();
+    }
     Declaration* d = identdef(Declaration::TypeDecl);
     if( d == 0 )
         return;
@@ -1019,7 +1043,7 @@ Type* Parser2::NamedType(bool allowAny) {
             Type* res = new Type();
             res->kind = Type::NameRef;
             res->quali = new Quali();
-            res->pos = t.toRowCol();
+            res->pos = select(t.toRowCol());
             *res->quali = q;
             unresolved << res;
             return res;
@@ -1035,7 +1059,7 @@ Type* Parser2::NamedType(bool allowAny) {
     res->setType(d->getType());
     if( !allowAny && res->getType() && res->getType()->kind == Type::Any )
         error(t, "cannot use type ANY here");
-    res->pos = t.toRowCol();
+    res->pos = select(t.toRowCol());
     return res;
 }
 
@@ -1140,7 +1164,7 @@ void Parser2::FieldList() {
         const quint64 tmp = cur.d_val.toULongLong();
         if( tmp > 64 )
             error(cur, "bitwidth of padding field too large");
-        Declaration* padding = addDecl("", cur.toRowCol(), Declaration::Field);
+        Declaration* padding = addDecl("", select(cur.toRowCol()), Declaration::Field);
         padding->anonymous = true;
         padding->f.bw = tmp;
         padding->outer = curDecl;
@@ -1149,12 +1173,18 @@ void Parser2::FieldList() {
 }
 
 DeclList Parser2::IdentList(Declaration::Kind k) {
+    if( nextIsLine() ) {
+        Line();
+    }
     DeclList res;
     res << identdef(k);
 	while( la.d_type == Tok_Comma || FIRST_identdef(la.d_type) ) {
 		if( la.d_type == Tok_Comma ) {
 			expect(Tok_Comma, false, "IdentList");
 		}
+        if( nextIsLine() ) {
+            Line();
+        }
         res << identdef(k);
 	}
     return res;
@@ -1261,7 +1291,10 @@ void Parser2::ProcedureDeclaration() {
 		expect(Tok_PROC, false, "ProcedureDeclaration");
 	} else
 		invalid("ProcedureDeclaration");
-	if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Dot )  ) {
+    if( nextIsLine() ) {
+        Line();
+    }
+    if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Dot )  ) {
 
         const Token tok = la;
         const QByteArray receiver = Binding();
@@ -1335,7 +1368,7 @@ void Parser2::ProcedureDeclaration() {
                     p->invar = true;
 				} else if( la.d_code == Tok_INIT ) {
 					expect(Tok_INIT, true, "ProcedureDeclaration");
-                    p->init = true;
+                    p->entryPoint = true;
 				} else
 					invalid("ProcedureDeclaration");
 			}
@@ -1428,14 +1461,20 @@ Type* Parser2::ReturnType() {
 }
 
 void Parser2::FPSection() {
-	expect(Tok_ident, false, "FPSection");
+    if( nextIsLine() ) {
+        Line();
+    }
+    expect(Tok_ident, false, "FPSection");
     TokenList ids;
     ids << cur;
 	while( la.d_type == Tok_Comma || la.d_type == Tok_ident ) {
 		if( la.d_type == Tok_Comma ) {
 			expect(Tok_Comma, false, "FPSection");
 		}
-		expect(Tok_ident, false, "FPSection");
+        if( nextIsLine() ) {
+            Line();
+        }
+        expect(Tok_ident, false, "FPSection");
         ids << cur;
     }
 	expect(Tok_Colon, false, "FPSection");
@@ -1449,7 +1488,10 @@ void Parser2::FPSection() {
 
 void Parser2::module() {
 	expect(Tok_MODULE, true, "module");
-	expect(Tok_ident, false, "module");
+    if( nextIsLine() ) {
+        Line();
+    }
+    expect(Tok_ident, false, "module");
 
     if( mdl->findModuleByName(cur.d_val) )
     {
@@ -1457,6 +1499,7 @@ void Parser2::module() {
         return;
     }
     curMod = addDecl(cur, Declaration::Module);
+    curMod->md = new ModuleData();
     scopeStack.push_back(curMod);
 
 	if( FIRST_MetaParams(la.d_type) ) {
@@ -1465,7 +1508,15 @@ void Parser2::module() {
 	if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
 	}
-	while( FIRST_ImportList(la.d_type) || FIRST_DeclarationSequence(la.d_type) ) {
+    if( la.d_code == Tok_SOURCE ) {
+        expect(Tok_SOURCE, true, "module");
+        expect(Tok_string, false, "module");
+        source = QString::fromUtf8(cur.d_val);
+        if( la.d_type == Tok_Semi ) {
+            expect(Tok_Semi, false, "module");
+        }
+    }
+    while( FIRST_ImportList(la.d_type) || FIRST_DeclarationSequence(la.d_type) ) {
 		if( FIRST_ImportList(la.d_type) ) {
 			ImportList();
 		} else if( FIRST_DeclarationSequence(la.d_type) || la.d_type == Tok_IMPORT || la.d_type == Tok_END || la.d_type == Tok_PROC || la.d_type == Tok_CONST || la.d_type == Tok_VAR || la.d_type == Tok_PROCEDURE || la.d_type == Tok_TYPE ) {
@@ -1474,7 +1525,10 @@ void Parser2::module() {
 			invalid("module");
 	}
 	expect(Tok_END, false, "module");
-	expect(Tok_ident, false, "module");
+    if( nextIsLine() ) {
+        Line();
+    }
+    expect(Tok_ident, false, "module");
     if( cur.d_val.constData() != curMod->name.constData() )
         error(cur,"Identifier after END doesn't correspond with module name");
 	if( la.d_type == Tok_Dot ) {
@@ -1508,7 +1562,10 @@ void Parser2::import() {
         expect(Tok_Slash, false, "import"); // TODO
 	}
 #endif
-	expect(Tok_ident, false, "import");
+    if( nextIsLine() ) {
+        Line();
+    }
+    expect(Tok_ident, false, "import");
     // path << cur;
 #if 0
 	if( FIRST_MetaActuals(la.d_type) ) {
@@ -1562,25 +1619,42 @@ void Parser2::DeclarationSequence() {
     // ok
 }
 
+void Parser2::Line()
+{
+    expect(Tok_LINE, true, "Line");
+    expect(Tok_unsigned, false, "Line");
+    if( !source.isEmpty() )
+    {
+        curPos = RowCol(cur.d_val.toUInt());
+        lineFound = true;
+    }else
+        error(cur, "LINE found without SOURCE");
+}
+
 Expression* Parser2::Expression_() {
     Expression* res = 0;
-	while( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
-        Expression* e = ExpInstr();
-        if( e == 0 )
+    while( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) || nextIsLine() ) {
+        if( nextIsLine() ) {
+            Line();
+        }else
         {
-            delete res;
-            return 0;
-        }else if( res == 0 )
-            res = e;
-        else
-            res->append(e);
+            Expression* e = ExpInstr();
+            if( e == 0 )
+            {
+                delete res;
+                return 0;
+            }else if( res == 0 )
+                res = e;
+            else
+                res->append(e);
+        }
 	}
     return res;
 }
 
 Expression* Parser2::ExpInstr() {
     Expression* res = new Expression();
-    res->pos = la.toRowCol();
+    res->pos = select(la.toRowCol());
 
     if( la.d_code == Tok_ADD ) {
         expect(Tok_ADD, true, "ExpInstr");
@@ -2070,14 +2144,14 @@ Expression* Parser2::ExpInstr() {
         expect(Tok_THEN, true, "CondOp");
         Expression* then_ = new Expression();
         then_->kind = IL_then;
-        then_->pos = cur.toRowCol();
+        then_->pos = select(cur.toRowCol());
         then_->e = Expression_();
         if_->next = then_;
 
         expect(Tok_ELSE, true, "CondOp");
         Expression* else_ = new Expression();
         else_->kind = IL_else;
-        else_->pos = cur.toRowCol();
+        else_->pos = select(cur.toRowCol());
         else_->e = Expression_();
         then_->next = else_;
 
@@ -2090,9 +2164,12 @@ Expression* Parser2::ExpInstr() {
 Statement* Parser2::StatementSequence() {
     Statement* res = 0;
     while( FIRST_Statement(la.d_type) || FIRST_Statement(la.d_code) ||
-           FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
+           FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) || nextIsLine() ) {
         Statement* s = 0;
-        if( FIRST_Statement(la.d_type) || FIRST_Statement(la.d_code) ) {
+        if( nextIsLine() ) {
+            Line();
+            continue;
+        }else if( FIRST_Statement(la.d_type) || FIRST_Statement(la.d_code) ) {
             s = Statement_();
         } else if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
             s = new Statement();
@@ -2147,7 +2224,7 @@ Statement* Parser2::Statement_()
     }
 
     Statement* res = new Statement();
-    res->pos = la.toRowCol();
+    res->pos = select(la.toRowCol());
 
     if( la.d_code == Tok_FREE ) {
         expect(Tok_FREE, true, "Statement");
@@ -2165,11 +2242,6 @@ Statement* Parser2::Statement_()
         res->kind = IL_label;
         expect(Tok_ident, false, "Statement");
         res->name = cur.d_val.constData();
-    } else if( la.d_code == Tok_LINE ) {
-        expect(Tok_LINE, true, "Statement");
-        res->kind = IL_line;
-        expect(Tok_unsigned, false, "Statement");
-        res->id = cur.d_val.toULong();
     } else if( la.d_code == Tok_POP ) {
         expect(Tok_POP, true, "Statement");
         res->kind = IL_pop;
@@ -2288,7 +2360,7 @@ Statement* Parser2::Statement_()
 Statement* Parser2::IfThenElse() {
     Statement* res = new Statement();
     res->kind = IL_if;
-    res->pos = la.toRowCol();
+    res->pos = select(la.toRowCol());
 	expect(Tok_IF, true, "IfThenElse");
     res->e = Expression_();
 	expect(Tok_THEN, true, "IfThenElse");
@@ -2296,7 +2368,7 @@ Statement* Parser2::IfThenElse() {
 	if( la.d_code == Tok_ELSE ) {
         Statement* s = new Statement();
         s->kind = IL_else;
-        s->pos = la.toRowCol();
+        s->pos = select(la.toRowCol());
 		expect(Tok_ELSE, true, "IfThenElse");
         s->body = StatementSequence();
         res->append(s);
@@ -2308,7 +2380,7 @@ Statement* Parser2::IfThenElse() {
 Statement* Parser2::Loop() {
     Statement* res = new Statement();
     res->kind = IL_loop;
-    res->pos = la.toRowCol();
+    res->pos = select(la.toRowCol());
 	expect(Tok_LOOP, true, "Loop");
     res->body = StatementSequence();
 	expect(Tok_END, false, "Loop");
@@ -2318,17 +2390,17 @@ Statement* Parser2::Loop() {
 Statement* Parser2::Switch() {
     Statement* res = new Statement();
     res->kind = IL_switch;
-    res->pos = la.toRowCol();
+    res->pos = select(la.toRowCol());
     expect(Tok_SWITCH, true, "Switch");
     res->e = Expression_();
 	while( la.d_code == Tok_CASE ) {
         Statement* s = new Statement();
         s->kind = IL_case;
-        s->pos = la.toRowCol();
+        s->pos = select(la.toRowCol());
         expect(Tok_CASE, true, "Switch");
         s->e = new Expression();
         s->e->kind = IL_case;
-        s->e->pos = la.toRowCol();
+        s->e->pos = select(la.toRowCol());
         s->e->i = integer();
 		while( la.d_type == Tok_Comma || FIRST_integer(la.d_type) ) {
 			if( la.d_type == Tok_Comma ) {
@@ -2336,7 +2408,7 @@ Statement* Parser2::Switch() {
 			}
             Expression* e = new Expression();
             e->kind = IL_case;
-            e->pos = la.toRowCol();
+            e->pos = select(la.toRowCol());
             e->i = integer();
             s->e->append(e);
         }
@@ -2347,7 +2419,7 @@ Statement* Parser2::Switch() {
 	if( la.d_code == Tok_ELSE ) {
         Statement* s = new Statement();
         s->kind = IL_else;
-        s->pos = la.toRowCol();
+        s->pos = select(la.toRowCol());
         expect(Tok_ELSE, true, "Switch");
         s->body = StatementSequence();
         res->append(s);
@@ -2359,7 +2431,7 @@ Statement* Parser2::Switch() {
 Statement* Parser2::RepeatUntil() {
     Statement* res = new Statement();
     res->kind = IL_repeat;
-    res->pos = la.toRowCol();
+    res->pos = select(la.toRowCol());
     expect(Tok_REPEAT, true, "RepeatUntil");
     res->body = StatementSequence();
 	expect(Tok_UNTIL, true, "RepeatUntil");
@@ -2371,7 +2443,7 @@ Statement* Parser2::RepeatUntil() {
 Statement* Parser2::WhileDo() {
     Statement* res = new Statement();
     res->kind = IL_while;
-    res->pos = la.toRowCol();
+    res->pos = select(la.toRowCol());
     expect(Tok_WHILE, true, "WhileDo");
     res->e = Expression_();
 	expect(Tok_DO, true, "WhileDo");
@@ -2395,12 +2467,18 @@ void Parser2::MetaActuals() {
 
 void Parser2::MetaParams() {
 	expect(Tok_Lpar, false, "MetaParams");
-	expect(Tok_ident, false, "MetaParams");
+    if( nextIsLine() ) {
+        Line();
+    }
+    expect(Tok_ident, false, "MetaParams");
 	while( ( ( peek(1).d_type == Tok_Comma || peek(1).d_type == Tok_ident ) && peek(2).d_type == Tok_ident )  ) {
 		if( la.d_type == Tok_Comma ) {
 			expect(Tok_Comma, false, "MetaParams");
 		}
-		expect(Tok_ident, false, "MetaParams");
+        if( nextIsLine() ) {
+            Line();
+        }
+        expect(Tok_ident, false, "MetaParams");
 	}
 	expect(Tok_Rpar, false, "MetaParams");
     // TODO

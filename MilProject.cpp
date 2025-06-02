@@ -114,7 +114,7 @@ bool Project::parse()
             if( !p.errors.isEmpty() )
             {
                 foreach( const Parser2::Error& e, p.errors )
-                    qCritical() << e.path << e.row << e.col << e.msg;
+                    qCritical() << e.path << e.pos.d_row << e.pos.d_col << e.msg;
                 p.errors.clear();
                 errorsFound = true;
             }else
@@ -137,6 +137,12 @@ bool Project::parse()
                     module = 0;
                 }
             }
+        }
+        if( !p.errors.isEmpty() )
+        {
+            foreach( const Parser2::Error& e, p.errors )
+                qCritical() << e.path << e.pos.d_row << e.pos.d_col << e.msg;
+            errorsFound = true;
         }
         if( parsed && !errorsFound )
             ok++;

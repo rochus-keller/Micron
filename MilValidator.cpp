@@ -84,10 +84,11 @@ bool Validator::validate(Declaration* module)
 
     foreach( Expression* e, newExprs )
     {
-        if( module->toDelete == 0 )
-            module->toDelete = new ToDelete(e);
+        Q_ASSERT(module->md);
+        if( module->md->toDelete == 0 )
+            module->md->toDelete = new ToDelete(e);
         else
-            module->toDelete->append(new ToDelete(e));
+            module->md->toDelete->append(new ToDelete(e));
     }
     newExprs.clear();
 

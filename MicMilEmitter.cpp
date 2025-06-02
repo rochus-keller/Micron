@@ -30,17 +30,18 @@ using namespace Mil;
 static const char* bool_sym = 0;
 static const char* char_sym = 0;
 
-MilEmitter::MilEmitter(MilRenderer* r):d_out(r),d_typeKind(0),ops(0)
+MilEmitter::MilEmitter(MilRenderer* r, DbgInfo di):d_out(r),d_typeKind(0),ops(0),lastLine(0), dbgInfo(di)
 {
     Q_ASSERT( r );
     bool_sym = Token::getSymbol("bool").constData();
     char_sym = Token::getSymbol("char").constData();
 }
 
-void MilEmitter::beginModule(const QByteArray& fullName, const QString& sourceFile, const MilMetaParams& mp)
+void MilEmitter::beginModule(const QByteArray& fullName, const QString& sourceFile, const RowCol & pos)
 {
     Q_ASSERT( !fullName.isEmpty() );
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
+#if 0
     QByteArrayList names;
     bool fullyInstantiated = true;
     foreach( const MilMetaParam& m, mp )
@@ -61,37 +62,49 @@ void MilEmitter::beginModule(const QByteArray& fullName, const QString& sourceFi
         else
             d_out->addType(m.name,false,MilQuali(),Generic,0);
     }
+#else
+    lineout(pos);
+    QString source;
+    if( dbgInfo != None )
+        source = sourceFile;
+    d_out->beginModule(fullName,source);
+#endif
 }
 
-void MilEmitter::endModule()
+void MilEmitter::endModule(const RowCol& pos)
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
+    lineout(pos);
     d_out->endModule();
 }
 
-void MilEmitter::addImport(const QByteArray& fullName)
+void MilEmitter::addImport(const QByteArray& fullName, const RowCol & pos)
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
+    lineout(pos);
     d_out->addImport(fullName);
 }
 
-void MilEmitter::addVariable(const MilQuali& typeRef, QByteArray name, bool isPublic)
+void MilEmitter::addVariable(const MilQuali& typeRef, QByteArray name, const RowCol & pos, bool isPublic)
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
+    lineout(pos);
     d_out->addVariable(typeRef,name, isPublic);
 }
 
-void MilEmitter::addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val)
+void MilEmitter::addConst(const MilQuali& typeRef, const QByteArray& name, const RowCol & pos, const QVariant& val)
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
+    lineout(pos);
     d_out->addConst(typeRef, name, val);
 }
 
-void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kind, const QByteArray& objectType)
+void MilEmitter::beginProc(const QByteArray& procName, const RowCol & pos, bool isPublic, quint8 kind, const QByteArray& objectType)
 {
     Q_ASSERT( d_typeKind == 0 );
     Q_ASSERT(!procName.isEmpty());
 
+    firstLine = lineset(pos);
     d_proc.append(MilProcedure());
     d_proc.back().name = procName;
     d_proc.back().isPublic = isPublic;
@@ -103,33 +116,40 @@ void MilEmitter::beginProc(const QByteArray& procName, bool isPublic, quint8 kin
     ops = &d_proc.back().body;
 }
 
-void MilEmitter::toFinallySection(bool yes)
+void MilEmitter::toFinallySection(bool yes, const RowCol & pos)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0);
     if( yes )
         ops = &d_proc.back().finally;
     else
         ops = &d_proc.back().body;
+    lastLine = 0;
 }
 
-void MilEmitter::endProc()
+void MilEmitter::endProc(const RowCol & pos)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    line_(pos); // mark the end of proc in the bytecode
+    if( firstLine )
+        d_out->line(firstLine); // mark the begin of proc
     d_out->addProcedure(d_proc.back());
     d_proc.pop_back();
     ops = 0;
 }
 
-void MilEmitter::beginType(const QByteArray& name, bool isPublic, quint8 typeKind, const MilQuali& super)
+void MilEmitter::beginType(const QByteArray& name, const RowCol & pos, bool isPublic, quint8 typeKind, const MilQuali& super)
 {
     Q_ASSERT( d_typeKind == 0 );
     Q_ASSERT( typeKind == Struct || typeKind == Union || typeKind == Object ||
               typeKind == ProcType || typeKind == MethType);
     d_typeKind = typeKind;
     if( typeKind == Struct || typeKind == Union || typeKind == Object )
-        d_out->beginType(name,isPublic, typeKind, super);
-    else
     {
+        lineout(pos);
+        d_out->beginType(name, isPublic, typeKind, super);
+    }else
+    {
+        firstLine = lineset(pos);
         Q_ASSERT(typeKind == ProcType || d_typeKind == MethType);
         d_proc.append(MilProcedure());
         d_proc.back().name = name;
@@ -146,39 +166,43 @@ void MilEmitter::endType()
         d_out->endType();
     else
     {
+        if( firstLine )
+            d_out->line(firstLine);
         d_out->addProcedure(d_proc.back());
         d_proc.pop_back();
     }
     d_typeKind = 0;
 }
 
-void MilEmitter::addType(const QByteArray& name, bool isPublic, const MilQuali& baseType, quint8 typeKind, quint32 len)
+void MilEmitter::addType(const QByteArray& name, const RowCol & pos, bool isPublic, const MilQuali& baseType, quint8 typeKind, quint32 len)
 {
     Q_ASSERT( d_typeKind == 0 );
     Q_ASSERT( typeKind == Alias || typeKind == Pointer || typeKind == Array);
+    lineout(pos);
     d_out->addType(name,isPublic,baseType,typeKind,len);
 }
 
-void MilEmitter::addField(const QByteArray& fieldName, const MilQuali& typeRef, bool isPublic, quint8 bits)
+void MilEmitter::addField(const QByteArray& fieldName, const RowCol & pos, const MilQuali& typeRef, bool isPublic, quint8 bits)
 {
     Q_ASSERT( d_typeKind == Struct || d_typeKind == Union || d_typeKind == Object );
+    lineout(pos);
     d_out->addField(fieldName, typeRef, isPublic, bits );
 }
 
-quint32 MilEmitter::addLocal(const MilQuali& typeRef, QByteArray name)
+quint32 MilEmitter::addLocal(const MilQuali& typeRef, QByteArray name, const RowCol & pos)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 );
     Q_ASSERT( !typeRef.second.isEmpty() );
-    d_proc.back().locals.append(MilVariable(typeRef,name));
+    d_proc.back().locals.append(MilVariable(typeRef,name, lineset(pos)));
     return d_proc.back().locals.size()-1;
 }
 
-quint32 MilEmitter::addArgument(const MilQuali& typeRef, QByteArray name)
+quint32 MilEmitter::addArgument(const MilQuali& typeRef, QByteArray name, const RowCol & pos)
 {
     Q_ASSERT( !d_proc.isEmpty() || d_typeKind == ProcType || d_typeKind == MethType );
     if( typeRef.second.isEmpty() )
         return 0; // error reported elsewhere
-    d_proc.back().params.append(MilVariable(typeRef,name));
+    d_proc.back().params.append(MilVariable(typeRef,name, lineset(pos)));
     return 0;
 }
 
@@ -801,11 +825,21 @@ void MilEmitter::ldstr_(const QByteArray& str)
     delta(+1);
 }
 
-void MilEmitter::line_(quint32 l)
+void MilEmitter::line_(const RowCol& pos)
 {
-    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    ops->append(MilOperation(IL_line,l) );
-    delta(0);
+    if( dbgInfo == None )
+        return;
+    if( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 )
+    {
+        quint32 cur = (dbgInfo == RowsOnly ? pos.d_row : pos.packed());
+        if( cur != lastLine )
+        {
+            lastLine = cur;
+            ops->append( MilOperation(IL_line,cur) );
+        }
+        delta(0);
+    }else
+        lineout(pos);
 }
 
 void MilEmitter::loop_()
@@ -1128,7 +1162,28 @@ void MilEmitter::delta(int d)
         d_maxStackDepth = d_stackDepth;
 }
 
-IlAsmRenderer::IlAsmRenderer(QIODevice* dev):level(0),sourceRendered(false),state(Idle)
+void MilEmitter::lineout(const RowCol & pos)
+{
+    const quint32 cur = lineset(pos);
+    if( cur )
+        d_out->line(cur);
+}
+
+quint32 MilEmitter::lineset(const RowCol & pos)
+{
+    if( dbgInfo == None )
+        return 0;
+    quint32 cur = (dbgInfo == RowsOnly ? pos.d_row : pos.packed());
+    if( cur != lastLine )
+    {
+        lastLine = cur;
+        return cur;
+    }
+    return 0;
+}
+
+IlAsmRenderer::IlAsmRenderer(QIODevice* dev, bool renderLineInfo):
+    level(0),renderLineInfo(renderLineInfo),state(Idle),curLine(0), lastLine(0)
 {
     // default is UTF-8, so no need to setCodec
     out.setDevice(dev);
@@ -1138,11 +1193,12 @@ void IlAsmRenderer::beginModule(const QByteArray& moduleName, const QString& sou
 {
     source = sourceFile;
     d_moduleName = moduleName;
-    sourceRendered = false;
     out << "// Generated by " << qApp->applicationName() << " " << qApp->applicationVersion() << " on "
         << QDateTime::currentDateTime().toString(Qt::ISODate) << endl << endl;
 
-    out << "module " << moduleName;
+    out << "module ";
+    lineout();
+    out << moduleName;
     if( !mp.isEmpty() )
     {
         out << " (";
@@ -1162,24 +1218,33 @@ void IlAsmRenderer::beginModule(const QByteArray& moduleName, const QString& sou
 
     state = Module;
     level++;
+
+    if( renderLineInfo && !sourceFile.isEmpty() )
+        out << ws() << "source \"" << sourceFile << "\"" << endl;
 }
 
 void IlAsmRenderer::endModule()
 {
     level--;
-    out << ws() << "end " << d_moduleName << endl;
+    out << ws() << "end ";
+    lineout();
+    out << d_moduleName << endl;
     state = Idle;
 }
 
 void IlAsmRenderer::addImport(const QByteArray& path)
 {
-    out << ws() << "import " << path;
+    out << ws() << "import ";
+    lineout();
+    out << path;
     out << endl;
 }
 
 void IlAsmRenderer::addVariable(const MilQuali& typeRef, QByteArray name, bool isPublic)
 {
-    out << ws() << "var " << name << ": " << toString(typeRef) << endl;
+    out << ws() << "var ";
+    lineout();
+    out << name << ": " << toString(typeRef) << endl;
 }
 
 void IlAsmRenderer::addProcedure(const MilProcedure& m)
@@ -1193,7 +1258,9 @@ void IlAsmRenderer::beginType(const QByteArray& className, bool isPublic, quint8
 {
     Q_ASSERT(classKind == MilEmitter::Union || classKind == MilEmitter::Struct || classKind == MilEmitter::Object);
     state = Struct;
-    out << ws() << "type " << className;
+    out << ws() << "type ";
+    lineout();
+    out << className;
     if( isPublic )
         out << "*";
 
@@ -1230,7 +1297,9 @@ void IlAsmRenderer::endType()
 
 void IlAsmRenderer::addType(const QByteArray& name, bool isPublic, const MilQuali& baseType, quint8 typeKind, quint32 len)
 {
-    out << ws() << "type " << name;
+    out << ws() << "type ";
+    lineout();
+    out << name;
     if( isPublic )
         out << "*";
 
@@ -1262,6 +1331,7 @@ void IlAsmRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRe
     {
         if( state == Module )
             out << "var ";
+        lineout();
         out << fieldName;
         if( isPublic )
             out << "*";
@@ -1271,6 +1341,11 @@ void IlAsmRenderer::addField(const QByteArray& fieldName, const MilQuali& typeRe
             out << " : " << bits;
     }
     out << endl;
+}
+
+void IlAsmRenderer::line(quint32 l)
+{
+    curLine = l;
 }
 
 QString IlAsmRenderer::formatDouble(const QVariant& v)
@@ -1366,7 +1441,9 @@ void IlAsmRenderer::render(const MilProcedure& m)
 
     if( m.kind == MilProcedure::ProcType || m.kind == MilProcedure::MethType )
     {
-        out << ws() << "type " << m.name;
+        out << ws() << "type ";
+        lineout();
+        out << m.name;
         if( m.isPublic )
             out << "*";
         out << " = proc";
@@ -1375,6 +1452,7 @@ void IlAsmRenderer::render(const MilProcedure& m)
     }else
     {
         out << ws() << "procedure ";
+        lineout();
         if( !m.binding.isEmpty() )
             out << m.binding << ".";
         out << m.name;
@@ -1389,6 +1467,8 @@ void IlAsmRenderer::render(const MilProcedure& m)
     {
         if( i != 0 )
             out << "; ";
+        curLine = m.params[i].line;
+        lineout();
         if( !m.params[i].type.second.isEmpty() )
             out << m.params[i].name;
         else
@@ -1433,6 +1513,8 @@ void IlAsmRenderer::render(const MilProcedure& m)
         level++;
         for( int i = 0; i < m.locals.size(); i++ )
         {
+            curLine = m.locals[i].line;
+            lineout();
             if( !m.locals[i].name.isEmpty() )
                 out << m.locals[i].name;
             else
@@ -1451,6 +1533,13 @@ void IlAsmRenderer::render(const MilProcedure& m)
         switch( op.op )
         {
         case IL_invalid:
+            break;
+        case IL_line:
+            if( renderLineInfo && op.arg.toUInt() != lastLine )
+            {
+                lastLine = op.arg.toUInt();
+                out << ws() << "line " << lastLine << endl;
+            }
             break;
         case IL_if:
         case IL_iif:
@@ -1568,9 +1657,23 @@ QByteArray IlAsmRenderer::toString(const MilQuali& q)
         return MilEmitter::toString(q);
 }
 
+void IlAsmRenderer::lineout()
+{
+    if( renderLineInfo )
+    {
+        if( curLine && curLine != lastLine )
+        {
+            lastLine = curLine;
+            out << "line " << curLine << " ";
+        }
+    }
+}
+
 void IlAsmRenderer::addConst(const MilQuali& typeRef, const QByteArray& name, const QVariant& val)
 {
-    out << ws() << "const " << name;
+    out << ws() << "const ";
+    lineout();
+    out << name;
     if( !typeRef.second.isEmpty() )
         out << " : " << toString(typeRef);
     if( !val.isNull() )
@@ -1647,6 +1750,12 @@ void MilSplitter::addField(const QByteArray& fieldName, const MilQuali& typeRef,
 {
     foreach(MilRenderer* r, renderer)
         r->addField(fieldName,typeRef,isPublic, bits);
+}
+
+void MilSplitter::line(quint32 l)
+{
+    foreach(MilRenderer* r, renderer)
+        r->line(l);
 }
 
 

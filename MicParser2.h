@@ -180,8 +180,10 @@ namespace Mic {
         void checkArithOp(Expression*);
         void checkUnaryOp(Expression*);
         void checkRelOp(Expression*);
-        void beginFinallyEnd(bool finally);
+        void beginFinallyEnd(bool finally, const RowCol &pos);
         Declaration* ProcedureHeader(bool inForward);
+        MilEmitter& line(const RowCol&);
+        MilEmitter& line(const Token&);
 
     private:
         AstModel* mdl;

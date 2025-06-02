@@ -164,7 +164,7 @@ void CeeGen::visitModule()
            break;
        case Declaration::Procedure:
            visitProcedure(sub);
-           if( sub->init )
+           if( sub->entryPoint )
                initFound = true;
            break;
        }
@@ -176,7 +176,7 @@ void CeeGen::visitModule()
    {
         Declaration proc;
         proc.kind = Declaration::Procedure;
-        proc.init = true;
+        proc.entryPoint = true;
         proc.outer = curMod;
         proc.name = "begin$";
         visitProcedure(&proc);
@@ -198,7 +198,7 @@ void CeeGen::visitProcedure(Declaration* proc)
     {
         procHeader(bout, proc);
         bout << " {" << endl;
-        if( proc->init && !curMod->nobody )
+        if( proc->entryPoint && !curMod->nobody )
         {
             bout << ws(0) << "static int done$ = 0;" << endl;
             bout << ws(0) << "if(!done$) {" << endl;

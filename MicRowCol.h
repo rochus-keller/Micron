@@ -33,6 +33,7 @@ namespace Mic
         uint unused : 1;
         RowCol():d_row(0),d_col(0),unused(0) {}
         RowCol( quint32 row, quint32 col );
+        RowCol( quint32 rowCol );
         bool setRowCol( quint32 row, quint32 col );
         bool isValid() const { return d_row > 0 && d_col > 0; } // valid lines and cols start with 1; 0 is invalid
         quint32 packed() const { return ( d_row << COL_BIT_LEN ) | d_col | MSB; }

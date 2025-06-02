@@ -688,7 +688,7 @@ void EiGen::Imp::visitModule()
            break;
        case Declaration::Procedure:
            visitProcedure(sub);
-           if( sub->init )
+           if( sub->entryPoint )
                initFound = true;
            break;
        }
@@ -700,13 +700,13 @@ void EiGen::Imp::visitModule()
    {
         Declaration proc;
         proc.kind = Declaration::Procedure;
-        proc.init = true;
+        proc.entryPoint = true;
         proc.outer = curMod;
         proc.name = "begin$";
         visitProcedure(&proc);
    }
 
-   if( curMod->init )
+   if( curMod->entryPoint )
    {
        // generate the entry point
        emitter.ctx.Begin(Code::Section::Code, "main" );
@@ -788,11 +788,11 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
         }
 
         // Prologue
-        if( !proc->init && target_data[target].has_linkregister )
+        if( !proc->entryPoint && target_data[target].has_linkregister )
             emitter.ctx.Push(Code::Reg(types[fun],Code::RLink));
         emitter.ctx.Enter(stacksize);
 
-        if( proc->init && !curMod->nobody )
+        if( proc->entryPoint && !curMod->nobody )
         {
             // if( !module$init_run$ )
             MyEmitter::Label afterend = emitter.ctx.CreateLabel();

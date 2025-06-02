@@ -155,28 +155,26 @@ public:
         modules.append(ModuleSlot(imp,file,0));
         ms = &modules.back();
 
-//#define _GEN_OUTPUT_
-#ifdef _GEN_OUTPUT_
-#if 0
-        QFileInfo info(file);
-        QFile out(info.dir().absoluteFilePath(info.completeBaseName()+".cod"));
-        if( !out.open(QIODevice::WriteOnly) )
-        {
-            qCritical() << "cannot open file for writing:" << out.fileName();
-            return 0;
-        }
-#else
-        QFile out;
-        out.open(stdout, QIODevice::WriteOnly);
-#endif
-#else
         Mic::InMemRenderer2 imr(&loader);
-#endif
+
         Lex2 lex;
         lex.sourcePath = file; // to keep file name if invalid
         lex.lex.setStream(file);
+
+#define _DUMP
+#ifdef _DUMP
+        QList<Mic::MilRenderer*> renderer;
+        QFile out;
+        out.open(stdout, QIODevice::WriteOnly);
+        Mic::IlAsmRenderer ilasm(&out,true);
+        renderer << &ilasm;
+        renderer << &imr;
+        Mic::MilSplitter split(renderer);
+        Mic::MilEmitter e(&split, Mic::MilEmitter::RowsOnly);
+#else
         qDebug() << "**** parsing" << QFileInfo(file).fileName();
         Mic::MilEmitter e(&imr);
+#endif
         Mic::AstModel mdl;
         Mic::Parser2 p(&mdl,&lex, &e, this);
         p.RunParser(imp.metaActuals);
@@ -189,6 +187,9 @@ public:
         {
             if( imr.commit() )
                 res = p.takeModule();
+#ifdef _DUMP
+            out.putChar('\n');
+#endif
             // else return 0
         }
         // TODO: uniquely extend the name of generic module instantiations
@@ -221,7 +222,7 @@ public:
 };
 
 static void process(const QString& file, const QStringList& searchPaths,
-                    bool run, bool dumpIL, bool dumpLL, const QString& arch)
+                    bool run, bool dumpIL, bool dumpLL, bool eigen, const QString& arch)
 {
     int ok = 0;
     int all = 0;
@@ -244,7 +245,7 @@ static void process(const QString& file, const QStringList& searchPaths,
     imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
     Mic::Declaration* top = mgr.loadModule(imp); // recursively compiles all required files
     if( top )
-        mgr.loader.getModel().getModules().last()->init = true; // top-level module is entry point
+        mgr.loader.getModel().getModules().last()->entryPoint = true; // top-level module is entry point
 
 
 
@@ -265,12 +266,12 @@ static void process(const QString& file, const QStringList& searchPaths,
         {
             if( m->name == "MIC$" )
                 continue;
-            Mic::IlAsmRenderer r(&out);
+            Mic::IlAsmRenderer r(&out, true);
             Mic::MilLoader2::render(&r,m);
             out.putChar('\n');
         }
     }
-    if( all == ok )
+    if( all == ok && eigen )
     {
         Mil::EiGen::TargetCode target = Mil::EiGen::translate(arch.toUtf8().constData());
         if( target == Mil::EiGen::NoTarget )
@@ -339,6 +340,8 @@ int main(int argc, char *argv[])
     cp.addOption(dump);
     QCommandLineOption dump2("l", "dump low-level bytecode"); // interpreter or eigen
     cp.addOption(dump2);
+    QCommandLineOption eigen("c", "generate Eigen bytecode");
+    cp.addOption(eigen);
     QCommandLineOption arch("a", "generate code for the given architecture", "arch");
     cp.addOption(arch);
 
@@ -349,7 +352,8 @@ int main(int argc, char *argv[])
     const QStringList searchPaths = cp.values(sp);
 
     // TODO: what to do with more than one file?
-    process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2), cp.value(arch));
+    process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2),
+            cp.isSet(eigen) || cp.isSet(arch), cp.value(arch));
 
     return 0;
 }

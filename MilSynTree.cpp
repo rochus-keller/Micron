@@ -23,6 +23,7 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_IdentList: return "IdentList";
 		case R_IfThenElse: return "IfThenElse";
 		case R_ImportList: return "ImportList";
+		case R_Line: return "Line";
 		case R_LocalDeclaration: return "LocalDeclaration";
 		case R_Loop: return "Loop";
 		case R_MemberList: return "MemberList";

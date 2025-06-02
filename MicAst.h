@@ -218,7 +218,8 @@ namespace Mic
         QVariant val;
 
         Value():mode(0),type(0),ref(false),visi(Declaration::Private){}
-        Value(Type* t, const QVariant& v, Mode m):type(t),val(v),mode(m),ref(false),visi(0){}
+        Value(Type* t, const QVariant& v, Mode m):
+            type(t),val(v),mode(m),ref(false),visi(0){}
 
         bool isConst() const { return mode == Const; }
         bool isLvalue() const { return mode == Declaration::VarDecl || mode == Declaration::LocalDecl ||

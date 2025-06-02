@@ -30,11 +30,11 @@ bool Evaluator::evaluate(Expression* e, bool assureOnMilStack)
     if( !recursiveRun(e) )
         return false;
     if(assureOnMilStack)
-        assureTopOnMilStack();
+        assureTopOnMilStack(false, e->pos);
     return err.isEmpty();
 }
 
-bool Evaluator::unaryOp(quint8 op)
+bool Evaluator::unaryOp(quint8 op, const RowCol& pos)
 {
     err.clear();
     if( stack.isEmpty() )
@@ -46,13 +46,13 @@ bool Evaluator::unaryOp(quint8 op)
     switch( op )
     {
     case Expression::Not:
-        notOp(v);
+        notOp(v, pos);
         break;
     case Expression::Plus:
-        unaryPlusOp(v);
+        unaryPlusOp(v, pos);
         break;
     case Expression::Minus:
-        unaryMinusOp(v);
+        unaryMinusOp(v, pos);
         break;
     default:
         Q_ASSERT(false);
@@ -88,7 +88,7 @@ Type*Evaluator::smallestIntType(const QVariant& v) const
         return mdl->getType(Type::INT64);
 }
 
-bool Evaluator::binaryOp(quint8 op)
+bool Evaluator::binaryOp(quint8 op, const RowCol& pos)
 {
     err.clear();
     if( stack.size() < 2 )
@@ -108,12 +108,12 @@ bool Evaluator::binaryOp(quint8 op)
     case Expression::Mod:
     case Expression::Add:
     case Expression::Sub:
-        stack.push_back(arithOp(op,lhs,rhs));
+        stack.push_back(arithOp(op,lhs,rhs, pos));
         break;
     // Logic
     case Expression::And:
     case Expression::Or:
-        stack.push_back(logicOp(op,lhs,rhs));
+        stack.push_back(logicOp(op,lhs,rhs, pos));
         break;
     // Relation
     case Expression::Eq:
@@ -122,13 +122,13 @@ bool Evaluator::binaryOp(quint8 op)
     case Expression::Leq:
     case Expression::Gt:
     case Expression::Geq:
-        stack.push_back(relationOp(op, lhs,rhs));
+        stack.push_back(relationOp(op, lhs,rhs, pos));
        break;
     case Expression::In:
-        stack.push_back(inOp(lhs,rhs));
+        stack.push_back(inOp(lhs,rhs, pos));
         break;
     case Expression::Is:
-        stack.push_back(isOp(lhs,rhs));
+        stack.push_back(isOp(lhs,rhs, pos));
         break;
     default:
         Q_ASSERT(false);
@@ -136,7 +136,7 @@ bool Evaluator::binaryOp(quint8 op)
     return err.isEmpty();
 }
 
-bool Evaluator::prepareRhs(Type* lhs, bool assig)
+bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
 {
     err.clear();
     if( stack.size() < 1 )
@@ -160,18 +160,22 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig)
                 rhs.type->getType()->kind == Type::CHAR))
     {
         // Tv is a non-open array of CHAR, Te is a string literal, or an open array of CHAR;
-        assureTopOnMilStack();
+        assureTopOnMilStack(false, pos);
+        out->line_(pos);
         out->ldind_(toQuali(lhs));
     }else if( lhs && lhs->kind == Type::Array && lhs->len &&
               rhs.type->kind == Type::Array && rhs.type->len > 0 && rhs.ref )
     {
         // copy rhs non-open array ref by value to stack to copy to non-open lhs array
         Q_ASSERT( lhs->len == rhs.type->len );
-        assureTopOnMilStack();
+        assureTopOnMilStack(false, pos);
+        out->line_(pos);
         out->ldind_(toQuali(lhs));
     }else if( lhs && lhs->kind == Type::CHAR && rhs.type->kind == Type::String )
+    {
+        out->line_(pos);
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
-    else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Procedure )
+    }else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Procedure )
     {
         Declaration* proc = rhs.val.value<Declaration*>();
         Q_ASSERT(proc);
@@ -180,6 +184,7 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig)
             err = "cannot take address of INLINE procedure";
             return false;
         }
+        out->line_(pos);
         out->ldproc_(toQuali(proc));
     }else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Method )
     {
@@ -191,10 +196,11 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig)
             return false;
         }
         const MilTrident trident = qMakePair(toQuali(proc->outer),proc->name);
+        out->line_(pos);
         out->ldmeth_(trident);
     }else
     {
-        assureTopOnMilStack(); // modifies stack.back() i.e. rhs
+        assureTopOnMilStack(false, pos); // modifies stack.back() i.e. rhs
         adjustNumType(stack.back().type,lhs);
     }
 
@@ -209,7 +215,7 @@ static inline MilQuali coreName(const QByteArray& proc)
     return res;
 }
 
-bool Evaluator::assign()
+bool Evaluator::assign(const RowCol& pos)
 {
     err.clear();
     if( stack.size() < 2 )
@@ -218,7 +224,7 @@ bool Evaluator::assign()
         return false;
     }
 
-    if( !prepareRhs( stack[stack.size()-2].type, true ) )
+    if( !prepareRhs( stack[stack.size()-2].type, true, pos ) )
         return false;
 
     Value rhs = stack.takeLast();
@@ -226,6 +232,8 @@ bool Evaluator::assign()
 
     if( !lhs.ref )
         return false; // error reported elsewhere
+
+    out->line_(pos);
 
     if( lhs.type->kind == Type::Array )
     {
@@ -297,44 +305,47 @@ bool Evaluator::assign()
     return err.isEmpty();
 }
 
-bool Evaluator::assign(Expression* lhs, Expression* rhs)
+bool Evaluator::assign(Expression* lhs, Expression* rhs, const RowCol& pos)
 {
     if( lhs->getType()->isCharArray() && lhs->getType()->len != 0  &&
             ( (rhs->getType()->isCharArray() && rhs->getType()->len == 0) || rhs->getType()->kind == Type::String ) )
-        return stind(lhs, rhs);
+        return stind(lhs, rhs, pos);
 
     switch( lhs->kind )
     {
     case Expression::Index:
-        return stelem(lhs, rhs);
+        return stelem(lhs, rhs, pos);
     case Expression::Select:
-        return stfld(lhs, rhs);
+        return stfld(lhs, rhs, pos);
     case Expression::LocalVar:
         if( !evaluate(rhs) ) // value
             return false;
-        if( !prepareRhs( lhs->getType(), true ) )
+        if( !prepareRhs( lhs->getType(), true, pos ) )
             return false;
         stack.takeLast();
+        out->line_(pos);
         out->stloc_(lhs->val.toUInt());
         break;
     case Expression::Param:
         if( !evaluate(rhs) ) // value
             return false;
-        if( !prepareRhs( lhs->getType(), true ) )
+        if( !prepareRhs( lhs->getType(), true, pos ) )
             return false;
         stack.takeLast();
+        out->line_(pos);
         out->starg_(lhs->val.toUInt());
         break;
     case Expression::ModuleVar:
         if( !evaluate(rhs) ) // value
             return false;
-        if( !prepareRhs( lhs->getType(), true ) )
+        if( !prepareRhs( lhs->getType(), true, pos ) )
             return false;
         stack.takeLast();
+        out->line_(pos);
         out->stvar_(lhs->val.value<Qualident>());
         break;
     default:
-        return stind(lhs, rhs);
+        return stind(lhs, rhs, pos);
     }
     return true;
 }
@@ -448,7 +459,7 @@ void Evaluator::assureTopIsValue()
         derefValue();
 }
 
-bool Evaluator::desigField(Declaration* field, bool byVal)
+bool Evaluator::desigField(Declaration* field, bool byVal, const RowCol& pos)
 {
     err.clear();
     if( stack.size() < 1 )
@@ -463,6 +474,7 @@ bool Evaluator::desigField(Declaration* field, bool byVal)
     Q_ASSERT(lhs.ref && lhs.type && (lhs.type->kind == Type::Record || lhs.type->kind == Type::Object));
 
     Q_ASSERT(field);
+    out->line_(pos);
     const MilTrident desig = qMakePair(toQuali(lhs.type),field->name);
     if( byVal )
         out->ldfld_(desig);
@@ -479,7 +491,7 @@ bool Evaluator::desigField(Declaration* field, bool byVal)
     return err.isEmpty();
 }
 
-bool Evaluator::desigVar(bool byVal)
+bool Evaluator::desigVar(bool byVal, const RowCol& pos)
 {
     err.clear();
     if( stack.isEmpty() )
@@ -489,6 +501,7 @@ bool Evaluator::desigVar(bool byVal)
     }
     Value v = stack.takeLast();
 
+    out->line_(pos);
     if( byVal )
         switch( v.mode )
         {
@@ -526,7 +539,7 @@ bool Evaluator::desigVar(bool byVal)
     return err.isEmpty();
 }
 
-bool Evaluator::desigIndex(bool byVal)
+bool Evaluator::desigIndex(bool byVal, const RowCol& pos)
 {
     err.clear();
 
@@ -545,10 +558,11 @@ bool Evaluator::desigIndex(bool byVal)
             err = "index out of range";
             return false;
         }
-        pushMilStack(rhs);
+        pushMilStack(rhs, pos);
     }
 
     const Qualident elemType = toQuali(lhs.type->getType());
+    out->line_(pos);
     if( byVal )
         out->ldelem_(elemType);
     else
@@ -564,7 +578,7 @@ bool Evaluator::desigIndex(bool byVal)
     return err.isEmpty();
 }
 
-bool Evaluator::call(int nArgs)
+bool Evaluator::call(int nArgs, const RowCol& pos)
 {
     err.clear();
     if( stack.size() < nArgs + 1 )
@@ -592,6 +606,7 @@ bool Evaluator::call(int nArgs)
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
             ret = proc->getType();
+            out->line_(pos);
             out->call_(toQuali(proc),nArgs, ret != 0); // TODO: desig in imported module
         }
         break;
@@ -601,6 +616,7 @@ bool Evaluator::call(int nArgs)
             Q_ASSERT(proc);
             ret = proc->getType();
             const MilTrident trident = qMakePair(toQuali(proc->outer),proc->name);
+            out->line_(pos);
             out->callvirt_(trident,nArgs, ret != 0);
 
         }
@@ -612,6 +628,7 @@ bool Evaluator::call(int nArgs)
         ret = callee.type->getType();
         if( callee.type->kind == Type::Proc )
         {
+            out->line_(pos);
             if( callee.type->typebound )
                 out->callvi_(toQuali(callee.type), nArgs, ret != 0);
             else
@@ -638,7 +655,7 @@ bool Evaluator::call(int nArgs)
     return err.isEmpty();
 }
 
-bool Evaluator::castPtr(Type* to)
+bool Evaluator::castPtr(Type* to, const RowCol& pos)
 {
     err.clear();
     if( stack.size() < 1 )
@@ -649,6 +666,7 @@ bool Evaluator::castPtr(Type* to)
     Value lhs = stack.takeLast(); // object
     // TODO
     Q_ASSERT(to && to->kind == Type::Pointer);
+    out->line_(pos);
     out->castptr_(toQuali(to->getType()));
     // TODO restrict to pointers, add to MIL
     lhs.type = to;
@@ -656,7 +674,7 @@ bool Evaluator::castPtr(Type* to)
     return err.isEmpty();
 }
 
-bool Evaluator::castNum(Type* to)
+bool Evaluator::castNum(Type* to, const RowCol& pos)
 {
     Q_ASSERT( to && to->isNumber() );
     err.clear();
@@ -666,8 +684,9 @@ bool Evaluator::castNum(Type* to)
         return false;
     }
     if( stack.back().isConst() )
+    {
         stack.back().type = to;
-    else
+    }else
     {
         MilEmitter::Type tt;
         switch(to->kind)
@@ -709,6 +728,7 @@ bool Evaluator::castNum(Type* to)
             Q_ASSERT(false);
         }
 
+        out->line_(pos);
         out->conv_(tt);
     }
     return err.isEmpty();
@@ -730,12 +750,12 @@ Value Evaluator::top()
     return res;
 }
 
-void Evaluator::assureTopOnMilStack(bool pop)
+void Evaluator::assureTopOnMilStack(bool pop, const RowCol& pos)
 {
     if( top().isConst() )
     {
         Value v = stack.takeLast();
-        pushMilStack(v);
+        pushMilStack(v, pos);
         v.mode = Value::Val;
         stack.push_back(v);
     }
@@ -758,16 +778,19 @@ void Evaluator::shortCircuitAnd(Expression* e)
     {
         recursiveRun(e->lhs);
         recursiveRun(e->rhs);
-        binaryOp(e->kind);
+        binaryOp(e->kind,e->pos);
     }else
     {
         // p and q : if p then q, else FALSE
+        out->line_(e->pos);
         out->iif_();
         recursiveRun(e->lhs);
-        assureTopOnMilStack(true);
+        assureTopOnMilStack(true, e->lhs->pos);
+        out->line_(e->pos);
         out->then_();
         recursiveRun(e->rhs);
-        assureTopOnMilStack(); // leave the bool result on the stack
+        assureTopOnMilStack(false, e->rhs->pos); // leave the bool result on the stack
+        out->line_(e->pos);
         out->else_();
         out->ldc_i4(0); // push FALSE
         out->end_();
@@ -790,24 +813,27 @@ void Evaluator::shortCircuitOr(Expression* e)
     {
         recursiveRun(e->lhs);
         recursiveRun(e->rhs);
-        binaryOp(e->kind);
+        binaryOp(e->kind, e->pos);
     }else
     {
         // p or q : if p then TRUE, else q
+        out->line_(e->pos);
         out->iif_();
         recursiveRun(e->lhs);
-        assureTopOnMilStack(true);
+        assureTopOnMilStack(true, e->lhs->pos);
+        out->line_(e->pos);
         out->then_();
         out->ldc_i4(1); // push TRUE
+        out->line_(e->pos);
         out->else_();
         recursiveRun(e->rhs);
-        assureTopOnMilStack(); // leave the bool result on the stack
+        assureTopOnMilStack(false, e->rhs->pos); // leave the bool result on the stack
         out->end_();
     }
 #endif
 }
 
-bool Evaluator::pushMilStack(const Value& v)
+bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
 {
     err.clear();
     switch( v.mode )
@@ -815,6 +841,7 @@ bool Evaluator::pushMilStack(const Value& v)
     case Value::Const:
         if( v.type->isSimple() || v.type->kind == Type::ConstEnum )
         {
+            out->line_(pos);
             switch( v.type->kind )
             {
             case Type::String:
@@ -857,6 +884,7 @@ bool Evaluator::pushMilStack(const Value& v)
             MilObject obj;
             obj.typeRef = toQuali(v.type);
             obj.data = v.val;
+            out->line_(pos);
             out->ldobj(obj);
         }
         break;
@@ -878,8 +906,9 @@ bool Evaluator::pushMilStack(const Value& v)
     return true;
 }
 
-void Evaluator::emitRelOp(quint8 op, bool unsig)
+void Evaluator::emitRelOp(quint8 op, bool unsig, const RowCol& pos)
 {
+    out->line_(pos);
     switch(op)
     {
     case Expression::Eq:
@@ -912,8 +941,9 @@ void Evaluator::emitRelOp(quint8 op, bool unsig)
     }
 }
 
-void Evaluator::emitArithOp(quint8 op, bool unsig, bool i64)
+void Evaluator::emitArithOp(quint8 op, bool unsig, bool i64, const RowCol &pos)
 {
+    out->line_(pos);
     switch(op)
     {
     case Expression::Mul:
@@ -956,7 +986,7 @@ void Evaluator::adjustNumType(Type* me, Type* other)
     }
 }
 
-void Evaluator::notOp(Value& v)
+void Evaluator::notOp(Value& v, const RowCol& pos)
 {
     Q_ASSERT( v.type->isBoolean() );
     if( v.isConst() )
@@ -964,12 +994,13 @@ void Evaluator::notOp(Value& v)
     else
     {
         // logic not
+        out->line_(pos);
         out->ldc_i4(0);
         out->ceq_();
     }
 }
 
-Value Evaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs)
+Value Evaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs, const RowCol& pos)
 {
     Value res;
     if( lhs.type->isBoolean() && rhs.type->isBoolean() )
@@ -999,7 +1030,7 @@ static inline Type* maxType(Type* lhs, Type* rhs)
         return rhs;
 }
 
-Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
+Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs, const RowCol& pos)
 {
     Value res;
     res.mode = Value::Val;
@@ -1041,7 +1072,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 }
             }else
             {
-                emitArithOp(op,false, res.type->kind == Type::INT64 );
+                emitArithOp(op,false, res.type->kind == Type::INT64, pos );
             }
         }else if( lhs.type->isUInt() && rhs.type->isUInt() )
         {
@@ -1073,7 +1104,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 }
             }else
             {
-                emitArithOp(op,true, res.type->kind == Type::UINT64);
+                emitArithOp(op,true, res.type->kind == Type::UINT64, pos);
             }
         }else if( lhs.type->isReal() && rhs.type->isReal() )
         {
@@ -1100,7 +1131,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
                 }
             }else
             {
-                emitArithOp(op);
+                emitArithOp(op, false, false, pos );
             }
         }else
             err = "operation not supported";
@@ -1130,6 +1161,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
             }
         }else
         {
+            out->line_(pos);
             switch(op)
             {
             case Expression::Mul:
@@ -1164,7 +1196,7 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs)
     return res;
 }
 
-Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
+Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const RowCol& pos)
 {
     Value res;
     res.mode = Value::Val;
@@ -1206,7 +1238,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                 }
             }else
             {
-                emitRelOp(op,false);
+                emitRelOp(op,false, pos);
             }
         }else if( lhs.type->isUInt() && rhs.type->isUInt() )
         {
@@ -1239,7 +1271,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                 }
             }else
             {
-                emitRelOp(op,false);
+                emitRelOp(op,false, pos);
             }
         }else if( lhs.type->isReal() && rhs.type->isReal() )
         {
@@ -1272,7 +1304,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
                 }
             }else
             {
-                emitRelOp(op,false);
+                emitRelOp(op,false, pos);
             }
         }else
             return res; // Q_ASSERT(false);
@@ -1281,21 +1313,27 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
         switch(op)
         {
         case Expression::Geq:
+            out->line_(pos);
             out->ldc_i4(6);
             break;
         case Expression::Gt:
+            out->line_(pos);
             out->ldc_i4(5);
             break;
         case Expression::Eq:
+            out->line_(pos);
             out->ldc_i4(1);
             break;
         case Expression::Leq:
+            out->line_(pos);
             out->ldc_i4(4);
             break;
         case Expression::Neq:
+            out->line_(pos);
             out->ldc_i4(2);
             break;
         case Expression::Lt:
+            out->line_(pos);
             out->ldc_i4(3);
             break;
         default:
@@ -1345,7 +1383,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             }
         }else
         {
-            emitRelOp(op,true);
+            emitRelOp(op,true,pos);
         }
     }else if( lhs.type->kind == Type::ConstEnum  && rhs.type->kind == Type::ConstEnum )
     {
@@ -1379,7 +1417,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             }
         }else
         {
-            emitRelOp(op,false);
+            emitRelOp(op,false,pos);
         }
     }else if( ( lhs.type->isSet() && rhs.type->isSet() ) ||
               (lhs.type->isBoolean() && rhs.type->isBoolean()) )
@@ -1400,7 +1438,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             }
         }else
         {
-            emitRelOp(op,true);
+            emitRelOp(op,true, pos);
         }
     }else if( lhs.type->kind == Type::Proc && rhs.type->kind == Type::Proc ||
               lhs.type->kind == Type::Proc && rhs.type->kind == Type::Nil ||
@@ -1411,7 +1449,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
             // TODO: actual generic module parameters could be proc type literals
         }else
         {
-            emitRelOp(op,true);
+            emitRelOp(op,true, pos);
         }
     }else
         return res;
@@ -1420,7 +1458,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs)
     return res;
 }
 
-Value Evaluator::inOp(const Value& lhs, const Value& rhs)
+Value Evaluator::inOp(const Value& lhs, const Value& rhs, const RowCol& pos)
 {
     Value res;
     res.mode = Value::Val;
@@ -1441,6 +1479,7 @@ Value Evaluator::inOp(const Value& lhs, const Value& rhs)
             res.mode = Value::Const;
         }else
         {
+            out->line_(pos);
             out->call_(coreName("SetIn"),2,1);
         }
 
@@ -1449,7 +1488,7 @@ Value Evaluator::inOp(const Value& lhs, const Value& rhs)
     return res;
 }
 
-Value Evaluator::isOp(const Value& lhs, const Value& rhs)
+Value Evaluator::isOp(const Value& lhs, const Value& rhs, const RowCol& pos)
 {
     Value res;
     res.mode = Value::Val;
@@ -1464,13 +1503,14 @@ Value Evaluator::isOp(const Value& lhs, const Value& rhs)
         if( t->kind == Type::Pointer )
             t = t->getType();
         const Qualident type = toQuali(t);
+        out->line_(pos);
         out->isinst_(type);
     }else
         err = "operation not compatible with given operands";
     return res;
 }
 
-void Evaluator::unaryMinusOp(Value& v)
+void Evaluator::unaryMinusOp(Value& v, const RowCol& pos)
 {
     if( v.type->isNumber() )
     {
@@ -1480,6 +1520,7 @@ void Evaluator::unaryMinusOp(Value& v)
                 v.val = -v.val.toLongLong();
             else
             {
+                out->line_(pos);
                 if( v.type->kind == Type::INT32 )
                     out->conv_(MilEmitter::I4);
                 else
@@ -1491,13 +1532,19 @@ void Evaluator::unaryMinusOp(Value& v)
             if( v.isConst() )
                 v.val = -v.val.toLongLong();
             else
+            {
+                out->line_(pos);
                 out->neg_();
+            }
         }else if( v.type->isReal() )
         {
             if( v.isConst() )
                 v.val = -v.val.toDouble();
             else
+            {
+                out->line_(pos);
                 out->neg_();
+            }
         }else
             Q_ASSERT(false);
     }else if( v.type->isSet() )
@@ -1505,12 +1552,15 @@ void Evaluator::unaryMinusOp(Value& v)
         if( v.isConst() )
             v.val = ~v.val.toUInt();
         else
+        {
+            out->line_(pos);
             out->not_();
+        }
     }else
         Q_ASSERT(false);
 }
 
-void Evaluator::unaryPlusOp(Value& v)
+void Evaluator::unaryPlusOp(Value& v, const RowCol& pos)
 {
     // NOP
 }
@@ -1611,7 +1661,7 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Not: // Unary
         if( !recursiveRun(e->lhs) )
             return false;
-        unaryOp(e->kind);
+        unaryOp(e->kind, e->pos);
         break;
     case Expression::Eq:
     case Expression::Neq:
@@ -1630,12 +1680,12 @@ bool Evaluator::recursiveRun(Expression* e)
         if( !recursiveRun(e->lhs) )
             return false;
         if( e->lhs->isConst() && !e->rhs->isConst() )
-            assureTopOnMilStack();
+            assureTopOnMilStack(false, e->lhs->pos);
         if( !recursiveRun(e->rhs) )
             return false;
         if( !e->lhs->isConst() && e->rhs->isConst() )
-            assureTopOnMilStack();
-        binaryOp(e->kind);
+            assureTopOnMilStack(false, e->rhs->pos);
+        binaryOp(e->kind, e->pos);
         break;
     case Expression::Or:
         shortCircuitOr(e);
@@ -1646,24 +1696,24 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Select:
         if( !recursiveRun(e->lhs) )
             return false;
-        desigField(e->val.value<Declaration*>(), e->byVal);
+        desigField(e->val.value<Declaration*>(), e->byVal, e->pos);
         break;
     case Expression::Index:
         if( !recursiveRun(e->lhs) )
             return false;
         if( !recursiveRun(e->rhs) )
             return false;
-        desigIndex(e->byVal);
+        desigIndex(e->byVal, e->pos);
         break;
     case Expression::Cast:
         if( !recursiveRun(e->lhs) )
             return false;
-        castPtr(e->getType());
+        castPtr(e->getType(), e->pos);
         break;
     case Expression::AutoCast:
         if( !recursiveRun(e->lhs) )
             return false;
-        castNum(e->getType());
+        castNum(e->getType(), e->pos);
         break;
     case Expression::Deref:
         if( !recursiveRun(e->lhs) )
@@ -1681,15 +1731,15 @@ bool Evaluator::recursiveRun(Expression* e)
         break;
     case Expression::LocalVar:
         stack.push_back(Value(e->getType(),e->val,Value::LocalDecl));
-        desigVar(e->byVal);
+        desigVar(e->byVal, e->pos);
         break;
     case Expression::Param:
         stack.push_back(Value(e->getType(),e->val,Value::ParamDecl));
-        desigVar(e->byVal);
+        desigVar(e->byVal, e->pos);
         break;
     case Expression::ModuleVar:
         stack.push_back(Value(e->getType(),e->val,Value::VarDecl));
-        desigVar(e->byVal);
+        desigVar(e->byVal, e->pos);
         break;
     case Expression::ProcDecl:
         stack.push_back(Value(e->getType(),e->val,Value::Procedure));
@@ -1739,13 +1789,13 @@ bool Evaluator::recursiveRun(Expression* e)
                 if( !recursiveRun(args[i]) )
                     return false;
                 if( i < formals.size() )
-                    prepareRhs(formals[i]->getType());
+                    prepareRhs(formals[i]->getType(), false, args[i]->pos);
                 else
-                    assureTopOnMilStack(); // effects builtin args and variable args
+                    assureTopOnMilStack(false, args[i]->pos); // effects builtin args and variable args
             }
             if( !recursiveRun(e->lhs) ) // here 'b' of "a.b()" is evaluated in case of proc type calls
                 return false;
-            call(args.size());
+            call(args.size(), e->pos);
         }
         break;
 
@@ -1904,18 +1954,18 @@ void Evaluator::recurseConstConstructor(Expression* e)
     }
 }
 
-bool Evaluator::stind(Expression* lhs, Expression* rhs)
+bool Evaluator::stind(Expression* lhs, Expression* rhs, const RowCol& pos)
 {
     if( !evaluate(lhs) )
         return false;
     if( rhs && !evaluate(rhs) )
         return false;         // value is pushed in assign
-    if( rhs && !assign() )
+    if( rhs && !assign(pos) )
         return false;
     return true;
 }
 
-bool Evaluator::stelem(Expression* lhs, Expression* rhs)
+bool Evaluator::stelem(Expression* lhs, Expression* rhs, const RowCol& pos)
 {
     err.clear();
     if( lhs == 0 || lhs->lhs == 0 || lhs->rhs == 0 || rhs == 0 )
@@ -1939,23 +1989,24 @@ bool Evaluator::stelem(Expression* lhs, Expression* rhs)
             err = "index out of range";
             return false;
         }
-        pushMilStack(index);
+        pushMilStack(index, pos);
     }
 
     if( !evaluate(rhs) ) // value
         return false;
 
-    if( !prepareRhs( array.type->getType(), true ) )
+    if( !prepareRhs( array.type->getType(), true, pos ) )
         return false;
 
     Value value = stack.takeLast();
 
+    out->line_(pos);
     out->stelem_(toQuali(array.type->getType()));
 
     return err.isEmpty();
 }
 
-bool Evaluator::stfld(Expression* lhs, Expression* rhs)
+bool Evaluator::stfld(Expression* lhs, Expression* rhs, const RowCol &pos)
 {
     err.clear();
     if( lhs == 0 || lhs->lhs == 0 || rhs == 0 )
@@ -1973,12 +2024,12 @@ bool Evaluator::stfld(Expression* lhs, Expression* rhs)
     if( !evaluate(rhs) ) // value
         return false;
 
-    if( !prepareRhs( field->getType(), true ) )
+    if( !prepareRhs( field->getType(), true, pos ) )
         return false;
 
     Value value = stack.takeLast();
 
-
+    out->line_(pos);
     out->stfld_(desig);
 
     return err.isEmpty();

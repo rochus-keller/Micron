@@ -479,7 +479,7 @@ bool Interpreter::run(Declaration* proc)
     if( !module->validated )
         return false;
 
-    if( !module->init && !precompile(module) )
+    if( !module->translated && !precompile(module) )
         return false;
 
     // init module variables
@@ -500,7 +500,7 @@ bool Interpreter::run(Declaration* proc)
         if( proc->kind == Declaration::Module )
             return imp->run(proc);
 
-        if( !proc->init )
+        if( !proc->entryPoint )
         {
             if( !imp->run(module) )
                 return false;

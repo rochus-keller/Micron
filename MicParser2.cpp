@@ -917,15 +917,15 @@ void Parser2::ForwardDeclaration()
     QByteArray binding;
     if( procDecl->typebound )
         binding = ev->toQuali(procDecl->link->getType()->getType()).second; // receiver is always pointer to T
-    out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
+    out->beginProc(ev->toQuali(procDecl).second, procDecl->pos, mdl->getTopScope()->kind == Declaration::Module &&
                    procDecl->visi > 0, MilProcedure::Forward, binding);
 
     const QList<Declaration*> params = procDecl->getParams(true);
     foreach( Declaration* p, params )
-        out->addArgument(ev->toQuali(p->getType()),p->name); // the SELF param is explicit
+        out->addArgument(ev->toQuali(p->getType()),p->name, p->pos); // the SELF param is explicit
     if( procDecl->getType() && procDecl->getType()->kind != Type::NoType )
         out->setReturnType(ev->toQuali(procDecl->getType()));
-    out->endProc();
+    out->endProc(procDecl->pos);
 }
 
 Expression* Parser2::number() {
@@ -1151,7 +1151,7 @@ void Parser2::TypeDeclaration() {
 
     thisDecl = 0;
     if( !q.second.isEmpty() )
-        out->addType(ev->toQuali(t).second,t->decl->isPublic(),q, MilEmitter::Alias);
+        out->addType(ev->toQuali(t).second,d->pos,t->decl->isPublic(),q, MilEmitter::Alias);
     else
         emitType(t);
 }
@@ -1221,6 +1221,7 @@ Type* Parser2::ArrayType() {
     Token tok,tok2;
 	if( la.d_type == Tok_ARRAY ) {
 		expect(Tok_ARRAY, true, "ArrayType");
+        arr->pos = cur.toRowCol();
 		if( FIRST_length(la.d_type) ) {
             tok = la;
             length(len);
@@ -1232,7 +1233,8 @@ Type* Parser2::ArrayType() {
         etype = type();
 	} else if( la.d_type == Tok_Lbrack ) {
 		expect(Tok_Lbrack, false, "ArrayType");
-		if( FIRST_length(la.d_type) ) {
+        arr->pos = cur.toRowCol();
+        if( FIRST_length(la.d_type) ) {
             tok = la;
             length(len);
             if( len == 0 )
@@ -1291,6 +1293,7 @@ void Parser2::length(quint32& len) {
 Type* Parser2::RecordType() {
 	expect(Tok_RECORD, true, "RecordType");
     Type* rec = new Type();
+    rec->pos = cur.toRowCol();
     rec->kind = Type::Record;
     typeStack.push_back(rec);
     mdl->openScope(0);
@@ -1311,6 +1314,7 @@ Type* Parser2::ObjectType() {
     if( langLevel < 3 )
         error(cur,"object types not available on current language level");
     Type* rec = new Type();
+    rec->pos = cur.toRowCol();
     rec->kind = Type::Object;
     typeStack.push_back(rec);
     mdl->openScope(0);
@@ -1475,6 +1479,7 @@ Parser2::IdentDefList Parser2::IdentList() {
 }
 
 Type* Parser2::PointerType() {
+    const Token tok = la;
 	if( la.d_type == Tok_POINTER ) {
 		expect(Tok_POINTER, true, "PointerType");
 		expect(Tok_TO, true, "PointerType");
@@ -1484,6 +1489,7 @@ Type* Parser2::PointerType() {
 		invalid("PointerType");
 
     Type* res = new Type();
+    res->pos = tok.toRowCol();
     res->kind = Type::Pointer;
     typeStack.push_back(res);
 
@@ -1512,6 +1518,7 @@ Type* Parser2::PointerType() {
 Type* Parser2::enumeration() {
 	expect(Tok_Lpar, false, "enumeration");
     Type* res = new Type();
+    res->pos = cur.toRowCol();
     typeStack.push_back(res);
     if( FIRST_constEnum(la.d_type) ) {
         res->subs = constEnum();
@@ -1578,9 +1585,9 @@ void Parser2::VariableDeclaration() {
         d->outer = outer;
         d->setType(t);
         if( d->kind == Declaration::VarDecl )
-            out->addVariable(ev->toQuali(d->getType()),d->name);
+            out->addVariable(ev->toQuali(d->getType()),d->name, d->pos);
         else
-            out->addLocal(ev->toQuali(d->getType()),d->name);
+            out->addLocal(ev->toQuali(d->getType()),d->name, d->pos);
     }
 }
 
@@ -1649,10 +1656,11 @@ void Parser2::emitType(Type* t)
                     hasVariant = true;
             }
 
-            out->beginType(ev->toQuali(t).second,t->decl->isPublic(), !hasFixed ? MilEmitter::Union : MilEmitter::Struct );
+            out->beginType(ev->toQuali(t).second,t->decl->pos,t->decl->isPublic(),
+                           !hasFixed ? MilEmitter::Union : MilEmitter::Struct );
             // TODO: record can have fixed and variable part which go to separate struct and union or embedded union
             foreach( Declaration* field, t->subs )
-                out->addField(field->name,ev->toQuali(field->getType()),field->isPublic(),field->id);
+                out->addField(field->name,field->pos,ev->toQuali(field->getType()),field->isPublic(),field->id);
         }else if( t->kind == Type::Object )
         {
             Type* base = t->getType();
@@ -1661,15 +1669,15 @@ void Parser2::emitType(Type* t)
             MilQuali super;
             if( base )
                 super = ev->toQuali(base);
-            out->beginType(ev->toQuali(t).second,t->decl->isPublic(), MilEmitter::Object, super );
+            out->beginType(ev->toQuali(t).second,t->decl->pos,t->decl->isPublic(), MilEmitter::Object, super );
             foreach( Declaration* field, t->subs )
-                out->addField(field->name,ev->toQuali(field->getType()),field->isPublic(),field->id);
+                out->addField(field->name,field->pos,ev->toQuali(field->getType()),field->isPublic(),field->id);
         }else
         {
-            out->beginType(ev->toQuali(t).second,t->decl->isPublic(),
+            out->beginType(ev->toQuali(t).second,t->decl->pos,t->decl->isPublic(),
                            t->typebound ? MilEmitter::MethType : MilEmitter::ProcType );
             foreach( Declaration* param, t->subs )
-                out->addArgument(ev->toQuali(param->getType()), param->name);
+                out->addArgument(ev->toQuali(param->getType()), param->name, param->pos);
             if( t->getType() && t->getType()->kind != Type::NoType )
                 out->setReturnType(ev->toQuali(t->getType()));
         }
@@ -1689,11 +1697,12 @@ void Parser2::emitType(Type* t)
             }
         }else
             base = t && t->getType() ? ev->toQuali(t->getType()) : Qualident();
-        out->addType(ev->toQuali(t).second,t->decl->isPublic(),base,
+        out->addType(ev->toQuali(t).second,t->decl->pos, t->decl->isPublic(),base,
                      t->kind == Type::Pointer ? MilEmitter::Pointer : MilEmitter::Array, t->len );
     }else if( t->kind == Type::ConstEnum )
     {
-        out->addType(ev->toQuali(t).second,t->decl->isPublic(),qMakePair(QByteArray(),Token::getSymbol("int32")),
+        out->addType(ev->toQuali(t).second, t->decl->pos,t->decl->isPublic(),
+                     qMakePair(QByteArray(),Token::getSymbol("int32")),
                      MilEmitter::Alias);
     }else
         Q_ASSERT(false);
@@ -1707,6 +1716,7 @@ Declaration*Parser2::addHelper(Type* t)
     decl->setType(t);
     decl->ownstype = true;
     decl->outer = thisMod;
+    decl->pos = t->pos;
     t->decl = decl;
     t->anonymous = true;
     emitType(t);
@@ -1719,7 +1729,7 @@ Declaration*Parser2::addTemp(Type* t)
     decl->kind = Declaration::LocalDecl;
     decl->setType(t);
     decl->outer = mdl->getTopScope();
-    decl->id = out->addLocal(ev->toQuali(t),decl->name);
+    decl->id = out->addLocal(ev->toQuali(t),decl->name, decl->pos);
     return decl;
 }
 
@@ -1935,11 +1945,11 @@ void Parser2::checkRelOp(Expression* e)
         error(e->pos.d_row, e->pos.d_col, "operands not compatible with operator");
 }
 
-void Parser2::beginFinallyEnd(bool finally)
+void Parser2::beginFinallyEnd(bool finally, const RowCol& pos)
 {
     Q_ASSERT(!inFinally);
     inFinally = finally;
-    out->toFinallySection(inFinally);
+    out->toFinallySection(inFinally, pos);
     labels.clear();
     gotos.clear();
     StatementSequence();
@@ -1963,7 +1973,7 @@ void Parser2::beginFinallyEnd(bool finally)
             error(j.value().tok,"goto label declared but not used"); // TODO should this really be an error?
     }
     inFinally = false;
-    out->toFinallySection(false);
+    out->toFinallySection(false, pos);
 }
 
 static bool renderLvalue( Expression* proc, int arg )
@@ -2162,6 +2172,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 Type* t = new Type();
                 t->kind = Type::Pointer;
                 t->setType(retType);
+                t->pos = tmp->pos;
                 tmp->setType(t);
                 addHelper(tmp->getType());
                 res = tmp;
@@ -2477,6 +2488,7 @@ Expression* Parser2::literal() {
         arr->setType(mdl->getType(Type::UINT8));
         arr->kind = Type::Array;
         arr->len = bytes.size();
+        arr->pos = res->pos;
         addHelper(arr);
         res->setType(arr);
         res->val = bytes;
@@ -2587,6 +2599,7 @@ Expression* Parser2::constructor(Type* hint) {
         Type* a = new Type();
         a->kind = Type::Array;
         a->len = maxIndex + 1;
+        a->pos = res->pos;
         a->setType(res->getType()->getType());
         addHelper(a);
         res->setType(a);
@@ -2763,6 +2776,7 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
         res->lhs = tmp;
         Type* ptr = new Type();
         ptr->setType(res->lhs->getType());
+        ptr->pos = res->pos;
         ptr->kind = Type::Pointer;
         addHelper(ptr);
         res->setType(ptr);
@@ -2836,7 +2850,7 @@ void Parser2::assignmentOrProcedureCall() {
 #else
         // now both lhs and rhs expression ASTs are ready; do analysis to recognize
         // array element and field assignments
-        if( rhs && !ev->assign(lhs,rhs) )
+        if( rhs && !ev->assign(lhs,rhs, tok.toRowCol()) )
             error(tok, ev->getErr() );
 #endif
         Expression::deleteAllExpressions();
@@ -2860,7 +2874,7 @@ void Parser2::assignmentOrProcedureCall() {
         if( !ev->evaluate(lhs) )
             error(t, ev->getErr());
         if( lhs->getType() && lhs->getType()->kind != Type::NoType )
-            out->pop_(); // remove unused result
+            line(lhs->pos).pop_(); // remove unused result
     }
     Expression::deleteAllExpressions();
 }
@@ -2886,21 +2900,22 @@ void Parser2::gotoLabel() {
     else
     {
         labels.insert(cur.d_val.constData(), Label(blockDepth,cur));
-        out->label_(cur.d_val);
+        line(cur).label_(cur.d_val);
     }
 	expect(Tok_Colon, false, "gotoLabel");
 }
 
 void Parser2::GotoStatement() {
+    const Token tok = la;
 	expect(Tok_GOTO, true, "GotoStatement");
 	expect(Tok_ident, false, "GotoStatement");
-    out->goto_(cur.d_val);
+    line(tok).goto_(cur.d_val);
     gotos.push_back( qMakePair(blockDepth,cur));
 }
 
 void Parser2::IfStatement() {
 	expect(Tok_IF, true, "IfStatement");
-    out->if_();
+    line(cur).if_();
     Token t = la;
     Expression* cond = expression(0);
     if( cond != 0 && !ev->evaluate(cond, true) )
@@ -2910,14 +2925,14 @@ void Parser2::IfStatement() {
         error(t, "expecting a boolean expression");
     ev->pop();
 	expect(Tok_THEN, true, "IfStatement");
-    out->then_();
+    line(cur).then_();
     StatementSequence();
     int level = 0;
 	while( FIRST_ElsifStatement(la.d_type) ) {
         // inlined ElsifStatement();
-        out->else_();
+        line(la).else_();
         expect(Tok_ELSIF, true, "ElsifStatement");
-        out->if_();
+        line(cur).if_();
         Token t = la;
         if( !ev->evaluate(expression(0), true) )
             error(t, ev->getErr());
@@ -2926,25 +2941,26 @@ void Parser2::IfStatement() {
             error(t, "expecting a boolean expression");
         ev->pop();
         expect(Tok_THEN, true, "ElsifStatement");
-        out->then_();
+        line(cur).then_();
         StatementSequence();
         level++;
 	}
 	if( FIRST_ElseStatement(la.d_type) ) {
         // inlined ElseStatement();
         expect(Tok_ELSE, true, "ElseStatement");
-        out->else_();
+        line(cur).else_();
         StatementSequence();
     }
     for( int i = 0; i < level; i++ )
         out->end_();
 	expect(Tok_END, true, "IfStatement");
-    out->end_();
+    line(cur).end_();
 }
 
 void Parser2::CaseStatement() {
-	expect(Tok_CASE, true, "CaseStatement");
-    Token tok = la;
+    expect(Tok_CASE, true, "CaseStatement");
+    const Token tok1 = cur;
+    Token tok2 = la;
     Expression* e = expression(0);
     const bool typeCase = e->getType() && e->getType()->kind == Type::Pointer &&
                                  e->getType()->getType() && e->getType()->getType()->kind == Type::Object;
@@ -2952,7 +2968,7 @@ void Parser2::CaseStatement() {
     {
         Expression::lockArena();
         expect(Tok_OF, true, "CaseStatement");
-        out->if_();
+        line(cur).if_();
         if( la.d_type == Tok_Bar )
             expect(Tok_Bar, false, "CaseStatement");
         TypeCase(e); // evaluates e and typename, emits then_, emits statements
@@ -2960,32 +2976,32 @@ void Parser2::CaseStatement() {
         while( la.d_type == Tok_Bar )
         {
             expect(Tok_Bar, false, "CaseStatement");
-            out->else_();
-            out->if_();
+            line(cur).else_();
+            line(cur).if_();
             TypeCase(e);
             level++;
         }
         if( la.d_type == Tok_ELSE ) {
             expect(Tok_ELSE, true, "CaseStatement");
-            out->else_();
+            line(cur).else_();
             StatementSequence();
         }
         for( int i = 0; i < level; i++ )
             out->end_();
         expect(Tok_END, true, "CaseStatement");
-        out->end_();
+        line(cur).end_();
         Expression::unlockArena();
         Expression::deleteAllExpressions();
     }else
     {
-        out->switch_();
+        line(tok1).switch_();
         if( !ev->evaluate(e, true) )
-            error(tok, ev->getErr());
+            error(tok2, ev->getErr());
         Type* t = ev->top().type;
         Expression::deleteAllExpressions();
         ev->pop();
         if( !t->isInteger() && t->kind != Type::CHAR && t->kind != Type::ConstEnum )
-            error(tok, "case expression must be of integer, char or constant enumeration type");
+            error(tok2, "case expression must be of integer, char or constant enumeration type");
         expect(Tok_OF, true, "CaseStatement");
         CaseLabels l;
         if( FIRST_Case(la.d_type) ) {
@@ -2997,11 +3013,11 @@ void Parser2::CaseStatement() {
         }
         if( la.d_type == Tok_ELSE ) {
             expect(Tok_ELSE, true, "CaseStatement");
-            out->else_();
+            line(cur).else_();
             StatementSequence();
         }
         expect(Tok_END, true, "CaseStatement");
-        out->end_();
+        line(cur).end_();
     }
 }
 
@@ -3014,7 +3030,7 @@ void Parser2::Case(Type* t, CaseLabels& ll) {
     else
         ll += l;
     expect(Tok_Colon, false, "Case");
-    out->case_(l.toList());
+    line(cur).case_(l.toList());
     out->then_();
     StatementSequence();
 }
@@ -3070,23 +3086,23 @@ void Parser2::TypeCase(Expression* e)
     if( !ev->evaluate(tyname) )
         error(tyname->pos, ev->getErr());
     if( tyname->getType()->kind == Type::Nil )
-        out->ldnull_();
+        line(e->pos).ldnull_();
     else
         ev->pop();
     if( !assigCompat(e->getType(), tyname->getType()) )
         error(tyname->pos,"label has incompatible type");
 
     if( tyname->getType()->kind == Type::Nil )
-        out->ceq_();
+        line(e->pos).ceq_();
     else
     {
         Type* t = tyname->getType();
         if( t->kind == Type::Pointer )
             t = t->getType();
-        out->isinst_(ev->toQuali(t));
+        line(e->pos).isinst_(ev->toQuali(t));
     }
     expect(Tok_Colon, false, "Case");
-    out->then_();
+    line(e->pos).then_();
     // TODO: take care that e is a variable or field, and that the type of it is t during the sequence
     StatementSequence();
 }
@@ -3105,7 +3121,7 @@ Value Parser2::label(Type* t) {
 
 void Parser2::WhileStatement() {
 	expect(Tok_WHILE, true, "WhileStatement");
-    out->while_();
+    line(cur).while_();
     const Token t = la;
     Expression* res = expression(0);
     if( res && !ev->evaluate(res, true) )
@@ -3115,18 +3131,18 @@ void Parser2::WhileStatement() {
     Expression::deleteAllExpressions();
     ev->pop();
     expect(Tok_DO, true, "WhileStatement");
-    out->do_();
+    line(cur).do_();
     StatementSequence();
 	expect(Tok_END, true, "WhileStatement");
-    out->end_();
+    line(cur).end_();
 }
 
 void Parser2::RepeatStatement() {
 	expect(Tok_REPEAT, true, "RepeatStatement");
-    out->repeat_();
+    line(cur).repeat_();
 	StatementSequence();
 	expect(Tok_UNTIL, true, "RepeatStatement");
-    out->until_();
+    line(cur).until_();
     const Token t = la;
     if( !ev->evaluate(expression(0), true) )
         error(t, ev->getErr());
@@ -3158,7 +3174,7 @@ void Parser2::ForStatement() {
     {
         // i := start
         Expression* lhs = toExpr(idxvar, tok.toRowCol());
-        ev->assign(lhs, expression(0));
+        ev->assign(lhs, expression(0), tok.toRowCol());
         Expression::deleteAllExpressions();
     }
 
@@ -3168,7 +3184,7 @@ void Parser2::ForStatement() {
     {
         // to := end
         Expression* lhs = toExpr(to, tok.toRowCol());
-        ev->assign(lhs, expression(0));
+        ev->assign(lhs, expression(0), tok.toRowCol() );
         Expression::deleteAllExpressions();
     }
 
@@ -3191,7 +3207,7 @@ void Parser2::ForStatement() {
 	expect(Tok_DO, true, "ForStatement");
     tok = cur;
 
-    out->while_();
+    line(tok).while_();
     {
         // while i <= to
         Expression* lhs = toExpr(idxvar, tok.toRowCol());
@@ -3207,7 +3223,7 @@ void Parser2::ForStatement() {
         ev->pop();
         Expression::deleteAllExpressions();
     }
-    out->do_();
+    line(tok).do_();
     StatementSequence();
 
     // i := i + 1
@@ -3226,27 +3242,27 @@ void Parser2::ForStatement() {
         rhs->rhs = r;
         rhs->setType(idxvar->getType());
 
-        ev->assign(lhs, rhs);
+        ev->assign(lhs, rhs, rhs->pos);
         Expression::deleteAllExpressions();
     }
 
-    out->end_();
+    line(la).end_();
 	expect(Tok_END, true, "ForStatement");
 }
 
 void Parser2::LoopStatement() {
 	expect(Tok_LOOP, true, "LoopStatement");
-    out->loop_();
+    line(cur).loop_();
     loopStack.push_back(RowCol(cur.d_lineNr,cur.d_colNr));
 	StatementSequence();
 	expect(Tok_END, true, "LoopStatement");
     loopStack.pop_back();
-    out->end_();
+    line(cur).end_();
 }
 
 void Parser2::ExitStatement() {
 	expect(Tok_EXIT, true, "ExitStatement");
-    out->exit_();
+    line(cur).exit_();
     if( loopStack.isEmpty() )
         error(cur,"cannot call exit when not in a loop");
 }
@@ -3261,9 +3277,11 @@ void Parser2::procedure() {
 }
 
 Type* Parser2::ProcedureType() {
+    const Token t = la;
 	procedure();
     bool bound = false;
     Type* p = new Type();
+    p->pos = t.toRowCol();
     p->kind = Type::Proc;
     typeStack.push_back(p);
     if( la.d_type == Tok_Lpar && (peek(2).d_type == Tok_POINTER || peek(2).d_type == Tok_Hat) ) {
@@ -3359,6 +3377,7 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
             Type* ptr = new Type();
             ptr->kind = Type::Pointer;
             ptr->setType(receiver.t);
+            ptr->pos = receiver.id.toRowCol();
             addHelper(ptr);
             param->setType(ptr);
         }
@@ -3382,6 +3401,18 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
         forward->data = QVariant::fromValue(procDecl);
 
     return procDecl;
+}
+
+MilEmitter &Parser2::line(const RowCol & pos)
+{
+    out->line_(pos);
+    return *out;
+}
+
+MilEmitter &Parser2::line(const Token & t)
+{
+    out->line_(t.toRowCol());
+    return *out;
 }
 
 void Parser2::ProcedureDeclaration() {
@@ -3408,12 +3439,13 @@ void Parser2::ProcedureDeclaration() {
             if( procDecl->typebound )
                 error(cur, "EXTERN not supported for type-bound procedures");
             procDecl->extern_ = true;
-            out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
+            out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
+                           mdl->getTopScope()->kind == Declaration::Module &&
                            procDecl->visi > 0, MilProcedure::Extern);
 
             const QList<Declaration*> params = procDecl->getParams(true);
             foreach( Declaration* p, params )
-                out->addArgument(ev->toQuali(p->getType()),p->name);
+                out->addArgument(ev->toQuali(p->getType()),p->name, p->pos);
             if( procDecl->getType() && procDecl->getType()->kind != Type::NoType )
                 out->setReturnType(ev->toQuali(procDecl->getType()));
 
@@ -3421,7 +3453,7 @@ void Parser2::ProcedureDeclaration() {
                 expect(Tok_ident, false, "ProcedureDeclaration");
                 procDecl->data = cur.d_val;
             }
-            out->endProc();
+            out->endProc(procDecl->pos);
         } else if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR ||
                    la.d_type == Tok_Semi || FIRST_ProcedureBody(la.d_type) ) {
             quint8 kind = langLevel == 0 ?
@@ -3447,12 +3479,13 @@ void Parser2::ProcedureDeclaration() {
             QByteArray binding;
             if( procDecl->typebound )
                 binding = ev->toQuali(procDecl->link->getType()->getType()).second; // receiver is always pointer to T
-            out->beginProc(ev->toQuali(procDecl).second,mdl->getTopScope()->kind == Declaration::Module &&
+            out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
+                           mdl->getTopScope()->kind == Declaration::Module &&
                            procDecl->visi > 0, kind, binding);
 
             const QList<Declaration*> params = procDecl->getParams(true);
             foreach( Declaration* p, params )
-                out->addArgument(ev->toQuali(p->getType()),p->name); // the SELF param is explicit
+                out->addArgument(ev->toQuali(p->getType()),p->name, p->pos); // the SELF param is explicit
             if( procDecl->getType() && procDecl->getType()->kind != Type::NoType )
                 out->setReturnType(ev->toQuali(procDecl->getType()));
 
@@ -3463,7 +3496,7 @@ void Parser2::ProcedureDeclaration() {
             expect(Tok_ident, false, "ProcedureBody");
             if( procDecl->name.constData() != cur.d_val.constData() )
                 error(cur, QString("name after END differs from procedure name") );
-            out->endProc();
+            out->endProc(cur.toRowCol());
         }  else
 			invalid("ProcedureDeclaration");
         mdl->closeScope();
@@ -3517,12 +3550,12 @@ Parser2::NameAndType Parser2::Receiver2()
 
 void Parser2::block() {
 	expect(Tok_BEGIN, true, "block");
-    beginFinallyEnd(false);
+    beginFinallyEnd(false, cur.toRowCol());
     if( la.d_type == Tok_FINALLY ) {
         expect(Tok_FINALLY, false, "block");
         if( langLevel < 1 )
             error(cur,"FINALLY sections are not supported on language level 0");
-        beginFinallyEnd(true);
+        beginFinallyEnd(true, cur.toRowCol());
     }
 }
 
@@ -3566,6 +3599,7 @@ void Parser2::DeclarationSequence() {
 
 void Parser2::ReturnStatement() {
 	expect(Tok_RETURN, true, "ReturnStatement");
+    const Token ret = cur;
     if( mdl->getTopScope()->kind != Declaration::Procedure )
         error(cur,"return statement only supported in a procedure declaration");
     if( inFinally )
@@ -3579,14 +3613,14 @@ void Parser2::ReturnStatement() {
             error(tok, ev->getErr()); // value is pushed on stack by prepareRhs
         if( !assigCompat( mdl->getTopScope()->getType(), e ) )
             error(tok,"expression is not compatible with the return type");
-        if( !ev->prepareRhs(mdl->getTopScope()->getType()) )
+        if( !ev->prepareRhs(mdl->getTopScope()->getType(), false, e->pos) )
             error(tok, ev->getErr());
-        out->ret_(true);
+        line(ret).ret_(true);
         Expression::deleteAllExpressions();
     }else if( mdl->getTopScope()->getType() != 0 && mdl->getTopScope()->getType()->kind != Type::NoType )
         error(cur,"this return statement requires an expression");
     else
-        out->ret_(false);
+        line(ret).ret_(false);
 }
 
 Type* Parser2::FormalParameters() {
@@ -3643,6 +3677,7 @@ Type* Parser2::ReturnType() {
     {
         Type* res = new Type();
         res->setType(t);
+        res->pos = t->pos;
         res->kind = Type::Pointer;
         t = res;
 
@@ -3792,7 +3827,7 @@ void Parser2::module() {
     if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
 	}
-    out->beginModule(md.fullName,source,mps);
+    out->beginModule(md.fullName,source,m->pos); // TODO: meta params in MIL
 
     // call "out" here for all non-generic type and const
     for( int i = 0; i < metaActuals.size(); i++ )
@@ -3803,11 +3838,11 @@ void Parser2::module() {
         if( ma.mode == Value::Const )
         {
             if( i < md.metaParams.size() )
-                out->addConst(ev->toQuali(ma.type), md.metaParams[i]->name, ma.val );
+                out->addConst(ev->toQuali(ma.type), md.metaParams[i]->name, md.metaParams[i]->pos, ma.val );
         }else if( ma.type->isSimple() )
         {
             if( i < md.metaParams.size() )
-                out->addType(md.metaParams[i]->name,false,ev->toQuali(ma.type),MilEmitter::Alias);
+                out->addType(md.metaParams[i]->name,md.metaParams[i]->pos, false,ev->toQuali(ma.type),MilEmitter::Alias);
         }else
             emitType(ma.type);  // TODO: this doesn't look right; what name should we use?
     }
@@ -3830,9 +3865,9 @@ void Parser2::module() {
         id.visi = IdentDef::Private;
         Declaration* procDecl = addDecl(id, Declaration::Procedure);
         mdl->openScope(procDecl);
-        out->beginProc("begin$",0, MilProcedure::ModuleInit);
+        out->beginProc("begin$", la.toRowCol(),0, MilProcedure::ModuleInit);
         block();
-        out->endProc();
+        out->endProc(la.toRowCol());
         mdl->closeScope();
     }
 	expect(Tok_END, true, "module");
@@ -3840,7 +3875,7 @@ void Parser2::module() {
 	if( la.d_type == Tok_Dot ) {
 		expect(Tok_Dot, false, "module");
 	}
-    out->endModule();
+    out->endModule(cur.toRowCol());
     mdl->closeScope();
 }
 
@@ -3915,10 +3950,10 @@ void Parser2::import() {
             // loadModule returns the module decl; we just need the list of module elements:
             importDecl->link = mod->link;
             ModuleData md = mod->data.value<ModuleData>();
-            out->addImport(md.fullName);
+            out->addImport(md.fullName, localName.toRowCol());
         }
     }else
-        out->addImport(Token::getSymbol(import.path.join('/')));
+        out->addImport(Token::getSymbol(import.path.join('/')), localName.toRowCol());
 }
 
 bool Parser2::isUnique( const MetaParamList& l, const Declaration* m)
@@ -3992,6 +4027,7 @@ MetaParamList Parser2::MetaSection(bool& isType) {
             Type* t = new Type();
             t->kind = Type::Generic;
             t->ownstype = true;
+            t->pos = res[i]->pos;
             res[i]->setType(t);
         }
     }

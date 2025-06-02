@@ -24,6 +24,7 @@ namespace Mil {
 			R_IdentList,
 			R_IfThenElse,
 			R_ImportList,
+			R_Line,
 			R_LocalDeclaration,
 			R_Loop,
 			R_MemberList,

@@ -43,9 +43,9 @@ namespace Mil {
 
 		struct Error {
 		    QString msg;
-		    int row, col;
+            RowCol pos;
 		    QString path;
-		    Error( const QString& m, int r, int c, const QString& p):msg(m),row(r),col(c),path(p){}
+            Error( const QString& m, const RowCol& pos, const QString& p):msg(m),pos(pos),path(p){}
 		};
 		QList<Error> errors;
 	protected:
@@ -79,6 +79,7 @@ namespace Mil {
 		void ImportList();
 		void import();
 		void DeclarationSequence();
+        void Line();
         Expression* Expression_();
         Expression* ExpInstr();
         Statement* StatementSequence();
@@ -107,6 +108,14 @@ namespace Mil {
         Declaration* addDecl(const Token& id, Declaration::Kind, bool public_ = false);
         Declaration* addDecl(const QByteArray& name, const RowCol& pos, Declaration::Kind, bool public_ = false);
         Declaration* qualident2(const Quali& q, const RowCol& pos);
+        RowCol select(const RowCol& pos) const
+        {
+            if( source.isEmpty() )
+                return pos;
+            else
+                return curPos;
+        }
+        bool nextIsLine();
 
     private:
         AstModel* mdl;
@@ -118,7 +127,10 @@ namespace Mil {
         QList<Type*> unresolved;
         Declaration* curMod;
         Declaration* curDecl;
+        QString source;
+        RowCol curPos;
         bool firstModule;
+        bool lineFound;
 	};
 }
 #endif // include

@@ -400,8 +400,8 @@ Declaration::~Declaration()
         delete c;
     else if( kind == Procedure && !forward && finally )
         delete finally;
-    else if( kind == Module && toDelete )
-        delete toDelete;
+    else if( kind == Module && md )
+        delete md;
     if( subs )
         delete subs;
     if( body )
@@ -564,7 +564,7 @@ Declaration*Declaration::findInitProc() const
     Declaration* init = subs;
     while(init)
     {
-        if( init->init )
+        if( init->entryPoint )
             return init;
         init = init->next;
     }
@@ -1009,4 +1009,10 @@ void ToDelete::append(ToDelete* td)
         l = l->next;
     Q_ASSERT( l && l->next == 0 );
     l->next = td;
+}
+
+ModuleData::~ModuleData()
+{
+    if( toDelete )
+        delete toDelete;
 }

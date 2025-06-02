@@ -167,6 +167,7 @@ namespace Mil {
 			case Tok_SHR: return "SHR";
 			case Tok_SHR_UN: return "SHR_UN";
 			case Tok_SIZEOF: return "SIZEOF";
+			case Tok_SOURCE: return "SOURCE";
 			case Tok_STARG: return "STARG";
 			case Tok_STARG_S: return "STARG_S";
 			case Tok_STELEM: return "STELEM";
@@ -382,6 +383,7 @@ namespace Mil {
 			case Tok_SHR: return "Tok_SHR";
 			case Tok_SHR_UN: return "Tok_SHR_UN";
 			case Tok_SIZEOF: return "Tok_SIZEOF";
+			case Tok_SOURCE: return "Tok_SOURCE";
 			case Tok_STARG: return "Tok_STARG";
 			case Tok_STARG_S: return "Tok_STARG_S";
 			case Tok_STELEM: return "Tok_STELEM";
@@ -1404,6 +1406,17 @@ namespace Mil {
 						if( at(str,len,i+4) == 'O' ){
 							if( at(str,len,i+5) == 'F' ){
 								res = Tok_SIZEOF; i += 6;
+							}
+						}
+					}
+				}
+				break;
+			case 'O':
+				if( at(str,len,i+2) == 'U' ){
+					if( at(str,len,i+3) == 'R' ){
+						if( at(str,len,i+4) == 'C' ){
+							if( at(str,len,i+5) == 'E' ){
+								res = Tok_SOURCE; i += 6;
 							}
 						}
 					}
