@@ -1,5 +1,5 @@
-#ifndef MICMILLOADER2_H
-#define MICMILLOADER2_H
+#ifndef _MILASTSERIALIZER_H
+#define _MILASTSERIALIZER_H
 
 /*
 * Copyright 2019-2025 Rochus Keller <mailto:me@rochus-keller.ch>
@@ -20,27 +20,19 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
-#include "MilAst.h"
-#include <QHash>
-
-namespace Mic
+namespace Mil
 {
+    class AbstractRenderer;
+    class Declaration;
 
-class MilLoader2 : public Mil::Importer
-{
-public:
-    MilLoader2();
-
-    Mil::Declaration* loadFromFile( const QString& path);
-    Mil::AstModel& getModel() { return mdl; }
-    QList<Mil::Declaration*> getModulesInDependencyOrder();
-protected:
-    Mil::Declaration* loadModule( const Mil::Import& imp );
-
-private:
-    Mil::AstModel mdl;
-};
-
+    class AstSerializer {
+    public:
+        enum DbgInfo { None, RowsOnly, RowsAndCols };
+        static bool render(AbstractRenderer* out, const Declaration* module, DbgInfo = None );
+    private:
+        AstSerializer();
+        ~AstSerializer();
+    };
 }
 
-#endif // MICMILLOADER_H
+#endif // _MILASTSERIALIZER_H

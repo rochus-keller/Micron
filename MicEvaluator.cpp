@@ -15,7 +15,7 @@
 */
 
 #include "MicEvaluator.h"
-#include "MicMilEmitter.h"
+#include "MilEmitter.h"
 #include "MicBuiltins.h"
 #include "MicToken.h"
 #include <bitset>
@@ -195,7 +195,7 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
             err = "cannot take address of INLINE procedure";
             return false;
         }
-        const MilTrident trident = qMakePair(toQuali(proc->outer),proc->name);
+        const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
         out->line_(pos);
         out->ldmeth_(trident);
     }else
@@ -207,9 +207,9 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
     return true;
 }
 
-static inline MilQuali coreName(const QByteArray& proc)
+static inline Mil::Quali coreName(const QByteArray& proc)
 {
-    MilQuali res;
+    Mil::Quali res;
     res.first = Token::getSymbol("MIC$");
     res.second = Token::getSymbol(proc);
     return res;
@@ -259,38 +259,38 @@ bool Evaluator::assign(const RowCol& pos)
     case Type::CHAR:
     case Type::UINT8:
     case Type::INT8:
-        out->stind_(MilEmitter::I1);
+        out->stind_(Mil::EmiTypes::I1);
         break;
     case Type::UINT16:
     case Type::INT16:
-        out->stind_(MilEmitter::I2);
+        out->stind_(Mil::EmiTypes::I2);
         break;
     case Type::UINT32:
     case Type::INT32:
     case Type::SET:
     case Type::ConstEnum:
-        out->stind_(MilEmitter::I4);
+        out->stind_(Mil::EmiTypes::I4);
         break;
     case Type::UINT64:
     case Type::INT64:
-        out->stind_(MilEmitter::I8);
+        out->stind_(Mil::EmiTypes::I8);
         break;
     case Type::FLT32:
-        out->stind_(MilEmitter::R4);
+        out->stind_(Mil::EmiTypes::R4);
         break;
     case Type::FLT64:
-        out->stind_(MilEmitter::R8);
+        out->stind_(Mil::EmiTypes::R8);
         break;
     case Type::Nil:
     case Type::String:
     case Type::Pointer:
-        out->stind_(MilEmitter::IntPtr);
+        out->stind_(Mil::EmiTypes::IntPtr);
         break;
     case Type::Proc:
         if( lhs.type->typebound )
-            out->stind_(MilEmitter::IPP);
+            out->stind_(Mil::EmiTypes::IPP);
         else
-            out->stind_(MilEmitter::IntPtr);
+            out->stind_(Mil::EmiTypes::IntPtr);
         break;
     case Type::Record:
     case Type::Object:
@@ -396,45 +396,45 @@ bool Evaluator::derefValue()
     case Type::BOOL:
     case Type::CHAR:
     case Type::UINT8:
-        out->ldind_(MilEmitter::U1);
+        out->ldind_(Mil::EmiTypes::U1);
         break;
     case Type::UINT16:
-        out->ldind_(MilEmitter::U2);
+        out->ldind_(Mil::EmiTypes::U2);
         break;
     case Type::UINT32:
     case Type::SET:
-        out->ldind_(MilEmitter::U4);
+        out->ldind_(Mil::EmiTypes::U4);
         break;
     case Type::UINT64:
-        out->ldind_(MilEmitter::U8);
+        out->ldind_(Mil::EmiTypes::U8);
         break;
     case Type::INT8:
-        out->ldind_(MilEmitter::I1);
+        out->ldind_(Mil::EmiTypes::I1);
         break;
     case Type::INT16:
-        out->ldind_(MilEmitter::I2);
+        out->ldind_(Mil::EmiTypes::I2);
         break;
     case Type::INT32:
     case Type::ConstEnum:
-        out->ldind_(MilEmitter::I4);
+        out->ldind_(Mil::EmiTypes::I4);
         break;
     case Type::INT64:
-        out->ldind_(MilEmitter::I8);
+        out->ldind_(Mil::EmiTypes::I8);
         break;
     case Type::FLT32:
-        out->ldind_(MilEmitter::R4);
+        out->ldind_(Mil::EmiTypes::R4);
         break;
     case Type::FLT64:
-        out->ldind_(MilEmitter::R8);
+        out->ldind_(Mil::EmiTypes::R8);
         break;
     case Type::Pointer:
-        out->ldind_(MilEmitter::IntPtr);
+        out->ldind_(Mil::EmiTypes::IntPtr);
         break;
     case Type::Proc:
         if( v.type->typebound )
-            out->ldind_(MilEmitter::IPP);
+            out->ldind_(Mil::EmiTypes::IPP);
         else
-            out->ldind_(MilEmitter::IntPtr);
+            out->ldind_(Mil::EmiTypes::IntPtr);
         break;
     case Type::Record:
     case Type::Object:
@@ -475,7 +475,7 @@ bool Evaluator::desigField(Declaration* field, bool byVal, const RowCol& pos)
 
     Q_ASSERT(field);
     out->line_(pos);
-    const MilTrident desig = qMakePair(toQuali(lhs.type),field->name);
+    const Mil::Trident desig = qMakePair(toQuali(lhs.type),field->name);
     if( byVal )
         out->ldfld_(desig);
     else
@@ -615,7 +615,7 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
             ret = proc->getType();
-            const MilTrident trident = qMakePair(toQuali(proc->outer),proc->name);
+            const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
             out->line_(pos);
             out->callvirt_(trident,nArgs, ret != 0);
 
@@ -688,41 +688,41 @@ bool Evaluator::castNum(Type* to, const RowCol& pos)
         stack.back().type = to;
     }else
     {
-        MilEmitter::Type tt;
+        Mil::EmiTypes::Basic tt;
         switch(to->kind)
         {
         case Type::BOOL:
         case Type::CHAR:
         case Type::UINT8:
-            tt = MilEmitter::U1;
+            tt = Mil::EmiTypes::U1;
             break;
         case Type::UINT16:
-            tt = MilEmitter::U2;
+            tt = Mil::EmiTypes::U2;
             break;
         case Type::UINT32:
         case Type::SET:
-            tt = MilEmitter::U4;
+            tt = Mil::EmiTypes::U4;
             break;
         case Type::UINT64:
-            tt = MilEmitter::U8;
+            tt = Mil::EmiTypes::U8;
             break;
         case Type::INT8:
-            tt = MilEmitter::I1;
+            tt = Mil::EmiTypes::I1;
             break;
         case Type::INT16:
-            tt = MilEmitter::I2;
+            tt = Mil::EmiTypes::I2;
             break;
         case Type::INT32:
-            tt = MilEmitter::I4;
+            tt = Mil::EmiTypes::I4;
             break;
         case Type::INT64:
-            tt = MilEmitter::I8;
+            tt = Mil::EmiTypes::I8;
             break;
         case Type::FLT32:
-            tt = MilEmitter::R4;
+            tt = Mil::EmiTypes::R4;
             break;
         case Type::FLT64:
-            tt = MilEmitter::R8;
+            tt = Mil::EmiTypes::R8;
             break;
         default:
             Q_ASSERT(false);
@@ -881,7 +881,7 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
             }
         }else
         {
-            MilObject obj;
+            Mil::ConstrLiteral obj;
             obj.typeRef = toQuali(v.type);
             obj.data = v.val;
             out->line_(pos);
@@ -976,13 +976,13 @@ void Evaluator::adjustNumType(Type* me, Type* other)
     {
         if( me->isInt() && other->isInt() &&
                 other->kind == Type::INT64 && me->kind < Type::INT64 )
-            out->conv_(MilEmitter::I8);
+            out->conv_(Mil::EmiTypes::I8);
         else if( me->isUInt() && other->isUInt() &&
                  other->kind == Type::UINT64 && me->kind < Type::UINT64 )
-            out->conv_(MilEmitter::U8);
+            out->conv_(Mil::EmiTypes::U8);
         else if( me->isReal() && other->isReal() &&
                  other->kind == Type::FLT64 && me->kind < Type::FLT64 )
-            out->conv_(MilEmitter::R8);
+            out->conv_(Mil::EmiTypes::R8);
     }
 }
 
@@ -1522,9 +1522,9 @@ void Evaluator::unaryMinusOp(Value& v, const RowCol& pos)
             {
                 out->line_(pos);
                 if( v.type->kind == Type::INT32 )
-                    out->conv_(MilEmitter::I4);
+                    out->conv_(Mil::EmiTypes::I4);
                 else
-                    out->conv_(MilEmitter::I8);
+                    out->conv_(Mil::EmiTypes::I8);
                 out->neg_();
             }
         }else if( v.type->isInteger() )
@@ -1833,7 +1833,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
     {
     case Type::Record:
     case Type::Object: {
-            MilRecordLiteral rec;
+            Mil::RecordLiteral rec;
             Expression* c = e->rhs;
             while( c )
             {
@@ -2019,7 +2019,7 @@ bool Evaluator::stfld(Expression* lhs, Expression* rhs, const RowCol &pos)
 
     Declaration* field = lhs->val.value<Declaration*>();
     Q_ASSERT(field);
-    const MilTrident desig = qMakePair(toQuali(pointer.type),field->name);
+    const Mil::Trident desig = qMakePair(toQuali(pointer.type),field->name);
 
     if( !evaluate(rhs) ) // value
         return false;

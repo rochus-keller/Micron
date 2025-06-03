@@ -26,6 +26,7 @@ extern "C" {
 #include <QVector>
 #include <QtDebug>
 using namespace Mil;
+using namespace Vm;
 
 //#define _USE_JUMP_TABLE // instead of a big switch
 //#define _CHECK_HEAP_ADDRESSES
@@ -311,7 +312,7 @@ static bool MIC_assert(void* args, void* ret)
 
 struct Interpreter::Imp
 {
-    VmCode code;
+    Code code;
     AstModel* mdl;
 
     std::vector<char> moduleData;
@@ -1504,7 +1505,7 @@ bool Interpreter::Imp::execute(Frame* frame)
             }vmbreak;
         vmcase(sizeof)
         vmcase(ptroff)
-                qWarning() << "TODO not yet implemented" << VmCode::op_names[frame->proc->ops[pc].op];
+                qWarning() << "TODO not yet implemented" << Code::op_names[frame->proc->ops[pc].op];
                 pc++;
                 vmbreak;
         vmcase(pop)
@@ -1618,7 +1619,7 @@ bool Interpreter::Imp::execute(Frame* frame)
             } vmbreak;
         vmcase(newvla)
         vmcase(line)
-                qWarning() << "TODO not yet implemented" << VmCode::op_names[frame->proc->ops[pc].op];
+                qWarning() << "TODO not yet implemented" << Code::op_names[frame->proc->ops[pc].op];
                 pc++;
             vmbreak;
         }

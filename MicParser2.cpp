@@ -15,7 +15,7 @@
 */
 
 #include "MicParser2.h"
-#include "MicMilEmitter.h"
+#include "MilEmitter.h"
 #include "MicEvaluator.h"
 #include "MicBuiltins.h"
 #include <QtDebug>
@@ -611,7 +611,7 @@ static bool isPtrToOpenCharArray(Type* t)
 }
 #endif
 
-Parser2::Parser2(AstModel* m, Scanner2* s, MilEmitter* out, Importer* i):
+Parser2::Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* i):
     mdl(m),scanner(s),out(out),imp(i),thisMod(0),thisDecl(0),inFinally(false),
     langLevel(3),haveExceptions(false)
 {
@@ -918,14 +918,14 @@ void Parser2::ForwardDeclaration()
     if( procDecl->typebound )
         binding = ev->toQuali(procDecl->link->getType()->getType()).second; // receiver is always pointer to T
     out->beginProc(ev->toQuali(procDecl).second, procDecl->pos, mdl->getTopScope()->kind == Declaration::Module &&
-                   procDecl->visi > 0, MilProcedure::Forward, binding);
+                   procDecl->visi > 0, Mil::ProcData::Forward, binding);
 
     const QList<Declaration*> params = procDecl->getParams(true);
     foreach( Declaration* p, params )
         out->addArgument(ev->toQuali(p->getType()),p->name, p->pos); // the SELF param is explicit
     if( procDecl->getType() && procDecl->getType()->kind != Type::NoType )
         out->setReturnType(ev->toQuali(procDecl->getType()));
-    out->endProc(procDecl->pos);
+    out->endProc(RowCol());
 }
 
 Expression* Parser2::number() {
@@ -1151,7 +1151,7 @@ void Parser2::TypeDeclaration() {
 
     thisDecl = 0;
     if( !q.second.isEmpty() )
-        out->addType(ev->toQuali(t).second,d->pos,t->decl->isPublic(),q, MilEmitter::Alias);
+        out->addType(ev->toQuali(t).second,d->pos,t->decl->isPublic(),q, Mil::EmiTypes::Alias);
     else
         emitType(t);
 }
@@ -1657,7 +1657,7 @@ void Parser2::emitType(Type* t)
             }
 
             out->beginType(ev->toQuali(t).second,t->decl->pos,t->decl->isPublic(),
-                           !hasFixed ? MilEmitter::Union : MilEmitter::Struct );
+                           !hasFixed ? Mil::EmiTypes::Union : Mil::EmiTypes::Struct );
             // TODO: record can have fixed and variable part which go to separate struct and union or embedded union
             foreach( Declaration* field, t->subs )
                 out->addField(field->name,field->pos,ev->toQuali(field->getType()),field->isPublic(),field->id);
@@ -1666,16 +1666,16 @@ void Parser2::emitType(Type* t)
             Type* base = t->getType();
             if( base && base->kind == Type::Pointer )
                 base = base->getType();
-            MilQuali super;
+            Mil::Quali super;
             if( base )
                 super = ev->toQuali(base);
-            out->beginType(ev->toQuali(t).second,t->decl->pos,t->decl->isPublic(), MilEmitter::Object, super );
+            out->beginType(ev->toQuali(t).second,t->decl->pos,t->decl->isPublic(), Mil::EmiTypes::Object, super );
             foreach( Declaration* field, t->subs )
                 out->addField(field->name,field->pos,ev->toQuali(field->getType()),field->isPublic(),field->id);
         }else
         {
             out->beginType(ev->toQuali(t).second,t->decl->pos,t->decl->isPublic(),
-                           t->typebound ? MilEmitter::MethType : MilEmitter::ProcType );
+                           t->typebound ? Mil::EmiTypes::MethType : Mil::EmiTypes::ProcType );
             foreach( Declaration* param, t->subs )
                 out->addArgument(ev->toQuali(param->getType()), param->name, param->pos);
             if( t->getType() && t->getType()->kind != Type::NoType )
@@ -1698,12 +1698,12 @@ void Parser2::emitType(Type* t)
         }else
             base = t && t->getType() ? ev->toQuali(t->getType()) : Qualident();
         out->addType(ev->toQuali(t).second,t->decl->pos, t->decl->isPublic(),base,
-                     t->kind == Type::Pointer ? MilEmitter::Pointer : MilEmitter::Array, t->len );
+                     t->kind == Type::Pointer ? Mil::EmiTypes::Pointer : Mil::EmiTypes::Array, t->len );
     }else if( t->kind == Type::ConstEnum )
     {
         out->addType(ev->toQuali(t).second, t->decl->pos,t->decl->isPublic(),
                      qMakePair(QByteArray(),Token::getSymbol("int32")),
-                     MilEmitter::Alias);
+                     Mil::EmiTypes::Alias);
     }else
         Q_ASSERT(false);
 }
@@ -3403,13 +3403,13 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
     return procDecl;
 }
 
-MilEmitter &Parser2::line(const RowCol & pos)
+Mil::Emitter &Parser2::line(const RowCol & pos)
 {
     out->line_(pos);
     return *out;
 }
 
-MilEmitter &Parser2::line(const Token & t)
+Mil::Emitter &Parser2::line(const Token & t)
 {
     out->line_(t.toRowCol());
     return *out;
@@ -3441,7 +3441,7 @@ void Parser2::ProcedureDeclaration() {
             procDecl->extern_ = true;
             out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
                            mdl->getTopScope()->kind == Declaration::Module &&
-                           procDecl->visi > 0, MilProcedure::Extern);
+                           procDecl->visi > 0, Mil::ProcData::Extern);
 
             const QList<Declaration*> params = procDecl->getParams(true);
             foreach( Declaration* p, params )
@@ -3453,21 +3453,21 @@ void Parser2::ProcedureDeclaration() {
                 expect(Tok_ident, false, "ProcedureDeclaration");
                 procDecl->data = cur.d_val;
             }
-            out->endProc(procDecl->pos);
+            out->endProc(cur.toRowCol());
         } else if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR ||
                    la.d_type == Tok_Semi || FIRST_ProcedureBody(la.d_type) ) {
             quint8 kind = langLevel == 0 ?
-                        MilProcedure::Inline // on langLevel 0 all procedures are implicitly inline
-                      : MilProcedure::Normal;
+                        Mil::ProcData::Inline // on langLevel 0 all procedures are implicitly inline
+                      : Mil::ProcData::Normal;
 			if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR ) {
 				if( la.d_type == Tok_INLINE ) {
 					expect(Tok_INLINE, true, "ProcedureDeclaration");
                     procDecl->inline_ = true;
-                    kind = MilProcedure::Inline;
+                    kind = Mil::ProcData::Inline;
 				} else if( la.d_type == Tok_INVAR ) {
 					expect(Tok_INVAR, true, "ProcedureDeclaration");
                     procDecl->invar = true;
-                    kind = MilProcedure::Invar;
+                    kind = Mil::ProcData::Invar;
 				} else
 					invalid("ProcedureDeclaration");
                 if( procDecl->typebound )
@@ -3493,10 +3493,10 @@ void Parser2::ProcedureDeclaration() {
             DeclarationSequence();
             block();
             expect(Tok_END, true, "ProcedureBody");
+            out->endProc(la.toRowCol());
             expect(Tok_ident, false, "ProcedureBody");
             if( procDecl->name.constData() != cur.d_val.constData() )
                 error(cur, QString("name after END differs from procedure name") );
-            out->endProc(cur.toRowCol());
         }  else
 			invalid("ProcedureDeclaration");
         mdl->closeScope();
@@ -3757,7 +3757,7 @@ void Parser2::module() {
     md.metaActuals = metaActuals;
 
     const QString source = cur.d_sourcePath;
-    MilMetaParams mps;
+    Mil::MetaParams mps;
     if( FIRST_MetaParams(la.d_type) ) {
         MetaParamList mp = MetaParams();
         md.metaParams = mp;
@@ -3769,7 +3769,7 @@ void Parser2::module() {
             else
                 for( int i = 0; i < mp.size(); i++ )
                 {
-                    MilMetaParam m;
+                    Mil::MetaParam m;
                     m.name = mp[i]->name;
                     if( metaActuals[i].isConst() && mp[i]->kind != Declaration::ConstDecl ||
                             !metaActuals[i].isConst() && mp[i]->kind == Declaration::ConstDecl )
@@ -3812,7 +3812,7 @@ void Parser2::module() {
         {
             for( int i = 0; i < mp.size(); i++ )
             {
-                MilMetaParam m;
+                Mil::MetaParam m;
                 m.name = mp[i]->name;
                 m.isGeneric = true;
                 m.isConst = mp[i]->kind == Declaration::ConstDecl;
@@ -3842,7 +3842,7 @@ void Parser2::module() {
         }else if( ma.type->isSimple() )
         {
             if( i < md.metaParams.size() )
-                out->addType(md.metaParams[i]->name,md.metaParams[i]->pos, false,ev->toQuali(ma.type),MilEmitter::Alias);
+                out->addType(md.metaParams[i]->name,md.metaParams[i]->pos, false,ev->toQuali(ma.type),Mil::EmiTypes::Alias);
         }else
             emitType(ma.type);  // TODO: this doesn't look right; what name should we use?
     }
@@ -3865,17 +3865,17 @@ void Parser2::module() {
         id.visi = IdentDef::Private;
         Declaration* procDecl = addDecl(id, Declaration::Procedure);
         mdl->openScope(procDecl);
-        out->beginProc("begin$", la.toRowCol(),0, MilProcedure::ModuleInit);
+        out->beginProc("begin$", la.toRowCol(),0, Mil::ProcData::ModuleInit);
         block();
-        out->endProc(la.toRowCol());
+        out->endProc(RowCol());
         mdl->closeScope();
     }
 	expect(Tok_END, true, "module");
-	expect(Tok_ident, false, "module");
+    out->endModule(la.toRowCol());
+    expect(Tok_ident, false, "module");
 	if( la.d_type == Tok_Dot ) {
 		expect(Tok_Dot, false, "module");
 	}
-    out->endModule(cur.toRowCol());
     mdl->closeScope();
 }
 

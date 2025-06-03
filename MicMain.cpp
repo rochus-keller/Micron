@@ -23,6 +23,7 @@
 #include "MilVmCode.h"
 #include "MilVmOakwood.h"
 #include "MilEiGen.h"
+#include "MilAstSerializer.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -33,7 +34,7 @@
 #include <QElapsedTimer>
 #include "MicPpLexer.h"
 #include "MicParser2.h"
-#include "MicMilEmitter.h"
+#include "MilEmitter.h"
 #include "MilLexer.h"
 #include "MilParser.h"
 #include "MilToken.h"
@@ -155,25 +156,25 @@ public:
         modules.append(ModuleSlot(imp,file,0));
         ms = &modules.back();
 
-        Mic::InMemRenderer2 imr(&loader.getModel());
+        Mil::IlAstRenderer imr(&loader.getModel());
 
         Lex2 lex;
         lex.sourcePath = file; // to keep file name if invalid
         lex.lex.setStream(file);
 
-#define _DUMP
+//#define _DUMP
 #ifdef _DUMP
-        QList<Mic::MilRenderer*> renderer;
+        QList<Mil::AbstractRenderer*> renderer;
         QFile out;
         out.open(stdout, QIODevice::WriteOnly);
-        Mic::IlAsmRenderer ilasm(&out,true);
+        Mil::IlAsmRenderer ilasm(&out,true);
         renderer << &ilasm;
         renderer << &imr;
-        Mic::MilSplitter split(renderer);
-        Mic::MilEmitter e(&split, Mic::MilEmitter::RowsOnly);
+        Mil::RenderSplitter split(renderer);
+        Mil::Emitter e(&split, Mil::Emitter::RowsOnly);
 #else
         qDebug() << "**** parsing" << QFileInfo(file).fileName();
-        Mic::MilEmitter e(&imr);
+        Mil::Emitter e(&imr, Mil::Emitter::RowsOnly);
 #endif
         Mic::AstModel mdl;
         Mic::Parser2 p(&mdl,&lex, &e, this);
@@ -266,8 +267,8 @@ static void process(const QString& file, const QStringList& searchPaths,
         {
             if( m->name == "MIC$" )
                 continue;
-            Mic::IlAsmRenderer r(&out, true);
-            Mic::MilLoader2::render(&r,m);
+            Mil::IlAsmRenderer r(&out, true);
+            Mil::AstSerializer::render(&r,m, Mil::AstSerializer::RowsOnly);
             out.putChar('\n');
         }
     }

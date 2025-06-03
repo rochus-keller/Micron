@@ -1421,7 +1421,10 @@ void Parser2::ProcedureBody(Declaration* proc) {
     expect(Tok_BEGIN, false, "ProcedureBody");
     proc->body = StatementSequence();
 	expect(Tok_END, false, "ProcedureBody");
-	expect(Tok_ident, false, "ProcedureBody");
+    if( nextIsLine() ) {
+        Line();
+    }
+    expect(Tok_ident, false, "ProcedureBody");
     if( cur.d_val.constData() != proc->name.constData() )
         error(cur, "invalid end identifier");
 }
@@ -1499,7 +1502,6 @@ void Parser2::module() {
         return;
     }
     curMod = addDecl(cur, Declaration::Module);
-    curMod->md = new ModuleData();
     scopeStack.push_back(curMod);
 
 	if( FIRST_MetaParams(la.d_type) ) {
@@ -1512,6 +1514,8 @@ void Parser2::module() {
         expect(Tok_SOURCE, true, "module");
         expect(Tok_string, false, "module");
         source = QString::fromUtf8(cur.d_val);
+        curMod->md = new ModuleData();
+        curMod->md->source = source;
         if( la.d_type == Tok_Semi ) {
             expect(Tok_Semi, false, "module");
         }
@@ -1527,6 +1531,8 @@ void Parser2::module() {
 	expect(Tok_END, false, "module");
     if( nextIsLine() ) {
         Line();
+        if( curMod->md )
+            curMod->md->end = curPos;
     }
     expect(Tok_ident, false, "module");
     if( cur.d_val.constData() != curMod->name.constData() )

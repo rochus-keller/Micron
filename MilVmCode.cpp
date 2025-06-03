@@ -20,8 +20,9 @@
 #include "MilVmCode.h"
 #include <QtDebug>
 using namespace Mil;
+using namespace Vm;
 
-const char* VmCode::op_names[] = {
+const char* Code::op_names[] = {
     "<invalid>",
     #define OPDEF(op, x) #op
     #include "MilVmOps.h"
@@ -35,13 +36,13 @@ static const int op_args[] = {
     #undef OPDEF
 };
 
-VmCode::VmCode(AstModel* mdl, quint8 pointerWidth, quint8 stackAlignment):
+Code::Code(AstModel* mdl, quint8 pointerWidth, quint8 stackAlignment):
     mdl(mdl),pointerWidth(pointerWidth), stackAlignment(stackAlignment)
 {
 
 }
 
-VmCode::~VmCode()
+Code::~Code()
 {
     for( int i = 0; i < procs.size(); i++ )
         delete procs[i];
@@ -49,12 +50,12 @@ VmCode::~VmCode()
         delete vtables[i];
 }
 
-void VmCode::addExternal(const char* module, const char* name, quint32 id)
+void Code::addExternal(const char* module, const char* name, quint32 id)
 {
     externals[module].insert(name, id);
 }
 
-bool VmCode::compile(Declaration* procOrModule)
+bool Code::compile(Declaration* procOrModule)
 {
     Q_ASSERT(procOrModule &&
              (procOrModule->kind == Declaration::Procedure ||
@@ -75,7 +76,7 @@ bool VmCode::compile(Declaration* procOrModule)
 
 }
 
-bool VmCode::translateModule(Declaration* m)
+bool Code::translateModule(Declaration* m)
 {
     Q_ASSERT(m && m->kind == Declaration::Module);
 
@@ -118,7 +119,7 @@ bool VmCode::translateModule(Declaration* m)
     return true;
 }
 
-bool VmCode::translateProc(Declaration* proc)
+bool Code::translateProc(Declaration* proc)
 {
     if( proc->validated )
         return true; // the proc was already translated
@@ -156,7 +157,7 @@ bool VmCode::translateProc(Declaration* proc)
     return translateProc(*cur);
 }
 
-bool VmCode::translateProc(Procedure& proc)
+bool Code::translateProc(Procedure& proc)
 {
     Q_ASSERT( proc.decl && proc.decl->kind == Declaration::Procedure );
     const DeclList locals = proc.decl->getLocals();
@@ -216,7 +217,7 @@ bool VmCode::translateProc(Procedure& proc)
     }
 }
 
-bool VmCode::translateStatSeq(Procedure& proc, Statement* s)
+bool Code::translateStatSeq(Procedure& proc, Statement* s)
 {
     while(s)
     {
@@ -567,7 +568,7 @@ bool VmCode::translateStatSeq(Procedure& proc, Statement* s)
     return true;
 }
 
-bool VmCode::translateExprSeq(Procedure& proc, Expression* e)
+bool Code::translateExprSeq(Procedure& proc, Expression* e)
 {
     static const int pointerWidth = sizeof(void*);
     while(e)
@@ -1390,7 +1391,7 @@ bool VmCode::translateExprSeq(Procedure& proc, Expression* e)
     return true;
 }
 
-bool VmCode::translateInit(Procedure& proc, quint32 id)
+bool Code::translateInit(Procedure& proc, quint32 id)
 {
     Q_ASSERT( proc.decl && (proc.decl->kind == Declaration::Module || proc.decl->kind == Declaration::Procedure) );
 
@@ -1414,7 +1415,7 @@ bool VmCode::translateInit(Procedure& proc, quint32 id)
     return true;
 }
 
-void VmCode::render(char* data, quint32 off, Type* t, Constant* c)
+void Code::render(char* data, quint32 off, Type* t, Constant* c)
 {
     switch(c->kind)
     {
@@ -1484,7 +1485,7 @@ void VmCode::render(char* data, quint32 off, Type* t, Constant* c)
     }
 }
 
-void VmCode::render(char* data, quint32 start, ComponentList* cl)
+void Code::render(char* data, quint32 start, ComponentList* cl)
 {
     Type* t = deref(cl->type);
     if( t->kind == Type::Array )
@@ -1504,7 +1505,7 @@ void VmCode::render(char* data, quint32 start, ComponentList* cl)
     }
 }
 
-void VmCode::downcopy(Vtable* vt)
+void Code::downcopy(Vtable* vt)
 {
     // make sure that each vtable is filled with inherited methods as far as used
     // TODO avoid multiple scans of same vt
@@ -1519,7 +1520,7 @@ void VmCode::downcopy(Vtable* vt)
     }
 }
 
-bool VmCode::dumpProc(QTextStream& out, Declaration* proc)
+bool Code::dumpProc(QTextStream& out, Declaration* proc)
 {
     if( proc->forward )
         return false;
@@ -1530,7 +1531,7 @@ bool VmCode::dumpProc(QTextStream& out, Declaration* proc)
     out << "proc " << p->decl->toPath() << endl;
     for( int pc = 0; pc < p->ops.size(); pc++ )
     {
-        out << "    " << QString("%1: ").arg(pc,2) << VmCode::op_names[p->ops[pc].op];
+        out << "    " << QString("%1: ").arg(pc,2) << Code::op_names[p->ops[pc].op];
         switch(op_args[p->ops[pc].op])
         {
         case NoOpArgs:
@@ -1580,7 +1581,7 @@ bool VmCode::dumpProc(QTextStream& out, Declaration* proc)
     return true;
 }
 
-bool VmCode::dumpModule(QTextStream& out, Declaration* module)
+bool Code::dumpModule(QTextStream& out, Declaration* module)
 {
     Declaration* d = module->subs;
     while(d)
@@ -1592,7 +1593,7 @@ bool VmCode::dumpModule(QTextStream& out, Declaration* module)
     return true;
 }
 
-bool VmCode::dumpAll(QTextStream& out)
+bool Code::dumpAll(QTextStream& out)
 {
     DeclList& modules = mdl->getModules();
     foreach( Declaration* module, modules )
@@ -1600,7 +1601,7 @@ bool VmCode::dumpAll(QTextStream& out)
     return true;
 }
 
-void VmCode::initMemory(char* mem, Type* t, bool doPointerInit )
+void Code::initMemory(char* mem, Type* t, bool doPointerInit )
 {
     if( doPointerInit && t->pointerInit )
         memset(mem, 0, t->getByteSize(sizeof(void*)));

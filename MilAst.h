@@ -161,9 +161,16 @@ namespace Mil
     {
         QString source;
         ToDelete* toDelete;
+        Mic::RowCol end;
 
         ModuleData():toDelete(0){}
         ~ModuleData();
+    };
+
+    struct ProcedureData
+    {
+        Statement* finally; // optionally, owned
+        Mic::RowCol end;
     };
 
     class Declaration : public Node
@@ -188,8 +195,8 @@ namespace Mil
                 uint off : 24; // Field offset in bytes
             } f;
             int off;  // method vtbl slot, LocalDecl & ParamDecl offset in bytes
-            Declaration* forwardTo; // Procedure if forward==true, not owned
-            Statement* finally; // Procedure if forward==false, optionally, owned
+            Declaration* forwardTo; // Procedure: if forward==true, not owned
+            ProcedureData* pd; // Procedure: if forward==false, optionally, owned
             Declaration* imported; // Import, not owned
             ModuleData* md; // Module
         };

@@ -19,16 +19,17 @@
 
 #include <Micron/MicAst.h>
 
+namespace Mil {
+class Emitter;
+}
 namespace Mic
 {
-class MilEmitter;
-
 typedef QPair<QByteArray,QByteArray> Qualident;
 
 class Evaluator
 {
 public:
-    Evaluator(AstModel* m, MilEmitter* out):mdl(m),out(out) {}
+    Evaluator(AstModel* m, Mil::Emitter* out):mdl(m),out(out) {}
 
     void pushCurProc(Declaration*d) { curProcs.push_back(d); }
     void popCurProc() { curProcs.pop_back(); }
@@ -94,7 +95,7 @@ protected:
 
 private:
     AstModel* mdl;
-    MilEmitter* out;
+    Mil::Emitter* out;
     QString err;
     QList<Value> stack;
     friend class Builtins;

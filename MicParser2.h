@@ -23,8 +23,11 @@
 #include <QHash>
 #include <QSet>
 
+namespace Mil {
+class Emitter;
+}
+
 namespace Mic {
-    class MilEmitter;
     class Evaluator;
 
     class Scanner2 {
@@ -44,7 +47,7 @@ namespace Mic {
 
     class Parser2 {
 	public:
-        Parser2(AstModel* m, Scanner2* s, MilEmitter* out, Importer* = 0);
+        Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* = 0);
         ~Parser2();
 
         void RunParser(const MetaActualList& = MetaActualList());
@@ -182,12 +185,12 @@ namespace Mic {
         void checkRelOp(Expression*);
         void beginFinallyEnd(bool finally, const RowCol &pos);
         Declaration* ProcedureHeader(bool inForward);
-        MilEmitter& line(const RowCol&);
-        MilEmitter& line(const Token&);
+        Mil::Emitter& line(const RowCol&);
+        Mil::Emitter& line(const Token&);
 
     private:
         AstModel* mdl;
-        MilEmitter* out;
+        Mil::Emitter* out;
         Evaluator* ev;
         Importer* imp;
 		Token cur;

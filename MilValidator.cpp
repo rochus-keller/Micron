@@ -84,7 +84,8 @@ bool Validator::validate(Declaration* module)
 
     foreach( Expression* e, newExprs )
     {
-        Q_ASSERT(module->md);
+        if( module->md == 0 )
+            module->md = new ModuleData();
         if( module->md->toDelete == 0 )
             module->md->toDelete = new ToDelete(e);
         else

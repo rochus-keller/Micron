@@ -398,8 +398,8 @@ Declaration::~Declaration()
 {
     if( kind == ConstDecl && c )
         delete c;
-    else if( kind == Procedure && !forward && finally )
-        delete finally;
+    else if( kind == Procedure && !forward && pd )
+        delete pd;
     else if( kind == Module && md )
         delete md;
     if( subs )

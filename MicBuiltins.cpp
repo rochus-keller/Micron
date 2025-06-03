@@ -16,13 +16,13 @@
 
 #include "MicBuiltins.h"
 #include "MicEvaluator.h"
-#include "MicMilEmitter.h"
+#include "MilEmitter.h"
 #include "MicToken.h"
 using namespace Mic;
 
-static inline MilQuali coreName(const QByteArray& proc)
+static inline Mil::Quali coreName(const QByteArray& proc)
 {
-    MilQuali res;
+    Mil::Quali res;
     res.first = Token::getSymbol("MIC$");
     res.second = Token::getSymbol(proc);
     return res;
@@ -411,25 +411,25 @@ void Builtins::doSigned()
 {
     Value v = ev->stack.takeLast();
     Type* t;
-    MilEmitter::Type tt;
+    Mil::EmiTypes::Basic tt;
     switch(v.type->kind)
     {
     case Type::UINT8:
         t = ev->mdl->getType(Type::INT8);
-        tt = MilEmitter::I1;
+        tt = Mil::EmiTypes::I1;
         break;
     case Type::UINT16:
         t = ev->mdl->getType(Type::INT16);
-        tt = MilEmitter::I2;
+        tt = Mil::EmiTypes::I2;
         break;
     case Type::UINT32:
     default:
         t = ev->mdl->getType(Type::INT32);
-        tt = MilEmitter::I4;
+        tt = Mil::EmiTypes::I4;
         break;
     case Type::UINT64:
         t = ev->mdl->getType(Type::INT64);
-        tt = MilEmitter::I8;
+        tt = Mil::EmiTypes::I8;
         break;
     }
     v.type = t;
@@ -444,25 +444,25 @@ void Builtins::doUnsigned()
 {
     Value v = ev->stack.takeLast();
     Type* t;
-    MilEmitter::Type tt;
+    Mil::EmiTypes::EmiTypes::Basic tt;
     switch(v.type->kind)
     {
     case Type::INT8:
         t = ev->mdl->getType(Type::UINT8);
-        tt = MilEmitter::U1;
+        tt = Mil::EmiTypes::U1;
         break;
     case Type::INT16:
         t = ev->mdl->getType(Type::UINT16);
-        tt = MilEmitter::U2;
+        tt = Mil::EmiTypes::U2;
         break;
     case Type::INT32:
     default:
         t = ev->mdl->getType(Type::UINT32);
-        tt = MilEmitter::U4;
+        tt = Mil::EmiTypes::U4;
         break;
     case Type::INT64:
         t = ev->mdl->getType(Type::UINT64);
-        tt = MilEmitter::U8;
+        tt = Mil::EmiTypes::U8;
         break;
     }
     v.type = t;
@@ -499,14 +499,14 @@ void Builtins::doFlt()
         if( v.isConst() )
             v.val = (double)v.val.toLongLong();
         else
-            ev->out->conv_(MilEmitter::R8);
+            ev->out->conv_(Mil::EmiTypes::R8);
     }else
     {
         v.type = ev->mdl->getType(Type::FLT32);
         if( v.isConst() )
             v.val = (double)v.val.toLongLong();
         else
-            ev->out->conv_(MilEmitter::R4);
+            ev->out->conv_(Mil::EmiTypes::R4);
     }
     ev->stack.push_back(v);
 }
@@ -622,7 +622,7 @@ void Builtins::incdec(int nArgs, bool inc)
         if( what.type->kind == Type::UINT64 || what.type->kind == Type::INT64 )
         {
             ev->out->dup_();
-            ev->out->ldind_(what.type->kind == Type::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
+            ev->out->ldind_(what.type->kind == Type::UINT64 ? Mil::EmiTypes::U8 : Mil::EmiTypes::I8);
             if( nArgs == 2 )
             {
                 if( step.isConst() )
@@ -630,7 +630,7 @@ void Builtins::incdec(int nArgs, bool inc)
                 else
                 {
                     ev->out->ldloc_(tmp);
-                    ev->out->conv_(MilEmitter::I8);
+                    ev->out->conv_(Mil::EmiTypes::I8);
                 }
             }else
                 ev->out->ldc_i8(1);
@@ -638,11 +638,11 @@ void Builtins::incdec(int nArgs, bool inc)
                 ev->out->add_();
             else
                 ev->out->sub_();
-            ev->out->stind_(what.type->kind == Type::UINT64 ? MilEmitter::U8 : MilEmitter::I8);
+            ev->out->stind_(what.type->kind == Type::UINT64 ? Mil::EmiTypes::U8 : Mil::EmiTypes::I8);
         }else
         {
             ev->out->dup_();
-            ev->out->ldind_(what.type->isUInt() ? MilEmitter::U4 : MilEmitter::I4);
+            ev->out->ldind_(what.type->isUInt() ? Mil::EmiTypes::U4 : Mil::EmiTypes::I4);
             if( nArgs == 2 )
             {
                 if( step.isConst() )
@@ -655,7 +655,7 @@ void Builtins::incdec(int nArgs, bool inc)
                 ev->out->add_();
             else
                 ev->out->sub_();
-            ev->out->stind_(what.type->isUInt() ? MilEmitter::U4 : MilEmitter::I4);
+            ev->out->stind_(what.type->isUInt() ? Mil::EmiTypes::U4 : Mil::EmiTypes::I4);
         }
     }else if( what.type->kind == Type::ConstEnum )
     {
@@ -665,19 +665,19 @@ void Builtins::incdec(int nArgs, bool inc)
             return;
         }
         ev->out->dup_();
-        ev->out->ldind_(MilEmitter::I4);
+        ev->out->ldind_(Mil::EmiTypes::I4);
         ev->out->ldc_i4(1);
         if( inc )
             ev->out->add_();
         else
             ev->out->sub_();
-        ev->out->stind_(MilEmitter::I4);
+        ev->out->stind_(Mil::EmiTypes::I4);
         // TODO: check overflow and halt?
         // TODO: do we expect more enums than fit in I4?
     }else if( what.type->kind == Type::Pointer )
     {
         ev->out->dup_();
-        ev->out->ldind_(MilEmitter::IntPtr);
+        ev->out->ldind_(Mil::EmiTypes::IntPtr);
         if( nArgs == 2 )
         {
             if( step.isConst() )
@@ -686,7 +686,7 @@ void Builtins::incdec(int nArgs, bool inc)
                 ev->out->ldloc_(tmp);
         }
         ev->out->ptroff_(ev->toQuali(what.type->getType()));
-        ev->out->stind_(MilEmitter::IntPtr);
+        ev->out->stind_(Mil::EmiTypes::IntPtr);
     }else
         ev->err = "invalid argument types";
 }
@@ -734,22 +734,22 @@ void Builtins::PRINT(int nArgs, bool ln)
     }
     if( ev->stack.back().type->kind == Type::ConstEnum )
     {
-        ev->out->conv_(MilEmitter::I8);
+        ev->out->conv_(Mil::EmiTypes::I8);
         ev->out->call_(coreName("printI8"),1,false);
     }else if( ev->stack.back().type->isInt() )
     {
         if( ev->stack.back().type->kind != Type::INT64 )
-            ev->out->conv_(MilEmitter::I8);
+            ev->out->conv_(Mil::EmiTypes::I8);
         ev->out->call_(coreName("printI8"),1,false);
     }else if( ev->stack.back().type->isUInt() )
     {
         if( ev->stack.back().type->kind != Type::UINT64 )
-            ev->out->conv_(MilEmitter::U8);
+            ev->out->conv_(Mil::EmiTypes::U8);
         ev->out->call_(coreName("printU8"),1,false);
     }else if( ev->stack.back().type->isReal() )
     {
         if( ev->stack.back().type->kind != Type::FLT64 )
-            ev->out->conv_(MilEmitter::R8);
+            ev->out->conv_(Mil::EmiTypes::R8);
         ev->out->call_(coreName("printF8"),1,false);
     }else if( ev->stack.back().type->isText() )
     {
@@ -796,7 +796,7 @@ void Builtins::NEW(int nArgs)
     if( what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Object )
     {
         ev->out->newobj_(ev->toQuali(what.type->getType()));
-        ev->out->stind_(MilEmitter::IntPtr);
+        ev->out->stind_(Mil::EmiTypes::IntPtr);
     }else if( what.type->getType()->len > 0 ) // fixed size array
     {
         if( nArgs > 1 )
@@ -805,7 +805,7 @@ void Builtins::NEW(int nArgs)
             return;
         }
         ev->out->newobj_(ev->toQuali(what.type->getType())); // don't use newarr for fixed size arrays
-        ev->out->stind_(MilEmitter::IntPtr);
+        ev->out->stind_(Mil::EmiTypes::IntPtr);
     }else // open array
     {
         if( nArgs != 2 )
@@ -814,7 +814,7 @@ void Builtins::NEW(int nArgs)
             return;
         }
         ev->out->newarr_(ev->toQuali(what.type->getType()->getType()));
-        ev->out->stind_(MilEmitter::IntPtr);
+        ev->out->stind_(Mil::EmiTypes::IntPtr);
     }
 }
 

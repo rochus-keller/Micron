@@ -37,7 +37,7 @@ let utils : SourceSet {
     ]
 }
 
-let micParser : SourceSet {
+let mic : SourceSet {
     .configs += config;
     .sources += [
         ./MicLexer.cpp
@@ -52,8 +52,6 @@ let micParser : SourceSet {
         ./MicParser2.h
         ./MicAst.cpp
         ./MicAst.h
-        ./MicMilEmitter.cpp
-        ./MicMilEmitter.h
         ./MicEvaluator.cpp
         ./MicEvaluator.h
         ./MicBuiltins.cpp
@@ -63,7 +61,7 @@ let micParser : SourceSet {
     ]
 }
 
-let milParser : SourceSet {
+let mil : SourceSet {
     .configs += config;
     .sources += [
         ./MilLexer.cpp
@@ -90,12 +88,16 @@ let milParser : SourceSet {
         ./MilProject.h
         ./MilValidator.h
         ./MilCeeGen.h
-        ./ilInterpreter.h
+        ./MilInterpreter.h
         ./MilVmOps.h
         ./MilVmCode.h
         ./MilVmOakwood.h
         ./MilEiGen.h
+        ./MilEmitter.cpp
+        ./MilEmitter.h
     ]
+    .sources += ./MilRenderer.cpp
+    .sources += ./MilAstSerializer.cpp
 }
 
 let rcc : Rcc {
@@ -105,6 +107,6 @@ let rcc : Rcc {
 
 let compiler ! : Executable {
     .sources += [ ./MicMain.cpp ]
-    .deps += [ utils micParser milParser rcc eigen.common eigen.emitter qt.core_sources ]
+    .deps += [ utils mic mil rcc eigen.common eigen.emitter qt.core_sources ]
     .configs += config
 }

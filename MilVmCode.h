@@ -26,7 +26,8 @@ class QTextStream;
 
 namespace Mil
 {
-
+namespace Vm
+{
 enum OpArgCode {
     NoOpArgs,
     OffArg,
@@ -94,11 +95,11 @@ struct MethRef
     MethRef(Vtable* o = 0, Procedure* p = 0):obj(o),proc(p){}
 };
 
-class VmCode
+class Code
 {
 public:
-    VmCode(AstModel*, quint8 pointerWidth, quint8 stackAlignment);
-    ~VmCode();
+    Code(AstModel*, quint8 pointerWidth, quint8 stackAlignment);
+    ~Code();
 
     void addExternal(const char* module, const char* name, quint32 id);
 
@@ -284,7 +285,7 @@ private:
     QList<Context> ctxStack; // because translateProc is called recursively
     QMap<const char*,QMap<const char*, int> > externals;
 };
-
+}
 }
 
 #endif // MILVMCODE_H
