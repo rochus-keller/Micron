@@ -1,0 +1,300 @@
+(* The Computer Language Benchmarks Game
+ * http://shootout.alioth.debian.org/
+ *
+ * Based on nbody.java and adapted based on the SOM version.
+ * Copyright (c) 2025 Rochus Keller <me@rochus-keller.ch> (for Micron migration)
+ *)
+
+module NBody
+
+import M := MathL
+
+const
+  PI = 3.141592653589793
+  SOLAR_MASS = (4.0 * PI * PI)
+  DAYS_PER_YER = 365.24
+  Count = 5
+
+type
+  Body = record
+    x,y,z: longreal
+    vx,vy,vz: longreal
+    mass: longreal
+  end
+
+  NBodySystem = record
+    bodies: array Count of Body
+  end;
+
+procedure Body_getX(me: ^Body): longreal
+begin
+  return me.x
+end Body_getX
+
+procedure Body_getY(me: ^Body): longreal
+begin
+  return me.y
+end Body_getY
+
+procedure Body_getZ(me: ^Body): longreal
+begin
+  return me.z
+end Body_getZ
+
+procedure Body_getVX(me: ^Body): longreal
+begin
+  return me.vx
+end Body_getVX
+
+procedure Body_getVY(me: ^Body): longreal
+begin
+  return me.vy
+end Body_getVY
+
+procedure Body_getVZ(me: ^Body): longreal
+begin
+  return me.vz
+end Body_getVZ
+
+procedure Body_getMass(me: ^Body): longreal
+begin
+  return me.mass
+end Body_getMass
+
+procedure Body_setX(me: ^Body; x: longreal)
+begin
+  me.x := x
+end Body_setX
+
+procedure Body_setY(me: ^Body; y: longreal)
+begin
+  me.y := y
+end Body_setY
+
+procedure Body_setZ(me: ^Body; z: longreal)
+begin
+  me.z := z
+end Body_setZ
+
+procedure Body_setVX(me: ^Body; vx: longreal)
+begin
+  me.vx := vx
+end Body_setVX
+
+procedure Body_setVY(me: ^Body; vy: longreal)
+begin
+  me.vy := vy
+end Body_setVY
+
+procedure Body_setVZ(me: ^Body; vz: longreal)
+begin
+  me.vz := vz
+end Body_setVZ
+
+procedure Body_offsetMomentum(me: ^Body; px, py, pz: longreal)
+begin
+  me.vx := 0.0 - (px / SOLAR_MASS)
+  me.vy := 0.0 - (py / SOLAR_MASS)
+  me.vz := 0.0 - (pz / SOLAR_MASS)
+end Body_offsetMomentum
+
+procedure Body_create(x, y, z, vx, vy, vz, mass: longreal): Body
+var
+  res: Body
+begin
+  res.x := x
+  res.y := y
+  res.z := z
+  res.vx := vx * DAYS_PER_YER
+  res.vy := vy * DAYS_PER_YER
+  res.vz := vz * DAYS_PER_YER
+  res.mass := mass * SOLAR_MASS
+  return res
+end Body_create
+
+procedure Body_jupiter(): Body
+begin
+  return Body_create(
+    4.84143144246472090e+00,
+    -1.16032004402742839e+00,
+    -1.03622044471123109e-01,
+    1.66007664274403694e-03,
+    7.69901118419740425e-03,
+    -6.90460016972063023e-05,
+    9.54791938424326609e-04)
+end Body_jupiter
+
+procedure Body_saturn(): Body
+begin
+  return Body_create(
+    8.34336671824457987e+00,
+    4.12479856412430479e+00,
+    -4.03523417114321381e-01,
+    -2.76742510726862411e-03,
+    4.99852801234917238e-03,
+    2.30417297573763929e-05,
+    2.85885980666130812e-04)
+end Body_saturn
+
+procedure Body_uranus(): Body
+begin
+  return Body_create(
+    1.28943695621391310e+01,
+    -1.51111514016986312e+01,
+    -2.23307578892655734e-01,
+    2.96460137564761618e-03,
+    2.37847173959480950e-03,
+    -2.96589568540237556e-05,
+    4.36624404335156298e-05)
+end Body_uranus
+
+procedure Body_neptune(): Body
+begin
+  return Body_create(
+    1.53796971148509165e+01,
+    -2.59193146099879641e+01,
+    1.79258772950371181e-01,
+    2.68067772490389322e-03,
+    1.62824170038242295e-03,
+    -9.51592254519715870e-05,
+    5.15138902046611451e-05)
+end Body_neptune
+
+procedure Body_sun(): Body
+begin
+  return Body_create(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+end Body_sun
+
+procedure test(b: ^Body)
+begin
+	println(b.mass)
+end test 
+
+procedure NBodySystem_init(me: ^NBodySystem)
+var
+  px, py, pz: longreal
+  i: integer
+  b: ^Body
+  tmp: longreal
+begin
+  me.bodies[0] := Body_sun()
+  me.bodies[1] := Body_jupiter()
+  me.bodies[2] := Body_saturn()
+  me.bodies[3] := Body_uranus()
+  me.bodies[4] := Body_neptune()
+
+  px := 0.0
+  py := 0.0
+  pz := 0.0
+
+  for i := 0 to Count - 1 do
+    b := @me.bodies[i]
+    px := px + Body_getVX(b) * Body_getMass(b)
+    py := py + Body_getVY(b) * Body_getMass(b)
+    pz := pz + Body_getVZ(b) * Body_getMass(b)
+  end
+
+  Body_offsetMomentum(@me.bodies[0], px, py, pz)
+end NBodySystem_init
+
+procedure NBodySystem_advance(me: ^NBodySystem; dt: longreal)
+var
+  i, j: integer
+  iBody, jBody: ^Body
+  dx, dy, dz: longreal
+  dSquared, distance, mag: longreal
+begin
+  for i := 0 to Count - 1 do
+    iBody := @me.bodies[i]
+    for j := i + 1 to Count - 1 do
+      jBody := @me.bodies[j]
+      dx := Body_getX(iBody) - Body_getX(jBody)
+      dy := Body_getY(iBody) - Body_getY(jBody)
+      dz := Body_getZ(iBody) - Body_getZ(jBody)
+
+      dSquared := dx * dx + dy * dy + dz * dz
+      distance := M.sqrt(dSquared)
+      mag := dt / (dSquared * distance);
+
+      Body_setVX(iBody, Body_getVX(iBody) - (dx * Body_getMass(jBody) * mag))
+      Body_setVY(iBody, Body_getVY(iBody) - (dy * Body_getMass(jBody) * mag))
+      Body_setVZ(iBody, Body_getVZ(iBody) - (dz * Body_getMass(jBody) * mag))
+
+      Body_setVX(jBody, Body_getVX(jBody) + (dx * Body_getMass(iBody) * mag))
+      Body_setVY(jBody, Body_getVY(jBody) + (dy * Body_getMass(iBody) * mag))
+      Body_setVZ(jBody, Body_getVZ(jBody) + (dz * Body_getMass(iBody) * mag))
+    end
+  end
+
+  for i := 0 to Count - 1 do
+    iBody := @me.bodies[i]
+    Body_setX(iBody, Body_getX(iBody) + dt * Body_getVX(iBody))
+    Body_setY(iBody, Body_getY(iBody) + dt * Body_getVY(iBody))
+    Body_setZ(iBody, Body_getZ(iBody) + dt * Body_getVZ(iBody))
+  end
+end NBodySystem_advance
+
+procedure NBodySystem_energy(me: ^NBodySystem): longreal
+var
+  e: longreal
+  i, j: integer
+  iBody, jBody: ^Body
+  dx, dy, dz, distance: longreal
+begin
+  e := 0.0;
+  for i := 0 to Count - 1 do
+    iBody := @me.bodies[i]
+    e := e + 0.5 * Body_getMass(iBody)
+         * (Body_getVX(iBody) * Body_getVX(iBody) +
+            Body_getVY(iBody) * Body_getVY(iBody) +
+            Body_getVZ(iBody) * Body_getVZ(iBody))
+    for j := i + 1 to Count - 1 do
+      jBody := @me.bodies[j]
+      dx := Body_getX(iBody) - Body_getX(jBody)
+      dy := Body_getY(iBody) - Body_getY(jBody)
+      dz := Body_getZ(iBody) - Body_getZ(jBody)
+      distance := M.sqrt(dx * dx + dy * dy + dz * dz)
+      e := e - (Body_getMass(iBody) * Body_getMass(jBody)) / distance
+    end
+  end
+  return e
+end NBodySystem_energy
+
+procedure verifyResult2(resultValue: longreal; innerIterations: integer): boolean
+const
+  epsilon = 0.00000000000005 // orig: 00000000000000005
+begin
+  if innerIterations = 250000 then
+    return (abs(resultValue) - 0.1690859889909308 < epsilon)
+  end
+  if innerIterations = 1 then
+    return (abs(resultValue) - 0.16907495402506745 < epsilon)
+  end
+
+  // Checkstyle: stop
+  print("No verification result for ")print(innerIterations)println(" found");
+  print("Result is: ")println(resultValue)
+  // Checkstyle: resume
+  return false
+end verifyResult2
+
+procedure run(innerIterations: integer): boolean
+var
+  system: NBodySystem
+  i: integer
+begin
+  NBodySystem_init(@system)
+  for i := 0 to innerIterations - 1 do
+    NBodySystem_advance(@system, 0.01)
+  end;
+  return verifyResult2(NBodySystem_energy(@system), innerIterations)
+end run
+
+begin
+	println("NBody begin")
+	
+	assert(run(1))
+	
+	println("NBody end")
+end NBody
+

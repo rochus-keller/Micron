@@ -847,10 +847,11 @@ end benchmark
 
 
 begin
+	println("Richards begin")
 	TRACING := false
 	NO_WORK := nil
 	NO_TASK := nil
 	toDelete := nil
 	assert(benchmark()#0)
-
+	println("Richards end")
 end Richards

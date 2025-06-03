@@ -197,6 +197,14 @@ void Project::interpret(bool dump)
     }
 }
 
+void Project::dumpMil()
+{
+    foreach( Declaration* module, mdl->getModules() )
+    {
+        // TODO
+    }
+}
+
 Declaration*Project::loadModule(const Import& imp)
 {
     // we assume here that all modules were already loaded and parsed

@@ -3673,7 +3673,7 @@ Type* Parser2::ReturnType() {
 			invalid("ReturnType");
 	}
     Type* t = NamedType();
-    if( ptr )
+    if( t && ptr )
     {
         Type* res = new Type();
         res->setType(t);

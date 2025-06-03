@@ -2182,17 +2182,22 @@ Statement* Parser2::StatementSequence() {
                 return 0;
             }
             s->pos = s->e->pos;
-            while( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) )
+            while( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) || nextIsLine() )
             {
                 // take care that all stretches of expressions are connected under the same ExprStat
-                Expression* e = ExpInstr();
-                if( e == 0 )
+                if( nextIsLine() ) {
+                    Line();
+                }else
                 {
-                    if( res )
-                        delete res;
-                    return 0;
+                    Expression* e = ExpInstr();
+                    if( e == 0 )
+                    {
+                        if( res )
+                            delete res;
+                        return 0;
+                    }
+                    s->e->append(e);
                 }
-                s->e->append(e);
             }
         } else
             invalid("StatementSequence");

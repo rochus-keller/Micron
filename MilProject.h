@@ -39,6 +39,7 @@ namespace Mil
         bool parse();
         void generateC();
         void interpret(bool dump = false);
+        void dumpMil();
 
         static inline QByteArray escapeFilename( const QByteArray& fileName )
         {

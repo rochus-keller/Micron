@@ -128,9 +128,9 @@ QList<Declaration*> MilLoader2::getModulesInDependencyOrder()
 
 // NOTE keep InMemRenderer2 in sync with Mil::Parser2
 
-InMemRenderer2::InMemRenderer2(MilLoader2* loader):loader(loader), module(0), type(0), curProc(0)
+InMemRenderer2::InMemRenderer2(AstModel *mdl):mdl(mdl), module(0), type(0), curProc(0)
 {
-    Q_ASSERT( loader );
+    Q_ASSERT( mdl );
 }
 
 InMemRenderer2::~InMemRenderer2()
@@ -159,7 +159,7 @@ bool InMemRenderer2::commit()
         }
         unresolved.clear();
 
-        Validator v(&loader->mdl);
+        Validator v(mdl);
 #if 1
         if( !v.validate(module) )
         {
@@ -168,7 +168,7 @@ bool InMemRenderer2::commit()
             delete module;
         }else
 #endif
-            if( !loader->mdl.addModule(module) )
+            if( !mdl->addModule(module) )
         {
             error(QString("cannot add module: %1").arg(module->name.constData()) );
             delete module;
@@ -202,7 +202,7 @@ void InMemRenderer2::addImport(const QByteArray& path)
 {
     Q_ASSERT(module);
 
-    Declaration* imported = loader->mdl.findModuleByName(path);
+    Declaration* imported = mdl->findModuleByName(path);
     if( imported == 0 )
         error(QString("cannot import: %1").arg(path.constData()));
     else
@@ -954,10 +954,10 @@ Declaration*InMemRenderer2::resolve(const Quali& q) const
     {
         Declaration* res = module->findSubByName(q.second);
         if( res == 0 )
-            res = loader->mdl.getGlobals()->findSubByName(q.second);
+            res = mdl->getGlobals()->findSubByName(q.second);
         return res;
     }else
-        return loader->mdl.resolve(q);
+        return mdl->resolve(q);
 }
 
 void InMemRenderer2::error(const QString& msg, int pc) const

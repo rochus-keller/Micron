@@ -40,14 +40,13 @@ protected:
     Mil::Declaration* loadModule( const Mil::Import& imp );
 
 private:
-    friend class InMemRenderer2;
     Mil::AstModel mdl;
 };
 
 class InMemRenderer2 : public MilRenderer
 {
 public:
-    InMemRenderer2(MilLoader2*);
+    InMemRenderer2(Mil::AstModel*);
     ~InMemRenderer2();
 
     bool commit();
@@ -85,7 +84,7 @@ protected:
     void error(const QString&, int pc = -1) const;
 
 private:
-    MilLoader2* loader;
+    Mil::AstModel* mdl;
     Mil::Declaration* module;
     Mil::Type* type;
     Mil::Declaration* curProc;

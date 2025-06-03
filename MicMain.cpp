@@ -155,7 +155,7 @@ public:
         modules.append(ModuleSlot(imp,file,0));
         ms = &modules.back();
 
-        Mic::InMemRenderer2 imr(&loader);
+        Mic::InMemRenderer2 imr(&loader.getModel());
 
         Lex2 lex;
         lex.sourcePath = file; // to keep file name if invalid
