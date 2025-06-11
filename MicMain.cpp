@@ -223,7 +223,7 @@ public:
 };
 
 static void process(const QString& file, const QStringList& searchPaths,
-                    bool run, bool dumpIL, bool dumpLL, bool eigen, const QString& arch)
+                    bool run, bool dumpIL, bool dumpLL, bool eigen, const QString& arch, bool dbg)
 {
     int ok = 0;
     int all = 0;
@@ -292,8 +292,10 @@ static void process(const QString& file, const QStringList& searchPaths,
                 QFile out(module->name + ".cod");
                 if( !out.open(QIODevice::WriteOnly) )
                     qCritical() << "cannot open file for writing:" << out.fileName();
-                else if( !gen.generate(module, &out) )
+                else if( !gen.generate(module, &out, dbg) )
                     qCritical() << "error generating module" << module->name;
+                else
+                    qDebug() << "wrote Eigen IR to" << out.fileName();
             }
         }
     }
@@ -345,6 +347,8 @@ int main(int argc, char *argv[])
     cp.addOption(eigen);
     QCommandLineOption arch("a", "generate code for the given architecture", "arch");
     cp.addOption(arch);
+    QCommandLineOption dbg("g", "generate debug information");
+    cp.addOption(dbg);
 
     cp.process(a);
     const QStringList args = cp.positionalArguments();
@@ -354,7 +358,7 @@ int main(int argc, char *argv[])
 
     // TODO: what to do with more than one file?
     process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2),
-            cp.isSet(eigen) || cp.isSet(arch), cp.value(arch));
+            cp.isSet(eigen) || cp.isSet(arch), cp.value(arch), cp.isSet(dbg));
 
     return 0;
 }

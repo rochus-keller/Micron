@@ -133,17 +133,19 @@ public:
     std::vector<MyEmitter::Label> labels;
     QHash<const char*, MyEmitter::Label*> labelRefs;
     MyEmitter::Label* endOfProc;
+    std::string source;
     bool hasDebugInfo;
+    bool inBody;
 
     Imp(AstModel* mdl, TargetCode tg);
 
     EcsType getEcsType(Type*) const;
     Code::Type getCodeType(Type*) const;
-    void loc( const Mic::RowCol& ) const;
+    void loc( const Mic::RowCol& );
     static EcsType ilToEcsType(quint8 op);
     Smop ldind(Type * ty, const Smop& addr, const Mic::RowCol& pos);
 
-    bool generate(Declaration* module);
+    bool generate(Declaration* module, bool emitDebugInfo);
     void visitModule();
     void visitProcedure(Declaration*);
     void visitMetaDecl(Declaration*);
@@ -252,13 +254,11 @@ class fdostream : public std::ostream {
     }
 };
 
-bool EiGen::generate(Declaration* module, QIODevice* out)
+bool EiGen::generate(Declaration* module, QIODevice* out, bool emitDebugInfo)
 {
     Q_ASSERT(module && module->kind == Declaration::Module);
 
-    // TODO: calc offsets in AST of module
-
-    const bool res = imp->generate(module);
+    const bool res = imp->generate(module, emitDebugInfo);
     if( res && out )
     {
         fdostream out_stream(out);
@@ -495,7 +495,7 @@ Smop EiGen::Imp::ldind(Type* lhsValueType, const Smop& addr, const Mic::RowCol& 
 }
 
 EiGen::Imp::Imp(AstModel* mdl, TargetCode tg):mdl(mdl),curMod(0), curProc(0),
-    diagnostics(std::cerr), endOfProc(0), hasDebugInfo(false), target(tg),
+    diagnostics(std::cerr), endOfProc(0), hasDebugInfo(false), target(tg), inBody(false),
     layout(
         {target_data[tg].int_width, 1, 8},
         {4, 4, 8},
@@ -566,15 +566,48 @@ Code::Type EiGen::Imp::getCodeType(Type* t) const
         return types[et];
 }
 
-void EiGen::Imp::loc(const Mic::RowCol&) const
+void EiGen::Imp::loc(const Mic::RowCol& pos)
 {
-    // TODO
+    static int line_no = 0, col_no = 0;
+
+    if( pos.d_row != line_no || pos.d_col != col_no )
+    {
+        if( inBody && !source.empty() ) // TODO: depend on hasDebugInfo?
+        {
+            Q_ASSERT(pos.isValid());
+            std::ostringstream s;
+            s << "line " << pos.d_row << ":" << pos.d_col;
+            emitter.ctx.Comment(s.str().c_str());
+        }
+
+        if( hasDebugInfo )
+        {
+            Q_ASSERT(pos.isValid());
+            // we are in a procedure
+            if( inBody )
+                emitter.ctx.Break(source,toPos(pos));
+            else
+                emitter.ctx.Locate(source,toPos(pos));
+        }
+
+        line_no = pos.d_row;
+        col_no = pos.d_col;
+    }
 }
 
-bool EiGen::Imp::generate(Declaration* module)
+bool EiGen::Imp::generate(Declaration* module, bool emitDebugInfo)
 {
     Q_ASSERT( module );
     curMod = module;
+    hasDebugInfo = emitDebugInfo;
+    if( hasDebugInfo && (module->md == 0 || module->md->source.isEmpty()) )
+    {
+        qWarning() << "Eigen::generate: debug information requested but module comes without";
+        hasDebugInfo = false;
+    }
+    source.clear();
+    if( module->md )
+        source = module->md->source.toUtf8().toStdString();
 
     visitModule();
 
@@ -623,7 +656,7 @@ void EiGen::Imp::visitModule()
        if( hasDebugInfo && sub->kind == Declaration::TypeDecl )
        {
            emitter.ctx.Begin(Code::Section::TypeSection, qualident(sub).toStdString());
-           emitter.ctx.Locate(curMod->name.toStdString(), toPos(sub->pos));
+           loc(sub->pos);
            typeDecl(sub->getType());
 
            if( sub->getType()->objectInit && sub->getType()->isSOA() )
@@ -732,7 +765,7 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
     {
         emitter.ctx.Begin(Code::Section::Code, qualident(proc->forwardToProc()).toStdString() );
         MyEmitter::Label lbl = emitter.ctx.CreateLabel();
-        endOfProc = &lbl;
+        endOfProc = &lbl; // this needs to be here because of lifetime information for declarations
 
         int stacksize = 0;
         Declaration* sub = proc->subs;
@@ -761,7 +794,7 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
 
         if( hasDebugInfo )
         {
-            emitter.ctx.Locate(proc->name.toStdString(),toPos(proc->pos));
+            loc(proc->pos);
             Type* retType = deref(proc->getType());
             if( retType->kind != Type::Undefined )
             {
@@ -826,6 +859,8 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
             }
             sub = sub->next;
         }
+
+        inBody = true;
         statementSeq(proc->body);
 
         // Epilogue
@@ -838,6 +873,7 @@ void EiGen::Imp::visitProcedure(Declaration* proc)
         emitter.ctx.Return();
     }
 
+    inBody = false;
     endOfProc = 0;
     curProc = 0;
 }
@@ -949,9 +985,10 @@ QByteArray EiGen::Imp::typeRef(Type* t)
 
 void EiGen::Imp::locPar(Declaration* var)
 {
+    Q_ASSERT(endOfProc);
     emitter.ctx.DeclareSymbol(*endOfProc, var->name.toStdString(),
                      Code::Mem(types[ptr],Code::RFP, var->off));
-    emitter.ctx.Locate(var->name.toStdString(),toPos(var->pos));
+    loc(var->pos);
     typeDecl(deref(var->getType()));
 }
 
@@ -966,8 +1003,7 @@ void EiGen::Imp::variable(Declaration* var)
              );
     if( hasDebugInfo )
     {
-        emitter.ctx.Locate(curMod->name.toStdString(),
-                  toPos(var->pos));
+        loc(var->pos);
         typeDecl(var->getType());
     }
 
@@ -1309,7 +1345,7 @@ void EiGen::Imp::statementSeq(Statement* s)
             break;
 
         case IL_line:
-            // TODO
+            // NOP
             break;
 
         default:

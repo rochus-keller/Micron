@@ -236,6 +236,12 @@ namespace Mil
         Declaration* derefTrident(const Trident& ) const;
         Declaration* resolve(const Quali&) const;
         void error(const QString&, int pc = -1) const;
+        RowCol setline(quint32 line)
+        {
+            if( line )
+                curPos = RowCol(line);
+            return curPos;
+        }
 
     private:
         AstModel* mdl;

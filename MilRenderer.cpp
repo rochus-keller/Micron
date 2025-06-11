@@ -787,7 +787,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
             p->name = param.name;
             t->subs.append(p);
             p->outer = decl;
-            p->pos = Mic::RowCol(param.line);
+            p->pos = setline(param.line);
             p->setType( derefType(param.type) );
         }
     }else
@@ -829,7 +829,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
             p->name = param.name;
             decl->appendSub(p);
             p->outer = decl;
-            p->pos = Mic::RowCol(param.line);
+            p->pos = setline(param.line);
             p->setType( derefType(param.type) );
         }
 
@@ -840,7 +840,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
             p->name = local.name;
             decl->appendSub(p);
             p->outer = decl;
-            p->pos = Mic::RowCol(local.line);
+            p->pos = setline(local.line);
             p->setType( derefType(local.type) );
         }
 
@@ -1055,6 +1055,8 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
         {
             tmp->kind = (IL_op)Statement::ExprStat;
             tmp->e = translateExpr(ops, pc);
+            if( tmp->e )
+                tmp->pos = tmp->e->pos;
             continue;
         }
 

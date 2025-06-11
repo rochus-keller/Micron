@@ -38,7 +38,7 @@ namespace Mil
         EiGen(AstModel*, TargetCode);
         ~EiGen();
 
-        bool generate(Declaration* module, QIODevice* out);
+        bool generate(Declaration* module, QIODevice* out, bool emitDebugInfo = false);
 
         static TargetCode translate(const char*, bool defaultToHost = true );
         static quint8 pointer_width(TargetCode);

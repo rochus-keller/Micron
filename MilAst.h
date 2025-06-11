@@ -115,7 +115,7 @@ namespace Mil
         QList<Declaration*> subs; // list of record fields or enum elements, or params for proc type, owned
         Declaration* decl;
 
-        Type():Node(T),len(0),decl(0){}
+        Type():Node(T),quali(0),decl(0){}
         ~Type();
 
         bool isInteger() const { return kind >= INT8 && kind <= UINT64; }
