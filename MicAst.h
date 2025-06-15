@@ -47,7 +47,7 @@ namespace Mic
     public:
         Node(quint8 m):kind(0),meta(m),deferred(false),anonymous(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
-            owned(false),type(0),autoself(0){}
+            owned(false),type(0),autoself(0),invalid(0){}
         ~Node();
 
         enum Meta { Inval, T, D, E };
@@ -71,6 +71,7 @@ namespace Mic
         uint extern_ : 1; // extern name (if present) is in val
         uint generic : 1;
         uint autoself : 1;
+        uint invalid : 1; // module
 
         // Expression
         uint byVal : 1; // option for LocalVar, Param, ModuleVar, Select, Index

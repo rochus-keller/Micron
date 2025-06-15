@@ -17,5 +17,6 @@ proc printCh(c: char) extern
 proc printBool(b: u1) extern
 proc printSet(s: u4) extern
 proc assert(cond: u1; line: u4; file: _$2) extern
+proc exit(res: i4) extern
 
 end MIC$

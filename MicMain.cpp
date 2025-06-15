@@ -24,6 +24,7 @@
 #include "MilVmOakwood.h"
 #include "MilEiGen.h"
 #include "MilAstSerializer.h"
+#include "MilBackend.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -32,6 +33,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QTemporaryFile>
 #include "MicPpLexer.h"
 #include "MicParser2.h"
 #include "MilEmitter.h"
@@ -171,10 +173,10 @@ public:
         renderer << &ilasm;
         renderer << &imr;
         Mil::RenderSplitter split(renderer);
-        Mil::Emitter e(&split, Mil::Emitter::RowsOnly);
+        Mil::Emitter e(&split, Mil::Emitter::RowsAndCols);
 #else
         qDebug() << "**** parsing" << QFileInfo(file).fileName();
-        Mil::Emitter e(&imr, Mil::Emitter::RowsOnly);
+        Mil::Emitter e(&imr, Mil::Emitter::RowsAndCols);
 #endif
         Mic::AstModel mdl;
         Mic::Parser2 p(&mdl,&lex, &e, this);
@@ -186,8 +188,9 @@ public:
                 qCritical() << QFileInfo(e.path).fileName() << e.row << e.col << e.msg;
         }else
         {
-            if( imr.commit() )
-                res = p.takeModule();
+            res = p.takeModule();
+            if( !imr.commit() )
+                res->invalid = true;
 #ifdef _DUMP
             out.putChar('\n');
 #endif
@@ -223,7 +226,7 @@ public:
 };
 
 static void process(const QString& file, const QStringList& searchPaths,
-                    bool run, bool dumpIL, bool dumpLL, bool eigen, const QString& arch, bool dbg)
+                    bool run, bool dumpIL, bool dumpLL, bool eigen, const QString& arch, bool dbg, const QString& outPath, const QStringList& rtLibs)
 {
     int ok = 0;
     int all = 0;
@@ -252,7 +255,7 @@ static void process(const QString& file, const QStringList& searchPaths,
 
     all += mgr.modules.size();
     foreach( const ModuleSlot& m, mgr.modules )
-        ok += m.decl ? 1 : 0;
+        ok += m.decl ? !m.decl->invalid : 0;
 
     Mic::Expression::killArena();
     Mic::AstModel::cleanupGlobals();
@@ -267,8 +270,8 @@ static void process(const QString& file, const QStringList& searchPaths,
         {
             if( m->name == "MIC$" )
                 continue;
-            Mil::IlAsmRenderer r(&out, true);
-            Mil::AstSerializer::render(&r,m, Mil::AstSerializer::RowsOnly);
+            Mil::IlAsmRenderer r(&out, dbg);
+            Mil::AstSerializer::render(&r,m, Mil::AstSerializer::RowsAndCols);
             out.putChar('\n');
         }
     }
@@ -280,22 +283,72 @@ static void process(const QString& file, const QStringList& searchPaths,
         else
         {
             const qint8 alig = Mil::EiGen::stack_align(target);
-            mgr.loader.getModel().calcMemoryLayouts(Mil::EiGen::pointer_width(target),
-                                                    alig, 2 * alig, true);
+            mgr.loader.getModel().calcMemoryLayouts(Mil::EiGen::pointer_width(target), alig, 2 * alig);
 
             Mil::EiGen gen(&mgr.loader.getModel(), target);
+            QStringList objFiles;
+            bool hasErrors = false;
 
             foreach( Mil::Declaration* module, mgr.loader.getModel().getModules() )
             {
                 if( module->name == "MIC$" )
                     continue;
-                QFile out(module->name + ".cod");
-                if( !out.open(QIODevice::WriteOnly) )
-                    qCritical() << "cannot open file for writing:" << out.fileName();
-                else if( !gen.generate(module, &out, dbg) )
+                QTemporaryFile cod;
+                if( !cod.open() )
+                    qCritical() << "cannot open temporary file for Eigen IR";
+                else if( !gen.generate(module, &cod, dbg) )
                     qCritical() << "error generating module" << module->name;
                 else
-                    qDebug() << "wrote Eigen IR to" << out.fileName();
+                {
+                    cod.flush();
+                    cod.close();
+                    QString objFile;
+                    if( !outPath.isEmpty() )
+                    {
+                        objFile = QDir(outPath).absoluteFilePath(module->name + ".obj"); // TODO: escape name
+                    }else if( module->md && !module->md->source.isEmpty() )
+                    {
+                        QFileInfo info(module->md->source);
+                        objFile = info.absoluteDir().absoluteFilePath(module->name + ".obj");
+                    }else
+                    {
+                        qCritical() << "don't know where to store object and symbol files for" << module->name;
+                        hasErrors = true;
+                        break;
+                    }
+                    if( dumpLL )
+                    {
+                        QFileInfo info(objFile);
+                        QString path = info.absoluteDir().absoluteFilePath(info.baseName() + ".cod");
+                        QFile::remove(path);
+                        if( !QFile::copy(cod.fileName(),path) )
+                            qWarning() << "failed to copy" << cod.fileName() << "to" << path;
+                    }
+                    if( !Mil::Backend::generate(cod.fileName(),objFile, target, dbg) )
+                    {
+                        qCritical() << "cannot generate object file for" << module->name;
+                        hasErrors = true;
+                        break;
+                    }else
+                        objFiles << objFile;
+                }
+            }
+            if( !hasErrors )
+            {
+                QString outFile;
+                QString suffix;
+#ifdef Q_OS_WIN32
+                suffis = ".exe";
+#endif
+                if( !outPath.isEmpty() )
+                {
+                    outFile = QDir(outPath).absoluteFilePath(info.baseName() + suffix);
+                }else
+                {
+                    QFileInfo info(file);
+                    outFile = info.absoluteDir().absoluteFilePath(info.baseName() + suffix);
+                }
+                Mil::Backend::link(objFiles, rtLibs, outFile, target, false, dbg);
             }
         }
     }
@@ -337,6 +390,8 @@ int main(int argc, char *argv[])
     cp.addPositionalArgument("main", "the main module of the application");
     QCommandLineOption sp("I", "add a path where to look for modules", "path");
     cp.addOption(sp);
+    QCommandLineOption op("O", "set the path where compiled modules are stored", "path");
+    cp.addOption(op);
     QCommandLineOption run("r", "run in interpreter");
     cp.addOption(run);
     QCommandLineOption dump("d", "dump MIL code");
@@ -349,16 +404,29 @@ int main(int argc, char *argv[])
     cp.addOption(arch);
     QCommandLineOption dbg("g", "generate debug information");
     cp.addOption(dbg);
+    QCommandLineOption libs("L", "add a directory where the compiler looks for the runtime libraries", "path");
+    cp.addOption(libs);
 
     cp.process(a);
     const QStringList args = cp.positionalArguments();
-    if( args.isEmpty() )
+    if( args.size() != 1 )
+    {
+        qCritical() << "expecting exactly one source file";
         return -1;
+    }
     const QStringList searchPaths = cp.values(sp);
+    const QStringList outPaths = cp.values(op);
+    if( outPaths.size() > 1 )
+    {
+        qCritical() << "only one output path can be set";
+        return -1;
+    }
+    QString outPath;
+    if( !outPaths.isEmpty() )
+        outPath = outPaths.first();
 
-    // TODO: what to do with more than one file?
     process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2),
-            cp.isSet(eigen) || cp.isSet(arch), cp.value(arch), cp.isSet(dbg));
+            cp.isSet(eigen) || cp.isSet(arch), cp.value(arch), cp.isSet(dbg), outPath, cp.values(libs) );
 
     return 0;
 }

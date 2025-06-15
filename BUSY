@@ -95,9 +95,13 @@ let mil : SourceSet {
         ./MilEiGen.h
         ./MilEmitter.cpp
         ./MilEmitter.h
+        ./MilRenderer.cpp
+        ./MilAstSerializer.cpp
+        ./MilBackend.cpp
+        ./MilRenderer.h
+        ./MilAstSerializer.h
+        ./MilBackend.h
     ]
-    .sources += ./MilRenderer.cpp
-    .sources += ./MilAstSerializer.cpp
 }
 
 let rcc : Rcc {
@@ -107,6 +111,7 @@ let rcc : Rcc {
 
 let compiler ! : Executable {
     .sources += [ ./MicMain.cpp ]
-    .deps += [ utils mic mil rcc eigen.common eigen.emitter qt.core_sources ]
+    .deps += [ utils mic mil rcc eigen.common eigen.emitter qt.core_sources eigen.dbgconv
+                eigen.amd64 eigen.arm eigen.arm32 eigen.arma32 eigen.arma64 eigen.armt32 eigen.lcore ]
     .configs += config
 }

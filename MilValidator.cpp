@@ -248,7 +248,10 @@ void Validator::visitStatSeq(Statement* stat)
             {
                 Type* lhsT = deref(stat->d->getType());
                 if( !assigCompat(lhsT,stat->args) )
+                {
+                    assigCompat(lhsT,stat->args); // TEST
                     error(stat->pos, "module variable type not compatible with value on stack");
+                }
             }
             break;
         case IL_if:
@@ -338,8 +341,8 @@ void Validator::visitStatSeq(Statement* stat)
                 if( lhsT->kind != Type::Pointer )
                     error(stat->pos,"first argument must be a pointer");
                 Type* a = deref(lhsT->getType());
-                if( a->kind != Type::Array || a->len != 0 || deref(a->getType())->kind != Type::CHAR )
-                    error(stat->pos,"first argument must be a pointer to an open char array");
+                if( a->kind != Type::Array || a->len == 0 || deref(a->getType())->kind != Type::CHAR )
+                    error(stat->pos,"first argument must be a pointer to an non-open char array");
                 Type* rhsT = deref(stat->args->rhs->getType());
                 if( rhsT->kind == Type::Pointer )
                 {
@@ -1395,6 +1398,8 @@ bool Validator::equal(Type* lhs, Type* rhs)
         return true;
     if( lhs->isInt64() && rhs->isInt64() )
         return true;
+    if( lhs->kind == Type::CHAR && rhs->kind == Type::CHAR )
+        return true;
     if( lhs->kind == Type::FLOAT32 && rhs->kind == Type::FLOAT32 )
         return true;
     if( (lhs->kind == Type::INTPTR && rhs->kind == Type::INTPTR) ||
@@ -1455,7 +1460,13 @@ bool Validator::assigCompat(Type* lhs, Type* rhs)
         return true;
 
     if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer )
-        return assigCompat(deref(lhs->getType()), deref(rhs->getType()) );
+    {
+        Type* lhsT = deref(lhs->getType());
+        Type* rhsT = deref(rhs->getType());
+        if( lhsT->kind == Type::Array && rhsT->kind == Type::Array && lhsT->len == 0 && equal(lhsT->getType(), rhsT->getType() ) )
+            return true;
+        return assigCompat(lhsT, rhsT );
+    }
 
     return false;
 }

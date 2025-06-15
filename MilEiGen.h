@@ -43,6 +43,8 @@ namespace Mil
         static TargetCode translate(const char*, bool defaultToHost = true );
         static quint8 pointer_width(TargetCode);
         static quint8 stack_align(TargetCode);
+        static const char* backend(TargetCode);
+        static const char* name(TargetCode);
 
     private:
         class Imp;

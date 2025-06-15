@@ -98,3 +98,10 @@ void MIC$$assert(uint8_t cond, uint32_t line, const char* file)
         fprintf(stderr,"assertion failed in %s line %u\n", file, line);
 	assert(cond);
 }
+
+extern void _Exit(int res);
+
+void MIC$$exit(int res)
+{
+    _Exit(res);
+}

@@ -1723,11 +1723,12 @@ Declaration*Parser2::addHelper(Type* t)
     return decl;
 }
 
-Declaration*Parser2::addTemp(Type* t)
+Declaration*Parser2::addTemp(Type* t, const RowCol& pos)
 {
     Declaration* decl = mdl->addDecl(mdl->getTempName());
     decl->kind = Declaration::LocalDecl;
     decl->setType(t);
+    decl->pos = pos;
     decl->outer = mdl->getTopScope();
     decl->id = out->addLocal(ev->toQuali(t),decl->name, decl->pos);
     return decl;
@@ -3180,11 +3181,11 @@ void Parser2::ForStatement() {
 
     expect(Tok_TO, true, "ForStatement");
     tok = cur;
-    Declaration* to = addTemp(idxvar->getType());
+    Declaration* to = addTemp(idxvar->getType(), tok.toRowCol());
     {
         // to := end
-        Expression* lhs = toExpr(to, tok.toRowCol());
-        ev->assign(lhs, expression(0), tok.toRowCol() );
+        Expression* lhs = toExpr(to, to->pos);
+        ev->assign(lhs, expression(0), to->pos);
         Expression::deleteAllExpressions();
     }
 
@@ -3945,7 +3946,7 @@ void Parser2::import() {
     if( imp )
     {
         Declaration* mod = imp->loadModule(import);
-        if( mod )
+        if( mod && !mod->invalid )
         {
             // loadModule returns the module decl; we just need the list of module elements:
             importDecl->link = mod->link;

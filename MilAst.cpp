@@ -149,7 +149,7 @@ Declaration*AstModel::resolve(const Quali& q) const
     return module->findSubByName(q.second);
 }
 
-void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder)
+void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset)
 {
     varOff = 0;
     DeclList done;
@@ -158,12 +158,12 @@ void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment, qui
         if( done.contains(m) )
             continue;
         done << m;
-        walkImports(m, done, pointerWidth, stackAlignment, firstParamOffset, reverseParamOrder);
-        calcMemoryLayoutOf(m, pointerWidth, stackAlignment, firstParamOffset, reverseParamOrder);
+        walkImports(m, done, pointerWidth, stackAlignment, firstParamOffset);
+        calcMemoryLayoutOf(m, pointerWidth, stackAlignment, firstParamOffset);
     }
 }
 
-void AstModel::walkImports(Declaration* m, DeclList& done, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder)
+void AstModel::walkImports(Declaration* m, DeclList& done, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset)
 {
     Declaration* sub = m->subs;
     while(sub)
@@ -173,7 +173,7 @@ void AstModel::walkImports(Declaration* m, DeclList& done, quint8 pointerWidth, 
             if( sub->imported && !done.contains(sub->imported) )
             {
                 done << sub->imported;
-                calcMemoryLayoutOf(sub->imported, pointerWidth, stackAlignment, firstParamOffset, reverseParamOrder);
+                calcMemoryLayoutOf(sub->imported, pointerWidth, stackAlignment, firstParamOffset);
             }
         }
         sub = sub->next;
@@ -219,7 +219,7 @@ AstModel::BitFieldUnit AstModel::collectBitFields(const DeclList& fields, int st
     return res;
 }
 
-void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder)
+void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset)
 {
     // RISK: this function assumes that declaration order reflects dependency order, besides pointers
     Declaration* sub = module->subs;
@@ -308,7 +308,7 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
                     foreach( Declaration* sub, type->subs )
                     {
                         if( sub->kind == Declaration::Procedure )
-                            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment, firstParamOffset, reverseParamOrder);
+                            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment, firstParamOffset);
                     }
                 }
                 break;
@@ -318,7 +318,7 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
             }
             break;
         case Declaration::Procedure:
-            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment, firstParamOffset, reverseParamOrder);
+            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment, firstParamOffset);
             break;
         case Declaration::VarDecl:
             {
@@ -336,7 +336,7 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
     }
 }
 
-void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset, bool reverseParamOrder)
+void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset)
 {
     int off_l = 0;
     QList<Declaration*> params;
@@ -362,8 +362,11 @@ void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, qu
         subsub = subsub->next;
     }
     int off_p = firstParamOffset;
+#if 0
+    // NOTE: this is wrong; they are pushed in reverse order, but the offsets are in original order
     if( reverseParamOrder )
         std::reverse(params.begin(), params.end());
+#endif
     foreach( Declaration* p, params )
     {
         Type* t = p->getType();

@@ -175,7 +175,7 @@ namespace Mic {
         Expression* toExpr(Declaration* d, const RowCol&);
         void emitType(Type*);
         Declaration* addHelper(Type*);
-        Declaration* addTemp(Type*);
+        Declaration* addTemp(Type*, const RowCol &pos);
         typedef QList<QPair<Token,Value> > Args;
         void openArrayError(const Token&, Type*);
         void invalidTypeError(const Token&, Type*);

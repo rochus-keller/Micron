@@ -621,7 +621,7 @@ IlAstRenderer::~IlAstRenderer()
 
 bool IlAstRenderer::commit()
 {
-    bool success = false;
+    bool success = true;
     if( hasError )
         delete module;
     else
@@ -645,15 +645,15 @@ bool IlAstRenderer::commit()
         {
             foreach( const Validator::Error& e, v.errors )
                 qCritical() << e.where << e.pos.d_row << e.pos.d_col << e.pc << e.msg;
-            delete module;
-        }else
+            success = false;
+        }
 #endif
-            if( !mdl->addModule(module) )
+        if( !mdl->addModule(module) )
         {
             error(QString("cannot add module: %1").arg(module->name.constData()) );
             delete module;
-        }else
-            success = true;
+            success = false;
+        }
     }
 
     module = 0;

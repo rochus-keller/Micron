@@ -315,6 +315,16 @@ quint8 EiGen::stack_align(EiGen::TargetCode t)
     return target_data[t].stack_align;
 }
 
+const char *EiGen::backend(EiGen::TargetCode t)
+{
+    return target_data[t].backend;
+}
+
+const char *EiGen::name(EiGen::TargetCode t)
+{
+    return target_data[t].name;
+}
+
 static QByteArray qualident(Declaration* d)
 {
     if( d->outer )
@@ -570,29 +580,25 @@ void EiGen::Imp::loc(const Mic::RowCol& pos)
 {
     static int line_no = 0, col_no = 0;
 
+    Q_ASSERT(pos.isValid());
+
     if( pos.d_row != line_no || pos.d_col != col_no )
     {
         if( inBody && !source.empty() ) // TODO: depend on hasDebugInfo?
         {
-            Q_ASSERT(pos.isValid());
             std::ostringstream s;
             s << "line " << pos.d_row << ":" << pos.d_col;
             emitter.ctx.Comment(s.str().c_str());
         }
 
-        if( hasDebugInfo )
-        {
-            Q_ASSERT(pos.isValid());
-            // we are in a procedure
-            if( inBody )
+        if( hasDebugInfo && inBody )
                 emitter.ctx.Break(source,toPos(pos));
-            else
-                emitter.ctx.Locate(source,toPos(pos));
-        }
-
-        line_no = pos.d_row;
-        col_no = pos.d_col;
     }
+    if( hasDebugInfo && !inBody )
+        emitter.ctx.Locate(source,toPos(pos));
+
+    line_no = pos.d_row;
+    col_no = pos.d_col;
 }
 
 bool EiGen::Imp::generate(Declaration* module, bool emitDebugInfo)
@@ -743,13 +749,14 @@ void EiGen::Imp::visitModule()
    {
        // generate the entry point
        emitter.ctx.Begin(Code::Section::Code, "main" );
+       // NOTE: all other functions are of form module$name so there is no name clash
        emitter.ctx.Enter(0);
 
        Smop f = Code::Adr(types[fun],curMod->name.toStdString() + "$begin$");
        emitter.ctx.Call(f, 0);
        emitter.ctx.Leave();
        emitter.ctx.Push(Code::Reg(types[s4], Code::RRes));
-       emitter.ctx.Call(Code::Adr(types[fun],"_Exit"),0);
+       emitter.ctx.Call(Code::Adr(types[fun],"MIC$$exit"),0);
 
        // TODO: how do we handle argc and argv?
    }
@@ -1309,7 +1316,7 @@ void EiGen::Imp::statementSeq(Statement* s)
         case IL_free: {
                 const MyEmitter::RestoreRegisterState restore(emitter.ctx);
                 Q_ASSERT(deref(s->args->getType())->kind == Type::Pointer);
-                Smop f = Code::Adr(types[fun],"free");
+                Smop f = Code::Adr(types[fun],"free"); // TODO
                 emitter.ctx.Push(expression(s->args));
                 const int aligned_size = align_to(types[ptr].size,target_data[target].stack_align);
                 emitter.ctx.Call(f,aligned_size);
@@ -1346,6 +1353,9 @@ void EiGen::Imp::statementSeq(Statement* s)
 
         case IL_line:
             // NOP
+            break;
+
+        case IL_strcpy:
             break;
 
         default:
@@ -1920,7 +1930,7 @@ Smop EiGen::Imp::expression(Expression* e)
             // calloc(n, sizeof(element_type))
             Type* et = deref(e->d->getType());
             Smop len = expression(e->lhs);
-            Smop f = Code::Adr(types[fun],"calloc");
+            Smop f = Code::Adr(types[fun],"calloc"); // TODO
             emitter.ctx.Push(Code::Imm(types[ptr],et->getByteSize(target_data[target].pointer_width)));
             emitter.ctx.Push(len);
             const int aligned_size = 2 * align_to(types[ptr].size,target_data[target].stack_align);
