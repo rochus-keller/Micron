@@ -124,11 +124,17 @@ AstModel::AstModel():helper(0),helperId(0)
 
 AstModel::~AstModel()
 {
+    clear();
+}
+
+void AstModel::clear()
+{
     for( int i = 1; i < scopes.size(); i++ ) // start with 1, 0 is globalScope
         delete scopes[i];
     scopes.clear();
     if( helper )
         delete helper;
+    helper = 0;
 }
 
 void AstModel::openScope(Declaration* scope)
@@ -766,4 +772,41 @@ void Node::setType(Type* t)
         type = t;
     }else
         type = t;
+}
+
+bool Import::operator==(const Import &rhs) const
+{
+    if( path != rhs.path )
+        return false;
+    if( metaActuals.size() != rhs.metaActuals.size() )
+        return false;
+    for( int i = 0; i < metaActuals.size(); i++ )
+    {
+        if( metaActuals[i].mode != rhs.metaActuals[i].mode )
+            return false;
+        if( metaActuals[i].type != rhs.metaActuals[i].type )
+            return false;
+        if( metaActuals[i].val != rhs.metaActuals[i].val )
+            return false;
+   }
+    return true;
+
+}
+
+void Symbol::deleteAll(Symbol * first)
+{
+    if( first == 0 )
+        return;
+    Q_ASSERT( first->kind == Module || first->kind == Invalid );
+    Symbol* s = first->next;
+    while( s )
+    {
+        // symbols can build a circle
+        if( s == first )
+            break;
+        Symbol* tmp = s->next;
+        delete s;
+        s = tmp;
+    }
+    delete first;
 }

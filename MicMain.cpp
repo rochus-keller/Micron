@@ -83,30 +83,13 @@ struct ModuleSlot
     ModuleSlot( const Mic::Import& i, const QString& f, Mic::Declaration* d):imp(i),file(f),decl(d){}
 };
 
-static bool operator==(const Mic::Import& lhs, const Mic::Import& rhs)
-{
-    if( lhs.path != rhs.path )
-        return false;
-    if( lhs.metaActuals.size() != rhs.metaActuals.size() )
-        return false;
-    for( int i = 0; i < lhs.metaActuals.size(); i++ )
-    {
-        if( lhs.metaActuals[i].mode != rhs.metaActuals[i].mode )
-            return false;
-        if( lhs.metaActuals[i].type != rhs.metaActuals[i].type )
-            return false;
-        if( lhs.metaActuals[i].val != rhs.metaActuals[i].val )
-            return false;
-   }
-    return true;
-}
-
 class Manager : public Mic::Importer {
 public:
     typedef QList<ModuleSlot> Modules;
     Modules modules;
     QList<QDir> searchPath;
     QString rootPath;
+    Mic::MilLoader2 loader;
 
     Manager() {
         loader.loadFromFile(":/runtime/MIC+.mil");
@@ -116,8 +99,6 @@ public:
         for( i = modules.begin(); i != modules.end(); ++i )
             delete (*i).decl;
     }
-
-    Mic::MilLoader2 loader;
 
     ModuleSlot* find(const Mic::Import& imp)
     {
@@ -194,7 +175,6 @@ public:
 #ifdef _DUMP
             out.putChar('\n');
 #endif
-            // else return 0
         }
         // TODO: uniquely extend the name of generic module instantiations
 

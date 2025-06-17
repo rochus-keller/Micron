@@ -6,10 +6,9 @@ SOURCES += \
     MicTokenType.cpp \
     MicParser2.cpp \
     MicAst.cpp \
-    MicMilEmitter.cpp \
     MicEvaluator.cpp \
-    $$PWD/MicBuiltins.cpp \
-    $$PWD/MicMilLoader2.cpp
+    MicBuiltins.cpp \
+    MicMilLoader2.cpp
 
 HEADERS += \
     MicLexer.h \
@@ -18,8 +17,7 @@ HEADERS += \
     MicTokenType.h \
     MicParser2.h \
     MicAst.h \
-    MicMilEmitter.h \
     MicEvaluator.h \
-    $$PWD/MicBuiltins.h \
-    $$PWD/MicMilLoader2.h
+    MicBuiltins.h \
+    MicMilLoader2.h
 

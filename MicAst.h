@@ -141,12 +141,16 @@ namespace Mic
                     Procedure, ForwardDecl, ParamDecl,
                     Max };
         static const char* s_mode[];
-        Declaration* next; // list of all declarations in outer scope
+        Declaration* next; // list of all declarations in scope
         Declaration* link; // member list or imported module decl
         Declaration* outer; // the owning declaration to reconstruct the qualident
         QByteArray name;
-        quint16 id; // used for built-in code and local/param number, and bit size of fields
-        QVariant data; // value for Const and Enum, path for Import, name for Extern, decl for forward
+
+        quint16 id; // used for built-in code and local/param number, and bit size of fields, and id of temparary locals
+        // TODO super for super class declaration and overridden method declaration
+        QVariant data; // value for Const and Enum, import data, name for Extern, decl for forward, module data
+
+
         Declaration():Node(D),next(0),link(0),id(0),outer(0){}
         ~Declaration();
 
@@ -232,11 +236,16 @@ namespace Mic
     struct Import {
         QByteArrayList path;
         MetaActualList metaActuals;
+        Declaration* importer;
+        RowCol importedAt;
+        Import():importer(0){}
+        bool operator==(const Mic::Import& rhs) const;
     };
 
     typedef QList<Declaration*> MetaParamList;
 
     struct ModuleData {
+        QString source;
         QByteArrayList path;
         MetaParamList metaParams;
         MetaActualList metaActuals;
@@ -244,11 +253,35 @@ namespace Mic
         QByteArray fullName; // path.join('/') + suffix as symbol
     };
 
+    class Symbol
+    {
+    public:
+        enum Kind { Invalid, Module, Decl, DeclRef, Lval };
+        quint8 kind;
+        quint8 len;
+        RowCol pos;
+        Declaration* decl;
+        Symbol* next;
+        Symbol():kind(Invalid),len(0),decl(0),next(0){}
+        static void deleteAll(Symbol*);
+    };
+
+    typedef QList<Symbol*> SymList;
+
+    struct Xref {
+        Symbol* syms;
+        QHash<Declaration*,SymList> uses;
+        QHash<Declaration*,DeclList> subs;
+        Xref():syms(0){}
+    };
+
     class AstModel
     {
     public:
         AstModel();
         ~AstModel();
+
+        void clear();
 
         void openScope(Declaration* scope);
         Declaration* closeScope(bool takeMembers = false);
@@ -277,10 +310,19 @@ namespace Mic
         static Type* types[Type::MaxBasicType];
 
     };
+
+    class Importer {
+    public:
+        virtual Declaration* loadModule( const Import& imp ) = 0;
+        virtual QByteArray moduleSuffix( const MetaActualList& imp ) = 0;
+        virtual QByteArray modulePath( const QByteArrayList& imp ) = 0;
+    };
+
 }
 
 Q_DECLARE_METATYPE(Mic::Import)
 Q_DECLARE_METATYPE(Mic::Declaration*)
+Q_DECLARE_METATYPE(Mic::Expression*)
 Q_DECLARE_METATYPE(Mic::ExpList)
 Q_DECLARE_METATYPE(Mic::ModuleData)
 

@@ -10,13 +10,14 @@ SOURCES += \
     MilValidator.cpp \
     MilCeeGen.cpp \
     MilInterpreter.cpp \
-    $$PWD/runtime/MIC++.c \
-    $$PWD/oakwood/Input+.c \
-    $$PWD/oakwood/MathL+.c \
-    $$PWD/oakwood/Out+.c \
-    $$PWD/MilVmCode.cpp \
-    $$PWD/MilVmOakwood.cpp \
-    $$PWD/MilEiGen.cpp
+    runtime/MIC++.c \
+    oakwood/Input+.c \
+    oakwood/MathL+.c \
+    oakwood/Out+.c \
+    MilVmCode.cpp \
+    MilVmOakwood.cpp \
+    MilEmitter.cpp \
+    MilRenderer.cpp
 
 HEADERS += \
     MilLexer.h \
@@ -28,7 +29,8 @@ HEADERS += \
     MilValidator.h \
     MilCeeGen.h \
     MilInterpreter.h \
-    $$PWD/MilVmOps.h \
-    $$PWD/MilVmCode.h \
-    $$PWD/MilVmOakwood.h \
-    $$PWD/MilEiGen.h
+    MilVmOps.h \
+    MilVmCode.h \
+    MilVmOakwood.h \
+    MilEmitter.h \
+    MilRenderer.h

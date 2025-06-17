@@ -611,13 +611,15 @@ static bool isPtrToOpenCharArray(Type* t)
 }
 #endif
 
-Parser2::Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* i):
+Parser2::Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* i, bool xref):
     mdl(m),scanner(s),out(out),imp(i),thisMod(0),thisDecl(0),inFinally(false),
-    langLevel(3),haveExceptions(false)
+    langLevel(3),haveExceptions(false),first(0),last(0)
 {
     ev = new Evaluator(m,out);
     self = Token::getSymbol("self");
     SELF = Token::getSymbol("SELF");
+    if( xref )
+        first = last = new Symbol();
 }
 
 Parser2::~Parser2()
@@ -625,6 +627,8 @@ Parser2::~Parser2()
     if( thisMod )
         delete thisMod;
     delete ev;
+    if( first )
+        Symbol::deleteAll(first);
 }
 
 void Parser2::RunParser(const MetaActualList& ma) {
@@ -639,6 +643,35 @@ Declaration*Parser2::takeModule()
     Declaration* res = thisMod;
     thisMod = 0;
     return res;
+}
+
+void Parser2::markDecl(Declaration* d)
+{
+    if( first == 0 )
+        return;
+    Symbol* s = new Symbol();
+    s->kind = Symbol::Decl;
+    s->decl = d;
+    s->pos = d->pos;
+    s->len = d->name.size();
+    xref[d].append(s);
+    last->next = s;
+    last = last->next;
+}
+
+Symbol* Parser2::markRef(Declaration* d, const RowCol& pos)
+{
+    if( first == 0 )
+        return 0;
+    Symbol* s = new Symbol();
+    s->kind = Symbol::DeclRef;
+    s->decl = d;
+    s->pos = pos;
+    s->len = d->name.size();
+    xref[d].append(s);
+    last->next = s;
+    last = last->next;
+    return s;
 }
 
 void Parser2::next() {
@@ -2030,6 +2063,8 @@ Expression* Parser2::designator(bool needsLvalue) {
                     return 0;
                 }else
                 {    
+                    markRef(field, tok.toRowCol());
+
                     Expression* tmp = Expression::create(field->kind == Declaration::Procedure ?
                                                              Expression::MethDecl : Expression::Select, tok.toRowCol() );
                     tmp->val = QVariant::fromValue(field);
@@ -2220,6 +2255,7 @@ Expression* Parser2::maybeQualident()
         if( la.d_type == Tok_Dot && d->kind == Declaration::Import )
         {
             // this is the one and only qualident case
+            markRef(d, tok.toRowCol());
             expect(Tok_Dot, false, "selector");
             expect(Tok_ident, false, "selector");
             tok = cur;
@@ -2236,6 +2272,7 @@ Expression* Parser2::maybeQualident()
                 visi = d->visi;
             }
         }
+        markRef(d, tok.toRowCol());
         Expression* res = toExpr(d, tok.toRowCol());
         if( res )
             res->visi = visi;
@@ -2317,6 +2354,7 @@ Declaration*Parser2::addDecl(const Token& id, quint8 visi, quint8 mode, bool* do
         d->kind = mode;
         d->visi = visi;
         d->pos = id.toRowCol();
+        markDecl(d);
     }else
         error(id, QString("name is not unique: %1").arg(id.d_val.constData()));
     return d;
@@ -3744,12 +3782,22 @@ void Parser2::module() {
     thisMod = m;
     mdl->openScope(m);
 
+    if( first )
+    {
+        first->decl = m;
+        first->kind = Symbol::Module;
+        first->pos = m->pos;
+        first->len = m->name.size();
+    }
+    markDecl(m);
+
     expect(Tok_MODULE, true, "module");
 	expect(Tok_ident, false, "module");
     m->name = cur.d_val;
 
     ModuleData md;
     md.path = scanner->path();
+    md.source = scanner->source();
     md.path += cur.d_val;
     if( imp )
         md.fullName = Token::getSymbol(imp->modulePath(md.path));
@@ -3757,7 +3805,6 @@ void Parser2::module() {
         md.fullName = Token::getSymbol(md.path.join('/'));
     md.metaActuals = metaActuals;
 
-    const QString source = cur.d_sourcePath;
     Mil::MetaParams mps;
     if( FIRST_MetaParams(la.d_type) ) {
         MetaParamList mp = MetaParams();
@@ -3799,10 +3846,7 @@ void Parser2::module() {
                 }
             if( imp )
             {
-                Import i;
-                i.metaActuals = metaActuals;
-                i.path = md.path;
-                md.suffix = imp->moduleSuffix(i.metaActuals);
+                md.suffix = imp->moduleSuffix(metaActuals);
                 if( !md.suffix.isEmpty() )
                 {
                     md.fullName = Token::getSymbol(md.fullName + md.suffix);
@@ -3828,7 +3872,7 @@ void Parser2::module() {
     if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
 	}
-    out->beginModule(md.fullName,source,m->pos); // TODO: meta params in MIL
+    out->beginModule(md.fullName,md.source,m->pos); // TODO: meta params in MIL
 
     // call "out" here for all non-generic type and const
     for( int i = 0; i < metaActuals.size(); i++ )
@@ -3878,6 +3922,9 @@ void Parser2::module() {
 		expect(Tok_Dot, false, "module");
 	}
     mdl->closeScope();
+
+    if( first )
+        last->next = first; // close the circle
 }
 
 void Parser2::ImportList() {
@@ -3916,6 +3963,8 @@ void Parser2::import() {
     Declaration* importDecl = addDecl(localName, 0, Declaration::Import,&doublette);
 
     Import import;
+    import.importer = thisMod;
+    import.importedAt = localName.toRowCol();
     foreach( const Token& t, path)
         import.path << t.d_val;
 
@@ -3952,6 +4001,7 @@ void Parser2::import() {
             importDecl->link = mod->link;
             ModuleData md = mod->data.value<ModuleData>();
             out->addImport(md.fullName, localName.toRowCol());
+            markRef(mod, localName.toRowCol());
         }
     }else
         out->addImport(Token::getSymbol(import.path.join('/')), localName.toRowCol());
@@ -4036,3 +4086,16 @@ MetaParamList Parser2::MetaSection(bool& isType) {
     return res;
 }
 
+Xref Parser2::takeXref()
+{
+    Xref res;
+    if( first == 0 )
+        return res;
+    res.uses = xref;
+    res.syms = first;
+    res.subs = subs;
+    xref.clear();
+    subs.clear();
+    first = last = new Symbol();
+    return res;
+}

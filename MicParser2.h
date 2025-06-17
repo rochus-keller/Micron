@@ -38,16 +38,9 @@ namespace Mic {
         virtual QByteArrayList path() const { return QByteArrayList(); } // prefix without module name
 	};
 
-    class Importer {
-    public:
-        virtual Declaration* loadModule( const Import& imp ) = 0;
-        virtual QByteArray moduleSuffix( const MetaActualList& imp ) = 0;
-        virtual QByteArray modulePath( const QByteArrayList& imp ) = 0;
-    };
-
     class Parser2 {
 	public:
-        Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* = 0);
+        Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* = 0, bool xref = false);
         ~Parser2();
 
         void RunParser(const MetaActualList& = MetaActualList());
@@ -59,6 +52,8 @@ namespace Mic {
 		    Error( const QString& m, int r, int c, const QString& p):msg(m),row(r),col(c),path(p){}
 		};
 		QList<Error> errors;
+
+        Xref takeXref();
 
         bool assigCompat(Type* lhs, Type* rhs) const;
     protected:
@@ -187,6 +182,8 @@ namespace Mic {
         Declaration* ProcedureHeader(bool inForward);
         Mil::Emitter& line(const RowCol&);
         Mil::Emitter& line(const Token&);
+        void markDecl(Declaration* d);
+        Symbol* markRef(Declaration* d, const RowCol& pos);
 
     private:
         AstModel* mdl;
@@ -218,7 +215,11 @@ namespace Mic {
         Gotos gotos;
         MetaActualList metaActuals;
         QByteArray self, SELF;
-	};
+        Symbol* first;
+        Symbol* last;
+        QHash<Declaration*,SymList> xref;
+        QHash<Declaration*,DeclList> subs;
+    };
 }
 
 #endif // include

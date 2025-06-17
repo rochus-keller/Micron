@@ -104,6 +104,81 @@ let mil : SourceSet {
     ]
 }
 
+# TODO: look for a better solution how to e.g. pass a Qt config to a pelib BUSY file instead
+let pelib_files = [
+    ../PeLib/AssemblyDef.cpp
+    ../PeLib/bigdigits.cpp
+    ../PeLib/Class.cpp
+    ../PeLib/CodeContainer.cpp
+    ../PeLib/CreateGUID.cpp
+    ../PeLib/CustomAttributeContainer.cpp
+    ../PeLib/DataContainer.cpp
+    ../PeLib/Enum.cpp
+    ../PeLib/Field.cpp
+    ../PeLib/Instruction.cpp
+    ../PeLib/Method.cpp
+    ../PeLib/MethodSignature.cpp
+    ../PeLib/Namespace.cpp
+    ../PeLib/SignatureGenerator.cpp
+    ../PeLib/Operand.cpp
+    ../PeLib/PELib.cpp
+    ../PeLib/PELibError.cpp
+    ../PeLib/PEWriter.cpp
+    ../PeLib/Property.cpp
+    ../PeLib/Qualifiers.cpp
+    ../PeLib/RSAEncoder.cpp
+    ../PeLib/sha1.cpp
+    ../PeLib/Type.cpp
+    ../PeLib/Value.cpp
+    ../PeLib/Resource.cpp
+    ../PeLib/PEMetaTables.cpp
+    ../PeLib/Stream.cpp
+    ../PeLib/CilIlEmitter.cpp
+    ../PeLib/CilPelibGen.cpp
+]
+let pelib_config : Config {
+    .include_dirs += ..
+    .defines += [ "HAVE_C99INCLUDES" "QT_CORE_LIB" ]
+    if (target_toolchain == `gcc) || (target_toolchain == `clang) {
+        .cflags_cc += "-std=c++11"
+    }
+}
+let pelib : SourceSet {
+    .sources += pelib_files;
+    .configs += [ pelib_config qt.core_client_config ]
+}
+
+let ide_files = [
+        ../GuiTools/AutoMenu.cpp
+        ../GuiTools/AutoShortcut.cpp
+        ../GuiTools/AutoToolBar.cpp
+        ../GuiTools/NamedFunction.cpp
+        ../GuiTools/UiFunction.cpp
+        ../GuiTools/CodeEditor.cpp
+        ../GuiTools/DocSelector.cpp
+        ../GuiTools/DocTabWidget.cpp
+        ../MonoTools/MonoEngine.cpp
+        ../MonoTools/MonoDebugger.cpp
+        ../MonoTools/MonoIlView.cpp
+        #./MicHighlighter.cpp
+        #./ObxIde2.cpp
+    ]
+
+let ide_moc : Moc {
+    .sources += [
+        ../GuiTools/UiFunction.h
+        ../GuiTools/AutoShortcut.h
+        ../GuiTools/AutoMenu.h
+        ../MonoTools/MonoIlView.h
+        ../MonoTools/MonoDebugger.h
+        ../MonoTools/MonoEngine.h
+        ../GuiTools/DocTabWidget.h
+        ../GuiTools/DocSelector.h
+        ../GuiTools/CodeEditor.h
+        #./ObxIde2.h
+    ]
+}
+
 let rcc : Rcc {
     .sources += [ ./MilCompiler.qrc ]
     .deps += qt.copy_rcc
@@ -112,6 +187,6 @@ let rcc : Rcc {
 let compiler ! : Executable {
     .sources += [ ./MicMain.cpp ]
     .deps += [ utils mic mil rcc eigen.common eigen.emitter qt.core_sources eigen.dbgconv
-                eigen.amd64 eigen.arm eigen.arm32 eigen.arma32 eigen.arma64 eigen.armt32 eigen.lcore ]
+                eigen.amd64 eigen.arm eigen.arm32 eigen.arma32 eigen.arma64 eigen.armt32 eigen.lcore pelib ]
     .configs += config
 }
