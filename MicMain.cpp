@@ -161,7 +161,7 @@ public:
 #endif
         Mic::AstModel mdl;
         Mic::Parser2 p(&mdl,&lex, &e, this);
-        p.RunParser(imp.metaActuals);
+        p.RunParser(imp);
         Mic::Declaration* res = 0;
         if( !p.errors.isEmpty() )
         {
@@ -170,7 +170,7 @@ public:
         }else
         {
             res = p.takeModule();
-            if( !imr.commit() )
+            if( !imr.errors.isEmpty() )
                 res->invalid = true;
 #ifdef _DUMP
             out.putChar('\n');

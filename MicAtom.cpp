@@ -17,22 +17,18 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
-#include "MicSymbol.h"
+#include "MicAtom.h"
 #include <QHash>
 using namespace Mic;
 
-static QHash<QByteArray,QByteArray> d_symbols;
+static QHash<QByteArray,QByteArray> d_atoms;
 
-Symbol::Symbol()
-{
 
-}
-
-QByteArray Symbol::getSymbol(const QByteArray& str)
+QByteArray Atom::getAtom(const QByteArray& str)
 {
     if( str.isEmpty() )
         return str;
-    QByteArray& sym = d_symbols[str];
+    QByteArray& sym = d_atoms[str];
     if( sym.isEmpty() )
         sym = str;
     return sym;

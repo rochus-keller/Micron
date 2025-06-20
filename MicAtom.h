@@ -1,5 +1,5 @@
-#ifndef MICSYMBOL_H
-#define MICSYMBOL_H
+#ifndef MICATOM_H
+#define MICATOM_H
 
 /*
 * Copyright 2025 Rochus Keller <mailto:me@rochus-keller.ch>
@@ -24,12 +24,13 @@
 
 namespace Mic
 {
-class Symbol
+class Atom
 {
 public:
-    Symbol();
-    static QByteArray getSymbol( const QByteArray& );
+    static QByteArray getAtom( const QByteArray& );
+private:
+    Atom();
 };
 }
 
-#endif // MICSYMBOL_H
+#endif // MICATOM_H

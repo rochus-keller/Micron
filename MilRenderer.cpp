@@ -619,57 +619,17 @@ IlAstRenderer::~IlAstRenderer()
         delete module;
 }
 
-bool IlAstRenderer::commit()
-{
-    bool success = true;
-    if( hasError )
-        delete module;
-    else
-    {
-        foreach( Type* t, unresolved)
-        {
-            if( t->getType() == 0 && t->quali )
-            {
-                Declaration* d = resolve(*t->quali);
-                if( d && d->kind != Declaration::TypeDecl )
-                    qCritical() << "the reference is no type declaration";
-                else if( d )
-                    t->setType(d->getType());
-            }
-        }
-        unresolved.clear();
-
-        Validator v(mdl);
-#if 1
-        if( !v.validate(module) )
-        {
-            foreach( const Validator::Error& e, v.errors )
-                qCritical() << e.where << e.pos.d_row << e.pos.d_col << e.pc << e.msg;
-            success = false;
-        }
-#endif
-        if( !mdl->addModule(module) )
-        {
-            error(QString("cannot add module: %1").arg(module->name.constData()) );
-            delete module;
-            success = false;
-        }
-    }
-
-    module = 0;
-    return success;
-}
-
 void IlAstRenderer::beginModule(const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& mp)
 {
     Q_ASSERT(module == 0);
-    hasError = false;
+    errors.clear();
     module = new Declaration();
     module->kind = Declaration::Module;
     if( !sourceFile.isEmpty() )
     {
         module->md = new ModuleData();
         module->md->source = sourceFile;
+        source = sourceFile;
     }
     module->name = moduleName;
     module->pos = curPos;
@@ -681,7 +641,50 @@ void IlAstRenderer::endModule()
     Q_ASSERT(module != 0);
     if( module->md )
         module->md->end = curPos;
-    // NOP, see commit/rollback
+
+
+    bool success = true;
+    if( !errors.isEmpty() )
+        delete module;
+    else
+    {
+        foreach( Type* t, unresolved)
+        {
+            if( t->getType() == 0 && t->quali )
+            {
+                Declaration* d = resolve(*t->quali);
+                if( d && d->kind != Declaration::TypeDecl )
+                    error(d, "the reference is no type declaration");
+                else if( d )
+                    t->setType(d->getType());
+            }
+        }
+        unresolved.clear();
+
+        Validator v(mdl);
+#if 1
+        if( !v.validate(module) )
+        {
+            foreach( const Validator::Error& e, v.errors )
+            {
+                Error ee;
+                ee.msg = e.msg;
+                ee.pc = e.pc;
+                ee.where = e.where;
+                errors << ee;
+            }
+            success = false;
+        }
+#endif
+        if( !mdl->addModule(module) )
+        {
+            error(module, "a module with this name already existes");
+            delete module;
+            success = false;
+        }
+    }
+
+    module = 0;
 }
 
 void IlAstRenderer::addImport(const QByteArray& path)
@@ -690,7 +693,7 @@ void IlAstRenderer::addImport(const QByteArray& path)
 
     Declaration* imported = mdl->findModuleByName(path);
     if( imported == 0 )
-        error(QString("cannot import: %1").arg(path.constData()));
+        error(module, QString("cannot import: %1").arg(path.constData()));
     else
     {
         Declaration* import = new Declaration();
@@ -753,7 +756,7 @@ void IlAstRenderer::addConst(const Quali& typeRef, const QByteArray& name, const
         }
         break;
     default:
-        qWarning() << "TODO InMemRenderer2::addConst type not yet supported" << val.type();
+        qWarning() << "TODO IlAstRenderer::addConst type not yet supported" << val.type();
         break;
     }
 }
@@ -849,7 +852,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
             Declaration* receiver = module->findSubByName(proc.binding);
             if( receiver == 0 || receiver->kind != Declaration::TypeDecl || receiver->getType()->kind != Type::Object )
             {
-                error(QString("invalid receiver: %1").arg(proc.binding.constData()));
+                error(curProc, QString("invalid receiver: %1").arg(proc.binding.constData()));
                 delete decl;
             }else
             {
@@ -860,7 +863,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
                     forward->name.clear();
                     forward->forwardTo = decl;
                 }else if( forward )
-                    error(QString("duplicate name: %1").arg(decl->name.constData()));
+                    error(curProc, QString("duplicate name: %1").arg(decl->name.constData()));
                 rt->subs.append(decl);
                 decl->outer = receiver;
             }
@@ -872,7 +875,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
                 forward->name.clear();
                 forward->forwardTo = decl;
             }else if( forward )
-                error(QString("duplicate name: %1").arg(decl->name.constData()));
+                error(curProc, QString("duplicate name: %1").arg(decl->name.constData()));
             module->appendSub(decl);
         }
 
@@ -927,7 +930,7 @@ void IlAstRenderer::beginType(const QByteArray& name, bool isPublic, quint8 type
         type->kind = Type::Object;
         type->setType(derefType(super));
         if( type->getType() == 0 && !super.second.isEmpty() )
-            error(QString("cannot resolve base type: %1").arg(format(super).constData()));
+            error(decl, QString("cannot resolve base type: %1").arg(format(super).constData()));
         break;
     default:
         Q_ASSERT(false);
@@ -971,7 +974,7 @@ void IlAstRenderer::addType(const QByteArray& name, bool isPublic, const Quali& 
         t->len = len;
         t->setType(derefType(baseType));
         if( t->getType() == 0 && !baseType.second.isEmpty() )
-            error(QString("cannot resolve base type: %1").arg(format(baseType).constData()));
+            error(decl, QString("cannot resolve base type: %1").arg(format(baseType).constData()));
         break;
     }
 }
@@ -997,14 +1000,14 @@ void IlAstRenderer::line(quint32 pos)
     curPos = Mic::RowCol(pos);
 }
 
-Type*IlAstRenderer::derefType(const Quali &q) const
+Type*IlAstRenderer::derefType(const Quali &q)
 {
     if( q.first.isEmpty() && q.second.isEmpty() )
         return 0;
     Declaration* type = resolve(q);
     if( type && type->kind != Declaration::TypeDecl )
     {
-        error(QString("not a type declaration: %1").arg(type->toPath().constData()));
+        error(type, QString("not a type declaration: %1").arg(type->toPath().constData()));
         return 0;
     }else if( type == 0 )
     {
@@ -1125,7 +1128,7 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
                     tmp->pos = curPos;
                     if( cll.isEmpty() )
                     {
-                        error("empty case label list", pc);
+                        error(curProc, "empty case label list", pc);
                         return res;
                     }
                     tmp->e = new Expression();
@@ -1178,7 +1181,7 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
             tmp->d = resolve(ops[pc].arg.value<Quali>());
             if( tmp->d == 0 || tmp->d->kind != Declaration::TypeDecl)
             {
-                error("invalid type declaration reference",pc);
+                error(curProc, "invalid type declaration reference",pc);
                 return res;
             }
             break;
@@ -1187,7 +1190,7 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
                 Declaration* d = derefTrident(td);
                 if( d == 0 || d->kind != Declaration::Field)
                 {
-                    error("invalid field declaration reference",pc);
+                    error(curProc, "invalid field declaration reference",pc);
                     return res;
                 }
                 tmp->d = d;
@@ -1196,7 +1199,7 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
             tmp->d = resolve(ops[pc].arg.value<Quali>());
             if( tmp->d == 0 || tmp->d->kind != Declaration::TypeDecl)
             {
-                error("invalid type declaration reference", pc);
+                error(curProc,"invalid type declaration reference", pc);
                 return res;
             }
             break;
@@ -1210,7 +1213,7 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
             tmp->d = resolve(ops[pc].arg.value<Quali>());
             if( tmp->d == 0 || tmp->d->kind != Declaration::VarDecl)
             {
-                error("invalid variable declaration reference",pc);
+                error(curProc,"invalid variable declaration reference",pc);
                 return res;
             }
             break;
@@ -1247,7 +1250,7 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
         case IL_exit:
             break;
         default:
-            error(QString("unexpected operation '%1'").arg(s_opName[ops[pc].op]), pc);
+            error(curProc,QString("unexpected operation '%1'").arg(s_opName[ops[pc].op]), pc);
             return res;
         }
         pc++;
@@ -1332,7 +1335,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
                 tmp->d = resolve(q);
                 if(tmp->d == 0)
                 {
-                    error(QString("cannot resolve qualident: %1").arg(format(q).constData()),pc++);
+                    error(curProc,QString("cannot resolve qualident: %1").arg(format(q).constData()),pc++);
                     return res;
                 }
             } break;
@@ -1344,7 +1347,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
                 tmp->d = derefTrident(td);
                 if(tmp->d == 0 )
                 {
-                    error(QString("cannot resolve trident: %1.%2").arg(format(td.first).constData()).
+                    error(curProc,QString("cannot resolve trident: %1.%2").arg(format(td.first).constData()).
                           arg(td.second.constData()), pc++);
                     return res;
                 }
@@ -1436,7 +1439,7 @@ bool IlAstRenderer::expect(const QList<ProcData::Op>& ops, quint32& pc, int op)
     // pc is not changed in here!
     if( pc >= ops.size() || ops[pc].op != op )
     {
-        error(QString("expecting '%1', instead got '%2'").arg(s_opName[op]).arg(s_opName[ops[pc].op]), pc);
+        error(curProc, QString("expecting '%1', instead got '%2'").arg(s_opName[op]).arg(s_opName[ops[pc].op]), pc);
         return false;
     }else
         return true;
@@ -1463,15 +1466,12 @@ Declaration*IlAstRenderer::resolve(const Quali &q) const
         return mdl->resolve(q);
 }
 
-void IlAstRenderer::error(const QString& msg, int pc) const
+void IlAstRenderer::error(Declaration* d, const QString& msg, int pc)
 {
-    QByteArray where;
-    if( curProc )
-        where = curProc->toPath();
-    else if( module )
-        where = module->toPath();
-    if( pc >= 0 )
-        where += " pc " + QByteArray::number(pc);
-    qCritical() << where.constData() << msg.toUtf8().constData();
-    hasError = true;
+    Error e;
+    e.msg = msg;
+    e.where = d->toPath();
+    if( curProc)
+        e.pc = pc;
+    errors << e;
 }

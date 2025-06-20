@@ -1,0 +1,34 @@
+<RCC>
+    <qresource prefix="/">
+        <file>images/close.png</file>
+        <file>images/exclamation-circle.png</file>
+        <file>images/exclamation-red.png</file>
+        <file>images/class.png</file>
+        <file>images/func_priv.png</file>
+        <file>images/func.png</file>
+        <file>images/struct.png</file>
+        <file>images/var_priv.png</file>
+        <file>images/var_prot.png</file>
+        <file>images/var.png</file>
+        <file>images/folder.png</file>
+        <file>images/module.png</file>
+        <file>images/class_priv.png</file>
+        <file>images/struct_priv.png</file>
+        <file>images/definition.png</file>
+        <file>images/break-marker.png</file>
+        <file>images/breakpoint.png</file>
+        <file>images/marker.png</file>
+        <file>images/alias_priv.png</file>
+        <file>images/alias.png</file>
+        <file>font/DejaVuSansMono.ttf</file>
+        <file>oakwood/Coroutines.mic</file>
+        <file>oakwood/Files.mic</file>
+        <file>oakwood/In.mic</file>
+        <file>oakwood/Input.mic</file>
+        <file>oakwood/Math.mic</file>
+        <file>oakwood/MathL.mic</file>
+        <file>oakwood/Out.mic</file>
+        <file>oakwood/Strings.mic</file>
+        <file>oakwood/XYplane.mic</file>
+    </qresource>
+</RCC>

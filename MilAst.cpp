@@ -18,7 +18,7 @@
 */
 
 #include "MilAst.h"
-#include "MicSymbol.h"
+#include "MicAtom.h"
 #include <QtDebug>
 #include <algorithm>
 using namespace Mil;
@@ -27,7 +27,7 @@ static void addTypeDecl(Declaration* globals, Type* t, const QByteArray& name)
 {
     Declaration* res = new Declaration();
     res->kind = Declaration ::TypeDecl;
-    res->name = Mic::Symbol::getSymbol(name);
+    res->name = Mic::Atom::getAtom(name);
     res->public_ = true;
     // NO, otherwise INT32 gets a $ prefix: res->outer = globals;
     res->setType(t);

@@ -18,11 +18,12 @@
 */
 
 #include "MicMilLoader2.h"
-#include "MicSymbol.h"
+#include "MicAtom.h"
 #include "MilOps.h"
 #include "MilParser2.h"
 #include "MilLexer.h"
 #include "MilValidator.h"
+#include <QFile>
 #include <QtDebug>
 using namespace Mic;
 using namespace Mil;
@@ -54,10 +55,19 @@ MilLoader2::MilLoader2()
 
 Declaration* MilLoader2::loadFromFile(const QString& file)
 {
+    QFile f(file);
+    if( !f.open(QIODevice::ReadOnly) )
+        return 0;
+    else
+        return loadFromFile(&f, file);
+}
+
+Declaration *MilLoader2::loadFromFile(QIODevice * in, const QString &path)
+{
     Lex lex;
-    lex.lex.setStream(file);
+    lex.lex.setStream(in, path);
     Parser2 p(&mdl, &lex, this);
-    qDebug() << "**** parsing" << file;
+    // qDebug() << "**** parsing" << path;
     Declaration* module = 0;
     if( p.parseModule() ) // we only parse one module here
     {
@@ -69,12 +79,12 @@ Declaration* MilLoader2::loadFromFile(const QString& file)
         }else
         {
             module = p.takeModule();
-            qDebug() << "module" << module->name;
+            // qDebug() << "module" << module->name;
             Validator v(&mdl);
             if( !v.validate(module) )
             {
                 foreach( const Validator::Error& e, v.errors )
-                    qCritical() << e.where << e.pos.d_row << e.pos.d_col << e.pc << e.msg;
+                    qCritical() << e.where << e.pc << e.msg;
                 v.errors.clear();
                 delete module;
                 module = 0;

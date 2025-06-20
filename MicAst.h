@@ -38,6 +38,7 @@ namespace Mic
             // end
             Max
         };
+        static const char* name[];
     };
 
     class Type;
@@ -45,15 +46,21 @@ namespace Mic
     class Node
     {
     public:
-        Node(quint8 m):kind(0),meta(m),deferred(false),anonymous(false),typebound(false),
+        Node(quint8 m):
+    #ifndef _DEBUG
+            kind(0),
+    #endif
+            meta(m),deferred(false),anonymous(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
-            owned(false),type(0),autoself(0),invalid(0){}
+            owned(false),type(0),autoself(0),invalid(0),hasSubs(0){}
         ~Node();
 
         enum Meta { Inval, T, D, E };
         enum Visi { NA, Private, ReadOnly, ReadWrite };
 
+#ifndef _DEBUG
         uint kind : 6;
+#endif
         uint meta : 2;
 
         uint typebound : 1; // Type, Declaration
@@ -72,6 +79,7 @@ namespace Mic
         uint generic : 1;
         uint autoself : 1;
         uint invalid : 1; // module
+        uint hasSubs : 1; // class/method: has overrides; module: has clients
 
         // Expression
         uint byVal : 1; // option for LocalVar, Param, ModuleVar, Select, Index
@@ -102,6 +110,11 @@ namespace Mic
             SET,
             MaxBasicType,
             Pointer, Proc, Array, Record, Object, ConstEnum, Generic };
+        static const char* name[];
+#ifdef _DEBUG
+        Kind kind;
+#endif
+
         quint32 len; // array length
         // type: array/pointer base type, return type
         QList<Declaration*> subs; // list of record fields or enum elements, or params for proc type
@@ -141,6 +154,9 @@ namespace Mic
                     Procedure, ForwardDecl, ParamDecl,
                     Max };
         static const char* s_mode[];
+#ifdef _DEBUG
+        Kind kind;
+#endif
         Declaration* next; // list of all declarations in scope
         Declaration* link; // member list or imported module decl
         Declaration* outer; // the owning declaration to reconstruct the qualident
@@ -148,7 +164,7 @@ namespace Mic
 
         quint16 id; // used for built-in code and local/param number, and bit size of fields, and id of temparary locals
         // TODO super for super class declaration and overridden method declaration
-        QVariant data; // value for Const and Enum, import data, name for Extern, decl for forward, module data
+        QVariant data; // value for Const and Enum, import data, name for Extern, decl for forward or super, module data
 
 
         Declaration():Node(D),next(0),link(0),id(0),outer(0){}
@@ -158,6 +174,8 @@ namespace Mic
         int getIndexOf(Declaration*) const;
         bool isLvalue() const { return kind == VarDecl || kind == LocalDecl || kind == ParamDecl; }
         bool isPublic() const { return visi >= ReadOnly; }
+        Declaration* getModule();
+
     };
     typedef QList<Declaration*> DeclList;
 
@@ -184,6 +202,9 @@ namespace Mic
             Super,   // ^ supercall
             MAX
         };
+#ifdef _DEBUG
+        Kind kind;
+#endif
         QVariant val; // set elements and call args are ExpList embedded in val
         Expression* lhs; // for unary and binary ops
         Expression* rhs; // for binary ops
@@ -234,11 +255,12 @@ namespace Mic
     typedef QList<Value> MetaActualList;
 
     struct Import {
-        QByteArrayList path;
+        QByteArrayList path; // full path incl. name
         MetaActualList metaActuals;
+        Declaration* resolved; // points to imported module
         Declaration* importer;
         RowCol importedAt;
-        Import():importer(0){}
+        Import():importer(0),resolved(0){}
         bool operator==(const Mic::Import& rhs) const;
     };
 
@@ -262,6 +284,7 @@ namespace Mic
         RowCol pos;
         Declaration* decl;
         Symbol* next;
+
         Symbol():kind(Invalid),len(0),decl(0),next(0){}
         static void deleteAll(Symbol*);
     };
@@ -298,8 +321,8 @@ namespace Mic
 
         static void cleanupGlobals();
     protected:
-        Type* newType(int form, int size);
-        Type* addType(const QByteArray& name, int form, int size);
+        Type* newType(Type::Kind form, int size);
+        Type* addType(const QByteArray& name, Type::Kind form, int size);
         void addTypeAlias(const QByteArray& name, Type*);
         void addBuiltin(const QByteArray& name, Builtin::Type);
     private:
@@ -325,6 +348,7 @@ Q_DECLARE_METATYPE(Mic::Declaration*)
 Q_DECLARE_METATYPE(Mic::Expression*)
 Q_DECLARE_METATYPE(Mic::ExpList)
 Q_DECLARE_METATYPE(Mic::ModuleData)
+Q_DECLARE_METATYPE(Mic::Symbol*)
 
 
 #endif // MICAST_H

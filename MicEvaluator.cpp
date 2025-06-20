@@ -307,8 +307,9 @@ bool Evaluator::assign(const RowCol& pos)
 
 bool Evaluator::assign(Expression* lhs, Expression* rhs, const RowCol& pos)
 {
-    if( lhs->getType()->isCharArray() && lhs->getType()->len != 0  &&
-            ( (rhs->getType()->isCharArray() && rhs->getType()->len == 0) || rhs->getType()->kind == Type::String ) )
+    if( lhs->getType() && lhs->getType()->isCharArray() && lhs->getType()->len != 0  &&
+            ( (rhs->getType() && rhs->getType()->isCharArray() && rhs->getType()->len == 0) ||
+               rhs->getType()->kind == Type::String ) )
         return stind(lhs, rhs, pos);
 
     switch( lhs->kind )

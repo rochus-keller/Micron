@@ -18,7 +18,7 @@
 */
 
 #include "MilToken.h"
-#include "MicSymbol.h"
+#include "MicAtom.h"
 using namespace Mil;
 
 bool Token::isValid() const
@@ -43,5 +43,5 @@ const char*Token::getString() const
 
 QByteArray Token::getSymbol(const QByteArray& str)
 {
-    return Mic::Symbol::getSymbol(str);
+    return Mic::Atom::getAtom(str);
 }

@@ -125,7 +125,7 @@ bool Project::parse()
                 if( !v.validate(module) )
                 {
                     foreach( const Validator::Error& e, v.errors )
-                        qCritical() << e.where << e.pos.d_row << e.pos.d_col << e.pc << e.msg;
+                        qCritical() << e.where << e.pc << e.msg;
                     v.errors.clear();
                     errorsFound = true;
                     delete module;

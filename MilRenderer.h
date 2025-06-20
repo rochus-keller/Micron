@@ -99,6 +99,14 @@ namespace Mil
     class AbstractRenderer
     {
     public:
+        struct Error {
+            QString msg;
+            QByteArray where;
+            quint32 pc;
+            Error():pc(0){}
+        };
+        QList<Error> errors;
+
         virtual void beginModule( const QByteArray& fullName, const QString& sourceFile,
                                   const QByteArrayList& metaParams = QByteArrayList() ) {}
         virtual void endModule() {}
@@ -167,7 +175,7 @@ namespace Mil
     class RenderSplitter : public AbstractRenderer
     {
     public:
-        RenderSplitter(const QList<AbstractRenderer*>& r):renderer(r) {}
+        RenderSplitter(const QList<AbstractRenderer*>& r = QList<AbstractRenderer*>()):renderer(r) {}
 
         virtual void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& );
         virtual void endModule();
@@ -203,8 +211,6 @@ namespace Mil
         IlAstRenderer(AstModel*);
         ~IlAstRenderer();
 
-        bool commit();
-
         void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& );
         void endModule();
 
@@ -229,13 +235,13 @@ namespace Mil
         Type* getCurrentType() const { return type; }
 
     protected:
-        Type* derefType(const Quali& ) const;
+        Type* derefType(const Quali& );
         Statement* translateStat(const QList<ProcData::Op>& ops, quint32& pc);
         Expression* translateExpr(const QList<ProcData::Op>& ops, quint32& pc);
         bool expect(const QList<ProcData::Op>& ops, quint32& pc, int op);
         Declaration* derefTrident(const Trident& ) const;
         Declaration* resolve(const Quali&) const;
-        void error(const QString&, int pc = -1) const;
+        void error(Declaration *d, const QString&, int pc = -1);
         RowCol setline(quint32 line)
         {
             if( line )
@@ -249,8 +255,8 @@ namespace Mil
         Type* type;
         Declaration* curProc;
         RowCol curPos;
+        QString source;
         mutable QList<Type*> unresolved;
-        mutable bool hasError;
     };
 }
 

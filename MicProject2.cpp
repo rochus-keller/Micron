@@ -110,14 +110,27 @@ Project2::Project2(QObject *parent) : QObject(parent),d_dirty(false),d_useBuiltI
     d_suffixes << ".mic";
 }
 
-void Project2::clear()
+Project2::~Project2()
+{
+    clear();
+}
+
+void Project2::clear(bool all)
 {
     d_mdl.clear();
     modules.clear();
-    d_groups.clear();
-    d_filePath.clear();
-    d_files.clear();
+    loader.getModel().clear();
     errors.clear();
+    subs.clear();
+    if( all )
+    {
+        d_groups.clear();
+        d_filePath.clear();
+        d_files.clear();
+        foreach(File* f, d_libs)
+            delete f;
+        d_libs.clear();
+    }
 }
 
 void Project2::createNew()
@@ -243,19 +256,29 @@ bool Project2::removePackagePath(const VirtualPath& path)
     return true;
 }
 
-Project2::FileGroup Project2::getRootFileGroup() const
+const Project2::FileGroup* Project2::getRootFileGroup() const
 {
     return findFileGroup(QByteArrayList());
 }
 
-Project2::FileGroup Project2::findFileGroup(const VirtualPath& package) const
+const Project2::FileGroup* Project2::findFileGroup(const VirtualPath& package) const
 {
     for( int i = 0; i < d_groups.size(); i++ )
     {
         if( d_groups[i].d_package == package )
-            return d_groups[i];
+            return &d_groups[i];
     }
-    return FileGroup();
+    return 0;
+}
+
+Symbol*Project2::getSymbolsOfModule(Declaration* module) const
+{
+    for( int i = 0; i < modules.size(); i++ )
+    {
+        if( modules[i].decl == module )
+            return modules[i].xref.syms;
+    }
+    return 0;
 }
 
 Symbol* Project2::findSymbolBySourcePos(const QString& file, quint32 line, quint16 col, Declaration **scopePtr) const
@@ -295,6 +318,14 @@ Project2::File* Project2::findFile(const QString& file) const
     return f.data();
 }
 
+Declaration *Project2::findModule(const QByteArray &name) const
+{
+    const ModuleSlot* ms = find(name);
+    if( ms )
+        return ms->decl;
+    return 0;
+}
+
 Project2::UsageByMod Project2::getUsage(Declaration *n) const
 {
     UsageByMod res;
@@ -306,6 +337,11 @@ Project2::UsageByMod Project2::getUsage(Declaration *n) const
     }
 
     return res;
+}
+
+DeclList Project2::getSubs(Declaration* d) const
+{
+    return subs.value(d);
 }
 
 QString Project2::getWorkingDir(bool resolved) const
@@ -402,7 +438,21 @@ quint32 Project2::getSloc() const
 
 bool Project2::parse()
 {
-    modules.clear();
+    clear(false);
+
+    if( useBuiltInOakwood() )
+    {
+        parseLib("In");
+        parseLib("Out");
+        parseLib("Files");
+        parseLib("Input");
+        parseLib("Math");
+        parseLib("MathL");
+        parseLib("Strings");
+        parseLib("Coroutines");
+        parseLib("XYplane");
+    }
+
     bool res = false;
     int all = 0, ok = 0;
 
@@ -428,10 +478,8 @@ bool Project2::parse()
 
 Declaration *Project2::loadModule(const Import &imp)
 {
-    ModuleSlot* ms = find(imp);
-    if( ms != 0 )
-        return ms->decl;
-
+    // toFile also finds modules with incomplete path, such as Interface instead of som.Interface
+    // we must thus look for the file first, so that we can complete the Import spec if necessary
     File* file = toFile(imp);
     if( file == 0 )
     {
@@ -443,11 +491,33 @@ Declaration *Project2::loadModule(const Import &imp)
         return 0;
     }
 
+    Import fixedImp = imp;
+    if( file->d_group && !file->d_group->d_package.isEmpty() )
+    {
+        // Take care that the new module is in the package where it was actually found
+        // So that e.g. Interface is in som.Interface, even when imported from Vector
+        fixedImp.path = file->d_group->d_package;
+        fixedImp.path.append(imp.path.back());
+    }
+
+    ModuleSlot* ms = find(fixedImp);
+    if( ms != 0 )
+        return ms->decl;
+
+
+
+    qDebug() << "*** parse" << file->d_name; // TEST
+
     // immediately add it so that circular module refs lead to an error
-    modules.append(ModuleSlot(imp,file,0));
+    modules.append(ModuleSlot(fixedImp,file,0));
     ms = &modules.back();
 
+#define _NO_MIL_ // TEST
+#ifdef _NO_MIL_
+    Mil::RenderSplitter imr;
+#else
     Mil::IlAstRenderer imr(&loader.getModel());
+#endif
 
     Lex2 lex;
     lex.sourcePath = file->d_filePath; // to keep file name if invalid
@@ -461,9 +531,8 @@ Declaration *Project2::loadModule(const Import &imp)
         lex.lex.setStream(file->d_filePath);
 
     Mil::Emitter e(&imr, Mil::Emitter::RowsAndCols);
-    Mic::AstModel mdl;
-    Mic::Parser2 p(&mdl,&lex, &e, this, true);
-    p.RunParser(imp.metaActuals);
+    Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
+    p.RunParser(fixedImp);
     Mic::Declaration* res = 0;
     if( !p.errors.isEmpty() )
     {
@@ -472,8 +541,15 @@ Declaration *Project2::loadModule(const Import &imp)
     }else
     {
         res = p.takeModule();
-        if( !imr.commit() )
-            res->invalid = true;
+
+        res->invalid = !imr.errors.isEmpty();
+
+        if( fixedImp.metaActuals.isEmpty() )
+            file->d_mod = res; // in case of generic modules, file->d_mod points to the non-instantiated version
+        ms->xref = p.takeXref();
+        QHash<Declaration*,DeclList>::const_iterator i;
+        for( i = ms->xref.subs.begin(); i != ms->xref.subs.end(); ++i )
+            subs[i.key()] += i.value();
     }
     // TODO: uniquely extend the name of generic module instantiations
 
@@ -559,17 +635,61 @@ const Project2::ModuleSlot *Project2::find(Declaration * m) const
 Project2::File *Project2::toFile(const Import &imp)
 {
     QByteArrayList path = imp.path;
-    QByteArray name = path.back();
     path.pop_back();
-    FileGroup fg = findFileGroup(path);
-    for( int i = 0; i < fg.d_files.size(); i++ )
+    const QByteArray name = imp.path.back();
+    const FileGroup* fg = findFileGroup(path);
+    if( fg != 0 )
     {
-        if( (fg.d_files[i]->d_mod && fg.d_files[i]->d_mod->name.constData() == name.constData()) || fg.d_files[i]->d_name == name )
+        for( int i = 0; i < fg->d_files.size(); i++ )
         {
-            return fg.d_files[i];
+            if( fg->d_files[i]->d_name == name )
+                return fg->d_files[i];
+        }
+        if( imp.importer )
+        {
+            path = imp.importer->data.value<ModuleData>().path;
+            path.pop_back();
+            path += imp.path;
+            path.pop_back();
+            fg = findFileGroup(path);
+            if( fg != 0 )
+            {
+                for( int i = 0; i < fg->d_files.size(); i++ )
+                {
+                    if( fg->d_files[i]->d_name == name )
+                        return fg->d_files[i];
+                }
+            }
         }
     }
+    foreach(File* f, d_libs)
+    {
+        if( (f->d_mod && f->d_mod->name.constData() == name.constData()) || f->d_name == name )
+            return f;
+    }
     return 0;
+}
+
+void Project2::parseLib(const QString & name)
+{
+    Mil::RenderSplitter imr;
+    Lex2 lex;
+    QString path = QString(":/oakwood/%1.mic").arg(name);
+    lex.sourcePath = path; // to keep file name if invalid
+    lex.lex.setStream(path);
+    Mil::Emitter e(&imr, Mil::Emitter::RowsAndCols);
+    Mic::Parser2 p(&d_mdl,&lex, &e, this, false);
+    p.RunParser();
+    ModuleSlot ms;
+    ms.decl = p.takeModule();
+    ms.xref = p.takeXref();
+    File* f = new File();
+    f->d_filePath = path;
+    f->d_mod = ms.decl;
+    f->d_name = name.toUtf8();
+    d_libs << f;
+    ms.file = f;
+    modules.append(ms);
 }
 
 QList<Declaration*> Project2::getModulesToGenerate(bool includeTemplates) const
@@ -631,11 +751,11 @@ bool Project2::save()
     out.setValue("BuildDir", d_buildDir );
     out.setValue("Options", d_options.join(' ') );
 
-    FileGroup root = getRootFileGroup();
-    out.beginWriteArray("Modules", root.d_files.size() ); // nested arrays don't work
-    for( int i = 0; i < root.d_files.size(); i++ )
+    const FileGroup* root = getRootFileGroup();
+    out.beginWriteArray("Modules", root->d_files.size() ); // nested arrays don't work
+    for( int i = 0; i < root->d_files.size(); i++ )
     {
-        const QString absPath = root.d_files[i]->d_filePath;
+        const QString absPath = root->d_files[i]->d_filePath;
         const QString relPath = dir.relativeFilePath( absPath );
         out.setArrayIndex(i);
         out.setValue("AbsPath", absPath );

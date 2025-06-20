@@ -23,6 +23,27 @@ using namespace Mic;
 Declaration AstModel::globalScope;
 Type* AstModel::types[Type::MaxBasicType] = {0};
 
+const char* Builtin::name[] = {
+    "ABS", "CAP", "BITAND", "BITASR", "BITNOT", "BITOR", "BITS", "BITSHL", "BITSHR",
+    "BITXOR", "CAST", "CHR", "DEFAULT", "FLOOR", "FLT", "GETENV", "LEN", "LONG", "MAX",
+    "MIN", "ODD", "ORD", "SHORT", "SIGNED", "SIZE", "STRLEN", "UNSIGNED", "VARARG", "VARARGS",
+    "ASSERT", "DEC", "DISPOSE", "EXCL", "HALT", "INC",
+    "INCL", "NEW", "PCALL", "PRINT", "PRINTLN", "RAISE", "SETENV",
+};
+
+const char* Type::name[] = {
+    "Undefined",
+    "NoType",
+    "String",
+    "Any",
+    "Nil",
+    "BOOL",
+    "CHAR",
+    "UINT8", "UINT16", "UINT32", "UINT64",
+    "INT8", "INT16", "INT32", "INT64",
+    "FLT32", "FLT64",
+    "SET",
+};
 
 AstModel::AstModel():helper(0),helperId(0)
 {
@@ -135,6 +156,7 @@ void AstModel::clear()
     if( helper )
         delete helper;
     helper = 0;
+    openScope(&globalScope); // establish the same status as the constructor
 }
 
 void AstModel::openScope(Declaration* scope)
@@ -188,6 +210,8 @@ Declaration*AstModel::addDecl(const QByteArray& name, bool* doublette)
         decl->name = name;
         if( scope->kind != Declaration::Scope )
             decl->outer = scope;
+        else
+            decl->outer = getTopModule(); // TODO: check
         *obj = decl;
         return decl;
     }else
@@ -281,7 +305,7 @@ void AstModel::cleanupGlobals()
     }
 }
 
-Type*AstModel::newType(int form, int size)
+Type*AstModel::newType(Type::Kind form, int size)
 {
     Type* t = new Type();
     t->kind = form;
@@ -289,7 +313,7 @@ Type*AstModel::newType(int form, int size)
     return t;
 }
 
-Type*AstModel::addType(const QByteArray& name, int form, int size)
+Type*AstModel::addType(const QByteArray& name, Type::Kind form, int size)
 {
     Type* t = newType(form, size);
     addTypeAlias(name, t);
@@ -484,6 +508,16 @@ int Declaration::getIndexOf(Declaration* ref) const
         d = d->next;
     }
     return -1;
+}
+
+Declaration *Declaration::getModule()
+{
+    if( kind == Module )
+        return this;
+    else if( outer )
+        return outer->getModule();
+    else
+        return 0;
 }
 
 

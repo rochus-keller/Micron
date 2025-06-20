@@ -23,6 +23,8 @@
 #include "MilAst.h"
 #include <QHash>
 
+class QIODevice;
+
 namespace Mic
 {
 
@@ -32,6 +34,7 @@ public:
     MilLoader2();
 
     Mil::Declaration* loadFromFile( const QString& path);
+    Mil::Declaration* loadFromFile( QIODevice*, const QString& path);
     Mil::AstModel& getModel() { return mdl; }
     QList<Mil::Declaration*> getModulesInDependencyOrder();
 protected:

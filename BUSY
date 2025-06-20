@@ -29,10 +29,10 @@ let utils : SourceSet {
     .configs += config;
     .sources += [
         ./MicRowCol.cpp
-        ./MicSymbol.cpp
+        ./MicAtom.cpp
         ./MilOps.cpp
         ./MicRowCol.h
-        ./MicSymbol.h
+        ./MicAtoms.h
         ./MilOps.h
     ]
 }

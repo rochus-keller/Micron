@@ -20,7 +20,7 @@
 #include "MicRowCol.h"
 #include "MilEmitter.h"
 #include "MilOps.h"
-#include "MicSymbol.h"
+#include "MicAtom.h"
 #include <QtDebug>
 using namespace Mil;
 
@@ -30,8 +30,8 @@ static const char* char_sym = 0;
 Emitter::Emitter(AbstractRenderer* r, DbgInfo di):d_out(r),d_typeKind(0),ops(0),lastLine(0), dbgInfo(di)
 {
     Q_ASSERT( r );
-    bool_sym = Mic::Symbol::getSymbol("bool").constData();
-    char_sym = Mic::Symbol::getSymbol("char").constData();
+    bool_sym = Mic::Atom::getAtom("bool").constData();
+    char_sym = Mic::Atom::getAtom("char").constData();
 }
 
 void Emitter::beginModule(const QByteArray& fullName, const QString& sourceFile, const RowCol & pos)
@@ -227,16 +227,16 @@ QByteArray Emitter::typeSymbol1(EmiTypes::Basic t)
     static QByteArray symbols[EmiTypes::IntPtr];
     if( symbols[0].isEmpty() )
     {
-        symbols[EmiTypes::U1] = Mic::Symbol::getSymbol("uint8");
-        symbols[EmiTypes::U2] = Mic::Symbol::getSymbol("uint16");
-        symbols[EmiTypes::U4] = Mic::Symbol::getSymbol("uint32");
-        symbols[EmiTypes::U8] = Mic::Symbol::getSymbol("uint64");
-        symbols[EmiTypes::I1] = Mic::Symbol::getSymbol("int8");
-        symbols[EmiTypes::I2] = Mic::Symbol::getSymbol("int16");
-        symbols[EmiTypes::I4] = Mic::Symbol::getSymbol("int32");
-        symbols[EmiTypes::I8] = Mic::Symbol::getSymbol("int64");
-        symbols[EmiTypes::R4] = Mic::Symbol::getSymbol("float32");
-        symbols[EmiTypes::R8] = Mic::Symbol::getSymbol("float64");
+        symbols[EmiTypes::U1] = Mic::Atom::getAtom("uint8");
+        symbols[EmiTypes::U2] = Mic::Atom::getAtom("uint16");
+        symbols[EmiTypes::U4] = Mic::Atom::getAtom("uint32");
+        symbols[EmiTypes::U8] = Mic::Atom::getAtom("uint64");
+        symbols[EmiTypes::I1] = Mic::Atom::getAtom("int8");
+        symbols[EmiTypes::I2] = Mic::Atom::getAtom("int16");
+        symbols[EmiTypes::I4] = Mic::Atom::getAtom("int32");
+        symbols[EmiTypes::I8] = Mic::Atom::getAtom("int64");
+        symbols[EmiTypes::R4] = Mic::Atom::getAtom("float32");
+        symbols[EmiTypes::R8] = Mic::Atom::getAtom("float64");
     }
     if( t < EmiTypes::IntPtr )
         return symbols[t];
@@ -249,16 +249,16 @@ QByteArray Emitter::typeSymbol2(EmiTypes::Basic t)
     static QByteArray symbols[EmiTypes::IntPtr];
     if( symbols[0].isEmpty() )
     {
-        symbols[EmiTypes::U1] = Mic::Symbol::getSymbol("u1");
-        symbols[EmiTypes::U2] = Mic::Symbol::getSymbol("u2");
-        symbols[EmiTypes::U4] = Mic::Symbol::getSymbol("u4");
-        symbols[EmiTypes::U8] = Mic::Symbol::getSymbol("u8");
-        symbols[EmiTypes::I1] = Mic::Symbol::getSymbol("i1");
-        symbols[EmiTypes::I2] = Mic::Symbol::getSymbol("i2");
-        symbols[EmiTypes::I4] = Mic::Symbol::getSymbol("i4");
-        symbols[EmiTypes::I8] = Mic::Symbol::getSymbol("i8");
-        symbols[EmiTypes::R4] = Mic::Symbol::getSymbol("r4");
-        symbols[EmiTypes::R8] = Mic::Symbol::getSymbol("r8");
+        symbols[EmiTypes::U1] = Mic::Atom::getAtom("u1");
+        symbols[EmiTypes::U2] = Mic::Atom::getAtom("u2");
+        symbols[EmiTypes::U4] = Mic::Atom::getAtom("u4");
+        symbols[EmiTypes::U8] = Mic::Atom::getAtom("u8");
+        symbols[EmiTypes::I1] = Mic::Atom::getAtom("i1");
+        symbols[EmiTypes::I2] = Mic::Atom::getAtom("i2");
+        symbols[EmiTypes::I4] = Mic::Atom::getAtom("i4");
+        symbols[EmiTypes::I8] = Mic::Atom::getAtom("i8");
+        symbols[EmiTypes::R4] = Mic::Atom::getAtom("r4");
+        symbols[EmiTypes::R8] = Mic::Atom::getAtom("r8");
     }
     if( t < EmiTypes::IntPtr )
         return symbols[t];

@@ -33,7 +33,6 @@ namespace Mil
 
         struct Error {
             QString msg;
-            Mic::RowCol pos;
             QByteArray where;
             quint32 pc;
             Error():pc(0){}
@@ -53,7 +52,7 @@ namespace Mil
         void visitWhile(Statement* stat);
         Statement* nextStat(Statement* stat);
         Expression* visitExpr(Expression*);
-        void error(const Mic::RowCol& pos, const QString&);
+        void error(Declaration *d, const QString&);
         bool expectN(quint32 n, Expression*);
         bool expectN(quint32 n, Statement*);
         Expression* stackAt(int) const;

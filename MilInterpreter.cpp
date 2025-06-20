@@ -18,7 +18,7 @@
 */
 
 #include "MilInterpreter.h"
-#include "MicSymbol.h"
+#include "MicAtom.h"
 #include "MilVmCode.h"
 extern "C" {
 #include "runtime/MIC+.h"
@@ -308,7 +308,7 @@ static bool MIC_assert(void* args, void* ret)
 }
 
 #define REGISTER_MICPROC(name) \
-    ffiProcs.push_back(MIC_##name); code.addExternal(MIC$, Mic::Symbol::getSymbol(#name), ffiProcs.size()-1);
+    ffiProcs.push_back(MIC_##name); code.addExternal(MIC$, Mic::Atom::getAtom(#name), ffiProcs.size()-1);
 
 struct Interpreter::Imp
 {
@@ -325,7 +325,7 @@ struct Interpreter::Imp
         for(int i = 1; i < LL_NUM_OF_OPS; i++ )
             out << "vmcase(" << VmCode::op_names[i] << ")" << endl;
 #endif
-        const char* MIC$ = Mic::Symbol::getSymbol("MIC$").constData();
+        const char* MIC$ = Mic::Atom::getAtom("MIC$").constData();
         REGISTER_MICPROC(relop1);
         REGISTER_MICPROC(relop2);
         REGISTER_MICPROC(relop3);
@@ -440,8 +440,8 @@ void Interpreter::registerProc(const QByteArray& module, const QByteArray& procN
 {
     const quint32 id = imp->ffiProcs.size();
     imp->ffiProcs.push_back(proc);
-    imp->code.addExternal(Mic::Symbol::getSymbol(module).constData(),
-                          Mic::Symbol::getSymbol(procName).constData(), id);
+    imp->code.addExternal(Mic::Atom::getAtom(module).constData(),
+                          Mic::Atom::getAtom(procName).constData(), id);
 }
 
 bool Interpreter::precompile(Declaration* proc)

@@ -631,11 +631,10 @@ Parser2::~Parser2()
         Symbol::deleteAll(first);
 }
 
-void Parser2::RunParser(const MetaActualList& ma) {
+void Parser2::RunParser(const Import &import) {
 	errors.clear();
 	next();
-    metaActuals = ma;
-    module();
+    module(import);
 }
 
 Declaration*Parser2::takeModule()
@@ -1182,6 +1181,20 @@ void Parser2::TypeDeclaration() {
     }
     d->setType(t);
 
+    if( (t->kind == Type::Pointer && t->getType()->kind == Type::Object) || t->kind == Type::Object )
+    {
+        Type* obj = t;
+        if( obj->kind == Type::Pointer )
+            obj = obj->getType();
+
+        Type* super = obj->getType();
+        if( super->kind == Type::Pointer )
+            super = super->getType();
+        super->decl->hasSubs = true;
+        d->data = QVariant::fromValue(super->decl);
+        subs[super->decl].append(d);
+    }
+
     thisDecl = 0;
     if( !q.second.isEmpty() )
         out->addType(ev->toQuali(t).second,d->pos,t->decl->isPublic(),q, Mil::EmiTypes::Alias);
@@ -1230,7 +1243,7 @@ Type* Parser2::NamedType(Quali* qout,bool allowUnresovedLocal) {
         // this is a reference to the current type declaration.
         Q_ASSERT( d->getType() == 0 );
         if( !typeStack.isEmpty() &&
-                ( typeStack.first()->kind == Type::Pointer && typeStack.last()->kind == Type::Record ||
+                ( (typeStack.first()->kind == Type::Pointer && (typeStack.last()->kind == Type::Record || typeStack.last()->kind == Type::Object)) ||
                   typeStack.last()->kind == Type::Pointer ))
         {
             typeStack.first()->decl = thisDecl;
@@ -1455,7 +1468,7 @@ void Parser2::FieldList() {
             Expression* e = integer();
             if( e )
             {
-                const qint64 i = e->val.toULongLong();
+                const qint64 i = e->val.toLongLong();
                 if( i < 0 || i > 64 )
                     error(tok, "invalid bit size");
                 else
@@ -1478,7 +1491,7 @@ void Parser2::FieldList() {
         Expression* e = integer();
         if( e )
         {
-            const qint64 i = e->val.toULongLong();
+            const qint64 i = e->val.toLongLong();
             if( i < 0 || i > 64 )
                 error(tok, "invalid bit size");
             else
@@ -1786,7 +1799,7 @@ void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
     Declaration* formal = formals[actuals.size()-1];
     Expression* actual = actuals.last();
     if( !paramCompat(formal,actual) ) {
-        // TEST paramCompat(formal,actual);
+        //paramCompat(formal,actual); // TEST
         error(actual->pos.d_row, actual->pos.d_col, "actual argument not compatible with formal parameter");
     }
 }
@@ -2099,7 +2112,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             tok = la;
             res->rhs = expression(0);
             expect(Tok_Rbrack, false, "selector");
-            if( res->rhs && !res->rhs->getType()->isInteger())
+            if( res->rhs && res->rhs->getType() && !res->rhs->getType()->isInteger())
             {
                 error(cur,QString("expecting an index of integer type") );
                 return 0;
@@ -2343,7 +2356,7 @@ DeclList Parser2::toList(Declaration* d)
     return res;
 }
 
-Declaration*Parser2::addDecl(const Token& id, quint8 visi, quint8 mode, bool* doublette)
+Declaration*Parser2::addDecl(const Token& id, quint8 visi, Declaration::Kind mode, bool* doublette)
 {
     bool collision;
     Declaration* d = mdl->addDecl(id.d_val, &collision);
@@ -2360,7 +2373,7 @@ Declaration*Parser2::addDecl(const Token& id, quint8 visi, quint8 mode, bool* do
     return d;
 }
 
-Declaration*Parser2::addDecl(const Parser2::IdentDef& id, quint8 mode, bool* doublette)
+Declaration*Parser2::addDecl(const Parser2::IdentDef& id, Declaration::Kind mode, bool* doublette)
 {
     return addDecl(id.name, id.visi, mode, doublette);
 }
@@ -3517,7 +3530,20 @@ void Parser2::ProcedureDeclaration() {
 			}
             QByteArray binding;
             if( procDecl->typebound )
-                binding = ev->toQuali(procDecl->link->getType()->getType()).second; // receiver is always pointer to T
+            {
+                Type* base = procDecl->link->getType()->getType(); // receiver is always pointer to T
+                Declaration* super = base->decl;
+                if( super )
+                {
+                    super->hasSubs = true;
+                    procDecl->data = QVariant::fromValue(super);
+                    if( !matchFormals(super->getParams(true), procDecl->getParams(true)) || !matchResultType(super->getType(),procDecl->getType()) )
+                        error(procDecl->pos, "formal parameters do not match with the overridden procedure");
+                    if( first )
+                        subs[super].append(procDecl);
+                }
+                binding = ev->toQuali(base).second;
+            }
             out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
                            mdl->getTopScope()->kind == Declaration::Module &&
                            procDecl->visi > 0, kind, binding);
@@ -3767,7 +3793,7 @@ Type* Parser2::FormalType() {
     return t;
 }
 
-void Parser2::module() {
+void Parser2::module(const Import & import) {
     if( la.d_type != Tok_MODULE )
     {
         la.d_sourcePath = scanner->source();
@@ -3795,100 +3821,114 @@ void Parser2::module() {
 	expect(Tok_ident, false, "module");
     m->name = cur.d_val;
 
-    ModuleData md;
-    md.path = scanner->path();
-    md.source = scanner->source();
-    md.path += cur.d_val;
-    if( imp )
-        md.fullName = Token::getSymbol(imp->modulePath(md.path));
-    else
-        md.fullName = Token::getSymbol(md.path.join('/'));
-    md.metaActuals = metaActuals;
+    ModuleData modata;
+    modata.path = import.path;
+    if( modata.path.isEmpty() ) // import is optional parameter
+        modata.path += cur.d_val;
+    modata.source = scanner->source();
+    modata.metaActuals = import.metaActuals;
+
+    if( imp && !import.metaActuals.isEmpty() )
+        modata.suffix = imp->moduleSuffix(import.metaActuals);
+
+    if( !modata.suffix.isEmpty() )
+    {
+        modata.fullName = Token::getSymbol(imp->modulePath(modata.path) + modata.suffix);
+        m->name = Token::getSymbol(m->name + modata.suffix);
+    }else
+        modata.fullName = Token::getSymbol(modata.path.join('/'));
+
+    QString importer = cur.d_sourcePath;
+    RowCol importedAt(cur.d_lineNr, cur.d_colNr);
+    if( import.importer )
+    {
+        importer = import.importer->data.value<ModuleData>().source;
+        importedAt = import.importedAt;
+    }
 
     Mil::MetaParams mps;
     if( FIRST_MetaParams(la.d_type) ) {
-        MetaParamList mp = MetaParams();
-        md.metaParams = mp;
+        modata.metaParams = MetaParams();
 
-        if( !metaActuals.isEmpty() )
+        if( !import.metaActuals.isEmpty() )
         {
-            if( metaActuals.size() != mp.size() )
-                error(cur,"number of actual doesn't meet numer of formal meta parameters");
-            else
-                for( int i = 0; i < mp.size(); i++ )
+            if( import.metaActuals.size() != modata.metaParams.size() )
+            {
+                errors << Error("number of formal and actual meta parameters doesn't match",
+                                    importedAt.d_row, importedAt.d_col, importer);
+            }else
+                for( int i = 0; i < modata.metaParams.size(); i++ )
                 {
-                    Mil::MetaParam m;
-                    m.name = mp[i]->name;
-                    if( metaActuals[i].isConst() && mp[i]->kind != Declaration::ConstDecl ||
-                            !metaActuals[i].isConst() && mp[i]->kind == Declaration::ConstDecl )
-                        error(cur,QString("formal and actual meta parameter %1 not compatible").arg(i+1));
-                    if( metaActuals[i].type->kind == Type::Generic )
+                    Mil::MetaParam mmp;
+                    mmp.name = modata.metaParams[i]->name;
+                    if( (import.metaActuals[i].isConst() && modata.metaParams[i]->kind != Declaration::ConstDecl) ||
+                            (!import.metaActuals[i].isConst() && modata.metaParams[i]->kind == Declaration::ConstDecl) )
                     {
-                        m.isGeneric = true;
-                        m.isConst = mp[i]->kind == Declaration::ConstDecl;
+                        errors << Error(QString("formal and actual meta parameter %1 not compatible").arg(i+1),
+                                        importedAt.d_row, importedAt.d_col, importer);
+                    }
+                    if( true )
+                    {
+                        // we have to always replace the type.
+                        // otherwise the wrong type is created when doing new(T) in the generic, and there
+                        // is a loophole in type checking
+                        if( modata.metaParams[i]->getType() && modata.metaParams[i]->ownstype )
+                            delete modata.metaParams[i]->getType();
+                        modata.metaParams[i]->setType(import.metaActuals[i].type);
+                        modata.metaParams[i]->ownstype = false;
+                    }
+                    if( import.metaActuals[i].type && import.metaActuals[i].type->kind == Type::Generic )
+                    {
+                        mmp.isGeneric = true;
+                        mmp.isConst = modata.metaParams[i]->kind == Declaration::ConstDecl;
                     }else
                     {
-                        m.type = ev->toQuali(mp[i]->getType());
-                        delete mp[i]->getType();
-                        mp[i]->ownstype = false;
-                        if( mp[i]->kind == Declaration::TypeDecl )
+                        mmp.type = ev->toQuali(modata.metaParams[i]->getType());
+                        if( modata.metaParams[i]->kind == Declaration::ConstDecl )
                         {
-                            mp[i]->setType(metaActuals[i].type);
-                        }else if( mp[i]->kind == Declaration::ConstDecl )
-                        {
-                            mp[i]->setType(metaActuals[i].type);
-                            mp[i]->data = metaActuals[i].val;
-                            m.isConst = true;
+                            modata.metaParams[i]->data = import.metaActuals[i].val;
+                            mmp.isConst = true;
                             // TODO: check declaration type as soon as corresponding CONST appears
                         }
                     }
-                    mps << m;
+                    mps << mmp;
                 }
-            if( imp )
-            {
-                md.suffix = imp->moduleSuffix(metaActuals);
-                if( !md.suffix.isEmpty() )
-                {
-                    md.fullName = Token::getSymbol(md.fullName + md.suffix);
-                    m->name = Token::getSymbol(m->name + md.suffix);
-                }
-            }
         }else
         {
-            for( int i = 0; i < mp.size(); i++ )
+            for( int i = 0; i < modata.metaParams.size(); i++ )
             {
                 Mil::MetaParam m;
-                m.name = mp[i]->name;
+                m.name = modata.metaParams[i]->name;
                 m.isGeneric = true;
-                m.isConst = mp[i]->kind == Declaration::ConstDecl;
+                m.isConst = modata.metaParams[i]->kind == Declaration::ConstDecl;
                 mps << m;
             }
         }
-    }else if( !metaActuals.isEmpty() )
-        error(cur,"cannot instantiate a non generic module");
+    }else if( !import.metaActuals.isEmpty() )
+        errors << Error("cannot instantiate a non generic module",importedAt.d_row, importedAt.d_col, importer);
 
-    m->data = QVariant::fromValue(md);
+    m->data = QVariant::fromValue(modata);
 
     if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
 	}
-    out->beginModule(md.fullName,md.source,m->pos); // TODO: meta params in MIL
+    out->beginModule(modata.fullName,modata.source,m->pos); // TODO: meta params in MIL
 
     // call "out" here for all non-generic type and const
-    for( int i = 0; i < metaActuals.size(); i++ )
+    for( int i = 0; i < import.metaActuals.size(); i++ )
     {
-        const Value& ma = metaActuals[i];
-        if( ma.type->kind == Type::Generic )
+        const Value& ma = import.metaActuals[i];
+        if( ma.type && ma.type->kind == Type::Generic )
             continue;
         if( ma.mode == Value::Const )
         {
-            if( i < md.metaParams.size() )
-                out->addConst(ev->toQuali(ma.type), md.metaParams[i]->name, md.metaParams[i]->pos, ma.val );
-        }else if( ma.type->isSimple() )
+            if( i < modata.metaParams.size() )
+                out->addConst(ev->toQuali(ma.type), modata.metaParams[i]->name, modata.metaParams[i]->pos, ma.val );
+        }else if( ma.type && ma.type->isSimple() )
         {
-            if( i < md.metaParams.size() )
-                out->addType(md.metaParams[i]->name,md.metaParams[i]->pos, false,ev->toQuali(ma.type),Mil::EmiTypes::Alias);
-        }else
+            if( i < modata.metaParams.size() )
+                out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(ma.type),Mil::EmiTypes::Alias);
+        }else if( ma.type )
             emitType(ma.type);  // TODO: this doesn't look right; what name should we use?
     }
 
@@ -3971,7 +4011,8 @@ void Parser2::import() {
 	if( FIRST_MetaActuals(la.d_type) ) {
         // inlined MetaActuals();
         expect(Tok_Lpar, false, "MetaActuals");
-        if( !ev->evaluate(ConstExpression(0)) )
+        Expression* e = ConstExpression(0);
+        if( e && !ev->evaluate(e) )
             error(cur, ev->getErr());
         Value v = ev->pop();
         import.metaActuals << v;
@@ -3989,22 +4030,24 @@ void Parser2::import() {
         expect(Tok_Rpar, false, "MetaActuals");
     }
 
-    if( !doublette )
-        importDecl->data = QVariant::fromValue(import);
-
     if( imp )
     {
         Declaration* mod = imp->loadModule(import);
         if( mod && !mod->invalid )
         {
             // loadModule returns the module decl; we just need the list of module elements:
+            mod->hasSubs = true; // the module is used by at least this one
             importDecl->link = mod->link;
+            import.resolved = mod;
             ModuleData md = mod->data.value<ModuleData>();
             out->addImport(md.fullName, localName.toRowCol());
             markRef(mod, localName.toRowCol());
         }
     }else
         out->addImport(Token::getSymbol(import.path.join('/')), localName.toRowCol());
+
+    if( !doublette )
+        importDecl->data = QVariant::fromValue(import);
 }
 
 bool Parser2::isUnique( const MetaParamList& l, const Declaration* m)

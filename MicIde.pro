@@ -28,6 +28,7 @@ DEFINES += _MONO_ENGINE_EXT_
 
 SOURCES +=  MicProject2.cpp \
     MicHighlighter.cpp \
+    MicIde.cpp \
     ../GuiTools/CodeEditor.cpp \
     ../GuiTools/DocSelector.cpp \
     ../GuiTools/DocTabWidget.cpp \
@@ -38,6 +39,7 @@ SOURCES +=  MicProject2.cpp \
 
 HEADERS  += MicProject2.h \
     MicHighlighter.h \
+    MicIde.h \
     ../GuiTools/CodeEditor.h \
     ../GuiTools/DocSelector.h \
     ../GuiTools/DocTabWidget.h \
@@ -61,6 +63,6 @@ CONFIG(debug, debug|release) {
     QMAKE_CXXFLAGS += -Wno-reorder -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable
 }
 
-# TODO RESOURCES += ObxIde2.qrc
+RESOURCES += MicIde.qrc
 
 

@@ -35,7 +35,6 @@ namespace Mic {
 		virtual Token next() = 0;
 		virtual Token peek(int offset) = 0;
         virtual QString source() const = 0;
-        virtual QByteArrayList path() const { return QByteArrayList(); } // prefix without module name
 	};
 
     class Parser2 {
@@ -43,7 +42,7 @@ namespace Mic {
         Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* = 0, bool xref = false);
         ~Parser2();
 
-        void RunParser(const MetaActualList& = MetaActualList());
+        void RunParser( const Import& import = Import());
         Declaration* takeModule(); // get module declaration and take ownership (otherwise deleted by parser)
 		struct Error {
 		    QString msg;
@@ -136,7 +135,7 @@ namespace Mic {
         Type* ReturnType();
 		void FPSection();
         Type* FormalType();
-		void module();
+        void module(const Import &import);
 		void ImportList();
 		void import();
 
@@ -164,8 +163,8 @@ namespace Mic {
         Expression* maybeQualident();
         Declaration* resolveQualident(Quali* = 0, bool allowUnresovedLocal = false);
         static DeclList toList(Declaration*);
-        Declaration* addDecl(const Token& id, quint8 visi, quint8 mode, bool* doublette = 0);
-        Declaration* addDecl(const IdentDef& id, quint8 mode, bool* doublette = 0);
+        Declaration* addDecl(const Token& id, quint8 visi, Declaration::Kind mode, bool* doublette = 0);
+        Declaration* addDecl(const IdentDef& id, Declaration::Kind mode, bool* doublette = 0);
         void resolveDeferreds();
         Expression* toExpr(Declaration* d, const RowCol&);
         void emitType(Type*);
@@ -213,7 +212,6 @@ namespace Mic {
         Labels labels;
         typedef QList<QPair<Depth,Token> > Gotos;
         Gotos gotos;
-        MetaActualList metaActuals;
         QByteArray self, SELF;
         Symbol* first;
         Symbol* last;

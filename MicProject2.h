@@ -59,7 +59,7 @@ namespace Mic
             QByteArray d_name;
             QByteArray d_cache; // unsafed file contents
             Declaration* d_mod;
-            File():d_group(0){}
+            File():d_group(0),d_mod(0){}
         };
         typedef QExplicitlySharedDataPointer<File> FileRef;
 
@@ -85,8 +85,9 @@ namespace Mic
         typedef QPair<QByteArray,QByteArray> ModProc; // module.procedure or just module
 
         explicit Project2(QObject *parent = 0);
+        ~Project2();
 
-        void clear();
+        void clear(bool all = true);
 
         void createNew();
         bool initializeFromDir( const QDir&, bool recursive = false );
@@ -120,15 +121,18 @@ namespace Mic
 
         const FileHash& getFiles() const { return d_files; }
         const FileGroups& getFileGroups() const { return d_groups; }
-        FileGroup getRootFileGroup() const;
-        FileGroup findFileGroup(const VirtualPath& package ) const;
+        const FileGroup* getRootFileGroup() const;
+        const FileGroup* findFileGroup(const VirtualPath& package ) const;
         QList<Declaration*> getModulesToGenerate(bool includeTemplates=false) const; // in exec/depencency order
         File* findFile( const QString& file ) const; // arg can be a path or module name
+        Declaration* findModule(const QByteArray& name) const;
 
         Symbol *findSymbolBySourcePos(const QString& file, quint32 line, quint16 col, Declaration ** = 0 ) const;
         Symbol *findSymbolBySourcePos(Declaration* module, quint32 line, quint16 col, Declaration** scopePtr) const;
+        Symbol* getSymbolsOfModule(Declaration* module) const;
         typedef QList<QPair<Declaration*, SymList> > UsageByMod;
         UsageByMod getUsage( Declaration* ) const;
+        DeclList getSubs(Declaration* d) const;
 
         quint32 getSloc() const;
 
@@ -167,13 +171,16 @@ namespace Mic
         const ModuleSlot* find(const QByteArray& ) const;
         const ModuleSlot* find(Declaration*) const;
         File* toFile(const Mic::Import& imp);
+        void parseLib(const QString&);
 
     private:
         AstModel d_mdl;
         Mic::MilLoader2 loader;
         FileHash d_files;
+        QList<File*> d_libs; // temporary solution
         typedef QList<ModuleSlot> Modules;
         Modules modules;
+        QHash<Declaration*, DeclList> subs;
         FileGroups d_groups;
         QString d_filePath; // path where the project file was loaded from or saved to
         QStringList d_suffixes;
@@ -184,5 +191,7 @@ namespace Mic
         bool d_useBuiltInOakwood;
     };
 }
+
+Q_DECLARE_METATYPE(Mic::Project2::File*)
 
 #endif // OBXPROJECT_H
