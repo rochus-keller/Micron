@@ -46,6 +46,7 @@ namespace Mic
     class Project2;
     class Declaration;
     class Type;
+    class Symbol;
     using Mono::DebuggerEvent;
 
     class Ide : public QMainWindow
@@ -98,7 +99,7 @@ namespace Mic
         void createModsMenu( Editor* );
         void addDebugMenu(Gui::AutoMenu * pop);
         void fillXref();
-        void fillXref(Declaration*);
+        void fillXref(Symbol* hit, Declaration *module);
         void fillStack();
         void fillLocals();
         void printLocalVal( QTreeWidgetItem* item, Type* type, int depth );
@@ -110,7 +111,7 @@ namespace Mic
         bool checkEngine(bool withFastasm = false);
         quint32 getMonoModule( Declaration* ); // returns typeId
         bool updateBreakpoint(Declaration*, quint32 line, bool add );
-        void syncEditorMarks(Declaration* selected);
+        void syncEditorMarks(Symbol* selected, Declaration* module);
         void syncModView(Declaration* decl);
 
     protected slots:

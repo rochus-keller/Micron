@@ -139,7 +139,7 @@ public:
             QTextCursor c( document()->findBlockByNumber( qMax(int(s->pos.d_row - 1),0)) );
             c.setPosition( c.position() + qMax(int(s->pos.d_col - 1), 0) );
             int pos = c.position();
-            c.setPosition( pos + ident->name.size(), QTextCursor::KeepAnchor );
+            c.setPosition( pos + s->len, QTextCursor::KeepAnchor );
 
             QTextEdit::ExtraSelection sel;
             sel.format = format;
@@ -2078,6 +2078,8 @@ static const char* roleName( Symbol* e )
         return "decl";
     case Symbol::Lval:
         return "lhs";
+    case Symbol::End:
+        return "end";
     default:
         break;
     }
@@ -2099,12 +2101,15 @@ static Declaration* adjustForModIdx( Declaration* sym )
     return 0;
 }
 
-void Ide::syncEditorMarks(Declaration* selected)
+void Ide::syncEditorMarks(Symbol* selected, Declaration* module)
 {
+    if( selected == 0 || selected->decl == 0 )
+        return;
     Editor* edit = static_cast<Editor*>( d_tab->getCurrentTab() );
     if( edit == 0 )
         return;
-    Symbol* syms = d_pro->getSymbolsOfModule(selected->getModule());
+
+    Symbol* syms = d_pro->getSymbolsOfModule(module);
     if( syms == 0 )
     {
         edit->markNonTerms(SymList());
@@ -2115,7 +2120,8 @@ void Ide::syncEditorMarks(Declaration* selected)
     SymList marks;
     while( s )
     {
-        if( s->decl == selected )
+        // mark all symbols which point to the same declaration as the one currently selected
+        if( s->decl == selected->decl )
             marks << s;
         s = s->next;
         if( s == syms )
@@ -2147,17 +2153,21 @@ void Ide::fillXref()
         d_xrefTitle->clear();
         return;
     }
+    Project2::File* f = d_pro->findFile(edit->getPath());
+    if( f == 0 || f->d_mod == 0 )
+        return;
+
     int line, col;
     edit->getCursorPosition( &line, &col );
     line += 1;
     col += 1;
     Declaration* scope = 0;
-    Symbol* hit = d_pro->findSymbolBySourcePos(edit->getPath(), line, col, &scope);
+    Symbol* hit = d_pro->findSymbolBySourcePos(f->d_mod, line, col, &scope);
     if( hit && hit->decl )
     {
-        fillXref(hit->decl);
+        fillXref(hit, f->d_mod);
         syncModView(hit->decl);
-        syncEditorMarks(hit->decl);
+        syncEditorMarks(hit, f->d_mod);
         fillHier(hit->decl);
     }else
         edit->markNonTerms(SymList());
@@ -2171,45 +2181,44 @@ static inline QString declKindName(Declaration* decl)
         return "Field";
     case Declaration::VarDecl:
     case Declaration::LocalDecl:
-        return "Variable";
+        return "Var";
     case Declaration::ParamDecl:
-        return "Parameter";
+        return "Param";
     case Declaration::TypeDecl:
         return "Type";
     case Declaration::ConstDecl:
         if( decl->getType() && decl->getType()->kind == Type::ConstEnum )
-            return "Enumeration";
+            return "Enum";
         else
             return "Const";
     case Declaration::Import:
         return "Import";
     case Declaration::Builtin:
-        return "BuiltIn";
+        return "Builtin";
     case Declaration::Procedure:
-        return "Procedure";
+        return "Proc";
     case Declaration::Module:
         return "Module";
+    default:
+        break;
     }
     return "???";
 }
 
-void Ide::fillXref(Declaration *decl)
+void Ide::fillXref(Symbol* hit, Declaration* module)
 {
     d_xref->clear();
     d_xrefTitle->clear();
 
-    if( decl == 0 )
+    if( hit == 0 || hit->decl == 0 )
         return;
 
-    Project2::UsageByMod usage = d_pro->getUsage(decl);
+    Project2::UsageByMod usage = d_pro->getUsage(hit->decl);
 
-    d_xrefTitle->setText(decl->name);
-    const QString type = declKindName(decl);
+    d_xrefTitle->setText(QString("%1 '%2'").arg(declKindName(hit->decl)).arg(hit->decl->name.constData()));
 
     QFont f = d_xref->font();
     f.setBold(true);
-
-    Declaration* module = decl->getModule();
 
     QTreeWidgetItem* black = 0;
     for( int i = 0; i < usage.size(); i++ )
@@ -2228,7 +2237,7 @@ void Ide::fillXref(Declaration *decl)
                         .arg(modName)
                         .arg(s->pos.d_row).arg(s->pos.d_col)
                         .arg( roleName(s) ));
-            if( s->decl == decl )
+            if( s == hit )
             {
                 item->setFont(0,f);
                 black = item;
@@ -2765,8 +2774,10 @@ void Ide::onXrefDblClicked()
     {
         Symbol* e = item->data(0,Qt::UserRole).value<Symbol*>();
         Q_ASSERT( e );
+        Declaration* m = item->data(1,Qt::UserRole).value<Declaration*>();
+        Q_ASSERT( m );
         d_lock3 = true;
-        showEditor( e->decl->getModule()->data.value<ModuleData>().source, e->pos.d_row, e->pos.d_col, false, true );
+        showEditor( m->data.value<ModuleData>().source, e->pos.d_row, e->pos.d_col, false, true );
         d_lock3 = false;
     }
 }
@@ -3360,7 +3371,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.1");
+    a.setApplicationVersion("0.1.1");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

@@ -201,7 +201,7 @@ void Highlighter::highlightBlock(const QString& text)
             f = formatForCategory(C_Kw);
         }else if( t.d_type == Tok_ident )
         {
-            if( d_builtins.contains(t.d_val) )
+            if( (i == 0 || tokens[i-1].d_type != Tok_Dot) && d_builtins.contains(t.d_val) ) // x.dispose is not a builtin
                 f = formatForCategory(C_Type);
             else
                 f = formatForCategory(C_Ident);

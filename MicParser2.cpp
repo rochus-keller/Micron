@@ -652,21 +652,28 @@ void Parser2::markDecl(Declaration* d)
     s->kind = Symbol::Decl;
     s->decl = d;
     s->pos = d->pos;
+    Q_ASSERT(s->pos.isValid());
     s->len = d->name.size();
     xref[d].append(s);
     last->next = s;
     last = last->next;
 }
 
-Symbol* Parser2::markRef(Declaration* d, const RowCol& pos)
+Symbol* Parser2::markRef(Declaration* d, const RowCol& pos, quint8 what)
 {
-    if( first == 0 )
+    if( first == 0 || d == 0 )
         return 0;
     Symbol* s = new Symbol();
-    s->kind = Symbol::DeclRef;
+    if( what )
+        s->kind = what;
+    else
+        s->kind = Symbol::DeclRef;
     s->decl = d;
     s->pos = pos;
+    Q_ASSERT(s->pos.isValid());
     s->len = d->name.size();
+    if( d->kind == Declaration::Module )
+        s->len -= d->data.value<ModuleData>().suffix.size();
     xref[d].append(s);
     last->next = s;
     last = last->next;
@@ -1102,11 +1109,11 @@ Parser2::Quali Parser2::qualident() {
     Quali res;
 	if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Dot )  ) {
 		expect(Tok_ident, false, "qualident");
-        res.first = cur.d_val;
+        res.first = cur;
 		expect(Tok_Dot, false, "qualident");
 	}
 	expect(Tok_ident, false, "qualident");
-    res.second = cur.d_val;
+    res.second = cur;
     return res;
 }
 
@@ -1150,6 +1157,14 @@ Expression* Parser2::ConstExpression(Type* hint) {
     if( !res->isConst() )
         error(tok, QString("expression is not constant"));
     return res;
+}
+
+static inline Mil::Quali toMilQuali(const QPair<Token,Token>& in)
+{
+    Mil::Quali out;
+    out.first = in.first.d_val;
+    out.second = in.second.d_val;
+    return out;
 }
 
 void Parser2::TypeDeclaration() {
@@ -1196,8 +1211,8 @@ void Parser2::TypeDeclaration() {
     }
 
     thisDecl = 0;
-    if( !q.second.isEmpty() )
-        out->addType(ev->toQuali(t).second,d->pos,t->decl->isPublic(),q, Mil::EmiTypes::Alias);
+    if( !q.second.d_val.isEmpty() )
+        out->addType(ev->toQuali(t).second,d->pos,t->decl->isPublic(),toMilQuali(q), Mil::EmiTypes::Alias);
     else
         emitType(t);
 }
@@ -1546,7 +1561,7 @@ Type* Parser2::PointerType() {
         if( t == 0 )
         {
             res->setType(mdl->getType(Type::Undefined));
-            if( q.first.isEmpty() )
+            if( q.first.d_val.isEmpty() )
             {
                 // we're looking for a local declaration
                 res->deferred = true;
@@ -2039,9 +2054,13 @@ Expression* Parser2::designator(bool needsLvalue) {
 
     bool isLvalue = true;
 
-    Expression* res = maybeQualident();
+    Symbol* s = 0;
+    Expression* res = maybeQualident(&s);
     if( !res )
         return 0;
+
+    if( s && needsLvalue )
+        s->kind = Symbol::Lval;
 
     // TODO: check res is a variable
     if( !res->isLvalue() )
@@ -2076,7 +2095,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                     return 0;
                 }else
                 {    
-                    markRef(field, tok.toRowCol());
+                    markRef(field, cur.toRowCol(), needsLvalue ? Symbol::Lval : 0);
 
                     Expression* tmp = Expression::create(field->kind == Declaration::Procedure ?
                                                              Expression::MethDecl : Expression::Select, tok.toRowCol() );
@@ -2251,8 +2270,9 @@ Expression* Parser2::designator(bool needsLvalue) {
     return res;
 }
 
-Expression* Parser2::maybeQualident()
+Expression* Parser2::maybeQualident(Symbol** s)
 {
+    Q_ASSERT(s);
     expect(Tok_ident, false, "designator");
     Token tok = cur;
 
@@ -2285,7 +2305,7 @@ Expression* Parser2::maybeQualident()
                 visi = d->visi;
             }
         }
-        markRef(d, tok.toRowCol());
+        *s = markRef(d, tok.toRowCol());
         Expression* res = toExpr(d, tok.toRowCol());
         if( res )
             res->visi = visi;
@@ -2303,42 +2323,45 @@ Declaration* Parser2::resolveQualident(Parser2::Quali* qq, bool allowUnresovedLo
     Quali q = qualident();
     if( qq )
         *qq = q;
-    if( !q.first.isEmpty() )
+    if( !q.first.d_val.isEmpty() )
     {
         // a full quali: import.decl
-        Declaration* import = mdl->findDecl(q.first);
+        Declaration* import = mdl->findDecl(q.first.d_val);
         if( import == 0 )
         {
-            error(tok, QString("cannot find import declaration: %1").arg(q.first.constData()) );
+            error(tok, QString("cannot find import declaration: %1").arg(q.first.d_val.constData()) );
             return 0;
         }else if( import->kind != Declaration::Import )
         {
-            error(tok, QString("identifier doesn't refer to an import declaration: %1").arg(q.first.constData()) );
+            error(tok, QString("identifier doesn't refer to an import declaration: %1").arg(q.first.d_val.constData()) );
             return 0;
         }
-        Declaration* decl = mdl->findDecl(import, q.second);
+        markRef(import, q.first.toRowCol());
+        Declaration* decl = mdl->findDecl(import, q.second.d_val);
         if( decl == 0 )
         {
             error(tok, QString("cannot find declaration '%1' in module '%2'").
-                  arg(q.second.constData()).arg(q.first.constData()) );
+                  arg(q.second.d_val.constData()).arg(q.first.d_val.constData()) );
             return 0;
         }
         if( decl->visi == Declaration::Private )
         {
             error(cur,QString("cannot access private declaration '%1' from module '%2'").
-                  arg(q.second.constData()).arg(q.first.constData()) );
+                  arg(q.second.d_val.constData()).arg(q.first.d_val.constData()) );
             return 0;
         }
+        markRef(decl, q.second.toRowCol());
         return decl;
     }else
     {
         // a local decl
-        Declaration* d = mdl->findDecl(q.second);
+        Declaration* d = mdl->findDecl(q.second.d_val);
         if( d == 0 && !allowUnresovedLocal )
         {
-            error(tok, QString("cannot find declaration '%1'").arg(q.second.constData()) );
+            error(tok, QString("cannot find declaration '%1'").arg(q.second.d_val.constData()) );
             return 0;
         }
+        markRef(d, q.second.toRowCol());
         return d;
     }
 }
@@ -2356,7 +2379,7 @@ DeclList Parser2::toList(Declaration* d)
     return res;
 }
 
-Declaration*Parser2::addDecl(const Token& id, quint8 visi, Declaration::Kind mode, bool* doublette)
+Declaration*Parser2::addDecl(const Token& id, quint8 visi, Declaration::Kind mode, bool* doublette, bool mark)
 {
     bool collision;
     Declaration* d = mdl->addDecl(id.d_val, &collision);
@@ -2367,15 +2390,16 @@ Declaration*Parser2::addDecl(const Token& id, quint8 visi, Declaration::Kind mod
         d->kind = mode;
         d->visi = visi;
         d->pos = id.toRowCol();
-        markDecl(d);
+        if( mark )
+            markDecl(d);
     }else
         error(id, QString("name is not unique: %1").arg(id.d_val.constData()));
     return d;
 }
 
-Declaration*Parser2::addDecl(const Parser2::IdentDef& id, Declaration::Kind mode, bool* doublette)
+Declaration*Parser2::addDecl(const Parser2::IdentDef& id, Declaration::Kind mode, bool* doublette, bool mark)
 {
-    return addDecl(id.name, id.visi, mode, doublette);
+    return addDecl(id.name, id.visi, mode, doublette, mark);
 }
 
 void Parser2::resolveDeferreds()
@@ -2390,6 +2414,7 @@ void Parser2::resolveDeferreds()
             error(deferred[i].second, QString("invalid type: %1").arg(deferred[i].second.d_val.constData()) );
         }else
             deferred[i].first->setType(d->getType());
+        markRef(d, deferred[i].second.toRowCol());
     }
     deferred.clear();
 }
@@ -3219,6 +3244,8 @@ void Parser2::ForStatement() {
         error(cur,"control variable must be of integer type");
         return;
     }
+    markRef(idxvar, cur.toRowCol());
+
     // TODO: support enums as well
     expect(Tok_ColonEq, false, "ForStatement");
     Token tok = cur;
@@ -3562,7 +3589,9 @@ void Parser2::ProcedureDeclaration() {
             expect(Tok_ident, false, "ProcedureBody");
             if( procDecl->name.constData() != cur.d_val.constData() )
                 error(cur, QString("name after END differs from procedure name") );
-        }  else
+            else
+                markRef(procDecl, cur.toRowCol(), Symbol::End);
+        }else
 			invalid("ProcedureDeclaration");
         mdl->closeScope();
         ev->popCurProc();
@@ -3589,6 +3618,7 @@ Parser2::NameAndType Parser2::Receiver() {
     }else
         res.t = d->getType(); // res is an object or pointer to object
     expect(Tok_Rpar, false, "Receiver");
+    markRef(d, type.toRowCol());
     return res;
 }
 
@@ -3609,6 +3639,7 @@ Parser2::NameAndType Parser2::Receiver2()
         return res;
     }else
         res.t = d->getType(); // res is an object or pointer to object
+    markRef(d, type.toRowCol());
     expect(Tok_Dot, false, "Receiver");
     return res;
 }
@@ -3801,25 +3832,29 @@ void Parser2::module(const Import & import) {
         error(la,"not a Micron module");
         return;
     }
-    Declaration* m = new Declaration();
-    m->kind = Declaration::Module;
+
+    Declaration* modecl = new Declaration();
+    modecl->kind = Declaration::Module;
     if( thisMod )
         delete thisMod;
-    thisMod = m;
-    mdl->openScope(m);
+    thisMod = modecl;
+
+    expect(Tok_MODULE, true, "module");
+    expect(Tok_ident, false, "module");
+    const QByteArray unsuffixedName = cur.d_val;
+    modecl->name = cur.d_val;
+    modecl->pos = cur.toRowCol();
+
+    mdl->openScope(modecl);
 
     if( first )
     {
-        first->decl = m;
+        first->decl = modecl;
         first->kind = Symbol::Module;
-        first->pos = m->pos;
-        first->len = m->name.size();
+        first->pos = modecl->pos;
+        first->len = modecl->name.size();
     }
-    markDecl(m);
-
-    expect(Tok_MODULE, true, "module");
-	expect(Tok_ident, false, "module");
-    m->name = cur.d_val;
+    markDecl(modecl);
 
     ModuleData modata;
     modata.path = import.path;
@@ -3834,7 +3869,7 @@ void Parser2::module(const Import & import) {
     if( !modata.suffix.isEmpty() )
     {
         modata.fullName = Token::getSymbol(imp->modulePath(modata.path) + modata.suffix);
-        m->name = Token::getSymbol(m->name + modata.suffix);
+        modecl->name = Token::getSymbol(modecl->name + modata.suffix);
     }else
         modata.fullName = Token::getSymbol(modata.path.join('/'));
 
@@ -3907,12 +3942,12 @@ void Parser2::module(const Import & import) {
     }else if( !import.metaActuals.isEmpty() )
         errors << Error("cannot instantiate a non generic module",importedAt.d_row, importedAt.d_col, importer);
 
-    m->data = QVariant::fromValue(modata);
+    modecl->data = QVariant::fromValue(modata);
 
     if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
 	}
-    out->beginModule(modata.fullName,modata.source,m->pos); // TODO: meta params in MIL
+    out->beginModule(modata.fullName,modata.source,modecl->pos); // TODO: meta params in MIL
 
     // call "out" here for all non-generic type and const
     for( int i = 0; i < import.metaActuals.size(); i++ )
@@ -3958,6 +3993,10 @@ void Parser2::module(const Import & import) {
 	expect(Tok_END, true, "module");
     out->endModule(la.toRowCol());
     expect(Tok_ident, false, "module");
+    if( cur.d_val.constData() != unsuffixedName.constData() )
+        error(cur, "name after end of module must be the same as the module name");
+    else
+        markRef(modecl, cur.toRowCol(), Symbol::End);
 	if( la.d_type == Tok_Dot ) {
 		expect(Tok_Dot, false, "module");
 	}
@@ -3996,11 +4035,17 @@ void Parser2::import() {
 		expect(Tok_ident, false, "import");
         path << cur;
     }
+
+    const bool hasAlias = localName.d_type != 0;
     if( localName.d_type == 0 )
+        // import b
         localName = path.last();
+    //else
+        // import a := b
 
     bool doublette;
-    Declaration* importDecl = addDecl(localName, 0, Declaration::Import,&doublette);
+    Declaration* importDecl = addDecl(localName, 0, Declaration::Import,&doublette, false);
+    markDecl(importDecl);
 
     Import import;
     import.importer = thisMod;
@@ -4041,7 +4086,8 @@ void Parser2::import() {
             import.resolved = mod;
             ModuleData md = mod->data.value<ModuleData>();
             out->addImport(md.fullName, localName.toRowCol());
-            markRef(mod, localName.toRowCol());
+            if(hasAlias)
+                markRef(mod, path.last().toRowCol());
         }
     }else
         out->addImport(Token::getSymbol(import.path.join('/')), localName.toRowCol());

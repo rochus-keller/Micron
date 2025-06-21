@@ -290,19 +290,19 @@ Symbol* Project2::findSymbolBySourcePos(const QString& file, quint32 line, quint
     return findSymbolBySourcePos(f->d_mod,line,col, scopePtr);
 }
 
-Symbol*Project2::findSymbolBySourcePos(Declaration *m, quint32 line, quint16 col, Declaration **scopePtr) const
+Symbol*Project2::findSymbolBySourcePos(Declaration *module, quint32 line, quint16 col, Declaration **scopePtr) const
 {
-    Q_ASSERT(m && m->kind == Declaration::Module);
-    const ModuleSlot* module = find(m);
-    if( module == 0 || module->xref.syms == 0 )
+    Q_ASSERT(module && module->kind == Declaration::Module);
+    const ModuleSlot* modslot = find(module);
+    if( modslot == 0 || modslot->xref.syms == 0 )
         return 0;
-    Symbol* s = module->xref.syms;
+    Symbol* s = modslot->xref.syms;
     do
     {
         if( line == s->pos.d_row && col >= s->pos.d_col && col <= s->pos.d_col + s->len )
             return s;
         s = s->next;
-    }while( s && s != module->xref.syms );
+    }while( s && s != modslot->xref.syms );
     return 0;
 }
 

@@ -278,7 +278,7 @@ namespace Mic
     class Symbol
     {
     public:
-        enum Kind { Invalid, Module, Decl, DeclRef, Lval };
+        enum Kind { Invalid, End, Module, Decl, DeclRef, Lval };
         quint8 kind;
         quint8 len;
         RowCol pos;

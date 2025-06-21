@@ -59,7 +59,7 @@ namespace Mic {
         Expression* number();
         Expression* integer();
 
-        typedef QPair<QByteArray,QByteArray> Quali;
+        typedef QPair<Token,Token> Quali;
         Quali qualident();
         struct IdentDef {
             Token name;
@@ -160,11 +160,11 @@ namespace Mic {
         bool sameType(Type* lhs, Type* rhs) const;
         bool equalTypes(Type* lhs, Type* rhs) const;
         void ForwardDeclaration();
-        Expression* maybeQualident();
+        Expression* maybeQualident(Symbol **s);
         Declaration* resolveQualident(Quali* = 0, bool allowUnresovedLocal = false);
         static DeclList toList(Declaration*);
-        Declaration* addDecl(const Token& id, quint8 visi, Declaration::Kind mode, bool* doublette = 0);
-        Declaration* addDecl(const IdentDef& id, Declaration::Kind mode, bool* doublette = 0);
+        Declaration* addDecl(const Token& id, quint8 visi, Declaration::Kind mode, bool* doublette = 0, bool mark = true);
+        Declaration* addDecl(const IdentDef& id, Declaration::Kind mode, bool* doublette = 0, bool mark = true);
         void resolveDeferreds();
         Expression* toExpr(Declaration* d, const RowCol&);
         void emitType(Type*);
@@ -182,7 +182,7 @@ namespace Mic {
         Mil::Emitter& line(const RowCol&);
         Mil::Emitter& line(const Token&);
         void markDecl(Declaration* d);
-        Symbol* markRef(Declaration* d, const RowCol& pos);
+        Symbol* markRef(Declaration* d, const RowCol& pos, quint8 what = 0);
 
     private:
         AstModel* mdl;
