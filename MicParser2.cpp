@@ -644,10 +644,10 @@ Declaration*Parser2::takeModule()
     return res;
 }
 
-void Parser2::markDecl(Declaration* d)
+Symbol* Parser2::markDecl(Declaration* d)
 {
     if( first == 0 )
-        return;
+        return 0;
     Symbol* s = new Symbol();
     s->kind = Symbol::Decl;
     s->decl = d;
@@ -657,6 +657,7 @@ void Parser2::markDecl(Declaration* d)
     xref[d].append(s);
     last->next = s;
     last = last->next;
+    return s;
 }
 
 Symbol* Parser2::markRef(Declaration* d, const RowCol& pos, quint8 what)
@@ -4086,8 +4087,18 @@ void Parser2::import() {
             import.resolved = mod;
             ModuleData md = mod->data.value<ModuleData>();
             out->addImport(md.fullName, localName.toRowCol());
+#if 0
             if(hasAlias)
                 markRef(mod, path.last().toRowCol());
+#else
+            // Take care that each import of a module is visible in the xref even if there is no alias
+            Symbol* sym = markRef(mod, path.last().toRowCol());
+            if(!hasAlias)
+            {
+                sym->len = 0;
+                importDecl->anonymous = true;
+            }
+#endif
         }
     }else
         out->addImport(Token::getSymbol(import.path.join('/')), localName.toRowCol());

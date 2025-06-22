@@ -1380,7 +1380,9 @@ void Ide::onTabChanged()
 
 void Ide::onTabClosing(int i)
 {
-    d_pro->findFile(d_tab->getDoc(i).toString())->d_cache.clear();
+    Project2::File* f = d_pro->findFile(d_tab->getDoc(i).toString());
+    if( f ) // zero for oakwoods
+        f->d_cache.clear();
 }
 
 void Ide::onEditorChanged()
@@ -2057,7 +2059,7 @@ void Ide::addDebugMenu(Gui::AutoMenu* pop)
 
 }
 
-static bool sortExList( const Symbol* lhs, Symbol* rhs )
+static bool sortExList( const Symbol* lhs, const Symbol* rhs )
 {
     Declaration* lm = lhs->decl;
     Declaration* rm = rhs->decl;
@@ -2067,6 +2069,16 @@ static bool sortExList( const Symbol* lhs, Symbol* rhs )
     const quint32 rl = rhs->pos.packed();
 
     return ln < rn || (!(rn < ln) && ll < rl);
+}
+
+static bool sortUsageByMod( const QPair<Declaration*, SymList>& lhs, const QPair<Declaration*, SymList>& rhs )
+{
+    Declaration* lm = lhs.first;
+    Declaration* rm = rhs.first;
+    const QByteArray ln = lm ? lm->name : QByteArray();
+    const QByteArray rn = rm ? rm->name : QByteArray();
+
+    return ln < rn;
 }
 
 static const char* roleName( Symbol* e )
@@ -2144,35 +2156,6 @@ void Ide::syncModView(Declaration* decl)
     }
 }
 
-void Ide::fillXref()
-{
-    Editor* edit = static_cast<Editor*>( d_tab->getCurrentTab() );
-    if( edit == 0 )
-    {
-        d_xref->clear();
-        d_xrefTitle->clear();
-        return;
-    }
-    Project2::File* f = d_pro->findFile(edit->getPath());
-    if( f == 0 || f->d_mod == 0 )
-        return;
-
-    int line, col;
-    edit->getCursorPosition( &line, &col );
-    line += 1;
-    col += 1;
-    Declaration* scope = 0;
-    Symbol* hit = d_pro->findSymbolBySourcePos(f->d_mod, line, col, &scope);
-    if( hit && hit->decl )
-    {
-        fillXref(hit, f->d_mod);
-        syncModView(hit->decl);
-        syncEditorMarks(hit, f->d_mod);
-        fillHier(hit->decl);
-    }else
-        edit->markNonTerms(SymList());
-}
-
 static inline QString declKindName(Declaration* decl)
 {
     switch( decl->kind )
@@ -2205,22 +2188,63 @@ static inline QString declKindName(Declaration* decl)
     return "???";
 }
 
-void Ide::fillXref(Symbol* hit, Declaration* module)
+void Ide::fillXref()
 {
-    d_xref->clear();
-    d_xrefTitle->clear();
-
-    if( hit == 0 || hit->decl == 0 )
+    Editor* edit = static_cast<Editor*>( d_tab->getCurrentTab() );
+    if( edit == 0 )
+    {
+        d_xref->clear();
+        d_xrefTitle->clear();
+        return;
+    }
+    Project2::File* f = d_pro->findFile(edit->getPath());
+    if( f == 0 || f->d_mod == 0 )
         return;
 
-    Project2::UsageByMod usage = d_pro->getUsage(hit->decl);
+    int line, col;
+    edit->getCursorPosition( &line, &col );
+    line += 1;
+    col += 1;
+    Declaration* scope = 0;
+    Symbol* hit = d_pro->findSymbolBySourcePos(f->d_mod, line, col, &scope);
+    if( hit && hit->decl )
+    {
+        d_xref->clear();
+        d_xrefTitle->setText(QString("%1 '%2'").arg(declKindName(hit->decl)).arg(hit->decl->name.constData()));
+        QTreeWidgetItem* black = fillXref(hit, f->d_mod);
+        if( black && !d_lock3 )
+        {
+            d_xref->scrollToItem(black, QAbstractItemView::PositionAtCenter);
+            d_xref->setCurrentItem(black);
+        }
+        syncModView(hit->decl);
+        syncEditorMarks(hit, f->d_mod);
+        fillHier(hit->decl);
+    }else
+        edit->markNonTerms(SymList());
+}
 
-    d_xrefTitle->setText(QString("%1 '%2'").arg(declKindName(hit->decl)).arg(hit->decl->name.constData()));
+QTreeWidgetItem* Ide::fillXref(Symbol* hit, Declaration* module)
+{
+    if( hit == 0 || hit->decl == 0 )
+        return 0;
+
+    QTreeWidgetItem* black = 0;
+
+    if( hit->decl->kind == Declaration::Import && hit->decl->anonymous )
+    {
+        Symbol sym = *hit;
+        sym.decl = hit->decl->data.value<Import>().resolved;
+        if( sym.decl )
+            black = fillXref(&sym, module);
+    }
+
+    Project2::UsageByMod usage = d_pro->getUsage(hit->decl);
 
     QFont f = d_xref->font();
     f.setBold(true);
 
-    QTreeWidgetItem* black = 0;
+    std::sort( usage.begin(), usage.end(), sortUsageByMod );
     for( int i = 0; i < usage.size(); i++ )
     {
         SymList syms = usage[i].second;
@@ -2249,11 +2273,7 @@ void Ide::fillXref(Symbol* hit, Declaration* module)
                 item->setForeground( 0, Qt::gray );
         }
     }
-    if( black && !d_lock3 )
-    {
-        d_xref->scrollToItem(black, QAbstractItemView::PositionAtCenter);
-        d_xref->setCurrentItem(black);
-    }
+    return black;
 }
 
 void Ide::fillStack()
@@ -2817,7 +2837,8 @@ void Ide::onToggleBreakPt()
     quint32 line;
     const bool on = edit->toggleBreakPoint(&line);
     Project2::File* fm = d_pro->findFile(edit->getPath());
-    Q_ASSERT( fm && fm->d_mod );
+    if( fm == 0 || fm->d_mod == 0 )
+        return;
     if( on )
         d_breakPoints[fm->d_mod->name].insert(line + 1);
     else
@@ -3371,7 +3392,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.1.1");
+    a.setApplicationVersion("0.1.2");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

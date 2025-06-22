@@ -181,7 +181,7 @@ namespace Mic {
         Declaration* ProcedureHeader(bool inForward);
         Mil::Emitter& line(const RowCol&);
         Mil::Emitter& line(const Token&);
-        void markDecl(Declaration* d);
+        Symbol *markDecl(Declaration* d);
         Symbol* markRef(Declaration* d, const RowCol& pos, quint8 what = 0);
 
     private:

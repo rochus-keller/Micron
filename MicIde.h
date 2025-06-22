@@ -99,7 +99,7 @@ namespace Mic
         void createModsMenu( Editor* );
         void addDebugMenu(Gui::AutoMenu * pop);
         void fillXref();
-        void fillXref(Symbol* hit, Declaration *module);
+        QTreeWidgetItem *fillXref(Symbol* hit, Declaration *module);
         void fillStack();
         void fillLocals();
         void printLocalVal( QTreeWidgetItem* item, Type* type, int depth );
