@@ -534,23 +534,31 @@ Declaration *Project2::loadModule(const Import &imp)
     Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
     p.RunParser(fixedImp);
     Mic::Declaration* res = 0;
+    bool hasErrors = false;
     if( !p.errors.isEmpty() )
     {
         foreach( const Mic::Parser2::Error& e, p.errors )
             errors << Error(e.msg, RowCol(e.row, e.col), e.path);
-    }else
-    {
-        res = p.takeModule();
-
-        res->invalid = !imr.errors.isEmpty();
-
-        if( fixedImp.metaActuals.isEmpty() )
-            file->d_mod = res; // in case of generic modules, file->d_mod points to the non-instantiated version
-        ms->xref = p.takeXref();
-        QHash<Declaration*,DeclList>::const_iterator i;
-        for( i = ms->xref.subs.begin(); i != ms->xref.subs.end(); ++i )
-            subs[i.key()] += i.value();
+        hasErrors = true;
     }
+
+    if( !imr.errors.isEmpty() )
+    {
+        foreach( const Mil::AbstractRenderer::Error& e, imr.errors )
+            errors << Error(e.msg, RowCol(), e.where + ":" + QByteArray::number(e.pc));
+        hasErrors = true;
+    }
+
+    res = p.takeModule();
+    res->invalid = hasErrors;
+
+    if( fixedImp.metaActuals.isEmpty() )
+        file->d_mod = res; // in case of generic modules, file->d_mod points to the non-instantiated version
+    ms->xref = p.takeXref();
+    QHash<Declaration*,DeclList>::const_iterator i;
+    for( i = ms->xref.subs.begin(); i != ms->xref.subs.end(); ++i )
+        subs[i.key()] += i.value();
+
     // TODO: uniquely extend the name of generic module instantiations
 
     ms->decl = res;

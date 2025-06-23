@@ -210,9 +210,9 @@ void Emitter::setReturnType(const Quali& typeRef)
     d_proc.back().retType = typeRef;
 }
 
-void Emitter::setExtern(const QByteArray& origName)
+void Emitter::setOrigName(const QByteArray& origName)
 {
-    Q_ASSERT( d_proc.back().kind == ProcData::Extern );
+    Q_ASSERT( d_proc.back().kind == ProcData::Foreign );
     d_origName = origName;
 }
 

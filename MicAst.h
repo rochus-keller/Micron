@@ -52,7 +52,7 @@ namespace Mic
     #endif
             meta(m),deferred(false),anonymous(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
-            owned(false),type(0),autoself(0),invalid(0),hasSubs(0){}
+            owned(false),type(0),autoself(0),invalid(0),hasSubs(0),ffi_(0){}
         ~Node();
 
         enum Meta { Inval, T, D, E };
@@ -76,6 +76,7 @@ namespace Mic
         uint inline_ : 1;
         uint invar : 1;
         uint extern_ : 1; // extern name (if present) is in val
+        uint ffi_ : 1;   // extern "C" name
         uint generic : 1;
         uint autoself : 1;
         uint invalid : 1; // module

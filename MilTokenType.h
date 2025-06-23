@@ -68,6 +68,7 @@ namespace Mil {
 		Tok_END,
 		Tok_EXIT,
 		Tok_EXTERN,
+		Tok_FOREIGN,
 		Tok_FORWARD,
 		Tok_FREE,
 		Tok_GOTO,

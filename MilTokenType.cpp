@@ -61,6 +61,7 @@ namespace Mil {
 			case Tok_END: return "END";
 			case Tok_EXIT: return "EXIT";
 			case Tok_EXTERN: return "EXTERN";
+			case Tok_FOREIGN: return "FOREIGN";
 			case Tok_FORWARD: return "FORWARD";
 			case Tok_FREE: return "FREE";
 			case Tok_GOTO: return "GOTO";
@@ -277,6 +278,7 @@ namespace Mil {
 			case Tok_END: return "Tok_END";
 			case Tok_EXIT: return "Tok_EXIT";
 			case Tok_EXTERN: return "Tok_EXTERN";
+			case Tok_FOREIGN: return "Tok_FOREIGN";
 			case Tok_FORWARD: return "Tok_FORWARD";
 			case Tok_FREE: return "Tok_FREE";
 			case Tok_GOTO: return "Tok_GOTO";
@@ -745,7 +747,17 @@ namespace Mil {
 			switch( at(str,len,i+1) ){
 			case 'O':
 				if( at(str,len,i+2) == 'R' ){
-					if( at(str,len,i+3) == 'W' ){
+					switch( at(str,len,i+3) ){
+					case 'E':
+						if( at(str,len,i+4) == 'I' ){
+							if( at(str,len,i+5) == 'G' ){
+								if( at(str,len,i+6) == 'N' ){
+									res = Tok_FOREIGN; i += 7;
+								}
+							}
+						}
+						break;
+					case 'W':
 						if( at(str,len,i+4) == 'A' ){
 							if( at(str,len,i+5) == 'R' ){
 								if( at(str,len,i+6) == 'D' ){
@@ -753,6 +765,7 @@ namespace Mil {
 								}
 							}
 						}
+						break;
 					}
 				}
 				break;

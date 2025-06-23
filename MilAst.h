@@ -40,7 +40,7 @@ namespace Mil
     #endif
             meta(m),anonymous(false),objectInit(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),forward(false),validated(false),
-            type(0),public_(0),entryPoint(0),owned(0),nobody(0),pointerInit(0),override_(0),translated(0) {}
+            type(0),public_(0),entryPoint(0),owned(0),nobody(0),pointerInit(0),override_(0),translated(0),foreign_(0) {}
         virtual ~Node();
 
         enum Meta { Inval, T, D, E, S };
@@ -65,6 +65,7 @@ namespace Mil
         uint inline_ : 1;
         uint invar : 1;
         uint extern_ : 1; // extern name (if present) is in val
+        uint foreign_ : 1;
         uint nobody : 1;
         uint forward : 1;
         uint override_ : 1;
@@ -72,7 +73,7 @@ namespace Mil
         uint translated : 1; // module
         uint entryPoint : 1; // procedure: begin$; module: top entry
 
-        // 27 bits
+        // 28 bits
 
         Mic::RowCol pos; // Declaration, Expression
 
@@ -171,6 +172,7 @@ namespace Mil
     {
         Statement* finally; // optionally, owned
         Mic::RowCol end;
+        QByteArray origName; // original name in the external C library
     };
 
     class Declaration : public Node

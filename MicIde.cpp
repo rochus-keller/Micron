@@ -1411,8 +1411,11 @@ void Ide::onEditorChanged()
 void Ide::onErrorsDblClicked()
 {
     QTreeWidgetItem* item = d_errs->currentItem();
-    showEditor( item->data(0, Qt::UserRole ).toString(),
-                item->data(1, Qt::UserRole ).toInt(), item->data(2, Qt::UserRole ).toInt() );
+    const int row = item->data(1, Qt::UserRole ).toInt();
+    const int col = item->data(2, Qt::UserRole ).toInt();
+    if( row == 0 || col == 0 )
+        return;
+    showEditor( item->data(0, Qt::UserRole ).toString(), row, col );
 }
 
 static bool errorEntryLessThan(const Project2::Error &s1, const Project2::Error &s2)
@@ -3392,7 +3395,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.1.2");
+    a.setApplicationVersion("0.1.3");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

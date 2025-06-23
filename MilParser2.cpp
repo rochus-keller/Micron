@@ -1382,12 +1382,18 @@ void Parser2::ProcedureDeclaration() {
 			}
 			expect(Tok_EXTERN, true, "ProcedureDeclaration");
             p->extern_ = true;
-#if 0
-            // TODO
-			if( la.d_type == Tok_ident ) {
-				expect(Tok_ident, false, "ProcedureDeclaration");
-			}
-#endif
+        } else if( la.d_code == Tok_FOREIGN || ( la.d_type == Tok_Semi && peek(2).d_code == Tok_FOREIGN ) ) {
+            if( la.d_type == Tok_Semi ) {
+                expect(Tok_Semi, false, "ProcedureDeclaration");
+            }
+            expect(Tok_EXTERN, true, "ProcedureDeclaration");
+            p->foreign_ = true;
+            if( la.d_type == Tok_string ) {
+                expect(Tok_string, false, "ProcedureDeclaration");
+                if( p->pd == 0 )
+                    p->pd = new ProcedureData();
+                p->pd->origName = cur.d_val.mid(1, cur.d_val.size()-2);
+            }
         } else if( la.d_code == Tok_FORWARD || ( la.d_type == Tok_Semi && peek(2).d_code == Tok_FORWARD ) ) {
             if( la.d_type == Tok_Semi ) {
                 expect(Tok_Semi, false, "ProcedureDeclaration");

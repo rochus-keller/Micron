@@ -110,7 +110,7 @@ Type*Validator::deref(Type* t)
 
 void Validator::visitProcedure(Declaration* proc)
 {
-    if( proc->forward || proc->extern_ )
+    if( proc->forward || proc->extern_ || proc->foreign_ )
     {
         return; // TODO: check param compat
     }

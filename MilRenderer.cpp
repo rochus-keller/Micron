@@ -332,6 +332,11 @@ void IlAsmRenderer::render(const ProcData& m)
     case ProcData::Extern:
         out << " extern ";
         break;
+    case ProcData::Foreign:
+        out << " extern c ";
+        if( !m.origName.isEmpty() )
+            out << "\"" << m.origName << "\" ";
+        break;
     case ProcData::Inline:
         out << " inline ";
         break;
@@ -349,7 +354,7 @@ void IlAsmRenderer::render(const ProcData& m)
     out << endl;
 
     if(m.kind == ProcData::ProcType || m.kind == ProcData::MethType ||
-            m.kind == ProcData::Extern || m.kind == ProcData::Forward )
+            m.kind == ProcData::Extern || m.kind == ProcData::Foreign || m.kind == ProcData::Forward )
         return;
 
     if( !m.locals.isEmpty() )
@@ -814,6 +819,12 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
         case ProcData::Extern:
             decl->extern_ = true;
             break;
+        case ProcData::Foreign:
+            decl->foreign_ = true;
+            if( decl->pd == 0 )
+                decl->pd = new ProcedureData();
+            decl->pd->origName = proc.origName;
+            break;
         case ProcData::Inline:
             decl->inline_ = true;
             break;
@@ -1209,14 +1220,16 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
         case IL_stloc_s:
             tmp->id = ops[pc].arg.toUInt();
             break;
-        case IL_stvar:
-            tmp->d = resolve(ops[pc].arg.value<Quali>());
-            if( tmp->d == 0 || tmp->d->kind != Declaration::VarDecl)
-            {
-                error(curProc,"invalid variable declaration reference",pc);
-                return res;
-            }
-            break;
+        case IL_stvar: {
+                Quali q = ops[pc].arg.value<Quali>();
+                tmp->d = resolve(q);
+                if( tmp->d == 0 || tmp->d->kind != Declaration::VarDecl)
+                {
+                    tmp->d = resolve(q);
+                    error(curProc,"invalid variable declaration reference",pc);
+                    return res;
+                }
+            } break;
         case IL_stloc_1:
             tmp->id = 1;
             break;
@@ -1456,7 +1469,7 @@ Declaration*IlAstRenderer::derefTrident(const Trident& td) const
 
 Declaration*IlAstRenderer::resolve(const Quali &q) const
 {
-    if( q.first.isEmpty() )
+    if( q.first.isEmpty() || q.first.constData() == module->name.constData() )
     {
         Declaration* res = module->findSubByName(q.second);
         if( res == 0 )

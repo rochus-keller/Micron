@@ -88,7 +88,7 @@ bool CeeGen::requiresBody(Declaration* module)
             // TODO: inline and invar are implemented as normal procedures so far
             if( sub->invar || sub->inline_ )
                 return true;
-            if( !sub->extern_ )
+            if( !sub->extern_ && !sub->foreign_ )
                 return true;
             break;
         }
@@ -194,7 +194,7 @@ void CeeGen::visitProcedure(Declaration* proc)
     hout << "extern ";
     procHeader(hout, proc);
     hout << ";" << endl;
-    if( !proc->forward && !proc->extern_ )
+    if( !proc->forward && !proc->extern_ && !proc->foreign_ )
     {
         procHeader(bout, proc);
         bout << " {" << endl;

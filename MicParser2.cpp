@@ -3516,12 +3516,24 @@ void Parser2::ProcedureDeclaration() {
             expect(Tok_EXTERN, true, "ProcedureDeclaration");
             if( langLevel == 0 )
                 error(cur, "EXTERN not allowed in language level 0");
-            if( procDecl->typebound )
-                error(cur, "EXTERN not supported for type-bound procedures");
             procDecl->extern_ = true;
+            if( la.d_type == Tok_ident ) {
+                expect(Tok_ident, true, "ProcedureDeclaration");
+                if( cur.d_val == "C" || cur.d_val == "c" )
+                    procDecl->ffi_;
+                else
+                    error(cur, "expecting 'C' after EXTERN");
+                if( la.d_type == Tok_string ) {
+                    expect(Tok_string, true, "ProcedureDeclaration");
+                    procDecl->data = cur.d_val;
+                }
+            }
             out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
                            mdl->getTopScope()->kind == Declaration::Module &&
-                           procDecl->visi > 0, Mil::ProcData::Extern);
+                           procDecl->visi > 0, procDecl->ffi_ ? Mil::ProcData::Foreign : Mil::ProcData::Extern);
+
+            if( procDecl->ffi_ )
+                out->setOrigName(cur.d_val.mid(1, cur.d_val.size()-2));
 
             const QList<Declaration*> params = procDecl->getParams(true);
             foreach( Declaration* p, params )
@@ -3529,10 +3541,6 @@ void Parser2::ProcedureDeclaration() {
             if( procDecl->getType() && procDecl->getType()->kind != Type::NoType )
                 out->setReturnType(ev->toQuali(procDecl->getType()));
 
-            if( la.d_type == Tok_ident ) {
-                expect(Tok_ident, false, "ProcedureDeclaration");
-                procDecl->data = cur.d_val;
-            }
             out->endProc(cur.toRowCol());
         } else if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR ||
                    la.d_type == Tok_Semi || FIRST_ProcedureBody(la.d_type) ) {
@@ -3872,7 +3880,7 @@ void Parser2::module(const Import & import) {
         modata.fullName = Token::getSymbol(imp->modulePath(modata.path) + modata.suffix);
         modecl->name = Token::getSymbol(modecl->name + modata.suffix);
     }else
-        modata.fullName = Token::getSymbol(modata.path.join('/'));
+        modata.fullName = Token::getSymbol(modata.path.join('$'));
 
     QString importer = cur.d_sourcePath;
     RowCol importedAt(cur.d_lineNr, cur.d_colNr);
@@ -4099,9 +4107,10 @@ void Parser2::import() {
                 importDecl->anonymous = true;
             }
 #endif
-        }
+        }else
+            error(localName, QString("error importing module '%1'").arg(import.path.join('/').constData()));
     }else
-        out->addImport(Token::getSymbol(import.path.join('/')), localName.toRowCol());
+        out->addImport(Token::getSymbol(import.path.join('$')), localName.toRowCol());
 
     if( !doublette )
         importDecl->data = QVariant::fromValue(import);

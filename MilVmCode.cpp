@@ -169,7 +169,7 @@ bool Code::translateProc(Procedure& proc)
         proc.fixArgSize = stackAligned(params.last()->off + params.last()->getType()->getByteSize(sizeof(void*)));
     if( proc.decl->getType() )
         proc.returnSize = stackAligned(proc.decl->getType()->getByteSize(sizeof(void*)));
-    if( proc.decl->extern_ )
+    if( proc.decl->extern_ || proc.decl->foreign_ )
     {
         if(proc.decl->typebound)
         {

@@ -122,7 +122,7 @@ Declaration*AstModel::findModuleByName(const QByteArray& name) const
 
 bool AstModel::addModule(Declaration* module)
 {
-    Q_ASSERT(module);
+    Q_ASSERT(module && module->kind == Declaration::Module);
     if( findModuleByName(module->name) )
         return false;
     //else
