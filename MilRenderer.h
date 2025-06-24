@@ -77,15 +77,6 @@ namespace Mil
         ProcData():kind(Invalid),isPublic(0),isVararg(0),endLine(0) {}
     };
 
-    struct MetaParam {
-        QByteArray name;
-        Quali type;
-        bool isConst;
-        bool isGeneric;
-        MetaParam():isConst(false),isGeneric(false){}
-    };
-    typedef QList<MetaParam> MetaParams;
-
     struct ConstrLiteral // the result of a constructor, see ldobj
     {
         Quali typeRef;

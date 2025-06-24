@@ -167,6 +167,10 @@ public:
         {
             foreach( const Mic::Parser2::Error& e, p.errors )
                 qCritical() << QFileInfo(e.path).fileName() << e.row << e.col << e.msg;
+        }else if( !imr.errors.isEmpty() )
+        {
+            foreach( const Mil::AbstractRenderer::Error& e, imr.errors )
+                qCritical() << (e.where + ":" + QByteArray::number(e.pc)) << e.msg;
         }else
         {
             res = p.takeModule();

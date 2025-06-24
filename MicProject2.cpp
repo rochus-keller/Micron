@@ -131,6 +131,7 @@ void Project2::clear(bool all)
             delete f;
         d_libs.clear();
     }
+    loader.loadFromFile(":/runtime/MIC+.mil");
 }
 
 void Project2::createNew()
@@ -512,7 +513,7 @@ Declaration *Project2::loadModule(const Import &imp)
     modules.append(ModuleSlot(fixedImp,file,0));
     ms = &modules.back();
 
-#define _NO_MIL_ // TEST
+//#define _NO_MIL_ // TEST
 #ifdef _NO_MIL_
     Mil::RenderSplitter imr;
 #else

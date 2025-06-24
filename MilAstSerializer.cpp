@@ -46,9 +46,18 @@ static quint32 lineout(const Mic::RowCol& pos, AstSerializer::DbgInfo dbi)
         return pos.packed();
 }
 
+static Mil::Quali toQuali(Type* t)
+{
+    if( t )
+        return t->toQuali();
+    else
+        return Quali("", "?");
+}
+
 static void renderType(const Declaration* d, AbstractRenderer* r, AstSerializer::DbgInfo dbi)
 {
     Type* t = d->getType();
+    Q_ASSERT(t);
     switch( t->kind )
     {
     case Type::Struct:
@@ -70,7 +79,7 @@ static void renderType(const Declaration* d, AbstractRenderer* r, AstSerializer:
             foreach( Declaration* f, fields )
             {
                 lineout(r, f->pos, dbi);
-                r->addField(f->name,f->getType()->toQuali(), f->public_, f->f.bw);
+                r->addField(f->name,toQuali(f->getType()), f->public_, f->f.bw);
             }
             r->endType();
             DeclList methods = t->getMethodTable(false);
@@ -94,13 +103,13 @@ static void renderType(const Declaration* d, AbstractRenderer* r, AstSerializer:
             {
                 ProcData::Var param;
                 param.name = sub->name;
-                param.type = sub->getType()->toQuali();
+                param.type = toQuali(sub->getType());
                 param.line = lineout(sub->pos, dbi);
                 proc.params.append(param);
             }
 
             if( t->getType() )
-                proc.retType = t->getType()->toQuali();
+                proc.retType = toQuali(t->getType());
             r->addProcedure(proc);
         }
         break;
@@ -108,10 +117,13 @@ static void renderType(const Declaration* d, AbstractRenderer* r, AstSerializer:
         r->addType(d->name,d->public_,t->toQuali(),Mil::EmiTypes::Alias);
         break;
     case Type::Pointer:
-        r->addType(d->name,d->public_,t->getType()->toQuali(),Mil::EmiTypes::Pointer);
+        r->addType(d->name,d->public_,toQuali(t->getType()),Mil::EmiTypes::Pointer);
         break;
     case Type::Array:
-        r->addType(d->name,d->public_,t->getType()->toQuali(),Mil::EmiTypes::Array,t->len);
+        r->addType(d->name,d->public_,toQuali(t->getType()),Mil::EmiTypes::Array,t->len);
+        break;
+    case Type::Generic:
+        r->addType(d->name,d->public_,Quali(), Mil::EmiTypes::Generic);
         break;
     default:
         Q_ASSERT(false);
@@ -120,12 +132,15 @@ static void renderType(const Declaration* d, AbstractRenderer* r, AstSerializer:
 
 static void renderVar(const Declaration* v, AbstractRenderer* r)
 {
-    r->addVariable(v->getType()->toQuali(),v->name, v->public_);
+    r->addVariable(toQuali(v->getType()),v->name, v->public_);
 }
 
 static void renderConst(const Declaration* v, AbstractRenderer* r)
 {
-    r->addConst(v->getType()->toQuali(),v->name,v->c->toVariant()); // TODO: handle constructors
+    QVariant val;
+    if( v->c )
+        val = v->c->toVariant();
+    r->addConst(toQuali(v->getType()),v->name,val); // TODO: handle constructors
 }
 
 static void renderPos(ProcData& proc, const Mic::RowCol& pos, quint32& line, AstSerializer::DbgInfo dbi)
@@ -363,14 +378,14 @@ static void renderProc(const Declaration* p, AbstractRenderer* r, AstSerializer:
         case Declaration::ParamDecl:{
                 ProcData::Var param;
                 param.name = sub->name;
-                param.type = sub->getType()->toQuali();
+                param.type = toQuali(sub->getType());
                 param.line = lineout(sub->pos,dbi);
                 proc.params.append(param);
             } break;
         case Declaration::LocalDecl: {
                 ProcData::Var local;
                 local.name = sub->name;
-                local.type = sub->getType()->toQuali();
+                local.type = toQuali(sub->getType());
                 local.line = lineout(sub->pos,dbi);
                 proc.locals.append(local);
             } break;
@@ -397,9 +412,12 @@ bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, 
         dbi = None;
     else
         source = module->md->source;
+    QByteArrayList metaParamNames;
+    if( module->md != 0 && !module->md->metaParamNames.isEmpty() )
+        metaParamNames = module->md->metaParamNames;
 
     lineout(r, module->pos, dbi);
-    r->beginModule(module->name, source, QByteArrayList());
+    r->beginModule(module->name, source, metaParamNames);
     Declaration* sub = module->subs;
     while(sub)
     {

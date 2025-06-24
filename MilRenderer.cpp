@@ -50,12 +50,8 @@ void IlAsmRenderer::beginModule(const QByteArray& moduleName, const QString& sou
         for( int i = 0; i < mp.size(); i++ )
         {
             if( i != 0 )
-                out << "; ";
-            //if( !mp[i].type.isEmpty() )
-            //    out << "const ";
+                out << ", ";
             out << mp[i];
-            //if( !mp[i].type.isEmpty() )
-            //    out << ": " << mp[i].type;
         }
         out << ")";
     }
@@ -148,6 +144,11 @@ void IlAsmRenderer::addType(const QByteArray& name, bool isPublic, const Quali& 
     if( isPublic )
         out << "*";
 
+    if( typeKind == EmiTypes::Generic )
+    {
+        out << endl;
+        return;
+    }
     out << " = ";
     switch(typeKind)
     {
@@ -163,6 +164,8 @@ void IlAsmRenderer::addType(const QByteArray& name, bool isPublic, const Quali& 
             out << len << " ";
         out << "of " << toString(baseType) << endl;
         break;
+    default:
+        Q_ASSERT(false);
     }
 }
 
@@ -630,10 +633,11 @@ void IlAstRenderer::beginModule(const QByteArray& moduleName, const QString& sou
     errors.clear();
     module = new Declaration();
     module->kind = Declaration::Module;
-    if( !sourceFile.isEmpty() )
+    if( !sourceFile.isEmpty() || !mp.isEmpty() )
     {
         module->md = new ModuleData();
         module->md->source = sourceFile;
+        module->md->metaParamNames = mp;
         source = sourceFile;
     }
     module->name = moduleName;
@@ -958,7 +962,7 @@ void IlAstRenderer::addType(const QByteArray& name, bool isPublic, const Quali& 
 {
     Q_ASSERT(module);
     Q_ASSERT(type == 0);
-    Q_ASSERT(typeKind == EmiTypes::Alias || typeKind == EmiTypes::Array || typeKind == EmiTypes::Pointer);
+    Q_ASSERT(typeKind == EmiTypes::Alias || typeKind == EmiTypes::Array || typeKind == EmiTypes::Pointer || typeKind == EmiTypes::Generic);
 
     Declaration* decl = new Declaration();
     decl->kind = Declaration::TypeDecl;
@@ -979,6 +983,9 @@ void IlAstRenderer::addType(const QByteArray& name, bool isPublic, const Quali& 
         t->kind = Type::NameRef;
         t->quali = new Quali();
         *t->quali = baseType;
+        break;
+    case EmiTypes::Generic:
+        t->kind = Type::Generic;
         break;
     default:
         t->kind = typeKind == EmiTypes::Pointer ? Type::Pointer : Type::Array;
@@ -1348,6 +1355,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
                 tmp->d = resolve(q);
                 if(tmp->d == 0)
                 {
+                    tmp->d = resolve(q); // TEST
                     error(curProc,QString("cannot resolve qualident: %1").arg(format(q).constData()),pc++);
                     return res;
                 }

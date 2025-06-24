@@ -30,5 +30,6 @@
         <file>oakwood/Out.mic</file>
         <file>oakwood/Strings.mic</file>
         <file>oakwood/XYplane.mic</file>
+        <file>runtime/MIC+.mil</file>
     </qresource>
 </RCC>

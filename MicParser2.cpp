@@ -1766,6 +1766,11 @@ void Parser2::emitType(Type* t)
         out->addType(ev->toQuali(t).second, t->decl->pos,t->decl->isPublic(),
                      qMakePair(QByteArray(),Token::getSymbol("int32")),
                      Mil::EmiTypes::Alias);
+    }else if( t->kind == Type::Generic )
+    {
+        out->addType(ev->toQuali(t).second, t->decl->pos,t->decl->isPublic(),
+                     ev->toQuali(t), Mil::EmiTypes::Generic);
+
     }else
         Q_ASSERT(false);
 }
@@ -3890,12 +3895,14 @@ void Parser2::module(const Import & import) {
         importedAt = import.importedAt;
     }
 
-    Mil::MetaParams mps;
+    QByteArrayList metaParamNames;
     if( FIRST_MetaParams(la.d_type) ) {
-        modata.metaParams = MetaParams();
+        modata.metaParams = MetaParams(); // produces all typedecls and constdecls corresponding to the meta params
+                                          // modata.metaParams receives a reference to those for modification in case meta actuals are available
 
         if( !import.metaActuals.isEmpty() )
         {
+            // create an instance of a generic module
             if( import.metaActuals.size() != modata.metaParams.size() )
             {
                 errors << Error("number of formal and actual meta parameters doesn't match",
@@ -3903,50 +3910,25 @@ void Parser2::module(const Import & import) {
             }else
                 for( int i = 0; i < modata.metaParams.size(); i++ )
                 {
-                    Mil::MetaParam mmp;
-                    mmp.name = modata.metaParams[i]->name;
                     if( (import.metaActuals[i].isConst() && modata.metaParams[i]->kind != Declaration::ConstDecl) ||
                             (!import.metaActuals[i].isConst() && modata.metaParams[i]->kind == Declaration::ConstDecl) )
                     {
                         errors << Error(QString("formal and actual meta parameter %1 not compatible").arg(i+1),
                                         importedAt.d_row, importedAt.d_col, importer);
                     }
-                    if( true )
-                    {
-                        // we have to always replace the type.
-                        // otherwise the wrong type is created when doing new(T) in the generic, and there
-                        // is a loophole in type checking
-                        if( modata.metaParams[i]->getType() && modata.metaParams[i]->ownstype )
-                            delete modata.metaParams[i]->getType();
-                        modata.metaParams[i]->setType(import.metaActuals[i].type);
-                        modata.metaParams[i]->ownstype = false;
-                    }
-                    if( import.metaActuals[i].type && import.metaActuals[i].type->kind == Type::Generic )
-                    {
-                        mmp.isGeneric = true;
-                        mmp.isConst = modata.metaParams[i]->kind == Declaration::ConstDecl;
-                    }else
-                    {
-                        mmp.type = ev->toQuali(modata.metaParams[i]->getType());
-                        if( modata.metaParams[i]->kind == Declaration::ConstDecl )
-                        {
-                            modata.metaParams[i]->data = import.metaActuals[i].val;
-                            mmp.isConst = true;
-                            // TODO: check declaration type as soon as corresponding CONST appears
-                        }
-                    }
-                    mps << mmp;
+
+                    // we have to always replace the type.
+                    // otherwise the wrong type is created when doing new(T) in the generic, and there
+                    // is a loophole in type checking
+                    if( modata.metaParams[i]->getType() && modata.metaParams[i]->ownstype )
+                        delete modata.metaParams[i]->getType();
+                    modata.metaParams[i]->setType(import.metaActuals[i].type);
+                    modata.metaParams[i]->ownstype = false;
                 }
         }else
         {
             for( int i = 0; i < modata.metaParams.size(); i++ )
-            {
-                Mil::MetaParam m;
-                m.name = modata.metaParams[i]->name;
-                m.isGeneric = true;
-                m.isConst = modata.metaParams[i]->kind == Declaration::ConstDecl;
-                mps << m;
-            }
+                metaParamNames << modata.metaParams[i]->name;
         }
     }else if( !import.metaActuals.isEmpty() )
         errors << Error("cannot instantiate a non generic module",importedAt.d_row, importedAt.d_col, importer);
@@ -3956,24 +3938,25 @@ void Parser2::module(const Import & import) {
     if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
 	}
-    out->beginModule(modata.fullName,modata.source,modecl->pos); // TODO: meta params in MIL
+    out->beginModule(modata.fullName,modata.source,modecl->pos, metaParamNames);
 
-    // call "out" here for all non-generic type and const
-    for( int i = 0; i < import.metaActuals.size(); i++ )
+    for( int i = 0; i < modata.metaParams.size(); i++ )
     {
-        const Value& ma = import.metaActuals[i];
-        if( ma.type && ma.type->kind == Type::Generic )
-            continue;
-        if( ma.mode == Value::Const )
+        QVariant val;
+        Type* type = modata.metaParams[i]->getType();
+        if( i < import.metaActuals.size() )
         {
-            if( i < modata.metaParams.size() )
-                out->addConst(ev->toQuali(ma.type), modata.metaParams[i]->name, modata.metaParams[i]->pos, ma.val );
-        }else if( ma.type && ma.type->isSimple() )
+            type = import.metaActuals[i].type;
+            val = import.metaActuals[i].val;
+        }
+        if( modata.metaParams[i]->kind == Declaration::ConstDecl )
         {
-            if( i < modata.metaParams.size() )
-                out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(ma.type),Mil::EmiTypes::Alias);
-        }else if( ma.type )
-            emitType(ma.type);  // TODO: this doesn't look right; what name should we use?
+             out->addConst(ev->toQuali(type), modata.metaParams[i]->name, modata.metaParams[i]->pos, val );
+        }else if( type && type->isSimple() )
+        {
+             out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(type),Mil::EmiTypes::Alias);
+        }else if( type )
+            emitType(type);
     }
 
 	while( FIRST_ImportList(la.d_type) || FIRST_DeclarationSequence(la.d_type) ) {
@@ -4101,7 +4084,7 @@ void Parser2::import() {
 #else
             // Take care that each import of a module is visible in the xref even if there is no alias
             Symbol* sym = markRef(mod, path.last().toRowCol());
-            if(!hasAlias)
+            if(sym && !hasAlias)
             {
                 sym->len = 0;
                 importDecl->anonymous = true;
@@ -4188,6 +4171,7 @@ MetaParamList Parser2::MetaSection(bool& isType) {
             t->kind = Type::Generic;
             t->ownstype = true;
             t->pos = res[i]->pos;
+            t->decl = res[i];
             res[i]->setType(t);
         }
     }

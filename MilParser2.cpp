@@ -988,12 +988,11 @@ void Parser2::ConstDeclaration() {
     if( la.d_type == Tok_Eq ) {
         expect(Tok_Eq, false, "ConstDeclaration");
         d->c = ConstExpression2();
-#if 0
-        // TODO
     } else if( la.d_type == Tok_Colon ) {
         expect(Tok_Colon, false, "ConstDeclaration");
-        qualident();
-#endif
+        d->setType(NamedType());
+        if(curMod->md == 0 || !curMod->md->metaParamNames.contains(d->name) )
+            error(d->pos, "generic constant name is not listed");
     } else
         invalid("ConstDeclaration");
 }
@@ -1010,7 +1009,15 @@ void Parser2::TypeDeclaration() {
     {
 		expect(Tok_Eq, false, "TypeDeclaration");
         d->setType(type());
-	}
+    }else if( curMod->md == 0 || !curMod->md->metaParamNames.contains(d->name) )
+        error(d->pos, "generic type name is not listed");
+    else
+    {
+        Type* t = new Type();
+        t->kind = Type::Generic;
+        t->decl = d;
+        d->setType(t);
+    }
     curDecl = 0;
 }
 

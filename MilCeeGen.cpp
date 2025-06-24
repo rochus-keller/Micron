@@ -474,6 +474,11 @@ void CeeGen::pointerTo(QTextStream& out, Type* ptr)
 
 void CeeGen::constValue(QTextStream& out, Constant* c)
 {
+    if( c == 0 )
+    {
+        out << 0;
+        return;
+    }
     switch( c->kind )
     {
     case Constant::D:

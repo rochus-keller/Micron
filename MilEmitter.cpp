@@ -34,38 +34,15 @@ Emitter::Emitter(AbstractRenderer* r, DbgInfo di):d_out(r),d_typeKind(0),ops(0),
     char_sym = Mic::Atom::getAtom("char").constData();
 }
 
-void Emitter::beginModule(const QByteArray& fullName, const QString& sourceFile, const RowCol & pos)
+void Emitter::beginModule(const QByteArray& fullName, const QString& sourceFile, const RowCol & pos, const QByteArrayList &metaParamNames)
 {
     Q_ASSERT( !fullName.isEmpty() );
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
-#if 0
-    QByteArrayList names;
-    bool fullyInstantiated = true;
-    foreach( const MilMetaParam& m, mp )
-    {
-        if( m.isGeneric )
-            fullyInstantiated = false;
-        names << m.name;
-    }
-    if( fullyInstantiated )
-        names.clear();
-    d_out->beginModule(fullName,sourceFile, names);
-    foreach( const MilMetaParam& m, mp )
-    {
-        if( !m.isGeneric )
-            continue; // otherwise the client directly calls addType/beginType or addConst
-        if( m.isConst )
-            d_out->addConst(MilQuali(),m.name,QVariant());
-        else
-            d_out->addType(m.name,false,MilQuali(),Generic,0);
-    }
-#else
     lineout(pos);
     QString source;
     if( dbgInfo != None )
         source = sourceFile;
-    d_out->beginModule(fullName,source);
-#endif
+    d_out->beginModule(fullName,source, metaParamNames);
 }
 
 void Emitter::endModule(const RowCol& pos)
@@ -174,7 +151,7 @@ void Emitter::endType()
 void Emitter::addType(const QByteArray& name, const RowCol & pos, bool isPublic, const Quali& baseType, quint8 typeKind, quint32 len)
 {
     Q_ASSERT( d_typeKind == 0 );
-    Q_ASSERT( typeKind == EmiTypes::Alias || typeKind == EmiTypes::Pointer || typeKind == EmiTypes::Array);
+    Q_ASSERT( typeKind == EmiTypes::Alias || typeKind == EmiTypes::Pointer || typeKind == EmiTypes::Array || typeKind == EmiTypes::Generic);
     lineout(pos);
     d_out->addType(name,isPublic,baseType,typeKind,len);
 }

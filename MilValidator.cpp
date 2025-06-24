@@ -72,7 +72,8 @@ bool Validator::validate(Declaration* module)
             t->pointerInit = checkIfPointerInit(t);
             break;
         case Declaration::ConstDecl:
-            sub->setType(toType(sub->c));
+            if( sub->c )
+                sub->setType(toType(sub->c));
             break;
         case Declaration::Procedure:
             visitProcedure(sub);

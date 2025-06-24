@@ -34,7 +34,7 @@ namespace Mil
         enum DbgInfo { None, RowsOnly, RowsAndCols };
         Emitter(AbstractRenderer*, DbgInfo = None);
 
-        void beginModule( const QByteArray& fullName, const QString& sourceFile, const RowCol& );
+        void beginModule( const QByteArray& fullName, const QString& sourceFile, const RowCol&, const QByteArrayList& metaParamNames = QByteArrayList() );
         void endModule(const RowCol&);
 
         void addImport(const QByteArray& fullName, const RowCol&);

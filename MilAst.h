@@ -163,6 +163,7 @@ namespace Mil
         QString source;
         ToDelete* toDelete;
         Mic::RowCol end;
+        QByteArrayList metaParamNames;
 
         ModuleData():toDelete(0){}
         ~ModuleData();
