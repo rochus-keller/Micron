@@ -767,7 +767,7 @@ void Ide::createMenuBar()
     pop->addCommand( "Check Syntax", this, SLOT(onParse()), tr("CTRL+T"), false );
     pop->addCommand( "Compile", this, SLOT(onCompile()), tr("CTRL+B"), false );
     pop->addCommand( "Suppress Warnings", this, SLOT(onNoWarnings()) );
-    pop->addCommand( "Incremental Build (alpha!)", this, SLOT(onIncremental()) );
+    //pop->addCommand( "Incremental Build (alpha!)", this, SLOT(onIncremental()) );
     pop->addCommand( "Set Command...", this, SLOT(onSetRunCommand()) );
     pop->addCommand( "Set Input File...", this, SLOT(onSetInputFile()) );
     pop->addCommand( "Export IL...", this, SLOT(onExportIl()) );
@@ -1006,12 +1006,10 @@ void Ide::onExportC()
 
     if( !compile(false,false) ) // otherwise allocated flag is already set after one generator run
         return;
-#if 0
-    // TODO
-    if( !CGen2::translateAll(d_pro, d_debugging, dirPath ) )
+
+    if( !d_pro->generateC(dirPath) )
         QMessageBox::critical(this,tr("Save C"),tr("There was an error when generating C; "
                                                    "see Output window for more information"));
-#endif
 }
 
 void Ide::onModsDblClicked(QTreeWidgetItem* item, int)
@@ -3395,7 +3393,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.1.4");
+    a.setApplicationVersion("0.2");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

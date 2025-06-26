@@ -623,8 +623,7 @@ IlAstRenderer::IlAstRenderer(AstModel *mdl):mdl(mdl), module(0), type(0), curPro
 
 IlAstRenderer::~IlAstRenderer()
 {
-    if( module )
-        delete module;
+    // don't delete module
 }
 
 void IlAstRenderer::beginModule(const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& mp)
@@ -654,8 +653,10 @@ void IlAstRenderer::endModule()
 
     bool success = true;
     if( !errors.isEmpty() )
+    {
         delete module;
-    else
+        module = 0;
+    }else
     {
         foreach( Type* t, unresolved)
         {
@@ -689,11 +690,10 @@ void IlAstRenderer::endModule()
         {
             error(module, "a module with this name already existes");
             delete module;
+            module = 0;
             success = false;
         }
     }
-
-    module = 0;
 }
 
 void IlAstRenderer::addImport(const QByteArray& path)
@@ -983,6 +983,7 @@ void IlAstRenderer::addType(const QByteArray& name, bool isPublic, const Quali& 
         t->kind = Type::NameRef;
         t->quali = new Quali();
         *t->quali = baseType;
+        unresolved << t;
         break;
     case EmiTypes::Generic:
         t->kind = Type::Generic;

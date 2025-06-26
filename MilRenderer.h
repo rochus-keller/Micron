@@ -222,7 +222,7 @@ namespace Mil
 
         void line(quint32);
 
-        Declaration* getCurrentModule() const { return module; }
+        Declaration* getModule() const { return module; }
         Type* getCurrentType() const { return type; }
 
     protected:

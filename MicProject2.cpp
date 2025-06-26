@@ -30,6 +30,7 @@
 #include "MilLexer.h"
 #include "MilParser.h"
 #include "MilToken.h"
+#include "MilCeeGen.h"
 using namespace Mic;
 
 struct HitTest
@@ -105,7 +106,7 @@ public:
     QString source() const { return sourcePath; }
 };
 
-Project2::Project2(QObject *parent) : QObject(parent),d_dirty(false),d_useBuiltInOakwood(false)
+Project2::Project2(QObject *parent) : QObject(parent),d_dirty(false),d_useBuiltInOakwood(false),d_level(0)
 {
     d_suffixes << ".mic";
 }
@@ -450,8 +451,6 @@ bool Project2::parse()
         parseLib("Math");
         parseLib("MathL");
         parseLib("Strings");
-        parseLib("Coroutines");
-        parseLib("XYplane");
     }
 
     bool res = false;
@@ -475,6 +474,74 @@ bool Project2::parse()
     return all == ok;
     emit sigReparsed();
     return res;
+}
+
+bool Project2::generateC(const QString &outDir)
+{
+    writeC("runtime", "MIC+", outDir);
+
+    if( useBuiltInOakwood() )
+    {
+        writeC("oakwood", "In", outDir);
+        writeC("oakwood", "Out", outDir);
+        writeC("oakwood", "Files", outDir);
+        writeC("oakwood", "Input", outDir);
+        writeC("oakwood", "Math", outDir);
+        writeC("oakwood", "MathL", outDir);
+        writeC("oakwood", "Strings", outDir);
+    }
+
+    QSet<Mil::Declaration*> used;
+    QDir dir(outDir);
+    // TODO: check if files can be created and written
+    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    {
+        if( module->generic ) // skip not fully instantiated modules
+            continue;
+        Mil::Declaration* sub = module->subs;
+        while(sub)
+        {
+            if( sub->kind == Mil::Declaration::Import )
+            {
+                Mil::Declaration* imported = sub->imported;
+                if( imported && !imported->generic )
+                    used.insert(imported);
+            }
+            sub = sub->next;
+        }
+        Mil::CeeGen cg(&loader.getModel());
+        QFile header( dir.absoluteFilePath(escapeFilename(module->name) + ".h"));
+        header.open(QFile::WriteOnly);
+        QFile* body = 0;
+        QFile b( dir.absoluteFilePath(escapeFilename(module->name) + ".c"));
+        module->nobody = !Mil::CeeGen::requiresBody(module);
+        if( !module->nobody )
+        {
+            b.open(QFile::WriteOnly);
+            body = &b;
+        }
+
+        cg.generate(module, &header, body);
+    }
+
+    // TODO: check if getMain was set
+    QFile main(dir.absoluteFilePath("main+.c"));
+    main.open(QFile::WriteOnly);
+    QTextStream out(&main);
+    out << "// main+.c" << endl;
+    out << Mil::CeeGen::genDedication() << endl << endl;
+    out << "int main(int argc, char** argv) {" << endl;
+
+    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    {
+        // if a module is not in "used", it is never imported and thus a root module
+        if( !used.contains(module) && !module->nobody && !module->generic )
+            out << "    " <<  module->name << "$begin$();" << endl;
+    }
+    out << "    return 0;" << endl;
+    out << "}" << endl;
+
+    return true;
 }
 
 Declaration *Project2::loadModule(const Import &imp)
@@ -505,10 +572,6 @@ Declaration *Project2::loadModule(const Import &imp)
     if( ms != 0 )
         return ms->decl;
 
-
-
-    qDebug() << "*** parse" << file->d_name; // TEST
-
     // immediately add it so that circular module refs lead to an error
     modules.append(ModuleSlot(fixedImp,file,0));
     ms = &modules.back();
@@ -520,6 +583,7 @@ Declaration *Project2::loadModule(const Import &imp)
     Mil::IlAstRenderer imr(&loader.getModel());
 #endif
 
+    d_level++;
     Lex2 lex;
     lex.sourcePath = file->d_filePath; // to keep file name if invalid
     QBuffer buf; // keep buffer here so it remains valid for the parse if needed
@@ -534,6 +598,10 @@ Declaration *Project2::loadModule(const Import &imp)
     Mil::Emitter e(&imr, Mil::Emitter::RowsAndCols);
     Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
     p.RunParser(fixedImp);
+    if( p.getModule() )
+        qDebug() << "*** parsing" << p.getModule()->name << "level" << d_level << (p.getModule()->generic?"generic":""); // TEST
+    else
+        qDebug() << "*** parse" << file->d_name; // TEST
     Mic::Declaration* res = 0;
     bool hasErrors = false;
     if( !p.errors.isEmpty() )
@@ -555,14 +623,17 @@ Declaration *Project2::loadModule(const Import &imp)
 
     if( fixedImp.metaActuals.isEmpty() )
         file->d_mod = res; // in case of generic modules, file->d_mod points to the non-instantiated version
+
+    if( imr.getModule() )
+        imr.getModule()->generic = res->generic;
+
     ms->xref = p.takeXref();
     QHash<Declaration*,DeclList>::const_iterator i;
     for( i = ms->xref.subs.begin(); i != ms->xref.subs.end(); ++i )
         subs[i.key()] += i.value();
 
-    // TODO: uniquely extend the name of generic module instantiations
-
     ms->decl = res;
+    d_level--;
     return res;
 }
 
@@ -701,44 +772,12 @@ void Project2::parseLib(const QString & name)
     modules.append(ms);
 }
 
-QList<Declaration*> Project2::getModulesToGenerate(bool includeTemplates) const
+void Project2::writeC(const QString& where, const QString &what, const QString &out)
 {
-    QList<Declaration*> res;
-#if 0
-    FileHash::const_iterator i;
-    QList<Declaration*> mods = d_mdl.getDepOrder();
-    qDebug() << "******* module generating order:";
-    QSet<Module*> test;
-    foreach( Module* m, mods )
-    {
-        if( m->d_metaParams.isEmpty() )
-        {
-            qDebug() << m->getName();
-            QList<Module*> result;
-            m->findAllInstances(result);
-            foreach( Module* inst, result )
-            {
-                if( test.contains(inst) )
-                    qWarning() << "already seen" << inst->getName();
-                else if( inst->isFullyInstantiated() )
-                    qDebug() << "instance" << inst->getName();
-                else
-                    qWarning() << "not fully instantiated" << inst->getName();
-                test.insert(inst);
-            }
-        }
-    }
-    foreach( Module* m, mods )
-    {
-        if( m->d_synthetic )
-            ; // NOP
-        else if( m->d_isDef || m->d_metaParams.isEmpty() )
-            res.append(m); // we don't add generic modules because the instances to generate are identified by Module:findAllInstances
-        else if( includeTemplates && m->d_metaActuals.isEmpty() )
-            res.append(m);
-    }
-#endif
-    return res;
+    QDir dir(out);
+    const bool a = QFile::copy(QString(":/%1/%2.h").arg(where).arg(what), dir.absoluteFilePath(what+".h"));
+    const bool b = QFile::copy(QString(":/%1/%2+.c").arg(where).arg(what), dir.absoluteFilePath(what+"+.c"));
+    qDebug() << what << a << b;
 }
 
 bool Project2::save()

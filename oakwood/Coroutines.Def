@@ -1,9 +1,0 @@
-(* Source: The Oakwood Guidelines for Oberon-2 Compiler Developers, Revision: 1A First Issue, Oct. 1995 *)
-(* replaced LONGINT by INT32 *)
-MODULE Coroutines;
-TYPE
-Coroutine = RECORD END;
-Body = PROCEDURE;
-PROCEDURE Init (body: Body; stackSize: INT32; cor: POINTER TO Coroutine);
-PROCEDURE Transfer (from, to: POINTER TO Coroutine);
-END Coroutines.

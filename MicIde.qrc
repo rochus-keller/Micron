@@ -21,7 +21,6 @@
         <file>images/alias_priv.png</file>
         <file>images/alias.png</file>
         <file>font/DejaVuSansMono.ttf</file>
-        <file>oakwood/Coroutines.mic</file>
         <file>oakwood/Files.mic</file>
         <file>oakwood/In.mic</file>
         <file>oakwood/Input.mic</file>
@@ -29,7 +28,22 @@
         <file>oakwood/MathL.mic</file>
         <file>oakwood/Out.mic</file>
         <file>oakwood/Strings.mic</file>
-        <file>oakwood/XYplane.mic</file>
         <file>runtime/MIC+.mil</file>
+        <file>oakwood/Files.h</file>
+        <file>oakwood/Files+.c</file>
+        <file>oakwood/In.h</file>
+        <file>oakwood/In+.c</file>
+        <file>oakwood/Input.h</file>
+        <file>oakwood/Input+.c</file>
+        <file>oakwood/Math.h</file>
+        <file>oakwood/Math+.c</file>
+        <file>oakwood/MathL.h</file>
+        <file>oakwood/MathL+.c</file>
+        <file>oakwood/Out.h</file>
+        <file>oakwood/Out+.c</file>
+        <file>oakwood/Strings.h</file>
+        <file>oakwood/Strings+.c</file>
+        <file>runtime/MIC+.h</file>
+        <file>runtime/MIC++.c</file>
     </qresource>
 </RCC>

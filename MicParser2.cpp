@@ -3927,6 +3927,7 @@ void Parser2::module(const Import & import) {
                 }
         }else
         {
+            modecl->generic = true; // a module with meta params without meta actuals
             for( int i = 0; i < modata.metaParams.size(); i++ )
                 metaParamNames << modata.metaParams[i]->name;
         }
@@ -3949,9 +3950,15 @@ void Parser2::module(const Import & import) {
             type = import.metaActuals[i].type;
             val = import.metaActuals[i].val;
         }
+
+        if( type && type->kind == Type::Generic )
+            modecl->generic = true; // not fully instantiated
+
         if( modata.metaParams[i]->kind == Declaration::ConstDecl )
         {
              out->addConst(ev->toQuali(type), modata.metaParams[i]->name, modata.metaParams[i]->pos, val );
+             if( val.isNull() )
+                 modecl->generic = true; // not fully instantiated
         }else if( type && type->isSimple() )
         {
              out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(type),Mil::EmiTypes::Alias);

@@ -77,7 +77,7 @@ namespace Mic
         uint invar : 1;
         uint extern_ : 1; // extern name (if present) is in val
         uint ffi_ : 1;   // extern "C" name
-        uint generic : 1;
+        uint generic : 1; // type and const meta param decls, generic modules if not fully instantiated
         uint autoself : 1;
         uint invalid : 1; // module
         uint hasSubs : 1; // class/method: has overrides; module: has clients

@@ -39,12 +39,11 @@ namespace Mil
             kind(0),
     #endif
             meta(m),anonymous(false),objectInit(false),typebound(false),
-            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),validated(false),
+            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),validated(false),generic(0),
             type(0),public_(0),entryPoint(0),owned(0),nobody(0),pointerInit(0),override_(0),translated(0),foreign_(0) {}
         virtual ~Node();
 
         enum Meta { Inval, T, D, E, S };
-        enum Visi { NA, Private, ReadOnly, ReadWrite };
 
 #ifndef _DEBUG
         uint kind : 8;
@@ -55,6 +54,7 @@ namespace Mil
         uint ownstype : 1; // all
         uint public_ : 1; // Declaration
         uint anonymous : 1; // Type, Field
+        uint generic : 1;
 
         // Type
         uint objectInit : 1; // this or enclosed type need object initialization (vtbl)
@@ -62,6 +62,9 @@ namespace Mil
         uint owned : 1;
 
         // Declaration:
+        // TODO instead of separate bits:
+        //    enum Mode {NA, Inline, Invar, Extern, Foreign, Forward };
+        //    uint mode : 3;
         uint inline_ : 1;
         uint invar : 1;
         uint extern_ : 1; // extern name (if present) is in val
@@ -73,7 +76,7 @@ namespace Mil
         uint translated : 1; // module
         uint entryPoint : 1; // procedure: begin$; module: top entry
 
-        // 28 bits
+        // 29 bits
 
         Mic::RowCol pos; // Declaration, Expression
 

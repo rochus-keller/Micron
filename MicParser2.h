@@ -44,6 +44,7 @@ namespace Mic {
 
         void RunParser( const Import& import = Import());
         Declaration* takeModule(); // get module declaration and take ownership (otherwise deleted by parser)
+        const Declaration* getModule() const { return thisMod; }
 		struct Error {
 		    QString msg;
 		    int row, col;

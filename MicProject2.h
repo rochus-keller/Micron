@@ -119,11 +119,12 @@ namespace Mic
 
         bool parse();
 
+        bool generateC(const QString& outDir);
+
         const FileHash& getFiles() const { return d_files; }
         const FileGroups& getFileGroups() const { return d_groups; }
         const FileGroup* getRootFileGroup() const;
         const FileGroup* findFileGroup(const VirtualPath& package ) const;
-        QList<Declaration*> getModulesToGenerate(bool includeTemplates=false) const; // in exec/depencency order
         File* findFile( const QString& file ) const; // arg can be a path or module name
         Declaration* findModule(const QByteArray& name) const;
 
@@ -143,6 +144,13 @@ namespace Mic
             Error( const QString& m, const RowCol& pos, const QString& p):msg(m),pos(pos),path(p){}
         };
         QList<Error> errors;
+
+        static inline QByteArray escapeFilename( const QByteArray& fileName )
+        {
+            QByteArray res = fileName;
+            res.replace('$','+');
+            return res;
+        }
 
         // Mic::Import implementation
         QByteArray modulePath( const QByteArrayList& path )
@@ -172,6 +180,7 @@ namespace Mic
         const ModuleSlot* find(Declaration*) const;
         File* toFile(const Mic::Import& imp);
         void parseLib(const QString&);
+        void writeC(const QString &in, const QString& what, const QString& out);
 
     private:
         AstModel d_mdl;
@@ -187,6 +196,7 @@ namespace Mic
         QByteArrayList d_options;
         QString d_workingDir, d_buildDir;
         ModProc d_main;
+        qint16 d_level;
         bool d_dirty;
         bool d_useBuiltInOakwood;
     };

@@ -34,6 +34,7 @@ namespace Mil
 
         bool generate(Declaration* module, QIODevice* header, QIODevice* body = 0);
         static bool requiresBody(Declaration* module);
+        static QString genDedication();
     protected:
         void visitModule();
         void visitProcedure(Declaration*);
