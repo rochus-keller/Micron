@@ -1437,7 +1437,7 @@ void Ide::onErrors()
 {
     d_errs->clear();
     QList<Project2::Error> errs = d_pro->errors;
-    //std::sort(errs.begin(), errs.end(), errorEntryLessThan );
+    std::sort(errs.begin(), errs.end(), errorEntryLessThan );
 
     for( int i = 0; i < errs.size(); i++ )
     {
@@ -1611,20 +1611,22 @@ void Ide::onAddDir()
 
 void Ide::onRemoveFile()
 {
-    ENABLED_IF( d_mods->currentItem() && d_mods->currentItem()->type() == 0 );
+    QTreeWidgetItem* cur = d_mods->currentItem();
+    ENABLED_IF( cur && cur->type() == 0 );
 
-    Declaration* m = d_mods->currentItem()->data(0,Qt::UserRole).value<Declaration*>();
-    if( m == 0 )
+    Project2::File* f = cur->data(0,Qt::UserRole).value<Project2::File*>();
+    if( f == 0 )
+    {
+        qWarning() << "remove file: invalid file item";
         return;
-
-    Q_ASSERT(m->kind == Declaration::Module);
+    }
 
     if( QMessageBox::warning( this, tr("Remove Module"),
-                              tr("Do you really want to remove module '%1' from project?").arg(m->name.constData()),
+                              tr("Do you really want to remove module '%1' from project?").arg(f->d_name.constData()),
                            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Yes ) != QMessageBox::Yes )
         return;
-    if( !d_pro->removeFile( m->data.value<ModuleData>().source ) )
-        qWarning() << "cannot remove module" << m->name;
+    if( !d_pro->removeFile( f->d_filePath ) )
+        qWarning() << "cannot remove module" << f->d_name;
     else
         compile(true);
 }
@@ -1891,23 +1893,23 @@ void Ide::fillMods()
 
     const Project2::FileGroups& paths = d_pro->getFileGroups();
     typedef QList<Group> Sort1;
-    Sort1 sort1;
+    Sort1 sortFg;
     foreach( const Project2::FileGroup& fg, paths )
-        sort1.append( qMakePair( fg.d_package.join('.'), fg.d_files ) );
-    std::sort( sort1.begin(), sort1.end(), sortNamed1 );
+        sortFg.append( qMakePair( fg.d_package.join('.'), fg.d_files ) );
+    std::sort( sortFg.begin(), sortFg.end(), sortNamed1 );
 
-    for( int j = 0; j < sort1.size(); j++ )
+    for( int j = 0; j < sortFg.size(); j++ )
     {
         QTreeWidgetItem* item = 0;
-        if( !sort1[j].first.isEmpty() )
+        if( !sortFg[j].first.isEmpty() )
         {
             item = new QTreeWidgetItem(d_mods,1);
-            item->setText(0, sort1[j].first);
+            item->setText(0, sortFg[j].first);
             item->setToolTip( 0, item->text(0) );
             item->setIcon(0, QPixmap(":/images/folder.png") );
         }
 
-        QList<Project2::File*> files = sort1[j].second;
+        QList<Project2::File*> files = sortFg[j].second;
         std::sort( files.begin(), files.end(), sortNamed );
         if( item )
             fillModTree(item,files);
@@ -2711,20 +2713,21 @@ void Ide::fillHier(Declaration* n)
     switch( n->kind )
     {
     case Declaration::TypeDecl:
-        switch( n->getType()->kind )
-        {
-        case Type::Record:
+        if( n->getType() )
+            switch( n->getType()->kind )
             {
-                Type* r = n->getType();
-                Type* r0 = r;
-                d_hierTitle->setText( QString("Inheritance of class '%1'").arg( n->name.constData() ) );
-                while( r->getType() )
-                    r = r->getType();
-                ref = fillHierClass( d_hier, n, r, r0, d_pro );
-                Q_ASSERT( ref );
+            case Type::Record:
+                {
+                    Type* r = n->getType();
+                    Type* r0 = r;
+                    d_hierTitle->setText( QString("Inheritance of class '%1'").arg( n->name.constData() ) );
+                    while( r->getType() )
+                        r = r->getType();
+                    ref = fillHierClass( d_hier, n, r, r0, d_pro );
+                    Q_ASSERT( ref );
+                }
+                break;
             }
-            break;
-        }
         break;
     case Declaration::Procedure:
         {
@@ -3393,7 +3396,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2");
+    a.setApplicationVersion("0.2.1");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

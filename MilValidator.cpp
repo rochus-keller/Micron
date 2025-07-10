@@ -125,6 +125,7 @@ void Validator::visitProcedure(Declaration* proc)
                  deref(deref(params.first()->getType())->getType()) != proc->outer->getType() ) )
             error(params.first(), "the SELF parameter must be a pointer to the bound object type");
     }
+    // TODO: check that
     gotos.clear(); labels.clear();
     visitStatSeq(proc->body);
     if( !stack.isEmpty() )

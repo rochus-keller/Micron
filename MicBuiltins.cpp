@@ -223,6 +223,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::STRLEN:
         expectingNArgs(args,1);
+        *ret = mdl->getType(Type::UINT32);
         break;
     case Builtin::UNSIGNED:
         expectingNArgs(args,1);

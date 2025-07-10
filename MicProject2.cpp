@@ -619,12 +619,13 @@ Declaration *Project2::loadModule(const Import &imp)
     }
 
     res = p.takeModule();
-    res->invalid = hasErrors;
+    if( res )
+        res->invalid = hasErrors;
 
     if( fixedImp.metaActuals.isEmpty() )
         file->d_mod = res; // in case of generic modules, file->d_mod points to the non-instantiated version
 
-    if( imr.getModule() )
+    if( res && imr.getModule() )
         imr.getModule()->generic = res->generic;
 
     ms->xref = p.takeXref();

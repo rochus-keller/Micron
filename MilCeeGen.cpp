@@ -721,6 +721,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
 
         case IL_ret:
             out << ws(level) << "return";
+            // TODO: return arrays by value, either via dynamc allocation or hidden parameter
             if( s->args )
             {
                 out << " ";

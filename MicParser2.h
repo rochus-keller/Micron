@@ -55,7 +55,7 @@ namespace Mic {
 
         Xref takeXref();
 
-        bool assigCompat(Type* lhs, Type* rhs) const;
+        bool assigCompat(Type* lhs, Type* rhs);
     protected:
         Expression* number();
         Expression* integer();
@@ -153,9 +153,9 @@ namespace Mic {
         void error( int row, int col, const QString& msg );
         void error( const RowCol&, const QString& msg );
         Declaration* findDecl(const Token& id );
-        bool assigCompat(Type* lhs, Declaration* rhs) const;
-        bool assigCompat(Type* lhs, const Expression* rhs) const;
-        bool paramCompat(Declaration* lhs, const Expression* rhs) const;
+        bool assigCompat(Type* lhs, Declaration* rhs);
+        bool assigCompat(Type* lhs, const Expression* rhs);
+        bool paramCompat(Declaration* lhs, const Expression* rhs);
         bool matchFormals(const QList<Declaration*>& a, const QList<Declaration*>& b) const;
         bool matchResultType(Type* lhs, Type* rhs) const;
         bool sameType(Type* lhs, Type* rhs) const;
@@ -166,7 +166,7 @@ namespace Mic {
         static DeclList toList(Declaration*);
         Declaration* addDecl(const Token& id, quint8 visi, Declaration::Kind mode, bool* doublette = 0, bool mark = true);
         Declaration* addDecl(const IdentDef& id, Declaration::Kind mode, bool* doublette = 0, bool mark = true);
-        void resolveDeferreds();
+        void resolveDeferreds(bool reportError = false);
         Expression* toExpr(Declaration* d, const RowCol&);
         void emitType(Type*);
         Declaration* addHelper(Type*);
@@ -184,6 +184,7 @@ namespace Mic {
         Mil::Emitter& line(const Token&);
         Symbol *markDecl(Declaration* d);
         Symbol* markRef(Declaration* d, const RowCol& pos, quint8 what = 0);
+        void checkPointerResolved(Type*);
 
     private:
         AstModel* mdl;

@@ -633,6 +633,7 @@ Parser2::~Parser2()
 
 void Parser2::RunParser(const Import &import) {
 	errors.clear();
+    deferred.clear();
 	next();
     module(import);
 }
@@ -679,6 +680,23 @@ Symbol* Parser2::markRef(Declaration* d, const RowCol& pos, quint8 what)
     last->next = s;
     last = last->next;
     return s;
+}
+
+void Parser2::checkPointerResolved(Type * ptr)
+{
+    if( ptr == 0 || ptr->kind != Type::Pointer || !ptr->deferred )
+        return;
+    Type* base = ptr->getType();
+    if( base == 0 || base->kind != Type::Undefined )
+        return;
+    for( int i = 0; i < deferred.size(); i++ )
+    {
+        if( deferred[i].first == ptr )
+        {
+            error(deferred[i].second, "cannot resolve pointer base type");
+            return;
+        }
+    }
 }
 
 void Parser2::next() {
@@ -738,7 +756,7 @@ Declaration* Parser2::findDecl(const Token& id)
     return x;
 }
 
-bool Parser2::assigCompat(Type* lhs, Type* rhs) const
+bool Parser2::assigCompat(Type* lhs, Type* rhs)
 {
     if( lhs == 0 || rhs == 0 )
         return false;
@@ -751,6 +769,11 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs) const
             (lhs->isUInt() && rhs->isUInt()) ||
             (lhs->isReal() && rhs->isReal()) )
         return lhs->kind >= rhs->kind;
+
+    if( lhs->kind == Type::Pointer )
+        checkPointerResolved(lhs);
+    if( rhs->kind == Type::Pointer )
+        checkPointerResolved(rhs);
 
     // Te and Tv are pointer types and the pointers have equal base types;
     if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer &&
@@ -815,7 +838,7 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs) const
     return false;
 }
 
-bool Parser2::assigCompat(Type* lhs, Declaration* rhs) const
+bool Parser2::assigCompat(Type* lhs, Declaration* rhs)
 {
     // Tv is a procedure type and e is the name of a procedure whose formal parameters match those of Tv.
     if( rhs->kind == Declaration::Procedure )
@@ -840,7 +863,7 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs) const
     return assigCompat(lhs, rhs->getType());
 }
 
-bool Parser2::assigCompat(Type* lhs, const Expression* rhs) const
+bool Parser2::assigCompat(Type* lhs, const Expression* rhs)
 {
     if( lhs == 0 || rhs == 0 )
         return false;
@@ -868,7 +891,7 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs) const
     return assigCompat(lhs, rhs->getType());
 }
 
-bool Parser2::paramCompat(Declaration* lhs, const Expression* rhs) const
+bool Parser2::paramCompat(Declaration* lhs, const Expression* rhs)
 {
     Q_ASSERT(lhs->kind == Declaration::ParamDecl);
 
@@ -1197,7 +1220,7 @@ void Parser2::TypeDeclaration() {
     }
     d->setType(t);
 
-    if( (t->kind == Type::Pointer && t->getType()->kind == Type::Object) || t->kind == Type::Object )
+    if( (t && t->kind == Type::Pointer && t->getType()->kind == Type::Object) || (t && t->kind == Type::Object) )
     {
         Type* obj = t;
         if( obj->kind == Type::Pointer )
@@ -1212,7 +1235,7 @@ void Parser2::TypeDeclaration() {
     }
 
     thisDecl = 0;
-    if( !q.second.d_val.isEmpty() )
+    if( t && !q.second.d_val.isEmpty() )
         out->addType(ev->toQuali(t).second,d->pos,t->decl->isPublic(),toMilQuali(q), Mil::EmiTypes::Alias);
     else
         emitType(t);
@@ -2089,6 +2112,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 res->setByVal();
                 Expression* tmp = Expression::create(Expression::Deref, tok.toRowCol() );
                 tmp->lhs = res;
+                checkPointerResolved(res->getType());
                 tmp->setType(res->getType()->getType());
                 res = tmp;
             }
@@ -2153,6 +2177,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             res->setByVal();
             Expression* tmp = Expression::create(Expression::Deref, tok.toRowCol() );
             tmp->lhs = res;
+            checkPointerResolved(res->getType());
             tmp->setType(res->getType()->getType());
             res = tmp;
         } else if( la.d_type == Tok_Lpar ) {
@@ -2408,21 +2433,30 @@ Declaration*Parser2::addDecl(const Parser2::IdentDef& id, Declaration::Kind mode
     return addDecl(id.name, id.visi, mode, doublette, mark);
 }
 
-void Parser2::resolveDeferreds()
+void Parser2::resolveDeferreds(bool reportError)
 {
     if( deferred.isEmpty() )
         return;
     for(int i = 0; i < deferred.size(); i++ )
     {
+        if( deferred[i].first == 0 )
+            continue; // already handled
         Declaration* d = mdl->findDecl(deferred[i].second.d_val);
         if( d == 0 || d->getType() == 0 || d->kind != Declaration::TypeDecl )
         {
-            error(deferred[i].second, QString("invalid type: %1").arg(deferred[i].second.d_val.constData()) );
+            if( reportError && !deferred[i].first->invalid )
+            {
+                error(deferred[i].second, QString("cannot resolve type: %1").arg(deferred[i].second.d_val.constData()) );
+                deferred[i].first = 0;
+            }
         }else
+        {
+            markRef(d, deferred[i].second.toRowCol());
             deferred[i].first->setType(d->getType());
-        markRef(d, deferred[i].second.toRowCol());
+            deferred[i].first->deferred = false;
+            deferred[i].first = 0;
+        }
     }
-    deferred.clear();
 }
 
 Expression* Parser2::expression(Type* hint, bool lvalue) {
@@ -3660,6 +3694,7 @@ Parser2::NameAndType Parser2::Receiver2()
 
 void Parser2::block() {
 	expect(Tok_BEGIN, true, "block");
+    resolveDeferreds();
     beginFinallyEnd(false, cur.toRowCol());
     if( la.d_type == Tok_FINALLY ) {
         expect(Tok_FINALLY, false, "block");
@@ -3688,7 +3723,6 @@ void Parser2::DeclarationSequence() {
 					expect(Tok_Semi, false, "DeclarationSequence");
 				}
 			}
-            resolveDeferreds();
 		} else if( la.d_type == Tok_VAR ) {
 			expect(Tok_VAR, true, "DeclarationSequence");
 			while( FIRST_VariableDeclaration(la.d_type) ) {
@@ -3792,6 +3826,10 @@ Type* Parser2::ReturnType() {
         t = res;
 
         addHelper(res);
+    }else if( t )
+    {
+        if( t->kind == Type::Array && t->len == 0 )
+            error(t->pos, "return type cannot be an open array");
     }
     return t;
 }
@@ -3999,6 +4037,9 @@ void Parser2::module(const Import & import) {
 	if( la.d_type == Tok_Dot ) {
 		expect(Tok_Dot, false, "module");
 	}
+
+    resolveDeferreds(true); // report remaining deferreds not resolved as error
+
     mdl->closeScope();
 
     if( first )
@@ -4054,6 +4095,7 @@ void Parser2::import() {
 
 	if( FIRST_MetaActuals(la.d_type) ) {
         // inlined MetaActuals();
+        resolveDeferreds();
         expect(Tok_Lpar, false, "MetaActuals");
         Expression* e = ConstExpression(0);
         if( e && !ev->evaluate(e) )
