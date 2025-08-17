@@ -1,6 +1,7 @@
 
 
 SOURCES += \
+    $$PWD/MilCilAsmGen.cpp \
     MilLexer.cpp \
     MilToken.cpp \
     MilTokenType.cpp \
@@ -20,6 +21,7 @@ SOURCES += \
     MilRenderer.cpp
 
 HEADERS += \
+    $$PWD/MilCilAsmGen.h \
     MilLexer.h \
     MilToken.h \
     MilTokenType.h \

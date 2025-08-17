@@ -987,12 +987,10 @@ void Ide::onExportIl()
 
     if( !compile(false,false) ) // otherwise allocated flag is already set after one generator run
         return;
-#if 0
-    // TODO
-    if( !CilGen::translateAll(d_pro, CilGen::Ilasm, d_debugging && d_ovflCheck, dirPath, true ) )
+
+    if( !d_pro->generateIL(dirPath) )
         QMessageBox::critical(this,tr("Save IL"),tr("There was an error when generating IL; "
-                                                    "see Output window for more information"));
-#endif
+                                                   "see Output window for more information"));
 }
 
 void Ide::onExportC()
@@ -3396,7 +3394,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2.1");
+    a.setApplicationVersion("0.2.2");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

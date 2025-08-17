@@ -120,6 +120,7 @@ namespace Mic
         bool parse();
 
         bool generateC(const QString& outDir);
+        bool generateIL(const QString& outDir);
 
         const FileHash& getFiles() const { return d_files; }
         const FileGroups& getFileGroups() const { return d_groups; }
