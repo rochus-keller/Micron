@@ -38,19 +38,71 @@ static QByteArray indent(int level)
     return QByteArray(level * 4, ' ');
 }
 
-QByteArray CilAsmGen::qualident(Declaration* d)
+QByteArray CilAsmGen::declRef(Declaration * d)
 {
-    if (d->outer)
+    // remember MIL has no nested types or procedures!
+
+    if( d == 0 )
+        return QByteArray();
+
+    switch(d->kind)
     {
-        if( d->outer->kind == Declaration::Module )
-            return d->outer->name + "::" + d->forwardToProc()->name;
+    case Declaration::Module:
+        if( d != curMod )
+            return "[" + d->name + "]" + d->name;
         else
-            return qualident(d->outer) + "$" + d->forwardToProc()->name;
-    }else
+            return d->name; // since the MIL module is a CIL class, this name always remains.
+
+    case Declaration::TypeDecl:
+        Q_ASSERT(d->outer && d->outer->kind == Declaration::Module && d->getType() && d->getType()->isSUO() );
+        return declRef(d->outer) + "/" + d->name;
+
+    case Declaration::Field:
+        Q_ASSERT(d->outer && d->outer->kind == Declaration::TypeDecl);
+        return declRef(d->outer) + "::" + d->name;
+
+    case Declaration::VarDecl:
+        Q_ASSERT(d->outer && d->outer->kind == Declaration::Module);
+        return declRef(d->outer) + "::" + d->name;
+
+    case Declaration::LocalDecl:
+    case Declaration::ParamDecl:
         return d->name;
+
+    case Declaration::Procedure:
+        Q_ASSERT(d->outer && d->outer->kind == Declaration::Module);
+        return declRef(d->outer) + "::" + d->forwardToProc()->name;
+
+    default:
+        Q_ASSERT(false);
+    }
 }
 
-bool CilAsmGen::generate(Declaration* module, QIODevice* device)
+QByteArray CilAsmGen::declName(Declaration * d)
+{
+    if( d == 0 )
+        return QByteArray();
+    switch(d->kind)
+    {
+    case Declaration::Field:
+    case Declaration::VarDecl:
+    case Declaration::LocalDecl:
+    case Declaration::ParamDecl:
+    case Declaration::ConstDecl:
+    case Declaration::Module:
+        return d->name;
+    case Declaration::Procedure:
+    case Declaration::TypeDecl:
+        if (d->outer && d->outer->kind != Declaration::Module)
+            return declName(d->outer) + "$" + d->forwardToProc()->name;
+        else
+            return d->forwardToProc()->name;
+    default:
+        Q_ASSERT(false);
+    }
+}
+
+bool CilAsmGen::generate(Declaration* module, QIODevice* device, const QString& fileName)
 {
     Q_ASSERT(module && device);
     curMod = module;
@@ -58,25 +110,59 @@ bool CilAsmGen::generate(Declaration* module, QIODevice* device)
     
     const QString dedication = genDedication();
     
-    out << "// " << module->name << ".il" << endl;
+    out << "// " << fileName << ".il" << endl;
     out << dedication << endl << endl;
     
-    // Assembly declaration
-    out << ".assembly extern mscorlib" << endl;
-    out << "{" << endl;
-    out << "    .ver 4:0:0:0" << endl;
-    out << "    .publickeytoken = (B7 7A 5C 56 19 34 E0 89)" << endl;
-    out << "}" << endl << endl;
-    
-    out << ".assembly " << module->name << endl;
-    out << "{" << endl;
-    out << "    .ver 1:0:0:0" << endl;
-    out << "}" << endl << endl;
-    
-    out << ".module " << module->name << ".dll" << endl << endl;
-    
+
+    out << ".assembly " << declName(module) << " {}" << endl;
+
+    out << ".module \"" << fileName << ".dll\"" << endl << endl;
+
+    out << "// imports" << endl;
+    out << ".assembly extern mscorlib {}" << endl;
+
     visitModule();
     
+    return true;
+}
+
+bool CilAsmGen::generateMain(QIODevice *device, const QSet<Declaration *> &used)
+{
+    Q_ASSERT(device);
+
+    out.setDevice(device);
+
+    const QString dedication = genDedication();
+
+    out << "// Main+.il" << endl;
+    out << dedication << endl << endl;
+
+    out << ".assembly Main$ {}" << endl;
+
+    out << ".module \"Main+.exe\"" << endl << endl;
+
+    out << "// imports" << endl;
+    foreach( Mil::Declaration* module, mdl->getModules() )
+    {
+        // if a module is not in "used", it is never imported and thus a root module
+        if( !used.contains(module) && !module->nobody && !module->generic )
+            out << ".assembly " << declName(module) << " {}" << endl;
+    }
+
+    out << endl;
+
+    out << ".method public static void Main() cil managed {" << endl;
+
+    out << "    .entrypoint" << endl;
+    foreach( Mil::Declaration* module, mdl->getModules() )
+    {
+        // if a module is not in "used", it is never imported and thus a root module
+        if( !used.contains(module) && !module->nobody && !module->generic )
+            out << "    call void [" <<  module->name << "]" << module->name << "::$begin$();" << endl;
+    }
+    out << "    ret;" << endl;
+    out << "}" << endl;
+
     return true;
 }
 
@@ -94,15 +180,16 @@ void CilAsmGen::visitModule()
     {
         if (sub->kind == Declaration::Import)
         {
-            out << ".assembly extern " << sub->name << endl;
-            out << "{" << endl;
-            out << "    .ver 1:0:0:0" << endl;
-            out << "}" << endl << endl;
+            out << ".assembly extern " << sub->name << " {}" << endl;
         }
         sub = sub->next;
     }
+    out << endl;
+
+    out << ".class public auto ansi sealed " << declName(curMod) << " extends [mscorlib]System.Object {" << endl;
     
-    // Forward declare types (structs)
+    out << ".field static int32 initialized$" << endl;
+
     sub = curMod->subs;
     while (sub)
     {
@@ -119,26 +206,12 @@ void CilAsmGen::visitModule()
     {
         if (sub->kind == Declaration::VarDecl)
         {
-            out << ".field static " << typeRef(sub->getType()) << " " << mangledName(sub) << endl;
+            out << ".field static " << typeRef(sub->getType()) << " " << declName(sub) << endl;
         }
         sub = sub->next;
     }
     out << endl;
-    
-    // Constants as static literals
-    sub = curMod->subs;
-    while (sub)
-    {
-        if (sub->kind == Declaration::ConstDecl)
-        {
-            out << ".field static literal " << typeRef(sub->getType()) << " " << mangledName(sub) << " = ";
-            constValue(sub->c);
-            out << endl;
-        }
-        sub = sub->next;
-    }
-    out << endl;
-    
+        
     // Process procedures and type methods
     bool initFound = false;
     sub = curMod->subs;
@@ -171,16 +244,18 @@ void CilAsmGen::visitModule()
         sub = sub->next;
     }
     
-    // Module initializer
+    // create module initializer if not present
     if (!initFound)
     {
         Declaration proc;
         proc.kind = Declaration::Procedure;
         proc.entryPoint = true;
         proc.outer = curMod;
-        proc.name = ".cctor";  // Static constructor in CIL
+        proc.name = "begin$";
         visitProcedure(&proc);
     }
+
+    out << "}" << endl; // end module class
 }
 
 void CilAsmGen::visitProcedure(Declaration* proc)
@@ -197,18 +272,17 @@ void CilAsmGen::visitProcedure(Declaration* proc)
     {
         // Module initialization code
         out << indent(1) << ".maxstack 2" << endl;
-        out << indent(1) << ".locals init (int32 done$)" << endl;
-        out << indent(1) << "ldsfld int32 " << curMod->name << "::initialized$" << endl;
+        out << indent(1) << "ldsfld int32 initialized$" << endl;
         out << indent(1) << "brtrue.s IL_INIT_DONE" << endl;
         out << indent(1) << "ldc.i4.1" << endl;
-        out << indent(1) << "stsfld int32 " << curMod->name << "::initialized$" << endl;
+        out << indent(1) << "stsfld int32 initialized$" << endl;
         
         Declaration* sub = curMod->subs;
         while (sub)
         {
             if (sub->kind == Declaration::Import && !sub->imported->nobody)
             {
-                out << indent(1) << "call void " << sub->imported->name << "::.cctor()" << endl;
+                out << indent(1) << "call void [" << sub->imported->name << "]" << sub->imported->name << "::begin$()" << endl;
             }
             else if (sub->kind == Declaration::VarDecl)
             {
@@ -260,11 +334,11 @@ void CilAsmGen::visitProcedure(Declaration* proc)
 void CilAsmGen::procHeader(Declaration* proc)
 {
     out << ".method static ";
+
+    if( proc->public_ || proc->entryPoint )
+        out << "public ";
     
-    if (proc->entryPoint)
-        out << "specialname rtspecialname ";
-    
-    out << typeRef(proc->getType()) << " " << mangledName(proc->forwardToProc());
+    out << typeRef(proc->getType()) << " " << declName(proc);
     out << "(";
     
     DeclList params = proc->getParams();
@@ -280,7 +354,7 @@ void CilAsmGen::procHeader(Declaration* proc)
 
 void CilAsmGen::parameter(Declaration* param, int index)
 {
-    out << typeRef(param->getType()) << " " << param->name;
+    out << typeRef(param->getType()) << " " << declName(param);
 }
 
 void CilAsmGen::typeDecl(Declaration* d)
@@ -291,44 +365,26 @@ void CilAsmGen::typeDecl(Declaration* d)
         out << "// Undeclared type " << d->name << endl;
         return;
     }
-    
-    QByteArray typeName = mangledName(d);
-    
+        
     switch (t->kind)
     {
-    case Type::Struct:
-    case Type::Union:
-        out << ".class value explicit ansi sealed " << typeName << endl;
-        out << "       extends [mscorlib]System.ValueType" << endl;
-        out << "{" << endl;
-        
-        if (t->kind == Type::Union)
-        {
-            // For unions, all fields start at offset 0
-            int maxSize = 0;
-            foreach (Declaration* field, t->subs)
+    case Type::Object:
+    case Type::Struct: {
+            out << ".class nested value sequential ansi sealed " << declName(d) << endl;
+            out << "       extends [mscorlib]System.ValueType" << endl;
+            out << "{" << endl;
+
+            QList<Declaration*> fields;
+            if( t->kind == Type::Object )
             {
-                if (field->kind == Declaration::Field)
-                {
-                    out << indent(1) << ".field [0] ";
-                    Type* ft = deref(field->getType());
-                    if (ft->kind == Type::Array && ft->len > 0)
-                    {
-                        // Embedded array - use ByValArray with fixed buffer
-                        out << "valuetype " << typeRef(ft->getType()) << "[" << ft->len << "] " << field->name << endl;
-                    }
-                    else
-                    {
-                        out << typeRef(field->getType()) << " " << field->name << endl;
-                    }
-                }
-            }
-        }
-        else
-        {
+                // Objects as structs with vtable pointer
+                out << indent(1) << ".field native int class$" << endl;  // vtable pointer
+                fields = t->getFieldList(true);
+            }else
+                fields = t->subs;
+
             // For structs, fields are sequential
-            int offset = 0;
-            foreach (Declaration* field, t->subs)
+            foreach (Declaration* field, fields)
             {
                 if (field->kind == Declaration::Field)
                 {
@@ -344,37 +400,36 @@ void CilAsmGen::typeDecl(Declaration* d)
                     else
                     {
                         out << typeRef(field->getType()) << " " << field->name << endl;
+                        // TODO: bitfields?
                     }
                 }
             }
-        }
-        
-        out << "}" << endl << endl;
-        break;
-        
-    case Type::Object: {
-            // Objects as structs with vtable pointer
-            out << ".class value explicit ansi sealed " << typeName << endl;
+            out << "}" << endl << endl;
+        } break;
+
+    case Type::Union: {
+            out << ".class nested value explicit ansi sealed " << declName(d) << endl;
             out << "       extends [mscorlib]System.ValueType" << endl;
             out << "{" << endl;
-            out << indent(1) << ".field native int class$" << endl;  // vtable pointer
 
-            QList<Declaration*> fields = t->getFieldList(true);
-            foreach (Declaration* field, fields)
-            {
-                Type* ft = deref(field->getType());
-                out << indent(1) << ".field ";
-                if (ft->kind == Type::Array && ft->len > 0)
+                // For unions, all fields start at offset 0
+                foreach (Declaration* field, t->subs)
                 {
-                    // Embedded array
-                    Type* elemType = deref(ft->getType());
-                    out << "valuetype '" << typeRef(elemType) << "'[" << ft->len << "] " << field->name << endl;
+                    if (field->kind == Declaration::Field)
+                    {
+                        out << indent(1) << ".field [0] ";
+                        Type* ft = deref(field->getType());
+                        if (ft->kind == Type::Array && ft->len > 0)
+                        {
+                            // Embedded array - use ByValArray with fixed buffer
+                            out << "valuetype " << typeRef(ft->getType()) << "[" << ft->len << "] " << field->name << endl;
+                        }
+                        else
+                        {
+                            out << typeRef(field->getType()) << " " << field->name << endl;
+                        }
+                    }
                 }
-                else
-                {
-                    out << typeRef(field->getType()) << " " << field->name << endl;
-                }
-            }
 
             out << "}" << endl << endl;
         } break;
@@ -393,7 +448,7 @@ void CilAsmGen::typeDecl(Declaration* d)
         // Function pointers
         if (t->typebound)
         {
-            out << ".class value explicit ansi sealed " << typeName << endl;
+            out << ".class value explicit ansi sealed " << declName(d) << endl;
             out << "       extends [mscorlib]System.ValueType" << endl;
             out << "{" << endl;
             out << indent(1) << ".field native int self" << endl;
@@ -423,7 +478,7 @@ QByteArray CilAsmGen::typeRef(Type* t)
     case Type::BOOL:
         return "bool";
     case Type::CHAR:
-        return "char";
+        return "uint8"; // the CIL char has 16 bits
     case Type::INT8:
         return "int8";
     case Type::INT16:
@@ -448,32 +503,30 @@ QByteArray CilAsmGen::typeRef(Type* t)
         return "native int";
     case Type::DBLINTPTR:
         return "native int";  // TODO: handle double pointer size
-    }
-    
-    if (t->kind == Type::Pointer)
-    {
+    case Type::Pointer: {
         Type* tt = deref(t->getType());
         if (tt->kind == Type::Array)
             tt = deref(tt->getType());
-        
-        if (tt->isSUO())
-            return "valuetype " + typeRef(tt) + "*";
+
+        return typeRef(tt) + "*";
+    }
+    case Type::Array: {
+        Type* tt = deref(t->getType());
+        return typeRef(tt) + "*"; // TODO
+    }
+    case Type::Struct:
+    case Type::Object:
+    case Type::Union:
+        return "valuetype " + declRef(t->decl);
+    case Type::Proc:
+        if( t->typebound )
+            return declRef(t->decl);
         else
-            return typeRef(tt) + "*";
+            return "native int";
+    default:
+        Q_ASSERT(false);
+        return "object"; // TODO
     }
-    else if (t->kind == Type::Array)
-    {
-        return typeRef(t->getType()) + "[]";
-    }
-    else if (t->decl)
-    {
-        if (t->isSUO())
-            return "valuetype " + mangledName(t->decl);
-        else
-            return mangledName(t->decl);
-    }
-    else
-        return "object";
 }
 
 QByteArray CilAsmGen::typeToken(Type* t)
@@ -739,7 +792,7 @@ void CilAsmGen::statementSeq(Statement* s)
         case IL_stvar:
             expression(s->args);
             out << indent(1) << "stsfld " << typeRef(s->args->getType()) << " ";
-            out << curMod->name << "::" << mangledName(s->d) << endl;
+            out << mangledName(s->d) << endl;
             break;
             
         case IL_ret:
@@ -1013,12 +1066,12 @@ void CilAsmGen::expression(Expression* e)
         
     case IL_ldvar:
         out << indent(1) << "ldsfld " << typeRef(e->d->getType()) << " ";
-        out << curMod->name << "::" << mangledName(e->d) << endl;
+        out << mangledName(e->d) << endl;
         break;
         
     case IL_ldvara:
         out << indent(1) << "ldsflda " << typeRef(e->d->getType()) << " ";
-        out << curMod->name << "::" << mangledName(e->d) << endl;
+        out << mangledName(e->d) << endl;
         break;
         
     case IL_ldarg_0:
@@ -1623,12 +1676,12 @@ void CilAsmGen::emitSoapInit(const QByteArray& name, Type* t, bool isStatic)
         else
             out << indent(1) << "ldloca " << name << endl;
         
-        out << indent(1) << "stfld " << typeRef(t) << " " << curMod->name << "::" << name << endl;
+        out << indent(1) << "stfld " << typeRef(t) << " " << name << endl;
     }
     else if (t->isSUOA() && t->pointerInit)
     {
         if (isStatic)
-            out << indent(1) << "ldsflda " << typeRef(t) << " " << curMod->name << "::" << name << endl;
+            out << indent(1) << "ldsflda " << typeRef(t) << " " << name << endl;
         else
             out << indent(1) << "ldloca " << name << endl;
         
@@ -1639,7 +1692,7 @@ void CilAsmGen::emitSoapInit(const QByteArray& name, Type* t, bool isStatic)
     if (t->objectInit && t->isSO())
     {
         if (isStatic)
-            out << indent(1) << "ldsflda " << typeRef(t) << " " << curMod->name << "::" << name << endl;
+            out << indent(1) << "ldsflda " << typeRef(t) << " " << name << endl;
         else
             out << indent(1) << "ldloca " << name << endl;
         

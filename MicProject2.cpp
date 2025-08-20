@@ -585,29 +585,17 @@ bool Project2::generateIL(const QString &outDir)
         if( !module->nobody )
         {
             Mil::CilAsmGen cg(&loader.getModel());
-            QFile body( dir.absoluteFilePath(escapeFilename(module->name) + ".il"));
+            const QString fileName = escapeFilename(module->name);
+            QFile body( dir.absoluteFilePath(fileName + ".il"));
             body.open(QFile::WriteOnly);
-            cg.generate(module, &body);
+            cg.generate(module, &body, fileName);
         } // else TODO
     }
 
-    QFile main(dir.absoluteFilePath("main+.il"));
+    QFile main(dir.absoluteFilePath("Main+.il"));
     main.open(QFile::WriteOnly);
-    QTextStream out(&main);
-    out << "// main+.il" << endl;
-    out << Mil::CeeGen::genDedication() << endl << endl;
-
-    // TODO
-    out << "int main(int argc, char** argv) {" << endl;
-
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
-    {
-        // if a module is not in "used", it is never imported and thus a root module
-        if( !used.contains(module) && !module->nobody && !module->generic )
-            out << "    " <<  module->name << "$begin$();" << endl;
-    }
-    out << "    return 0;" << endl;
-    out << "}" << endl;
+    Mil::CilAsmGen cg(&loader.getModel());
+    cg.generateMain(&main, used);
 
     return true;
 }
@@ -821,7 +809,7 @@ Project2::File *Project2::toFile(const Import &imp)
 
 void Project2::parseLib(const QString & name)
 {
-    Mil::RenderSplitter imr;
+    Mil::RenderSplitter imr; // dummy target
     Lex2 lex;
     QString path = QString(":/oakwood/%1.mic").arg(name);
     lex.sourcePath = path; // to keep file name if invalid

@@ -33,7 +33,8 @@ namespace Mil
     public:
         CilAsmGen(AstModel*);
 
-        bool generate(Declaration* module, QIODevice* out);
+        bool generate(Declaration* module, QIODevice* out, const QString &fileName);
+        bool generateMain(QIODevice* out, const QSet<Mil::Declaration*>& used);
         static QString genDedication();
         
     protected:
@@ -60,8 +61,9 @@ namespace Mil
         // Helper methods for CIL specifics
         void emitLabel(const QByteArray& label);
         void emitLocal(Declaration* local);
-        QByteArray mangledName(Declaration* d) { return qualident(d); }
-        QByteArray qualident(Declaration* d);
+        QByteArray mangledName(Declaration* d) { return declRef(d); }
+        QByteArray declName(Declaration*);
+        QByteArray declRef(Declaration*);
         void emitMaxStack();
         
     private:
