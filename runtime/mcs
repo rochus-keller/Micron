@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /home/me/Programme/Mono5/bin/mono $MONO_OPTIONS /home/me/Programme/Mono5/lib/mono/4.5/mcs.exe -unsafe -target:library -out:MIC+.dll MIC+.cs 

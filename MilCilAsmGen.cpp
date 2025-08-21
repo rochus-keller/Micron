@@ -120,6 +120,7 @@ bool CilAsmGen::generate(Declaration* module, QIODevice* device, const QString& 
 
     out << "// imports" << endl;
     out << ".assembly extern mscorlib {}" << endl;
+    out << ".assembly extern MIC$ {}" << endl;
 
     visitModule();
     

@@ -169,7 +169,7 @@ int MIC$$relop4(char lhs, char rhs, int op)
 	char l[2] = "x";
 	l[0] = lhs;
 	char r[2] = "x";
-	l[0] = rhs;
+	r[0] = rhs;
 	return MIC$$relop1(l,r,op);
 }
 
