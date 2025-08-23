@@ -33,8 +33,9 @@ namespace Mil
     public:
         CilAsmGen(AstModel*);
 
-        bool generate(Declaration* module, QIODevice* out, const QString &fileName);
+        bool generate(Declaration* module, QIODevice* out);
         bool generateMain(QIODevice* out, const QSet<Mil::Declaration*>& used);
+        bool generateConfig(QIODevice* out);
         static QString genDedication();
         
     protected:

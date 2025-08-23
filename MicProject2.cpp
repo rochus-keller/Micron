@@ -585,17 +585,22 @@ bool Project2::generateIL(const QString &outDir)
         if( !module->nobody )
         {
             Mil::CilAsmGen cg(&loader.getModel());
-            const QString fileName = escapeFilename(module->name);
-            QFile body( dir.absoluteFilePath(fileName + ".il"));
+            // Mono doesn't find the assembly, if the module name differs from the assembly name!
+            // so use $ also in the file name instead of +
+            QFile body( dir.absoluteFilePath(QString::fromLatin1(module->name) + ".il"));
             body.open(QFile::WriteOnly);
-            cg.generate(module, &body, fileName);
+            cg.generate(module, &body);
         } // else TODO
     }
 
-    QFile main(dir.absoluteFilePath("Main+.il"));
+    QFile main(dir.absoluteFilePath("Main$.il"));
     main.open(QFile::WriteOnly);
     Mil::CilAsmGen cg(&loader.getModel());
     cg.generateMain(&main, used);
+
+    QFile config(dir.absoluteFilePath("Main$.runtimeconfig.json"));
+    config.open(QFile::WriteOnly);
+    cg.generateConfig(&config);
 
     return true;
 }

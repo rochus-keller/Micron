@@ -19,8 +19,9 @@ public class MIC_Dollar
         else
         {
             byte[] bytes = latin1.GetBytes(str); 
-            res = Marshal.AllocHGlobal(bytes.Length);
+            res = Marshal.AllocHGlobal(bytes.Length+1);
             Marshal.Copy(bytes, 0, res, bytes.Length);
+            Marshal.WriteByte(res, bytes.Length, 0);
             dict[str] = res;
             return res;
         }
@@ -142,16 +143,16 @@ public class MIC_Dollar
         System.Console.Write(Convert.ToString(s, 2).PadLeft(32, '0'));
     }
 
-    public static unsafe void assert(bool cond, uint line, byte* file)
+    public static unsafe void assert(byte cond, uint line, byte* file)
     {
-        if(!cond && file != null)
+        if(cond == 0 && file != null)
         {
             int length = 0;
             while (file[length] != 0)
                 length++;    
             Console.Error.WriteLine("assertion failed in {0} line {1}", latin1.GetString(file, length), line);
         }
-	    System.Diagnostics.Debug.Assert(cond);
+	    System.Diagnostics.Debug.Assert(cond != 0);
     }
 
     public static void exit(int res)

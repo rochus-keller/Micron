@@ -1,0 +1,5 @@
+#!/bin/sh
+export MONO_PATH=.
+#export MONO_LOG_LEVEL=debug
+#export MONO_LOG_MASK=asm
+exec /home/me/Programme/Mono5/bin/mono $MONO_OPTIONS "$@"

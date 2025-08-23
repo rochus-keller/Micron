@@ -7,11 +7,17 @@ Options=@ByteArray()
 Suffixes=@Invalid()
 WorkingDir=
 
+[.]
+size=0
+
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Fibonacci.mic
-1\RelPath=Fibonacci.mic
-size=1
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Mini.mic
+1\RelPath=Mini.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Fibonacci.mic
+2\RelPath=Fibonacci.mic
+size=2
 
 [Packages]
 1\Name=@ByteArray()
-size=1
+2\Name=@ByteArray()
+size=2

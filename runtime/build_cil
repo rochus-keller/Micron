@@ -1,0 +1,6 @@
+#!/bin/sh
+/home/me/Programme/Mono5/bin/mono $MONO_OPTIONS /home/me/Programme/Mono5/lib/mono/4.5/mcs.exe -unsafe -target:library -out:MIC$.dll MIC$.cs 
+/home/me/Programme/Mono5/bin/monodis MIC$.dll > MIC$.il
+sed -i 's/_Dollar/\$/g' MIC$.il
+/home/me/Programme/Mono5/bin/mono $MONO_OPTIONS /home/me/Programme/Mono5/lib/mono/4.5/ilasm.exe -dll MIC$.il
+rm MIC$.il
