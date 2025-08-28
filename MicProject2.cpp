@@ -32,6 +32,7 @@
 #include "MilToken.h"
 #include "MilCeeGen.h"
 #include "MilCilAsmGen.h"
+#include "MilLlvmGen.h"
 using namespace Mic;
 
 struct HitTest
@@ -545,7 +546,7 @@ bool Project2::generateC(const QString &outDir)
     return true;
 }
 
-bool Project2::generateIL(const QString &outDir)
+bool Project2::generateMil(const QString &outDir)
 {
 #if 0
     // TODO
@@ -601,6 +602,55 @@ bool Project2::generateIL(const QString &outDir)
     QFile config(dir.absoluteFilePath("Main$.runtimeconfig.json"));
     config.open(QFile::WriteOnly);
     cg.generateConfig(&config);
+
+    return true;
+}
+
+bool Project2::generateLlvm(const QString &outDir)
+{
+#if 0
+    // TODO
+    writeC("runtime", "MIC+", outDir);
+
+    if( useBuiltInOakwood() )
+    {
+        writeC("oakwood", "In", outDir);
+        writeC("oakwood", "Out", outDir);
+        writeC("oakwood", "Files", outDir);
+        writeC("oakwood", "Input", outDir);
+        writeC("oakwood", "Math", outDir);
+        writeC("oakwood", "MathL", outDir);
+        writeC("oakwood", "Strings", outDir);
+    }
+#endif
+
+    QSet<Mil::Declaration*> used;
+    QDir dir(outDir);
+    // TODO: check if files can be created and written
+    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    {
+        if( module->generic ) // skip not fully instantiated modules
+            continue;
+        Mil::Declaration* sub = module->subs;
+        while(sub)
+        {
+            if( sub->kind == Mil::Declaration::Import )
+            {
+                Mil::Declaration* imported = sub->imported;
+                if( imported && !imported->generic )
+                    used.insert(imported);
+            }
+            sub = sub->next;
+        }
+        module->nobody = !Mil::CeeGen::requiresBody(module);
+        if( !module->nobody )
+        {
+            Mil::LlvmGen cg(&loader.getModel());
+            QFile body( dir.absoluteFilePath(QString::fromLatin1(module->name) + ".ll"));
+            body.open(QFile::WriteOnly);
+            cg.generate(module, &body);
+        } // else TODO
+    }
 
     return true;
 }

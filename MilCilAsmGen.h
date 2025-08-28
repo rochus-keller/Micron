@@ -46,7 +46,7 @@ namespace Mil
         QByteArray typeToken(Type*); // For type tokens in instructions
         void procHeader(Declaration* proc);
         void parameter(Declaration* param, int index);
-        void field(Declaration* field);
+        void emitField(Declaration* field, bool union_);
         void typeDecl(Declaration* type);
         void constValue(Constant* c);
         void statementSeq(Statement* s);

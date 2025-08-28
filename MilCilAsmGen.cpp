@@ -54,7 +54,7 @@ QByteArray CilAsmGen::declRef(Declaration * d)
             return "'" + d->name + "'"; // since the MIL module is a CIL class, this name always remains.
 
     case Declaration::TypeDecl:
-        Q_ASSERT(d->outer && d->outer->kind == Declaration::Module && d->getType() && d->getType()->isSUO() );
+        Q_ASSERT(d->outer && d->outer->kind == Declaration::Module && d->getType() && d->getType()->isSUOA() );
         return declRef(d->outer) + "/'" + d->name + "'";
 
     case Declaration::Field:
@@ -225,7 +225,7 @@ void CilAsmGen::visitModule()
     {
         if (sub->kind == Declaration::VarDecl)
         {
-            out << ".field static " << typeRef(sub->getType()) << " " << declName(sub) << endl;
+            out << ".field public static " << typeRef(sub->getType()) << " " << declName(sub) << endl;
         }
         sub = sub->next;
     }
@@ -376,6 +376,15 @@ void CilAsmGen::parameter(Declaration* param, int index)
     out << typeRef(param->getType()) << " " << declName(param);
 }
 
+void CilAsmGen::emitField(Declaration *field, bool union_)
+{
+    out << indent(1) << ".field public ";
+    if( union_ )
+        out << "[0] ";
+    out << typeRef(field->getType()) << " '" << field->name << "'" << endl;
+    // TODO: bitfields?
+}
+
 void CilAsmGen::typeDecl(Declaration* d)
 {
     Type* t = deref(d->getType());
@@ -389,15 +398,14 @@ void CilAsmGen::typeDecl(Declaration* d)
     {
     case Type::Object:
     case Type::Struct: {
-            out << ".class nested value sequential ansi sealed " << declName(d) << endl;
-            out << "       extends [mscorlib]System.ValueType" << endl;
-            out << "{" << endl;
+            out << ".class nested public sequential ansi sealed " << declName(d) << endl;
+            out << "       extends [mscorlib]System.ValueType {" << endl;
 
             QList<Declaration*> fields;
             if( t->kind == Type::Object )
             {
                 // Objects as structs with vtable pointer
-                out << indent(1) << ".field native int class$" << endl;  // vtable pointer
+                out << indent(1) << ".field public native int class$" << endl;  // vtable pointer
                 fields = t->getFieldList(true);
             }else
                 fields = t->subs;
@@ -406,56 +414,39 @@ void CilAsmGen::typeDecl(Declaration* d)
             foreach (Declaration* field, fields)
             {
                 if (field->kind == Declaration::Field)
-                {
-                    out << indent(1) << ".field ";
-                    Type* ft = deref(field->getType());
-                    if (ft->kind == Type::Array && ft->len > 0)
-                    {
-                        // Embedded array in struct - treated as sequential fields
-                        // For simplicity, we declare it as a fixed buffer
-                        Type* elemType = deref(ft->getType());
-                        out << "valuetype '" << typeRef(elemType) << "'[" << ft->len << "] '" << field->name << "'" << endl;
-                    }
-                    else
-                    {
-                        out << typeRef(field->getType()) << " '" << field->name << "'" << endl;
-                        // TODO: bitfields?
-                    }
-                }
+                    emitField(field, false);
             }
             out << "}" << endl << endl;
         } break;
 
     case Type::Union: {
-            out << ".class nested value explicit ansi sealed " << declName(d) << endl;
-            out << "       extends [mscorlib]System.ValueType" << endl;
-            out << "{" << endl;
+            out << ".class nested public explicit ansi sealed " << declName(d) << endl;
+            out << "       extends [mscorlib]System.ValueType {" << endl;
 
                 // For unions, all fields start at offset 0
                 foreach (Declaration* field, t->subs)
                 {
                     if (field->kind == Declaration::Field)
-                    {
-                        out << indent(1) << ".field [0] ";
-                        Type* ft = deref(field->getType());
-                        if (ft->kind == Type::Array && ft->len > 0)
-                        {
-                            // Embedded array - use ByValArray with fixed buffer
-                            out << "valuetype " << typeRef(ft->getType()) << "[" << ft->len << "] '" << field->name << "'" << endl;
-                        }
-                        else
-                        {
-                            out << typeRef(field->getType()) << " '" << field->name << "'" << endl;
-                        }
-                    }
+                        emitField(field, true);
                 }
 
             out << "}" << endl << endl;
         } break;
         
     case Type::Array:
-        // Arrays are pointers to elements when not embedded
-        // No type declaration needed
+        if( t->len )
+        {
+            const QByteArray et = typeRef(t->getType());
+            out << ".class nested public sequential ansi sealed " << declName(d) << endl;
+            out << "       extends [mscorlib]System.ValueType {" << endl;
+            for( int i = 0; i < t->len; i++ )
+            {
+                out << indent(1) << ".field public ";
+                out << et << " '#" << i << "'" << endl;
+            }
+            out << "}" << endl << endl;
+        } // else
+            // open arrays are just pointers to the first element, no type declaration needed
         break;
         
     case Type::Pointer:
@@ -473,7 +464,8 @@ void CilAsmGen::typeDecl(Declaration* d)
             out << indent(1) << ".field native int self" << endl;
             out << indent(1) << ".field native int proc" << endl;
             out << "}" << endl << endl;
-        }
+        } // else
+            // plain function pointers are just native int, no type declaration needed
         break;
     }
 }
@@ -486,14 +478,6 @@ QByteArray CilAsmGen::typeRef(Type* t)
     t = t->deref();
     switch (t->kind)
     {
-    case Type::Any:
-        return "void";
-    case Type::StringLit:
-        return "string";
-    case Type::ByteArrayLit:
-        return "uint8[]";
-    case Type::NIL:
-        return "object";
     case Type::BOOL:
         return "bool";
     case Type::CHAR:
@@ -529,10 +513,14 @@ QByteArray CilAsmGen::typeRef(Type* t)
 
         return typeRef(tt) + "*";
     }
-    case Type::Array: {
-        Type* tt = deref(t->getType());
-        return typeRef(tt) + "*"; // TODO
-    }
+    case Type::Array:
+        if( t->len )
+            return "valuetype " + declRef(t->decl);
+        else
+        {
+            Type* tt = deref(t->getType());
+            return typeRef(tt) + "*"; // TODO
+        }
     case Type::Struct:
     case Type::Object:
     case Type::Union:
@@ -550,7 +538,6 @@ QByteArray CilAsmGen::typeRef(Type* t)
 
 QByteArray CilAsmGen::typeToken(Type* t)
 {
-    // Return type token for CIL instructions
     t = deref(t);
     switch (t->kind)
     {
@@ -575,9 +562,8 @@ QByteArray CilAsmGen::typeToken(Type* t)
     case Type::FLOAT64:
         return "r8";
     case Type::INTPTR:
-        return "i";
     default:
-        return "ref";
+        return "i";
     }
 }
 
@@ -749,7 +735,7 @@ void CilAsmGen::statementSeq(Statement* s)
                 // Calculate element size based on type
                 Type* elemType = deref(s->args->rhs->getType());
                 int elemSize = 0;
-                const char* storeOp = "stind.ref";
+                const char* storeOp = "stind.i";
                 
                 switch(s->kind) {
                 case IL_stelem_i1:
@@ -782,7 +768,7 @@ void CilAsmGen::statementSeq(Statement* s)
                     break;
                 case IL_stelem:
                     out << indent(1) << "sizeof " << typeRef(elemType) << endl;
-                    storeOp = elemType->isSUO() ? "stobj" : "stind.ref";
+                    storeOp = elemType->isSUOA() ? "stobj" : "stind.i";
                     break;
                 }
                 
@@ -810,7 +796,8 @@ void CilAsmGen::statementSeq(Statement* s)
             
         case IL_stvar:
             expression(s->args);
-            out << indent(1) << "stsfld " << typeRef(s->args->getType()) << " ";
+            // TODO out << indent(1) << "stsfld " << typeRef(s->args->getType()) << " ";
+            out << indent(1) << "stsfld " << typeRef(s->d->getType()) << " ";
             out << mangledName(s->d) << endl;
             break;
             
@@ -842,6 +829,13 @@ void CilAsmGen::statementSeq(Statement* s)
             // Line debug information
             break;
             
+        case IL_strcpy:
+            Q_ASSERT(s->args && s->args->kind == Expression::Argument);
+            expression(s->args->lhs);  // to
+            expression(s->args->rhs);  // from
+            out << indent(1) << "call void [MIC$]MIC$::strcpy(uint8*,uint8*)" << endl;
+            break;
+
         default:
             Q_ASSERT(false);
         }
@@ -1009,7 +1003,7 @@ void CilAsmGen::expression(Expression* e)
         
     case IL_ldstr:
         out << indent(1) << "ldstr \"" << e->c->s << "\"" << endl;
-        out << indent(1) << "call native int [MIC$]MIC$::strlit(string)" << endl;
+        out << indent(1) << "call uint8* [MIC$]MIC$::strlit(string)" << endl;
         break;
         
     case IL_ldobj:

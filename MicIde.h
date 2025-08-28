@@ -127,7 +127,9 @@ namespace Mic
         void onCaption();
         void onFullScreen();
         void onCursor();
-        void onExportIl();
+        void onExportMil();
+        void onExportLlvm();
+        void onExportCil();
         void onExportC();
         void onModsDblClicked(QTreeWidgetItem*,int);
         void onModDblClicked(QTreeWidgetItem*,int);

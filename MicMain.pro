@@ -15,10 +15,12 @@ DEFINES += _DEBUG
 include(MicParser.pri)
 
 SOURCES += \
-    MicMain.cpp
+    MicMain.cpp \
+    MilAstSerializer.cpp
     #MicCilGen.cpp \
 
-HEADERS +=
+HEADERS += \
+    MilAstSerializer.h
     #MicCilGen.h \
 
 

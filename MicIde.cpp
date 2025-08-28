@@ -770,8 +770,10 @@ void Ide::createMenuBar()
     //pop->addCommand( "Incremental Build (alpha!)", this, SLOT(onIncremental()) );
     pop->addCommand( "Set Command...", this, SLOT(onSetRunCommand()) );
     pop->addCommand( "Set Input File...", this, SLOT(onSetInputFile()) );
-    pop->addCommand( "Export IL...", this, SLOT(onExportIl()) );
-    pop->addCommand( "Export C...", this, SLOT(onExportC()) );
+    pop->addCommand( "Export MIL...", this, SLOT(onExportMil()) );
+    pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
+    pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
+    pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
     pop->addCommand( "Run", this, SLOT(onRun()), tr("CTRL+R"), false );
 
     pop = new Gui::AutoMenu( tr("Debug"), this );
@@ -976,11 +978,47 @@ void Ide::onCursor()
     d_lock = false;
 }
 
-void Ide::onExportIl()
+void Ide::onExportMil()
 {
     ENABLED_IF( d_pro->errors.isEmpty() );
 
-    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save IL"), d_pro->getBuildDir(true) );
+    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save Micron Intermediate Language (MIL)"), d_pro->getBuildDir(true) );
+
+    if (dirPath.isEmpty())
+        return;
+
+    // TODO
+    if( !compile(false,false) ) // otherwise allocated flag is already set after one generator run
+        return;
+
+    if( !d_pro->generateMil(dirPath) )
+        QMessageBox::critical(this,tr("Save MIL"),tr("There was an error when generating IL; "
+                                                   "see Output window for more information"));
+}
+
+void Ide::onExportLlvm()
+{
+    ENABLED_IF( d_pro->errors.isEmpty() );
+
+    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save LLVM Intermediate Language (LL)"), d_pro->getBuildDir(true) );
+
+    if (dirPath.isEmpty())
+        return;
+
+    // TODO
+    if( !compile(false,false) ) // otherwise allocated flag is already set after one generator run
+        return;
+
+    if( !d_pro->generateLlvm(dirPath) )
+        QMessageBox::critical(this,tr("Save LLVM IR"),tr("There was an error when generating LL; "
+                                                   "see Output window for more information"));
+}
+
+void Ide::onExportCil()
+{
+    ENABLED_IF( d_pro->errors.isEmpty() );
+
+    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save ECMA-335 CIL"), d_pro->getBuildDir(true) );
 
     if (dirPath.isEmpty())
         return;
@@ -988,8 +1026,8 @@ void Ide::onExportIl()
     if( !compile(false,false) ) // otherwise allocated flag is already set after one generator run
         return;
 
-    if( !d_pro->generateIL(dirPath) )
-        QMessageBox::critical(this,tr("Save IL"),tr("There was an error when generating IL; "
+    if( !d_pro->generateMil(dirPath) )
+        QMessageBox::critical(this,tr("Save CIL"),tr("There was an error when generating IL; "
                                                    "see Output window for more information"));
 }
 
@@ -2013,8 +2051,10 @@ void Ide::createModsMenu(Ide::Editor* edit)
     pop->addCommand( "Save", this, SLOT(onSaveFile()), tr("CTRL+S"), false );
     pop->addSeparator();
     pop->addCommand( "Compile", this, SLOT(onCompile()), tr("CTRL+B"), false );
-    pop->addCommand( "Export IL...", this, SLOT(onExportIl()) );
-    pop->addCommand( "Export C...", this, SLOT(onExportC()) );
+    pop->addCommand( "Export MIL...", this, SLOT(onExportMil()) );
+    pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
+    pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
+    pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
     pop->addCommand( "Run", this, SLOT(onRun()), tr("CTRL+R"), false );
     addDebugMenu(pop);
     pop->addSeparator();
@@ -3394,7 +3434,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2.3");
+    a.setApplicationVersion("0.2.4");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

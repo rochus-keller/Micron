@@ -27,8 +27,8 @@ begin
 
 	// e := $20 61 62 63$ 
 	// equal to 
-	i := 64h
 	e := A{ 20h 61h 62h 63h } // TODO: not yet implemented i }
+	i := 64h
 	println(e[2])
 	println("Arrays done")
 end Arrays

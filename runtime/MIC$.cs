@@ -11,11 +11,11 @@ public class MIC_Dollar
     static Dictionary<string, IntPtr> dict = new Dictionary<string, IntPtr>();
     static System.Text.Encoding latin1 = System.Text.Encoding.GetEncoding("ISO-8859-1");
 
-    public static IntPtr strlit(string str)
+    public static unsafe byte* strlit(string str)
     {
         IntPtr res;
         if( dict.TryGetValue(str, out res) )
-            return res;
+            return (byte*)res;
         else
         {
             byte[] bytes = latin1.GetBytes(str); 
@@ -23,10 +23,22 @@ public class MIC_Dollar
             Marshal.Copy(bytes, 0, res, bytes.Length);
             Marshal.WriteByte(res, bytes.Length, 0);
             dict[str] = res;
-            return res;
+            return (byte*)res;
         }
     }
     
+    public static unsafe void strcpy( byte* lhs, byte* rhs )
+	{
+	    if (lhs == null || rhs == null) 
+	        return;
+		for (int i = 0; ; i++)
+		{
+		    lhs[i] = rhs[i];
+	        if( rhs[i] == 0 )
+	            return;
+	    }
+	}
+
 	public static unsafe int strcmp( byte* lhs, byte* rhs )
 	{
 	    if (lhs == null && rhs == null) return 0;
@@ -42,6 +54,7 @@ public class MIC_Dollar
 			if( lhs[i] == 0 )
 			    return 0;
 		}
+		return 0;
     }  
 	      
     public static unsafe bool relop1(byte* l, byte* r, int op)

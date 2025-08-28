@@ -1385,6 +1385,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
             tmp->id = ops[pc].arg.toUInt();
             break;
         case IL_ldobj:
+            qWarning() << "AstRenderer IL_ldobj not yet implemented";
             break; // MilObject TODO
         case IL_ldstr: {
             Constant* c = new Constant();

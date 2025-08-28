@@ -11,11 +11,13 @@ WorkingDir=
 size=0
 
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Mini.mic
-1\RelPath=Mini.mic
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Arrays2.mic
+1\RelPath=Arrays2.mic
 2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Fibonacci.mic
 2\RelPath=Fibonacci.mic
-size=2
+3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Mandelbrot.mic
+3\RelPath=Mandelbrot.mic
+size=1
 
 [Packages]
 1\Name=@ByteArray()

@@ -259,6 +259,7 @@ static void process(const QString& file, const QStringList& searchPaths,
             out.putChar('\n');
         }
     }
+#if 0
     if( all == ok && eigen )
     {
         Mil::EiGen::TargetCode target = Mil::EiGen::translate(arch.toUtf8().constData());
@@ -336,6 +337,7 @@ static void process(const QString& file, const QStringList& searchPaths,
             }
         }
     }
+#endif
     if( all == ok && run )
     {
         Mil::Interpreter r(&mgr.loader.getModel());

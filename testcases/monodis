@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /home/me/Programme/Mono5/bin/monodis "$@"

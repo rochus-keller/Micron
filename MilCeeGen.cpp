@@ -752,6 +752,8 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             // TODO
             break;
 
+        case IL_strcpy:
+            // TODO
         default:
             Q_ASSERT(false);
         }
