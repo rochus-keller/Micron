@@ -51,6 +51,7 @@ namespace Mil {
 			R_hexstringdelim_,
 			R_identdef,
 			R_import,
+			R_instantiation,
 			R_integer,
 			R_length,
 			R_module,

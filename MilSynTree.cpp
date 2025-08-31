@@ -50,6 +50,7 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_hexstringdelim_: return "hexstringdelim";
 		case R_identdef: return "identdef";
 		case R_import: return "import";
+		case R_instantiation: return "instantiation";
 		case R_integer: return "integer";
 		case R_length: return "length";
 		case R_module: return "module";

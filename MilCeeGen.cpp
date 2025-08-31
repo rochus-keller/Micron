@@ -948,7 +948,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         break;
 
     case IL_ldstr:
-    case IL_ldobj:
+    case IL_ldc_obj:
         constValue(out, e->c);
         break;
 

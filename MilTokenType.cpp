@@ -19,6 +19,7 @@ namespace Mil {
 			case Tok_2Dot: return "..";
 			case Tok_2Slash: return "//";
 			case Tok_Colon: return ":";
+			case Tok_ColonEq: return ":=";
 			case Tok_Semi: return ";";
 			case Tok_Eq: return "=";
 			case Tok_Lbrack: return "[";
@@ -96,6 +97,7 @@ namespace Mil {
 			case Tok_LDC_I4_S: return "LDC_I4_S";
 			case Tok_LDC_I8: return "LDC_I8";
 			case Tok_LDC_IP: return "LDC_IP";
+			case Tok_LDC_OBJ: return "LDC_OBJ";
 			case Tok_LDC_R4: return "LDC_R4";
 			case Tok_LDC_R8: return "LDC_R8";
 			case Tok_LDELEM: return "LDELEM";
@@ -137,7 +139,6 @@ namespace Mil {
 			case Tok_LDLOC_S: return "LDLOC_S";
 			case Tok_LDMETH: return "LDMETH";
 			case Tok_LDNULL: return "LDNULL";
-			case Tok_LDOBJ: return "LDOBJ";
 			case Tok_LDPROC: return "LDPROC";
 			case Tok_LDSTR: return "LDSTR";
 			case Tok_LDVAR: return "LDVAR";
@@ -236,6 +237,7 @@ namespace Mil {
 			case Tok_2Dot: return "Tok_2Dot";
 			case Tok_2Slash: return "Tok_2Slash";
 			case Tok_Colon: return "Tok_Colon";
+			case Tok_ColonEq: return "Tok_ColonEq";
 			case Tok_Semi: return "Tok_Semi";
 			case Tok_Eq: return "Tok_Eq";
 			case Tok_Lbrack: return "Tok_Lbrack";
@@ -313,6 +315,7 @@ namespace Mil {
 			case Tok_LDC_I4_S: return "Tok_LDC_I4_S";
 			case Tok_LDC_I8: return "Tok_LDC_I8";
 			case Tok_LDC_IP: return "Tok_LDC_IP";
+			case Tok_LDC_OBJ: return "Tok_LDC_OBJ";
 			case Tok_LDC_R4: return "Tok_LDC_R4";
 			case Tok_LDC_R8: return "Tok_LDC_R8";
 			case Tok_LDELEM: return "Tok_LDELEM";
@@ -354,7 +357,6 @@ namespace Mil {
 			case Tok_LDLOC_S: return "Tok_LDLOC_S";
 			case Tok_LDMETH: return "Tok_LDMETH";
 			case Tok_LDNULL: return "Tok_LDNULL";
-			case Tok_LDOBJ: return "Tok_LDOBJ";
 			case Tok_LDPROC: return "Tok_LDPROC";
 			case Tok_LDSTR: return "Tok_LDSTR";
 			case Tok_LDVAR: return "Tok_LDVAR";
@@ -500,7 +502,11 @@ namespace Mil {
 			}
 			break;
 		case ':':
-			res = Tok_Colon; i += 1;
+			if( at(str,len,i+1) == '=' ){
+				res = Tok_ColonEq; i += 2;
+			} else {
+				res = Tok_Colon; i += 1;
+			}
 			break;
 		case ';':
 			res = Tok_Semi; i += 1;
@@ -962,6 +968,13 @@ namespace Mil {
 								break;
 							}
 							break;
+						case 'O':
+							if( at(str,len,i+5) == 'B' ){
+								if( at(str,len,i+6) == 'J' ){
+									res = Tok_LDC_OBJ; i += 7;
+								}
+							}
+							break;
 						case 'R':
 							switch( at(str,len,i+5) ){
 							case '4':
@@ -1170,13 +1183,6 @@ namespace Mil {
 							if( at(str,len,i+5) == 'L' ){
 								res = Tok_LDNULL; i += 6;
 							}
-						}
-					}
-					break;
-				case 'O':
-					if( at(str,len,i+3) == 'B' ){
-						if( at(str,len,i+4) == 'J' ){
-							res = Tok_LDOBJ; i += 5;
 						}
 					}
 					break;

@@ -778,7 +778,7 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
         case IL_ldstr:
             emitOp(proc, LL_ldstr, addString(e->c->s) );
             break;
-        case IL_ldobj:
+        case IL_ldc_obj:
             emitOp(proc, LL_ldobj, addObject(e->c) );
             break;
         case IL_ldproc:

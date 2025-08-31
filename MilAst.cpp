@@ -576,7 +576,7 @@ Declaration*Declaration::findInitProc() const
 
 Expression::~Expression()
 {
-    if( (kind == IL_ldobj || kind == IL_ldstr) && c != 0 )
+    if( (kind == IL_ldc_obj || kind == IL_ldstr) && c != 0 )
         delete c;
     else if( (kind == IL_iif || kind == IL_if || kind == IL_then || kind == IL_else ) && e != 0 )
         delete e;

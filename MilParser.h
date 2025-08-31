@@ -56,6 +56,7 @@ namespace Mil {
 		void module(SynTree*);
 		void ImportList(SynTree*);
 		void import(SynTree*);
+		void instantiation(SynTree*);
 		void DeclarationSequence(SynTree*);
 		void Expression(SynTree*);
 		void ExpInstr(SynTree*);

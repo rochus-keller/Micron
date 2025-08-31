@@ -37,7 +37,7 @@ enum IL_op
     IL_ldarga, IL_ldarga_s,
     IL_ldc_i4, IL_ldc_i8, IL_ldc_i4_s, IL_ldc_r4, IL_ldc_r8,
     IL_ldc_i4_0, IL_ldc_i4_1, IL_ldc_i4_2, IL_ldc_i4_3, IL_ldc_i4_4, IL_ldc_i4_5,
-    IL_ldc_i4_6, IL_ldc_i4_7, IL_ldc_i4_8, IL_ldc_i4_m1, IL_ldobj,
+    IL_ldc_i4_6, IL_ldc_i4_7, IL_ldc_i4_8, IL_ldc_i4_m1, IL_ldc_obj,
     IL_ldelem, IL_ldelema, IL_ldelem_i1, IL_ldelem_i2,
     IL_ldelem_i4, IL_ldelem_i8, IL_ldelem_u1, IL_ldelem_u2,
     IL_ldelem_u4, IL_ldelem_u8, IL_ldelem_r4, IL_ldelem_r8, IL_ldelem_ip, IL_ldelem_ipp,

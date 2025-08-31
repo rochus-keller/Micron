@@ -1006,8 +1006,15 @@ void CilAsmGen::expression(Expression* e)
         out << indent(1) << "call uint8* [MIC$]MIC$::strlit(string)" << endl;
         break;
         
-    case IL_ldobj:
+    case IL_ldc_obj:
         // Load value type
+        // TODO: convert the constructor to a byte representation, then encode it with base64, then
+        // "call uint8[] [mscorlib]System.Convert::FromBase64String(string)", then use cpblk.
+        // NOTE: PeLib actually would support FieldRVA fields using DotNetPELib::Field::Bytes mode, but
+        // it's less immediate than literals.
+
+        // out << "ldstr \"" << toByteArray(e->c).toBase64() << "\"" << endl
+        // out << "call uint8[] [mscorlib]System.Convert::FromBase64String(string)"
         out << indent(1) << "ldobj " << typeRef(e->getType()) << endl;
         break;
         

@@ -428,7 +428,7 @@ void IlAsmRenderer::render(const ProcData& m)
                 out << i << " ";
             out << endl;
             break;
-        case IL_ldobj:
+        case IL_ldc_obj:
             {
                 const ConstrLiteral obj = op.arg.value<ConstrLiteral>();
                 out << ws() << s_opName[op.op] << " ";
@@ -1384,7 +1384,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
         case IL_ldloc:
             tmp->id = ops[pc].arg.toUInt();
             break;
-        case IL_ldobj:
+        case IL_ldc_obj:
             qWarning() << "AstRenderer IL_ldobj not yet implemented";
             break; // MilObject TODO
         case IL_ldstr: {

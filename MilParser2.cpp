@@ -259,7 +259,7 @@ static inline bool FIRST_Expression(int tt) {
 	case Tok_LDELEM_R8:
 	case Tok_LDELEM_U2:
 	case Tok_CALL:
-	case Tok_LDOBJ:
+    case Tok_LDC_OBJ:
 	case Tok_LDIND_U8:
 	case Tok_LDLOC_3:
 	case Tok_LDARG_2:
@@ -378,7 +378,7 @@ static inline bool FIRST_ExpInstr(int tt) {
 	case Tok_LDELEM_R8:
 	case Tok_LDELEM_U2:
 	case Tok_CALL:
-	case Tok_LDOBJ:
+    case Tok_LDC_OBJ:
 	case Tok_LDIND_U8:
 	case Tok_LDLOC_3:
 	case Tok_LDARG_2:
@@ -507,7 +507,7 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_STVAR:
 	case Tok_LDC_I4_1:
 	case Tok_OR:
-	case Tok_LDOBJ:
+    case Tok_LDC_OBJ:
 	case Tok_LDFLD:
     case Tok_LDIND_I8:
 	case Tok_LDC_I4_7:
@@ -1888,9 +1888,9 @@ Expression* Parser2::ExpInstr() {
         expect(Tok_LDC_I4_M1, true, "ExpInstr");
         res->kind = IL_ldc_i4_m1;
         res->i = -1;
-    } else if( la.d_code == Tok_LDOBJ ) {
-        expect(Tok_LDOBJ, true, "ExpInstr");
-        res->kind = IL_ldobj;
+    } else if( la.d_code == Tok_LDC_OBJ ) {
+        expect(Tok_LDC_OBJ, true, "ExpInstr");
+        res->kind = IL_ldc_obj;
         res->c = constructor();
     } else if( la.d_code == Tok_LDELEM ) {
         expect(Tok_LDELEM, true, "ExpInstr");

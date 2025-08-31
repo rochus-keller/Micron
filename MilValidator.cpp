@@ -674,7 +674,7 @@ Expression* Validator::visitExpr(Expression* e)
             e->setType(mdl->getBasicType(Type::StringLit));
             stack.push_back(e);
             break;
-        case IL_ldobj:
+        case IL_ldc_obj:
             e->setType(toType(e->c));
             stack.push_back(e);
             break;

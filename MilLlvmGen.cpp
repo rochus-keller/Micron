@@ -1398,7 +1398,7 @@ QByteArray LlvmGen::expression(Expression* e, int level)
         }
         break;
 
-    case IL_ldobj:
+    case IL_ldc_obj:
         // Load aggregate constant
         if( e->c )
             constValue(e->c, e->getType());

@@ -603,7 +603,7 @@ void Emitter::ldc_r8(double v)
 void Emitter::ldobj(const ConstrLiteral& v)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    ops->append(ProcData::Op(IL_ldobj,QVariant::fromValue(v) ));
+    ops->append(ProcData::Op(IL_ldc_obj,QVariant::fromValue(v) ));
     delta(+1);
 }
 
