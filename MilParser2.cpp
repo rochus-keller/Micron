@@ -1458,10 +1458,13 @@ Type* Parser2::FormalParameters() {
 			expect(Tok_Semi, false, "FormalParameters");
 			FPSection();
 		}
+#if 0
+        // we no longer support variadic procs
 		if( la.d_type == Tok_Semi ) {
 			expect(Tok_Semi, false, "FormalParameters");
 			expect(Tok_2Dot, false, "FormalParameters");
 		}
+#endif
 	}
 	expect(Tok_Rpar, false, "FormalParameters");
     Type* res = 0;

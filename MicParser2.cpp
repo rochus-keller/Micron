@@ -2854,9 +2854,22 @@ Expression* Parser2::component(Type* constrType, int& index) {
 
 Expression* Parser2::factor(Type* hint, bool lvalue) {
     Expression* res = 0;
-	if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Lbrace )  ) {
+    if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Lbrace ) ||  peek(1).d_type == Tok_Lbrace ) {
         res = constructor(hint);
-	} else if( FIRST_literal(la.d_type) ) {
+    } else if( la.d_type == Tok_At && ( peek(2).d_type == Tok_ident && peek(3).d_type == Tok_Lbrace || peek(2).d_type == Tok_Lbrace ) ) {
+        Expression* tmp = constructor(hint->getType());
+        tmp->anonymous = true; // this also represents an anonymous local variable
+        // TODO: who allocates and initializes the local? Here we would just deref a desig to it
+
+        res = Expression::create(Expression::Addr, cur.toRowCol());
+        res->lhs = tmp;
+        Type* ptr = new Type();
+        ptr->setType(res->lhs->getType());
+        ptr->pos = res->pos;
+        ptr->kind = Type::Pointer;
+        addHelper(ptr);
+        res->setType(ptr);
+    } else if( FIRST_literal(la.d_type) ) {
         res = literal();
 	} else if( FIRST_variableOrFunctionCall(la.d_type) ) {
         res = variableOrFunctionCall(lvalue);
@@ -3779,6 +3792,8 @@ Type* Parser2::FormalParameters() {
 			}
 			FPSection();
 		}
+#if 0
+        // we no longer support variadic procs (too much effort, viable alternatives, too little benefit)
 		if( la.d_type == Tok_Semi || la.d_type == Tok_2Dot ) {
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "FormalParameters");
@@ -3791,6 +3806,7 @@ Type* Parser2::FormalParameters() {
             d->outer = mdl->getTopScope();
             d->setType(mdl->getType(Type::NoType));
         }
+#endif
 	}
 	expect(Tok_Rpar, false, "FormalParameters");
     Type* res = 0;

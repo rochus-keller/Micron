@@ -66,7 +66,7 @@ namespace Mic
         uint typebound : 1; // Type, Declaration
         uint ownstype : 1; // all
         uint visi : 2; // Declaration
-        uint anonymous : 1;
+        uint anonymous : 1; // Type, Constructor
 
         // Type
         uint deferred : 1;
