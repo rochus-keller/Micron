@@ -399,7 +399,8 @@ void Validator::visitStatSeq(Statement* stat)
             error(curProc, QString("unexpected statement operator '%1'").arg(s_opName[stat->kind]));
             break;
         }
-        if( stat->kind != Statement::ExprStat && stack.size() != 0 )
+        if( stat->kind != IL_pop // pop is a special statement after which the stack might not be empty
+                && stat->kind != Statement::ExprStat && stack.size() != 0 )
             error(curProc,QString("evaluation stack not empty after statement"));
 
         stat = nextStat(stat);
@@ -1206,7 +1207,7 @@ bool Validator::expectN(quint32 n, Expression* e)
 
 bool Validator::expectN(quint32 n, Statement* stat)
 {
-    if( stack.size() != n )
+    if( stack.size() < n )
     {
         error(curProc,QString("expecting %1 values on expression stack").arg(n));
         return false;

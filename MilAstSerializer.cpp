@@ -201,8 +201,9 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
         case IL_ldloc:
             proc.body << ProcData::Op(e->kind, e->id);
             break;
-        case IL_ldobj:
+        case IL_ldc_obj:
             proc.body << ProcData::Op(e->kind);
+            qWarning() << "AstSerializer IL_ldc_obj not yet implemented";
             break; // MilObject TODO
         case IL_ldstr:
             proc.body << ProcData::Op(e->kind, e->c->s);

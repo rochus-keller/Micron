@@ -1824,7 +1824,7 @@ void Evaluator::constructor(Expression* e)
         recurseConstConstructor(e);
         return;
     }
-    // else
+    // else TODO
     err = "dynamic constructors not yet supported by code generator";
 }
 

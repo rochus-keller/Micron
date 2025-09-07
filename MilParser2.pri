@@ -1,6 +1,7 @@
 
 
 SOURCES += \
+    $$PWD/MilAstSerializer.cpp \
     $$PWD/MilCilAsmGen.cpp \
     $$PWD/MilLlvmGen.cpp \
     MilLexer.cpp \
@@ -22,6 +23,7 @@ SOURCES += \
     MilRenderer.cpp
 
 HEADERS += \
+    $$PWD/MilAstSerializer.h \
     $$PWD/MilCilAsmGen.h \
     $$PWD/MilLlvmGen.h \
     MilLexer.h \
