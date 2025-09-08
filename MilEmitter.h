@@ -105,7 +105,7 @@ namespace Mil
         void ldc_i8(qint64);
         void ldc_r4(double);
         void ldc_r8(double);
-        void ldobj(const ConstrLiteral&);
+        void ldc_obj(const ConstrLiteral&);
         void ldelem_(const Quali& typeRef);
         void ldelema_(const Quali& typeRef);
         void ldfld_(const Trident& fieldRef);

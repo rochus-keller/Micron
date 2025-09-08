@@ -139,8 +139,8 @@ static void renderConst(const Declaration* v, AbstractRenderer* r)
 {
     QVariant val;
     if( v->c )
-        val = v->c->toVariant();
-    r->addConst(toQuali(v->getType()),v->name,val); // TODO: handle constructors
+        val = ConstrLiteral::toVariant(v->c, v->getType());
+    r->addConst(toQuali(v->getType()),v->name,val);
 }
 
 static void renderPos(ProcData& proc, const Mic::RowCol& pos, quint32& line, AstSerializer::DbgInfo dbi)
@@ -202,11 +202,10 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
             proc.body << ProcData::Op(e->kind, e->id);
             break;
         case IL_ldc_obj:
-            proc.body << ProcData::Op(e->kind);
-            qWarning() << "AstSerializer IL_ldc_obj not yet implemented";
-            break; // MilObject TODO
+            proc.body << ProcData::Op(e->kind, ConstrLiteral::toVariant(e->c, e->getType()));
+            break;
         case IL_ldstr:
-            proc.body << ProcData::Op(e->kind, e->c->s);
+            proc.body << ProcData::Op(e->kind, QByteArray(e->c->s));
             break;
         case IL_ldc_i4:
         case IL_ldc_i8:

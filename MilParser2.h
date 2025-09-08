@@ -95,7 +95,7 @@ namespace Mil {
         Constant* ConstExpression2();
         Constant* constructor();
         ComponentList* component_list();
-        Component* component();
+        void component(Component &cp);
         quint32 numberOrIdent(bool param); // param or local var
 
 	protected:

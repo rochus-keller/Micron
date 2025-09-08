@@ -1,4 +1,4 @@
-/*
+﻿/*
 * Copyright 2019-2025 Rochus Keller <mailto:me@rochus-keller.ch>
 *
 * This file is part of the Micron language project.
@@ -432,9 +432,6 @@ void IlAsmRenderer::render(const ProcData& m)
             {
                 const ConstrLiteral obj = op.arg.value<ConstrLiteral>();
                 out << ws() << s_opName[op.op] << " ";
-                Q_ASSERT( obj.data.type() == QVariant::ByteArray ||
-                          obj.data.type() == QVariant::List ||
-                          obj.data.type() == QVariant::Map );
                 if( obj.data.type() != QVariant::ByteArray )
                     out << toString(obj.typeRef);
                 renderComponents(out,obj.data);
@@ -1384,9 +1381,16 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
         case IL_ldloc:
             tmp->id = ops[pc].arg.toUInt();
             break;
-        case IL_ldc_obj:
-            qWarning() << "AstRenderer IL_ldobj not yet implemented";
-            break; // MilObject TODO
+        case IL_ldc_obj: {
+            ConstrLiteral cl = ops[pc].arg.value<ConstrLiteral>();
+            tmp->c = ConstrLiteral::toConst(cl.data);
+            if( tmp->c && tmp->c->kind == Constant::C )
+            {
+                Declaration* d = resolve(cl.typeRef);
+                Q_ASSERT(d);
+                tmp->c->c->type = d->getType();
+            }
+            } break;
         case IL_ldstr: {
             Constant* c = new Constant();
             c->kind = Constant::S;
@@ -1497,4 +1501,120 @@ void IlAstRenderer::error(Declaration* d, const QString& msg, int pc)
     if( curProc)
         e.pc = pc;
     errors << e;
+}
+
+QVariant ConstrLiteral::toVariant(Constant* c, Type* t)
+{
+    if( t )
+    {
+        Q_ASSERT(c->kind == Constant::B || c->kind == Constant::C );
+        ConstrLiteral l;
+        l.typeRef = t->toQuali();
+        l.data = toVariant(c, 0);
+        return QVariant::fromValue(l);
+    }
+    switch(c->kind)
+    {
+    case Constant::D:
+        return c->d;
+    case Constant::I:
+        return c->i;
+    case Constant::S:
+        return QByteArray(c->s);
+    case Constant::B:
+        return QByteArray((char*)c->b->b, c->b->len);
+    case Constant::R:
+        return ConstrLiteral::toVariant(c->r->c, c->r->getType());
+    case Constant::C: {
+            ComponentList* cl = c->c;
+            if( !cl->c.isEmpty() && !cl->c.first().name.isEmpty() )
+            {
+                // named
+                RecordLiteral r;
+                for( int i = 0; i < cl->c.size(); i++ )
+                    r.append(FieldData(cl->c[i].name, toVariant(cl->c[i].c, 0 )));
+                return QVariant::fromValue(r);
+            }else
+            {
+                // anonymous
+                QVariantList l;
+                for( int i = 0; i < cl->c.size(); i++ )
+                    l.append(toVariant(cl->c[i].c, 0 ));
+                return l;
+            }
+        } break;
+    default:
+        Q_ASSERT(false);
+    }
+    return QVariant();
+}
+
+Constant * ConstrLiteral::toConst(const QVariant & data)
+{
+    // sync with renderComponents
+    if( data.canConvert<ConstrLiteral>() )
+    {
+        Q_ASSERT(false);
+        // the caller is responsible for this
+        return 0;
+    }
+    Constant* c = new Constant();
+    if( data.canConvert<RecordLiteral>() )
+    {
+        RecordLiteral m = data.value<RecordLiteral>();
+        c->c = new ComponentList();
+        c->kind = Constant::C;
+        for( int i = 0; i < m.size(); i++ )
+        {
+            c->c->c.append(Component());
+            c->c->c.back().name = m[i].first;
+            c->c->c.back().c = toConst(m[i].second);
+        }
+        return c;
+    }
+    switch( data.type() )
+    {
+    case QVariant::List:
+        c->kind = Constant::C;
+        c->c = new ComponentList();
+        foreach( const QVariant& v, data.toList() )
+        {
+            c->c->c.append(Component());
+            c->c->c.back().c = toConst(v);
+        }
+        break;
+    case QVariant::ByteArray:
+        {
+            const QByteArray ba = data.toByteArray();
+            c->kind = Constant::B;
+            c->b = new ByteString();
+            c->b->len = ba.size();
+            c->b->b = (quint8*)malloc(ba.size());
+            memcpy(c->b->b, ba.data(), ba.size());
+        } break;
+    case QVariant::String:
+        {
+            const QString str = data.toString();
+            const QByteArray latin1 = str.toLatin1();
+            c->kind = Constant::S;
+            c->s = (char*)malloc(latin1.size() + 1);
+            memcpy(c->s, latin1.data(), latin1.size() + 1);
+        }
+        break;
+    case QVariant::LongLong:
+    case QVariant::Int:
+    case QVariant::Bool:
+    case QVariant::ULongLong:
+    case QVariant::UInt:
+        c->kind = Constant::I;
+        c->i = data.toLongLong();
+        break;
+    case QVariant::Double:
+        c->kind = Constant::D;
+        c->d = data.toDouble();
+        break;
+    default:
+        Q_ASSERT(false);
+    }
+    return c;
 }

@@ -1492,13 +1492,12 @@ void Code::render(char* data, quint32 start, ComponentList* cl)
     {
         Type* et = deref(t->getType());
         int off = start;
-        Component* c = cl->c;
-        while( c )
+        for( int i = 0; i < cl->c.size(); i++ )
         {
-            render(data, off, et, c->c);
+            render(data, off, et, cl->c[i].c);
             off += et->getByteSize(sizeof(void*));
-            c = c->next;
         }
+
     }else
     {
         qWarning() << "TODO record literals not yet implemented";

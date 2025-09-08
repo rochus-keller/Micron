@@ -77,10 +77,17 @@ namespace Mil
         ProcData():kind(Invalid),isPublic(0),isVararg(0),endLine(0) {}
     };
 
-    struct ConstrLiteral // the result of a constructor, see ldobj
+    class Constant;
+    class Type;
+    class AstModel;
+
+    struct ConstrLiteral // the result of a constructor, see ldc_obj
     {
         Quali typeRef;
         QVariant data; // note that array of byte can be either QByteArray or QVariantList
+        // expected values: QByteArray, QVariantList, RecordLiteral, quint64 (pointer), quint32 (set or pointer)
+        static Constant* toConst(const QVariant & data);
+        static QVariant toVariant(Constant*, Type *t);
     };
     typedef QPair<QByteArray,QVariant> FieldData;
     typedef QList<FieldData> RecordLiteral;
@@ -190,9 +197,7 @@ namespace Mil
         QList<AbstractRenderer*> renderer;
     };
 
-    class AstModel;
     class Declaration;
-    class Type;
     class Statement;
     class Expression;
 

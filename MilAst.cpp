@@ -602,8 +602,6 @@ Component::~Component()
 {
     if( c )
         delete c;
-    if( next )
-        delete next;
 }
 
 Constant::~Constant()
@@ -622,33 +620,9 @@ Constant::~Constant()
     }
 }
 
-QVariant Constant::toVariant() const
-{
-    switch(kind)
-    {
-    case D:
-        return d;
-    case I:
-        return i;
-    case S:
-        return QByteArray(s);
-    case B:
-        return QByteArray((char*)b->b, b->len);
-    case R:
-        return r->c->toVariant();
-    case C:
-        break; // TODO
-    default:
-        Q_ASSERT(false);
-    }
-    return QVariant();
-}
-
 ComponentList::~ComponentList()
 {
-    if( c )
-        delete c;
-    if( type )
+    if( type && !type->owned )
         delete type;
 }
 

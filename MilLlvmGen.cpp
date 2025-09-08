@@ -673,16 +673,12 @@ void LlvmGen::constValue(Constant* c, Type* t)
         break;
     case Constant::C:
         out << "{ ";
-        Component* comp = c->c->c;
-        bool first = true;
-        while( comp )
+        for( int i = 0; i < c->c->c.size(); i++ )
         {
-            if( !first )
+            if( i != 0 )
                 out << ", ";
             // Need type info for components
-            constValue(comp->c);
-            comp = comp->next;
-            first = false;
+            constValue(c->c->c[i].c);
         }
         out << " }";
         break;

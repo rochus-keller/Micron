@@ -116,10 +116,10 @@ Project2::Project2(QObject *parent) : QObject(parent),d_dirty(false),d_useBuiltI
 
 Project2::~Project2()
 {
-    clear();
+    clear(true, false);
 }
 
-void Project2::clear(bool all)
+void Project2::clear(bool all, bool reloadMic)
 {
     d_mdl.clear();
     modules.clear();
@@ -135,7 +135,8 @@ void Project2::clear(bool all)
             delete f;
         d_libs.clear();
     }
-    loader.loadFromFile(":/runtime/MIC+.mil");
+    if( reloadMic )
+        loader.loadFromFile(":/runtime/MIC+.mil");
 }
 
 void Project2::createNew()

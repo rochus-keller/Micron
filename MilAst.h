@@ -233,18 +233,23 @@ namespace Mil
     {
         QByteArray name; // optional field name
         Constant* c;
-        Component* next;
 
-        Component():c(0),next(0){}
+        // A constructor consists of an explicit type and a list of either named or anonymous components. Named and anonymous components cannot be mixed in the list.
+        // If NamedType is a struct type, then there is either an anonymous component for each field of the struct in the order of declaration,
+        // or there is a named component for each field in arbitrary order. For union types, only named components can be used, and only one option
+        // of the union can be initialized in the constructor.
+        // If NamedType is an array type, then there is an anonymous componend for each element of the array. The array type may be an open array in
+        // which case the number of elements is determined by the number of components.
+        Component():c(0){}
         ~Component();
     };
 
     struct ComponentList
     {
         Type* type; // optional type, owned
-        Component* c; // owned
+        QList<Component> c; // owned
 
-        ComponentList():type(0),c(0) {}
+        ComponentList():type(0) {}
         ~ComponentList();
     };
 
@@ -271,7 +276,6 @@ namespace Mil
         };
         Constant():kind(Invalid) {}
         ~Constant();
-        QVariant toVariant() const;
     };
 
     class Expression : public Node

@@ -2629,42 +2629,39 @@ ComponentList* Parser2::component_list() {
 	expect(Tok_Lbrace, false, "component_list");
     ComponentList* cl = new ComponentList();
 	if( FIRST_component(la.d_type) ) {
-        Component* c = component();
-        if( c == 0 )
+        cl->c.append(Component());
+        component(cl->c.back());
+        if( cl->c.back().c == 0 )
             return cl;
-        cl->c = c;
 		while( la.d_type == Tok_Comma || FIRST_component(la.d_type) ) {
 			if( la.d_type == Tok_Comma ) {
 				expect(Tok_Comma, false, "component_list");
 			}
-            Component* cc = component();
-            if( cc == 0 )
+            cl->c.append(Component());
+            component(cl->c.back());
+            if( cl->c.back().c == 0 )
                 return cl;
-            c->next = cc;
-            c = cc;
 		}
 	}
 	expect(Tok_Rbrace, false, "component_list");
     return cl;
 }
 
-Component* Parser2::component() {
-    Component* cp = new Component();
+void Parser2::component(Component& cp) {
     if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Eq )  ) {
 		expect(Tok_ident, false, "component");
-        cp->name = cur.d_val;
+        cp.name = cur.d_val;
 		expect(Tok_Eq, false, "component");
 	}
 	if( FIRST_ConstExpression(la.d_type) ) {
-        cp->c = ConstExpression();
+        cp.c = ConstExpression();
 	} else if( FIRST_component_list(la.d_type) ) {
         ComponentList* cl = component_list();
-        cp->c = new Constant();
-        cp->c->kind = Constant::C;
-        cp->c->c = cl;
+        cp.c = new Constant();
+        cp.c->kind = Constant::C;
+        cp.c->c = cl;
 	} else
         invalid("component");
-    return cp;
 }
 
 quint32 Parser2::numberOrIdent(bool param)

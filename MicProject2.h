@@ -87,7 +87,7 @@ namespace Mic
         explicit Project2(QObject *parent = 0);
         ~Project2();
 
-        void clear(bool all = true);
+        void clear(bool all = true, bool reloadMic = true);
 
         void createNew();
         bool initializeFromDir( const QDir&, bool recursive = false );

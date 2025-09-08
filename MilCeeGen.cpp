@@ -516,17 +516,13 @@ void CeeGen::constValue(QTextStream& out, Constant* c)
             if( c->c->type )
                 out << "(" << typeRef(c->c->type) << ")";
             out << "{";
-            Component* i = c->c->c;
-            if( !i->name.isEmpty() )
-                out << "." << i->name << "=";
-            constValue(out, i->c);
-            while( i->next )
+            for( int i = 0; i < c->c->c.size(); i++ )
             {
-                out << ", ";
-                i = i->next;
-                if( !i->name.isEmpty() )
-                    out << "." << i->name << "=";
-                constValue(out, i->c);
+                if( i != 0 )
+                    out << ", ";
+                if( !c->c->c[i].name.isEmpty() )
+                    out << "." << c->c->c[i].name << "=";
+                constValue(out, c->c->c[i].c);
             }
             out << "}";
         }
@@ -627,6 +623,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
         case IL_stloc_1:
         case IL_stloc_2:
         case IL_stloc_3:
+            // ASSIG
             {
                 DeclList locals = curProc->getLocals();
                 Q_ASSERT(s->id < locals.size());
@@ -637,6 +634,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             break;
 
         case IL_starg:
+            // ASSIG
             {
                 DeclList params = curProc->getParams();
                 Q_ASSERT(s->id < params.size());
@@ -653,6 +651,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
         case IL_stind_r4:
         case IL_stind_r8:
         case IL_stind_ip:
+            // ASSIG
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
                 out << ws(level) << "*";
@@ -664,6 +663,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             break;
 
         case IL_stind_ipp:
+            // ASSIG
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
                 out << ws(level) << "*";
@@ -684,6 +684,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
         case IL_stelem_r4:
         case IL_stelem_r8:
         case IL_stelem_ip:
+            // ASSIG
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument &&
                           s->args->lhs && s->args->rhs &&
@@ -700,6 +701,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             break;
 
         case IL_stfld:
+            // ASSIG
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
                 out << ws(level) << "(";
@@ -713,6 +715,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             break;
 
         case IL_stvar:
+            // ASSIG
             out << ws(level) << qualident(s->d);
             out << " = ";
             expression(out, s->args, level+1);
@@ -752,8 +755,15 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             // TODO
             break;
 
-        case IL_strcpy:
-            // TODO
+        case IL_strcpy: {
+                Q_ASSERT( s->args && s->args->kind == Expression::Argument && s->args->lhs && s->args->rhs );
+                out << ws(level) << "strcpy(";
+                expression(out, s->args->lhs, level+1);
+                out << ", ";
+                expression(out, s->args->rhs, level+1);
+                out << ");" << endl;
+            } break;
+
         default:
             Q_ASSERT(false);
         }

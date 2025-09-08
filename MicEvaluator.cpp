@@ -886,7 +886,7 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
             obj.typeRef = toQuali(v.type);
             obj.data = v.val;
             out->line_(pos);
-            out->ldobj(obj);
+            out->ldc_obj(obj);
         }
         break;
     case Value::VarDecl:
@@ -1848,7 +1848,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             }
             Value v;
             v.mode = Value::Const;
-            v.val = QVariant::fromValue(rec);
+            v.val = QVariant::fromValue(rec); // v.val = Mil::RecordLiteral
             v.type = e->getType();
             stack.push_back(v);
             break;
@@ -1869,7 +1869,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             }
             Value v;
             v.mode = Value::Const;
-            v.val = QVariant::fromValue(arr.toList());
+            v.val = QVariant::fromValue(arr.toList()); // v.val = QVariantList
             v.type = e->getType();
             stack.push_back(v);
             break;
@@ -1878,7 +1878,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             Q_ASSERT(e->rhs);
             Value v;
             v.mode = Value::Const;
-            v.val = e->rhs->val;
+            v.val = e->rhs->val; // v.val = quint64
             v.type = e->getType();
             stack.push_back(v);
             break;
@@ -1947,7 +1947,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             }
             Value v;
             v.mode = Value::Const;
-            v.val = (quint64)set.to_ulong();
+            v.val = (quint64)set.to_ulong(); // v.val = quint32
             v.type = e->getType();
             stack.push_back(v);
             break;

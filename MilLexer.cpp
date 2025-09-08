@@ -133,7 +133,10 @@ Token Lexer::nextTokenImp()
         {
             Token t = token( Tok_Eof, 0 );
             if( d_in->parent() == this )
+            {
                 d_in->deleteLater();
+                d_in = 0;
+            }
             return t;
         }
         nextLine();
@@ -517,7 +520,7 @@ Token Lexer::comment()
     int pos = d_colNr;
     parseComment( d_line, pos, level );
     QByteArray str = d_line.mid(d_colNr,pos-d_colNr);
-    while( level > 0 && !d_in->atEnd() )
+    while( level > 0 && d_in && !d_in->atEnd() )
     {
         nextLine();
         pos = 0;
@@ -526,7 +529,7 @@ Token Lexer::comment()
             str += '\n';
         str += d_line.mid(d_colNr,pos-d_colNr);
     }
-    if( d_packComments && level > 0 && d_in->atEnd() )
+    if( d_packComments && level > 0 && d_in && d_in->atEnd() )
     {
         d_colNr = d_line.size();
         Token t( Tok_Invalid, startLine, startCol + 1, str.size(), tr("non-terminated comment").toLatin1() );
@@ -619,7 +622,7 @@ Token Lexer::hexstring()
     int pos = d_colNr + 1;
     int res = readHex(str, d_line, pos);
 
-    while( res == HEX_PENDING && !d_in->atEnd() )
+    while( res == HEX_PENDING && d_in && !d_in->atEnd() )
     {
         nextLine();
         countLine();
@@ -671,6 +674,8 @@ bool Lexer::isHexstring(int off) const
         if( !isHexDigit(ch) && !::isspace(ch) )
             return false;
     }
+    if( d_in == 0 )
+        return false;
     const QByteArray buf = d_in->peek(1000); // RISK
     for( int i = 0; i < buf.size(); i++ )
     {
