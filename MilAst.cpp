@@ -793,6 +793,30 @@ bool Type::isPtrToArray() const
         return false;
 }
 
+bool Type::isPtrToFixArray() const
+{
+    if( kind == Pointer )
+    {
+        Type* base = getType();
+        if( base )
+            base = base->deref();
+        return base->kind == Array && base->len != 0;
+    }else
+        return false;
+}
+
+bool Type::isPtrToOpenArray() const
+{
+    if( kind == Pointer )
+    {
+        Type* base = getType();
+        if( base )
+            base = base->deref();
+        return base->kind == Array && base->len == 0;
+    }else
+        return false;
+}
+
 bool Type::isPtrToOpenCharArray() const
 {
     if( kind == Pointer )

@@ -124,6 +124,7 @@ void CeeGen::visitModule()
            typeDecl(hout, sub);
            hout << ";" << endl;
            if( sub->getType()->objectInit && sub->getType()->isSOA() )
+               // for structs, objects and fixlen arrays whose fields or elements need object initialization, create an initializer
                emitInitializer(sub->getType());
        }
        sub = sub->next;
@@ -327,15 +328,17 @@ QByteArray CeeGen::typeRef(Type* t)
 
     if( t->kind == Type::Pointer )
     {
-        Type* tt = deref(t->getType());
-        if( tt->kind == Type::Array )
-            tt = deref(tt->getType()); // we treat an array as a pointer to its elements
+
+        Type* to = deref(t->getType());
+        if( t->isPtrToOpenArray())
+            // pointer to open arrays have no extra typedef, instead we use element_type*
+            to = to->getType();
         QByteArray prefix;
-        if( tt->kind == Type::Struct || tt->kind == Type::Object )
+        if( to->isSOA() ) // array types are embedded in a struct
             prefix = "struct ";
-        else if( tt->kind == Type::Union )
+        else if( to->kind == Type::Union )
             prefix = "union ";
-        return prefix + typeRef(tt) + "*";
+        return prefix + typeRef(to) + "*";
     }else if( t->decl )
         return qualident(t->decl);
     else
@@ -382,6 +385,12 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
         out << "typedef struct " << qualident(d) << "$Class$ " << qualident(d) << "$Class$;" << endl;
     }
 
+    if( t->kind == Type::Array && t->len == 0 )
+    {
+        out << "// no typedef for open array " << qualident(d) << " (" << typeRef(t->getType()) << "*)";
+        return; // we need not typedef for open arrays, instead they are referenced by element_type*
+    }
+
     out << "typedef ";
     if( t->kind < Type::MaxBasicType )
         out << typeRef(t);
@@ -423,11 +432,11 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
             }
             break;
         case Type::Array:
-            out << typeRef(t->getType()) << " " << qualident(d) << "[";
             if( t->len != 0 )
-                out << t->len;
-            out << "]";
-            return;
+                out << "struct " << qualident(d) << " { " << typeRef(t->getType()) << " _[" << t->len << "];" << " }";
+            else
+                Q_ASSERT(false); // out << typeRef(t->getType()) << "* ";
+            break;
 
         case Type::Union:
         case Type::Struct:
@@ -460,14 +469,14 @@ void CeeGen::pointerTo(QTextStream& out, Type* ptr)
 {
     Type* to = ptr->getType();
     Type* to2 = deref(to);
-    if( to2 && to2->kind == Type::Array )
+    if( to2 && to2->kind == Type::Array && to2->len == 0 )
     {
         // Pointer to array is translated to pointer to array element
         ptr = to2;
         to = ptr->getType();
         to2 = deref(to);
     }
-    if( to2 && to2->isSUO() )
+    if( to2 && to2->isSUOA() )
     {
         if( deref(to)->kind == Type::Union )
             out << "union ";
@@ -513,9 +522,16 @@ void CeeGen::constValue(QTextStream& out, Constant* c)
         break;
     case Constant::C:
         {
+            bool fixArray = false;
             if( c->c->type )
+            {
                 out << "(" << typeRef(c->c->type) << ")";
+                if( c->c->type->kind == Type::Array && c->c->type->len != 0 )
+                    fixArray = true;
+            }
             out << "{";
+            if( fixArray )
+                out << "{";
             for( int i = 0; i < c->c->c.size(); i++ )
             {
                 if( i != 0 )
@@ -524,6 +540,8 @@ void CeeGen::constValue(QTextStream& out, Constant* c)
                     out << "." << c->c->c[i].name << "=";
                 constValue(out, c->c->c[i].c);
             }
+            if( fixArray )
+                out << "}";
             out << "}";
         }
         break;
@@ -692,6 +710,8 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                           s->args->next->rhs && s->args->next->lhs == 0);
                 out << ws(level);
                 expression(out, s->args->next->rhs, level+1);
+                if( deref(s->args->next->rhs->getType())->isPtrToFixArray() )
+                    out << "->_";
                 out << "[";
                 expression(out, s->args->lhs, level+1);
                 out << "] = ";
@@ -842,11 +862,12 @@ void CeeGen::emitInitializer(Type* t)
     t = deref(t);
     hout << "void " << qualident(t->decl) << "$init$(" << typeRef(t) << "* obj, unsigned int n);" << endl;
     bout << "void " << qualident(t->decl) << "$init$(" << typeRef(t) << "* obj, unsigned int n) {" << endl;
+    // obj is a pointer to the object to be initialized; we can interpret this pointer as a single or an array of this object
     bout << ws(0) << "int i;" << endl;
-    bout << ws(0) << "for( i = 0; i < n; i++ ) {" << endl;
+    bout << ws(0) << "for( i = 0; i < n; i++ ) {" << endl; // this code is generalized to an array of this object of length n
 
     if( t->kind == Type::Object )
-        bout << ws(1) << "obj[i].class$ = &" << qualident(t->decl) << "$class$;" << endl;
+        bout << ws(1) << "obj[i].class$ = &" << qualident(t->decl) << "$class$;" << endl; // set the vptr to its class object
     else if( t->kind == Type::Array && t->len && t->objectInit )
     {
         Type* et = deref(t->getType());
@@ -993,7 +1014,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         out << qualident(e->d);
         break;
     case IL_ldvara:
-        out << "(" << ( !deref(e->getType())->isPtrToArray() ? "&" : "") << qualident(e->d) << ")";
+        out << "(" << ( !deref(e->getType())->isPtrToOpenArray() ? "&" : "") << qualident(e->d) << ")";
         break;
 
     case IL_ldarg_0:
@@ -1007,10 +1028,10 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         {
             DeclList params = curProc->getParams();
             Q_ASSERT( e->id < params.size() );
-            if( (e->kind == IL_ldarga_s || e->kind == IL_ldarga) && !deref(e->getType())->isPtrToArray() )
+            if( (e->kind == IL_ldarga_s || e->kind == IL_ldarga) && !deref(e->getType())->isPtrToOpenArray() )
                 out << "(&";
             out << params[e->id]->name;
-            if( (e->kind == IL_ldarga_s || e->kind == IL_ldarga) && !deref(e->getType())->isPtrToArray() )
+            if( (e->kind == IL_ldarga_s || e->kind == IL_ldarga) && !deref(e->getType())->isPtrToOpenArray() )
                 out << ")";
         }
         break;
@@ -1026,10 +1047,10 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         {
             DeclList locals = curProc->getLocals();
             Q_ASSERT( e->id < locals.size() );
-            if( (e->kind == IL_ldloca_s || e->kind == IL_ldloca) && !deref(e->getType())->isPtrToArray() )
+            if( (e->kind == IL_ldloca_s || e->kind == IL_ldloca) && !deref(e->getType())->isPtrToOpenArray() )
                 out << "(&";
             out << locals[e->id]->name;
-            if( (e->kind == IL_ldloca_s || e->kind == IL_ldloca) && !deref(e->getType())->isPtrToArray() )
+            if( (e->kind == IL_ldloca_s || e->kind == IL_ldloca) && !deref(e->getType())->isPtrToOpenArray() )
                 out << ")";
         }
         break;
@@ -1064,25 +1085,27 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
     case IL_ldelem_u8:
     case IL_ldelem:
     case IL_ldelema:
-        if( e->kind == IL_ldelema && !deref(e->getType())->isPtrToArray() )
+        if( e->kind == IL_ldelema && !deref(e->getType())->isPtrToOpenArray() )
             out << "(&";
         expression(out, e->lhs, level + 1);
+        if( deref(e->lhs->getType())->isPtrToFixArray() )
+            out << "->_";
         out << "[";
         expression(out, e->rhs, level + 1);
         out << "]";
-        if( e->kind == IL_ldelema && !deref(e->getType())->isPtrToArray() )
+        if( e->kind == IL_ldelema && !deref(e->getType())->isPtrToOpenArray() )
             out << ")";
         break;
 
     case IL_ldfld:
     case IL_ldflda:
-        if( e->kind == IL_ldflda && !deref(e->getType())->isPtrToArray() )
+        if( e->kind == IL_ldflda && !deref(e->getType())->isPtrToOpenArray() )
             out << "(&";
         out << "(";
         expression(out, e->lhs, level+1 );
         out << "->" << e->d->name;
         out << ")";
-        if( e->kind == IL_ldflda && !deref(e->getType())->isPtrToArray() )
+        if( e->kind == IL_ldflda && !deref(e->getType())->isPtrToOpenArray() )
             out << ")";
         break;
 
