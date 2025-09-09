@@ -45,22 +45,28 @@ namespace Mil
         void variable(QTextStream& out, Declaration* var);
         void typeDecl(QTextStream& out, Declaration* type);
         void pointerTo(QTextStream& out, Type* type);
-        void constValue(QTextStream& out, Constant* c);
+        void constValue(QTextStream& out, Constant* c, Type *hint);
         void statementSeq(QTextStream& out, Statement* s, int level = 0);
-        void expression(QTextStream& out, Expression* e, int level = 0);
-        void emitBinOP(QTextStream& out, Expression* e, const char* op, int level);
-        void emitRelOP(QTextStream& out, Expression* e, const char* op, int level);
+        void expression(QTextStream& out, Expression* e, Type* hint = 0);
+        void emitBinOP(QTextStream& out, Expression* e, const char* op);
+        void emitRelOP(QTextStream& out, Expression* e, const char* op);
         void emitSoapInit(QTextStream& out, const QByteArray& name, Type* t, int level);
         void emitSoaInit(QTextStream& out, const QByteArray& name, bool nameIsPtr, Type* t, int level);
         Type* deref(Type* t);
         void emitInitializer(Type*);
 
+        inline QByteArray ws(int level)
+        {
+            curLevel = level;
+            return QByteArray((level+1)*4,' ');
+        }
     private:
         AstModel* mdl;
         QTextStream hout;
         QTextStream bout;
         Declaration* curMod;
         Declaration* curProc;
+        int curLevel;
     };
 }
 

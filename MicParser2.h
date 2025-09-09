@@ -170,6 +170,9 @@ namespace Mic {
         Expression* toExpr(Declaration* d, const RowCol&);
         void emitType(Type*);
         Declaration* addHelper(Type*);
+        Type* addHelperType(Type::Kind kind, int len, Type* base, const RowCol pos);
+        Type* addHelperType(Type*);
+        Type* searchType(Type::Kind kind, int len, Type *base);
         Declaration* addTemp(Type*, const RowCol &pos);
         typedef QList<QPair<Token,Value> > Args;
         void openArrayError(const Token&, Type*);
@@ -219,6 +222,7 @@ namespace Mic {
         Symbol* last;
         QHash<Declaration*,SymList> xref;
         QHash<Declaration*,DeclList> subs;
+        QList<Type*> allTypes;
     };
 }
 

@@ -42,6 +42,7 @@ bool CeeGen::generate(Declaration* module, QIODevice* header, QIODevice* body)
 {
     Q_ASSERT( module && header );
     curMod = module;
+    curLevel = 0;
     hout.setDevice(header);
     QString dummy;
     if( body )
@@ -136,7 +137,7 @@ void CeeGen::visitModule()
        if( sub->kind == Declaration::ConstDecl )
        {
            hout << "#define " << qualident(sub);
-           constValue(hout, sub->c);
+           constValue(hout, sub->c, 0);
            hout << endl << endl;
        }
        sub = sub->next;
@@ -187,11 +188,6 @@ void CeeGen::visitModule()
         proc.name = "begin$";
         visitProcedure(&proc);
    }
-}
-
-static inline QByteArray ws(int level)
-{
-    return QByteArray((level+1)*4,' ');
 }
 
 void CeeGen::visitProcedure(Declaration* proc)
@@ -486,7 +482,7 @@ void CeeGen::pointerTo(QTextStream& out, Type* ptr)
     out << typeRef(ptr->getType()) << "*";
 }
 
-void CeeGen::constValue(QTextStream& out, Constant* c)
+void CeeGen::constValue(QTextStream& out, Constant* c, Type* hint)
 {
     if( c == 0 )
     {
@@ -518,14 +514,19 @@ void CeeGen::constValue(QTextStream& out, Constant* c)
         }
         break;
     case Constant::R:
-        constValue(out, c->r->c);
+        constValue(out, c->r->c, 0);
         break;
     case Constant::C:
         {
             bool fixArray = false;
             if( c->c->type )
             {
-                out << "(" << typeRef(c->c->type) << ")";
+                Type* t = c->c->type;
+#if 0
+                if( hint )
+                    t = hint;
+#endif
+                out << "(" << typeRef(t) << ")";
                 if( c->c->type->kind == Type::Array && c->c->type->len != 0 )
                     fixArray = true;
             }
@@ -538,7 +539,7 @@ void CeeGen::constValue(QTextStream& out, Constant* c)
                     out << ", ";
                 if( !c->c->c[i].name.isEmpty() )
                     out << "." << c->c->c[i].name << "=";
-                constValue(out, c->c->c[i].c);
+                constValue(out, c->c->c[i].c, 0);
             }
             if( fixArray )
                 out << "}";
@@ -559,14 +560,14 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             {
                 out << ws(level);
                 // NOTE: s->args points to the expr in a sequence after which the stack is empty
-                expression(out, s->args, level);
+                expression(out, s->args);
                 out << ";" << endl;
             }
             break;
 
         case IL_if:
             out << ws(level) << "if( ";
-            expression(out, s->args, level+1);
+            expression(out, s->args);
             out << " ) {" << endl;
             statementSeq(out, s->body, level+1);
             out << ws(level) << "}";
@@ -590,13 +591,13 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             out << ws(level) << "do {" << endl;
             statementSeq(out, s->body, level+1);
             out << ws(level) << "} while( !";
-            expression(out, s->args, level+1);
+            expression(out, s->args);
             out << " );" << endl;
             break;
 
         case IL_switch:
             out << ws(level) << "switch( ";
-            expression(out, s->args, level+1);
+            expression(out, s->args);
             out << " ) {" << endl;
             while( s->next && s->next->kind == IL_case )
             {
@@ -605,7 +606,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                 while(e)
                 {
                     out << ws(level) << "case ";
-                    expression(out, e, level+1 );
+                    expression(out, e);
                     out << ":" << endl;
                     e = e->next;
                 }
@@ -626,7 +627,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
 
         case IL_while:
             out << ws(level) << "while( ";
-            expression(out, s->args, level+1);
+            expression(out, s->args);
             out << " ) {" << endl;
             statementSeq(out, s->body, level+1);
             out << ws(level) << "}" << endl;
@@ -646,7 +647,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                 DeclList locals = curProc->getLocals();
                 Q_ASSERT(s->id < locals.size());
                 out << ws(level) << locals[s->id]->name << " = ";
-                expression(out, s->args, level + 1 );
+                expression(out, s->args, locals[s->id]->getType());
                 out << ";" << endl;
             }
             break;
@@ -657,7 +658,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                 DeclList params = curProc->getParams();
                 Q_ASSERT(s->id < params.size());
                 out << ws(level) << params[s->id]->name << " = ";
-                expression(out, s->args, level + 1 );
+                expression(out, s->args, params[s->id]->getType());
                 out << ";" << endl;
             }
             break;
@@ -673,9 +674,9 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
                 out << ws(level) << "*";
-                expression(out, s->args->lhs, level+1);
+                expression(out, s->args->lhs);
                 out << " = ";
-                expression(out, s->args->rhs, level+1);
+                expression(out, s->args->rhs, s->args->lhs->getType());
                 out << ";" << endl;
             }
             break;
@@ -685,11 +686,11 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
                 out << ws(level) << "*";
-                expression(out, s->args->lhs, level+1);
+                expression(out, s->args->lhs);
                 out << " = ";
                 if( s->args->rhs->kind == IL_ldmeth )
                     out << "(" << typeRef(s->args->lhs->getType()->getType()) << ")";
-                expression(out, s->args->rhs, level+1);
+                expression(out, s->args->rhs, s->args->lhs->getType());
                 out << ";" << endl;
             }
             break;
@@ -709,13 +710,13 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                           s->args->next && s->args->next->kind == Expression::Argument &&
                           s->args->next->rhs && s->args->next->lhs == 0);
                 out << ws(level);
-                expression(out, s->args->next->rhs, level+1);
+                expression(out, s->args->next->rhs);
                 if( deref(s->args->next->rhs->getType())->isPtrToFixArray() )
                     out << "->_";
                 out << "[";
-                expression(out, s->args->lhs, level+1);
+                expression(out, s->args->lhs);
                 out << "] = ";
-                expression(out, s->args->rhs, level+1);
+                expression(out, s->args->rhs, s->args->next->rhs->getType()->getType());
                 out << ";" << endl;
             }
             break;
@@ -725,11 +726,11 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
                 out << ws(level) << "(";
-                expression(out, s->args->lhs, level+1);
+                expression(out, s->args->lhs);
                 out << ")->";
                 out << s->d->name;
                 out << " = ";
-                expression(out, s->args->rhs, level+1);
+                expression(out, s->args->rhs, s->d->getType());
                 out << ";" << endl;
             }
             break;
@@ -738,7 +739,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             // ASSIG
             out << ws(level) << qualident(s->d);
             out << " = ";
-            expression(out, s->args, level+1);
+            expression(out, s->args, s->d->getType());
             out << ";" << endl;
             break;
 
@@ -748,18 +749,18 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             if( s->args )
             {
                 out << " ";
-                expression(out, s->args, level+1);
+                expression(out, s->args);
             }
             out << ";" << endl;
             break;
 
         case IL_pop:
-            expression(out, s->args, level+1);
+            expression(out, s->args);
             break;
 
         case IL_free:
             out << ws(level) << "free(";
-            expression(out, s->args, level+1);
+            expression(out, s->args);
             out << ");" << endl;
             break;
 
@@ -778,9 +779,9 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
         case IL_strcpy: {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument && s->args->lhs && s->args->rhs );
                 out << ws(level) << "strcpy(";
-                expression(out, s->args->lhs, level+1);
+                expression(out, s->args->lhs);
                 out << ", ";
-                expression(out, s->args->rhs, level+1);
+                expression(out, s->args->rhs);
                 out << ");" << endl;
             } break;
 
@@ -792,21 +793,21 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
     }
 }
 
-void CeeGen::emitBinOP(QTextStream& out, Expression* e, const char* op, int level)
+void CeeGen::emitBinOP(QTextStream& out, Expression* e, const char* op)
 {
     out << "(";
-    expression(out, e->lhs, level);
+    expression(out, e->lhs);
     out << " " << op << " ";
-    expression(out, e->rhs, level);
+    expression(out, e->rhs);
     out << ")";
 }
 
-void CeeGen::emitRelOP(QTextStream& out, Expression* e, const char* op, int level)
+void CeeGen::emitRelOP(QTextStream& out, Expression* e, const char* op)
 {
     out << "(";
-    expression(out, e->lhs, level+1);
+    expression(out, e->lhs);
     out << " " << op << " ";
-    expression(out, e->rhs, level+1);
+    expression(out, e->rhs);
     out << ")";
 }
 
@@ -831,7 +832,7 @@ void CeeGen::emitSoaInit(QTextStream& out, const QByteArray& name, bool nameIsPt
     if( t->isSO() )
         out << ws(level) << qualident(t->decl) << "$init$(" << (nameIsPtr ? "" : "&") << name << ", 1);" << endl;
     else if( t->kind == Type::Array && t->len && deref(t->getType())->isSO() )
-        out << ws(level) << qualident(deref(t->getType())->decl) << "$init$(" << name << ", " << t->len << ");" << endl;
+        out << ws(level) << qualident(deref(t->getType())->decl) << "$init$(" << name << (nameIsPtr ? "->" : ".") << "_, " << t->len << ");" << endl;
 }
 
 static void collectArgs(Expression* e, QList<Expression*>& args)
@@ -894,49 +895,49 @@ void CeeGen::emitInitializer(Type* t)
     bout << "}" << endl << endl;
 }
 
-void CeeGen::expression(QTextStream& out, Expression* e, int level)
+void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
 {
     switch(e->kind)
     {
     case IL_add:
-        emitBinOP(out, e, "+", level+1);
+        emitBinOP(out, e, "+");
         break;
     case IL_div_un:
     case IL_div:
-        emitBinOP(out, e, "/", level+1); // TODO: UN
+        emitBinOP(out, e, "/"); // TODO: UN
         break;
     case IL_mul:
-        emitBinOP(out, e, "*", level+1);
+        emitBinOP(out, e, "*");
         break;
     case IL_rem:
     case IL_rem_un:
-        emitBinOP(out, e, "%", level+1); // TODO: UN
+        emitBinOP(out, e, "%"); // TODO: UN
         break;
     case IL_sub:
-        emitBinOP(out, e, "-", level+1);
+        emitBinOP(out, e, "-");
         break;
 
     case IL_and:
-        emitBinOP(out, e, "&", level+1);
+        emitBinOP(out, e, "&");
         break;
     case IL_or:
-        emitBinOP(out, e, "|", level+1);
+        emitBinOP(out, e, "|");
         break;
     case IL_xor:
-        emitBinOP(out, e, "^", level+1);
+        emitBinOP(out, e, "^");
         break;
 
     case IL_shl:
-        emitBinOP(out, e, "<<", level+1);
+        emitBinOP(out, e, "<<");
         break;
     case IL_shr_un:
     case IL_shr:
-        emitBinOP(out, e, ">>", level+1); // TODO: UN
+        emitBinOP(out, e, ">>"); // TODO: UN
         break;
 
     case IL_neg:
         out << "-";
-        expression(out, e->lhs, level+1);
+        expression(out, e->lhs);
         break;
 
     case IL_abs:
@@ -944,13 +945,13 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
             out << "abs(";
         else
             out << "fabs(";
-        expression(out, e->lhs, level+1);
+        expression(out, e->lhs);
         out << ")";
         break;
 
     case IL_not:
         out << "~";
-        expression(out, e->lhs, level + 1);
+        expression(out, e->lhs);
         break;
 
     case IL_ldc_i4_0:
@@ -980,7 +981,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
 
     case IL_ldstr:
     case IL_ldc_obj:
-        constValue(out, e->c);
+        constValue(out, e->c, hint);
         break;
 
     case IL_conv_i1:
@@ -994,20 +995,20 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
     case IL_conv_r4:
     case IL_conv_r8:
         out << "((" << typeRef(Validator::tokToBasicType(mdl, e->kind)) << ")";
-        expression(out, e->lhs, level+1);
+        expression(out, e->lhs);
         out << ")";
         break;
 
     case IL_ceq:
-        emitRelOP(out, e, "==", level + 1);
+        emitRelOP(out, e, "==");
         break;
     case IL_cgt_un: // TODO: UN
     case IL_cgt:
-        emitRelOP(out, e, ">", level + 1);
+        emitRelOP(out, e, ">");
         break;
     case IL_clt_un: // TODO: UN
     case IL_clt:
-        emitRelOP(out, e, "<", level + 1);
+        emitRelOP(out, e, "<");
         break;
 
     case IL_ldvar:
@@ -1069,7 +1070,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
     case IL_ldind_u8:
     case IL_ldind:
         out << "*";
-        expression(out, e->lhs, level+1);
+        expression(out, e->lhs);
         break;
 
     case IL_ldelem_i1:
@@ -1087,11 +1088,11 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
     case IL_ldelema:
         if( e->kind == IL_ldelema && !deref(e->getType())->isPtrToOpenArray() )
             out << "(&";
-        expression(out, e->lhs, level + 1);
+        expression(out, e->lhs);
         if( deref(e->lhs->getType())->isPtrToFixArray() )
             out << "->_";
         out << "[";
-        expression(out, e->rhs, level + 1);
+        expression(out, e->rhs);
         out << "]";
         if( e->kind == IL_ldelema && !deref(e->getType())->isPtrToOpenArray() )
             out << ")";
@@ -1102,7 +1103,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         if( e->kind == IL_ldflda && !deref(e->getType())->isPtrToOpenArray() )
             out << "(&";
         out << "(";
-        expression(out, e->lhs, level+1 );
+        expression(out, e->lhs );
         out << "->" << e->d->name;
         out << ")";
         if( e->kind == IL_ldflda && !deref(e->getType())->isPtrToOpenArray() )
@@ -1114,15 +1115,17 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         break;
 
     case IL_ldmeth:
+        if( hint )
+            out << "(" << typeRef(hint) << ")";
         out << "{(_ptr$ = ";
-        expression(out, e->lhs, level+1);
+        expression(out, e->lhs);
         out << ", _ptr$), ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
         out << "->class$->" << e->d->name << "}";
         break;
 
     case IL_castptr:
         out << "((" << typeRef(e->d->getType()) << "*)";
-        expression(out, e->lhs, level+1 );
+        expression(out, e->lhs );
         out << ")";
         break;
 
@@ -1131,11 +1134,13 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
             out << qualident(e->d) << "(";
             QList<Expression*> args;
             collectArgs(e->rhs, args);
+            QList<Declaration*> formals = e->d->getParams(true);
+            Q_ASSERT( args.size() == formals.size() );
             for( int i = 0; i < args.size(); i++ )
             {
                 if( i != 0 )
                     out << ", ";
-                expression(out, args[i], level+1);
+                expression(out, args[i], formals[i]->getType());
             }
             out << ")";
         }
@@ -1144,15 +1149,17 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
     case IL_callvirt:
         {
             out << "(_ptr$ = ";
-            expression(out, e->lhs, level+1);
+            expression(out, e->lhs);
             out << ", ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
             out << "->class$->" << e->d->name << "(_ptr$";
             QList<Expression*> args;
             collectArgs(e->rhs, args);
+            QList<Declaration*> formals = e->d->getParams(false);
+            Q_ASSERT( args.size() == formals.size() );
             for( int i = 0; i < args.size(); i++ )
             {
-               out << ", ";
-                expression(out, args[i], level+1);
+                out << ", ";
+                expression(out, args[i], formals[i]->getType());
             }
             out << "))";
         }
@@ -1160,15 +1167,17 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
 
     case IL_calli:
         {
-            expression(out, e->lhs, level+1 );
+            expression(out, e->lhs );
+            Type* proc = deref(e->lhs->getType());
             out << "(";
             QList<Expression*> args;
             collectArgs(e->rhs, args);
+            Q_ASSERT( args.size() == proc->subs.size() );
             for( int i = 0; i < args.size(); i++ )
             {
                 if( i != 0 )
                     out << ", ";
-                expression(out, args[i], level+1);
+                expression(out, args[i], proc->subs[i]->getType());
             }
             out << ")";
         }
@@ -1177,15 +1186,17 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
     case IL_callvi:
         {
             out << "(_ptr$ = &";
-            expression(out, e->lhs, level+1 );
+            expression(out, e->lhs );
+            Type* proc = deref(e->lhs->getType());
             out << ", ((" << typeRef(e->lhs->getType()) << "*)_ptr$)->proc(((";
             out << typeRef(e->lhs->getType()) << "*)_ptr$)->self";
             QList<Expression*> args;
             collectArgs(e->rhs, args);
+            Q_ASSERT( args.size() == proc->subs.size() );
             for( int i = 0; i < args.size(); i++ )
             {
                 out << ", ";
-                expression(out, args[i], level+1);
+                expression(out, args[i], proc->subs[i]->getType());
             }
             out << "))";
         }
@@ -1219,7 +1230,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
             Type* et = deref(e->d->getType());
             const QByteArray name = typeRef(et);
             out << "(_len$ = ";
-            expression(out, e->lhs, level+1);
+            expression(out, e->lhs);
             out << ", _ptr$ = calloc(_len$,sizeof(";
             out << name << ")),\n\t\t";
             out << name << "$init$(" << "((" << name << "*)_ptr$)" << ", _len$), (";
@@ -1231,7 +1242,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
             out << "(";
             out << typeRef(et);
             out << "*)calloc(";
-            expression(out, e->lhs, level+1);
+            expression(out, e->lhs);
             out << ",sizeof(";
             out << typeRef(et) << "))";
         }
@@ -1243,14 +1254,14 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
             Type* t = deref(e->d->getType());
             const QByteArray name = typeRef(t);
             out << "_ptr$ = ";
-            expression(out, e->lhs, level+1 );
+            expression(out, e->lhs );
             out << "; memset(_ptr$, 0, sizeof(" << name << "));";
-            emitSoaInit(out, "((" + name + "*)_ptr$)", true, t, level );
+            emitSoaInit(out, "((" + name + "*)_ptr$)", true, t, curLevel );
         }
         break;
 
     case IL_dup:
-        expression(out, e->lhs, level+1);
+        expression(out, e->lhs);
         // TODO: temp instead of multiple eval of same exr
         break;
 
@@ -1258,9 +1269,9 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
         break;
 
     case IL_ptroff:
-        expression(out, e->lhs, level + 1);
+        expression(out, e->lhs);
         out << " += ";
-        expression(out, e->rhs, level+1);
+        expression(out, e->rhs);
         out << " * sizeof(" << typeRef(e->d->getType()) << ")";
         break;
 
@@ -1271,11 +1282,11 @@ void CeeGen::expression(QTextStream& out, Expression* e, int level)
             Expression* then_ = if_->next;
             Expression* else_ = if_->next->next;
             out << "(";
-            expression(out, if_->lhs, level + 1);
+            expression(out, if_->lhs);
             out << " ? ";
-            expression(out, then_->lhs, level + 1);
+            expression(out, then_->lhs);
             out << " : ";
-            expression(out, else_->lhs, level + 1);
+            expression(out, else_->lhs);
             out << ") ";
         } break;
 

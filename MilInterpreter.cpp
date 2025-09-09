@@ -1537,7 +1537,8 @@ bool Interpreter::Imp::execute(Frame* frame)
                 Procedure* proc = code.getProc(frame->proc->ops[pc].val);
                 void* obj = *(void**)(frame->stack.data()+frame->sp-proc->fixArgSize);
                 Vtable* vtbl = *(Vtable**)(obj);
-                proc = vtbl->methods[proc->decl->off];
+                Q_ASSERT(proc->decl->pd);
+                proc = vtbl->methods[proc->decl->pd->slot];
                 if( !call(frame, pc, proc, locals, stack ) )
                     return false;
                 pc++;

@@ -1309,11 +1309,11 @@ void Parser2::ProcedureDeclaration() {
         Declaration tmp;
         if( !receiver.isEmpty() )
             scopeStack.push_back(&tmp);
-        Declaration* p = identdef(Declaration::Procedure);
+        Declaration* proc = identdef(Declaration::Procedure);
         Declaration* object = 0;
         if( !receiver.isEmpty() )
         {
-            p->typebound = true;
+            proc->typebound = true;
             scopeStack.pop_back();
             object = scopeStack.back()->findSubByName(receiver);
             if( object && object->getType() && object->getType()->kind != Type::Object )
@@ -1321,30 +1321,37 @@ void Parser2::ProcedureDeclaration() {
             else if( object && object->getType() )
             {
                 Type* t = object->getType();
-                Declaration* forward = t->findSubByName(p->name, false);
+                Declaration* forward = t->findSubByName(proc->name, false);
                 if( forward && (forward->kind != Declaration::Procedure || !forward->forward) )
                     error(tok, "method name not unique in object");
                 else if( forward )
                 {
                     forward->name.clear();
-                    forward->forwardTo = p;
+                    forward->forwardTo = proc;
                 }
                 tmp.subs = 0;
-                t->subs.append(p);
-                p->outer = t->decl;
+                t->subs.append(proc);
+                proc->outer = t->decl;
             }
         }else
             error(tok, "cannot find the receiver type");
 
-        scopeStack.push_back(p);
+        scopeStack.push_back(proc);
 		if( FIRST_FormalParameters(la.d_type) ) {
-            p->setType(FormalParameters());
+            proc->setType(FormalParameters());
 		}
-        DeclList params = p->getParams();
-        if( params.isEmpty() )
-            error(tok, "expecting at least the SELF parameter");
-        else
-            params.first()->typebound = true;
+
+        if( proc->typebound )
+        {
+            DeclList params = proc->getParams();
+            if( params.isEmpty() || params.first()->kind != Declaration::ParamDecl ||
+                    params.first()->getType() == 0 || params.first()->getType()->getType() == 0 ||
+                    params.first()->getType()->kind != Type::Pointer || params.first()->getType()->getType()->kind != Type::Object ||
+                    params.first()->getType()->getType() != proc->outer->getType() )
+                error(tok, "first parameter of a bound procedure must be a pointer to the object type");
+            else if(!params.isEmpty())
+                params.first()->typebound = true;
+        }
 
 		if( la.d_type == Tok_Semi ) {
 			expect(Tok_Semi, false, "ProcedureDeclaration");
@@ -1354,9 +1361,9 @@ void Parser2::ProcedureDeclaration() {
                 expect(Tok_Semi, false, "ProcedureDeclaration");
             }
             expect(Tok_FORWARD, true, "ProcedureDeclaration");
-            p->forward = true;
+            proc->forward = true;
         }else
-            ProcedureBody(p);
+            ProcedureBody(proc);
         scopeStack.pop_back();
 	} else if( FIRST_identdef(la.d_type) ) {
         Declaration* p = identdef(Declaration::Procedure);
@@ -1397,9 +1404,7 @@ void Parser2::ProcedureDeclaration() {
             p->foreign_ = true;
             if( la.d_type == Tok_string ) {
                 expect(Tok_string, false, "ProcedureDeclaration");
-                if( p->pd == 0 )
-                    p->pd = new ProcedureData();
-                p->pd->origName = cur.d_val.mid(1, cur.d_val.size()-2);
+                p->getPd()->origName = cur.d_val.mid(1, cur.d_val.size()-2);
             }
         } else if( la.d_code == Tok_FORWARD || ( la.d_type == Tok_Semi && peek(2).d_code == Tok_FORWARD ) ) {
             if( la.d_type == Tok_Semi ) {

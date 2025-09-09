@@ -176,7 +176,6 @@ namespace Mic
         bool isLvalue() const { return kind == VarDecl || kind == LocalDecl || kind == ParamDecl; }
         bool isPublic() const { return visi >= ReadOnly; }
         Declaration* getModule();
-
     };
     typedef QList<Declaration*> DeclList;
 
@@ -317,6 +316,7 @@ namespace Mic
         Declaration* getTopScope() const { return scopes.back(); }
         QByteArray getTempName();
         Declaration* getTopModule() const;
+        Declaration* getHelper() const { return helper; }
 
         Type* getType(quint8 basicType) const { return types[basicType]; }
 

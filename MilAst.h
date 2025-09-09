@@ -176,6 +176,9 @@ namespace Mil
 
     struct ProcedureData
     {
+        ProcedureData():finally(0),slot(0) {}
+
+        quint32 slot;
         Statement* finally; // optionally, owned
         Mic::RowCol end;
         QByteArray origName; // original name in the external C library
@@ -202,7 +205,7 @@ namespace Mil
                 uint bw : 8; // Field bitwidth
                 uint off : 24; // Field offset in bytes
             } f;
-            int off;  // method vtbl slot, LocalDecl & ParamDecl offset in bytes
+            int off;  // LocalDecl & ParamDecl offset in bytes
             Declaration* forwardTo; // Procedure: if forward==true, not owned
             ProcedureData* pd; // Procedure: if forward==false, optionally, owned
             Declaration* imported; // Import, not owned
@@ -227,7 +230,7 @@ namespace Mil
         Declaration* forwardToProc() const;
         Declaration* getModule() const;
         Declaration* findInitProc() const;
-
+        ProcedureData* getPd();
     };
     typedef QList<Declaration*> DeclList;
 

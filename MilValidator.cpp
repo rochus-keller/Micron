@@ -46,19 +46,19 @@ bool Validator::validate(Declaration* module)
             {
                 Type* base = deref(t->getType());
                 int id = base->numOfNonFwdNonOverrideProcs();
-                foreach( Declaration* d, t->subs )
+                foreach( Declaration* method, t->subs )
                 {
-                    if( d->kind == Declaration::Procedure && !d->forward )
+                    if( method->kind == Declaration::Procedure && !method->forward )
                     {
-                        Declaration* p = base->findSubByName(d->name, true);
-                        if( p )
+                        Declaration* super = base->findSubByName(method->name, true);
+                        if( super && super->pd )
                         {
-                            d->off = p->off;
-                            d->override_ = true;
+                            method->getPd()->slot = super->pd->slot;
+                            method->override_ = true;
                             // TODO: check param equality with super
                         }else
-                            d->off = id++;
-                        visitProcedure(d);
+                            method->getPd()->slot = id++;
+                        visitProcedure(method);
                     }
                 }
             }else if( t->kind == Type::Union )

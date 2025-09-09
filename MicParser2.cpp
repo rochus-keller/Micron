@@ -634,6 +634,7 @@ Parser2::~Parser2()
 void Parser2::RunParser(const Import &import) {
 	errors.clear();
     deferred.clear();
+    allTypes.clear();
 	next();
     module(import);
 }
@@ -1227,11 +1228,14 @@ void Parser2::TypeDeclaration() {
             obj = obj->getType();
 
         Type* super = obj->getType();
-        if( super->kind == Type::Pointer )
-            super = super->getType();
-        super->decl->hasSubs = true;
-        d->data = QVariant::fromValue(super->decl);
-        subs[super->decl].append(d);
+        if( super )
+        {
+            if( super->kind == Type::Pointer )
+                super = super->getType();
+            super->decl->hasSubs = true;
+            d->data = QVariant::fromValue(super->decl);
+            subs[super->decl].append(d);
+        }
     }
 
     thisDecl = 0;
@@ -1262,10 +1266,24 @@ Type* Parser2::type(bool needsHelperDecl) {
 	} else
 		invalid("type");
     if( res && res->kind != Type::Undefined && isNewType && needsHelperDecl )
-        addHelper(res);
+    {
         // if the type is not directly owned by a declaration (because it is declared in place and anonymously)
         // we need a helper declaration with a artificial ident so we can refer to it in the IR, which doesn't
         // support in-place type declarations.
+        if( res->kind == Type::Array || res->kind == Type::Pointer )
+        {
+            Type* res2 = addHelperType(res);
+            if( res2 != res )
+            {
+                isNewType = false;
+                res = res2;
+            }else
+                addHelper(res);
+        }else
+            addHelper(res);
+    }
+    if( isNewType )
+        allTypes.append(res);
     return res;
 }
 
@@ -1813,6 +1831,47 @@ Declaration*Parser2::addHelper(Type* t)
     return decl;
 }
 
+Type *Parser2::addHelperType(Type::Kind kind, int len, Type *base, const RowCol pos)
+{
+    Type* res = searchType(kind, len, base);
+    if( res == 0 )
+    {
+        res = new Type();
+        res->setType(base);
+        res->pos = pos;
+        res->kind = kind;
+        allTypes.append(res);
+        addHelper(res);
+    }
+    return res;
+}
+
+Type *Parser2::addHelperType(Type * t)
+{
+    if( t->kind != Type::Array && t->kind != Type::Pointer )
+        return t;
+    if( t->deferred )
+        return t;
+    Type* res = searchType(t->kind, t->len, t->getType());
+    if( res == 0 )
+        return t;
+    // else
+    Q_ASSERT( !t->ownstype ); // since the base type is already found, this one cannot be th owner
+    Q_ASSERT( !t->deferred );
+    delete t;
+    return res;
+}
+
+Type *Parser2::searchType(Type::Kind kind, int len, Type *base)
+{
+    foreach( Type* t, allTypes )
+    {
+        if( t->kind == kind && t->len == len && base && t->getType() == base )
+            return t;
+    }
+    return 0;
+}
+
 Declaration*Parser2::addTemp(Type* t, const RowCol& pos)
 {
     Declaration* decl = mdl->addDecl(mdl->getTempName());
@@ -2268,12 +2327,8 @@ Expression* Parser2::designator(bool needsLvalue) {
 
                 Expression* tmp = Expression::create(Expression::Cast, lpar.toRowCol() );
                 tmp->lhs = proc;
-                Type* t = new Type();
-                t->kind = Type::Pointer;
-                t->setType(retType);
-                t->pos = tmp->pos;
+                Type* t = addHelperType(Type::Pointer, 0, retType, tmp->pos);
                 tmp->setType(t);
-                addHelper(tmp->getType());
                 res = tmp;
 #if 0
                 else if( !ev->cast() )
@@ -2601,12 +2656,7 @@ Expression* Parser2::literal() {
         // alternative syntax for A{ x x x } with A = array of byte
         res = Expression::create(Expression::Literal,cur.toRowCol());
         const QByteArray bytes = QByteArray::fromHex(cur.d_val); // already comes without quotes
-        Type* arr = new Type();
-        arr->setType(mdl->getType(Type::UINT8));
-        arr->kind = Type::Array;
-        arr->len = bytes.size();
-        arr->pos = res->pos;
-        addHelper(arr);
+        Type* arr = addHelperType(Type::Array, bytes.size(), mdl->getType(Type::UINT8), res->pos);
         res->setType(arr);
         res->val = bytes;
         // byte array literal: byte array with type array of uint8
@@ -2713,13 +2763,18 @@ Expression* Parser2::constructor(Type* hint) {
             error(res->pos, "cannot determine length of array");
             return 0;
         }
-        Type* a = new Type();
-        a->kind = Type::Array;
-        a->len = maxIndex + 1;
-        a->pos = res->pos;
-        a->setType(res->getType()->getType());
-        addHelper(a);
-        res->setType(a);
+#if 0
+        // no longer required because we reuse types with addHelperType
+        if( hint && hint->kind == Type::Array && hint->len == maxIndex + 1 && hint->getType() == res->getType()->getType() )
+        {
+            // There is a compatible type already available; we do this so also the generated C types are compatible
+            res->setType(hint);
+        }else
+#endif
+        {
+            Type* a = addHelperType(Type::Array, maxIndex + 1, res->getType()->getType(), res->pos);
+            res->setType(a);
+        }
     }else if( res->getType()->kind == Type::Pointer )
     {
         if( res->rhs == 0 || res->rhs->next != 0 )
@@ -2863,11 +2918,7 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
 
         res = Expression::create(Expression::Addr, cur.toRowCol());
         res->lhs = tmp;
-        Type* ptr = new Type();
-        ptr->setType(res->lhs->getType());
-        ptr->pos = res->pos;
-        ptr->kind = Type::Pointer;
-        addHelper(ptr);
+        Type* ptr = addHelperType(Type::Pointer, 0, res->lhs->getType(), res->pos);
         res->setType(ptr);
     } else if( FIRST_literal(la.d_type) ) {
         res = literal();
@@ -2904,11 +2955,7 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
 
         res = Expression::create(Expression::Addr, cur.toRowCol());
         res->lhs = tmp;
-        Type* ptr = new Type();
-        ptr->setType(res->lhs->getType());
-        ptr->pos = res->pos;
-        ptr->kind = Type::Pointer;
-        addHelper(ptr);
+        Type* ptr = addHelperType(Type::Pointer, 0, res->lhs->getType(), res->pos);
         res->setType(ptr);
     } else
         invalid("factor");
@@ -3462,7 +3509,7 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
     Declaration* forward = 0;
 
     if( receiver.t )
-        mdl->openScope(0);
+        mdl->openScope(0); // avoid that the new proc is entered in module scope
     else
     {
         forward = mdl->findDecl(id.name.d_val,false);
@@ -3475,7 +3522,10 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
     }
     Declaration* procDecl = addDecl(id, Declaration::Procedure);
     if( receiver.t )
+    {
         mdl->closeScope(true);
+        procDecl->outer = 0;
+    }
 
     mdl->openScope(procDecl);
 
@@ -3485,6 +3535,7 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
         Type* objectType = receiver.t;
         if( objectType->kind == Type::Pointer )
             objectType = objectType->getType();
+
         forward = objectType->findSub(id.name.d_val);
         if( forward && (forward->kind != Declaration::ForwardDecl || inForward) )
         {
@@ -3494,11 +3545,13 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
             return 0;
         }else if( forward )
             forward->name.clear();
+
         objectType->subs.append(procDecl);
         Q_ASSERT(procDecl->outer == 0);
         procDecl->outer = objectType->decl;
         procDecl->typebound = true;
         procDecl->autoself = autoself;
+
         Declaration* param = addDecl(receiver.id, 0, Declaration::ParamDecl);
         param->typebound = true;
         if( receiver.t->kind == Type::Pointer )
@@ -3506,11 +3559,7 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
         else
         {
             // Take care that the hidden "self" parameter is always pointer to T
-            Type* ptr = new Type();
-            ptr->kind = Type::Pointer;
-            ptr->setType(receiver.t);
-            ptr->pos = receiver.id.toRowCol();
-            addHelper(ptr);
+            Type* ptr = addHelperType(Type::Pointer, 0, receiver.t, receiver.id.toRowCol());
             param->setType(ptr);
         }
         receiver.t = objectType;
@@ -3619,18 +3668,19 @@ void Parser2::ProcedureDeclaration() {
             QByteArray binding;
             if( procDecl->typebound )
             {
-                Type* base = procDecl->link->getType()->getType(); // receiver is always pointer to T
-                Declaration* super = base->decl;
-                if( super )
+                Type* cls = procDecl->link->getType()->getType(); // receiver is always pointer to T
+                Type* base = cls->getType(); // base is always Object, not pointer to Object
+                Declaration* super = base ? base->findMember(procDecl->name) : 0; // forward names were cleared
+                if( super && super->kind == Declaration::Procedure )
                 {
                     super->hasSubs = true;
                     procDecl->data = QVariant::fromValue(super);
-                    if( !matchFormals(super->getParams(true), procDecl->getParams(true)) || !matchResultType(super->getType(),procDecl->getType()) )
+                    if( !matchFormals(super->getParams(false), procDecl->getParams(false)) || !matchResultType(super->getType(),procDecl->getType()) )
                         error(procDecl->pos, "formal parameters do not match with the overridden procedure");
                     if( first )
                         subs[super].append(procDecl);
                 }
-                binding = ev->toQuali(base).second;
+                binding = ev->toQuali(cls).second;
             }
             out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
                            mdl->getTopScope()->kind == Declaration::Module &&
@@ -3835,13 +3885,8 @@ Type* Parser2::ReturnType() {
     Type* t = NamedType();
     if( t && ptr )
     {
-        Type* res = new Type();
-        res->setType(t);
-        res->pos = t->pos;
-        res->kind = Type::Pointer;
+        Type* res = addHelperType(Type::Pointer, 0, t, t->pos);
         t = res;
-
-        addHelper(res);
     }else if( t )
     {
         if( t->kind == Type::Array && t->len == 0 )

@@ -520,7 +520,6 @@ Declaration *Declaration::getModule()
         return 0;
 }
 
-
 bool Value::isCallable() const
 {
     switch( mode )

@@ -822,9 +822,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
             break;
         case ProcData::Foreign:
             decl->foreign_ = true;
-            if( decl->pd == 0 )
-                decl->pd = new ProcedureData();
-            decl->pd->origName = proc.origName;
+            decl->getPd()->origName = proc.origName;
             break;
         case ProcData::Inline:
             decl->inline_ = true;
@@ -861,6 +859,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
 
         if( !proc.binding.isEmpty() )
         {
+            decl->typebound = true;
             Declaration* receiver = module->findSubByName(proc.binding);
             if( receiver == 0 || receiver->kind != Declaration::TypeDecl || receiver->getType()->kind != Type::Object )
             {
@@ -876,6 +875,14 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
                     forward->forwardTo = decl;
                 }else if( forward )
                     error(curProc, QString("duplicate name: %1").arg(decl->name.constData()));
+
+                if( decl->subs == 0 || decl->subs->kind != Declaration::ParamDecl ||
+                        decl->subs->getType() == 0 || decl->subs->getType()->getType() == 0 ||
+                        decl->subs->getType()->kind != Type::Pointer || decl->subs->getType()->getType()->kind != Type::Object ||
+                        decl->subs->getType()->getType() != rt )
+                    error(curProc, QString("first parameter of a bound procedure must be a pointer to the object type"));
+                else if( decl->subs )
+                    decl->subs->typebound = true;
                 rt->subs.append(decl);
                 decl->outer = receiver;
             }
@@ -894,12 +901,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
         quint32 pc = 0;
         decl->body = translateStat(proc.body, pc);
         if( proc.endLine )
-        {
-            if( decl->pd == 0 && module->md && !module->md->source.isEmpty() )
-                decl->pd = new ProcedureData();
-            if( decl->pd != 0 )
-                decl->pd->end = Mic::RowCol(proc.endLine);
-        }
+            decl->getPd()->end = Mic::RowCol(proc.endLine);
         curProc = 0;
     }
 }

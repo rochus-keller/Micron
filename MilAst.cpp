@@ -574,6 +574,17 @@ Declaration*Declaration::findInitProc() const
     return 0;
 }
 
+ProcedureData *Declaration::getPd()
+{
+    if( kind == Procedure && !forward )
+    {
+        if( pd == 0 )
+            pd = new ProcedureData();
+        return pd;
+    }else
+        return 0;
+}
+
 Expression::~Expression()
 {
     if( (kind == IL_ldc_obj || kind == IL_ldstr) && c != 0 )
@@ -1017,3 +1028,4 @@ ModuleData::~ModuleData()
     if( toDelete )
         delete toDelete;
 }
+
