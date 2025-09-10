@@ -114,9 +114,7 @@ void IlAsmRenderer::beginType(const QByteArray& className, bool isPublic, quint8
         if( !super.first.isEmpty() || !super.second.isEmpty() )
         {
             out << "(";
-            if( !super.first.isEmpty() )
-                out << super.first << ".";
-            out << super.second;
+            out << toString(super);
             out << ")";
         }
     }
@@ -323,8 +321,6 @@ void IlAsmRenderer::render(const ProcData& m)
             out << i;
         out << ": "<< toString(m.params[i].type);
     }
-    if( m.isVararg )
-        out << ", .. ";
 
     out << ")";
     if( !m.retType.second.isEmpty() )

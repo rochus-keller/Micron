@@ -64,7 +64,6 @@ namespace Mil
         quint32 addArgument(const Quali& typeRef, QByteArray name = QByteArray(), const RowCol& = RowCol() ); // SELF is explicit
         void setReturnType(const Quali& typeRef);
         void setOrigName( const QByteArray& origName = QByteArray() ); // in case of foreign
-        void setVararg();
 
         static QByteArray typeSymbol1(EmiTypes::Basic);
         static QByteArray typeSymbol2(EmiTypes::Basic);

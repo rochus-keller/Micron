@@ -86,7 +86,6 @@ void Emitter::beginProc(const QByteArray& procName, const RowCol & pos, bool isP
     d_proc.back().binding = objectType;
     d_stackDepth = 0;
     d_maxStackDepth = 0;
-    d_proc.back().isVararg = false;
     ops = &d_proc.back().body;
 }
 
@@ -191,12 +190,6 @@ void Emitter::setOrigName(const QByteArray& origName)
 {
     Q_ASSERT( d_proc.back().kind == ProcData::Foreign );
     d_origName = origName;
-}
-
-void Emitter::setVararg()
-{
-    Q_ASSERT( !d_proc.isEmpty() || d_typeKind == EmiTypes::ProcType || d_typeKind == EmiTypes::MethType );
-    d_proc.back().isVararg = true;
 }
 
 QByteArray Emitter::typeSymbol1(EmiTypes::Basic t)

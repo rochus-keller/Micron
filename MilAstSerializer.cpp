@@ -346,10 +346,13 @@ static void renderStats(ProcData& proc, Statement* s, quint32& line, AstSerializ
 
 static void renderProc(const Declaration* p, AbstractRenderer* r, AstSerializer::DbgInfo dbi)
 {
+    p = p->forwardToProc();
+
     ProcData proc;
-    proc.name = p->forwardToProc()->name;
+    proc.name = p->name;
     proc.isPublic = p->public_;
-    // TODO proc.isVararg
+    if( p->typebound )
+        proc.binding = p->outer->toQuali().second;
 
     if(p->pd )
         proc.endLine = lineout(p->pd->end, dbi);

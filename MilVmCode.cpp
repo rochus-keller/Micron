@@ -140,7 +140,7 @@ bool Code::translateProc(Declaration* proc)
     {
         const int off = findVtable(proc->outer->getType());
         Q_ASSERT(off != -1);
-        vtables[off]->methods[proc->off] = cur;
+        vtables[off]->methods[proc->getPd()->slot] = cur;
         if(proc->override_)
         {
             // go up the inheritance chain and assure all super methods are translated
@@ -149,7 +149,7 @@ bool Code::translateProc(Declaration* proc)
             Declaration* baseproc = super->findSubByName(proc->name, true);
             if( baseproc )
             {
-                Q_ASSERT(proc->off == baseproc->off );
+                Q_ASSERT(proc->getPd()->slot == baseproc->getPd()->slot );
                 translateProc(baseproc);
             }
         }
@@ -789,7 +789,7 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
         case IL_ldmeth:
             if( !translateProc(e->d) )
                 return false;
-            emitOp(proc, LL_ldmeth, e->d->off);
+            emitOp(proc, LL_ldmeth, e->d->getPd()->slot);
             break;
         case IL_conv_i1:
             if( lhsT->isInt32OnStack() )

@@ -65,7 +65,6 @@ namespace Mil
         enum Kind { Invalid, Intrinsic, Normal, Forward, Extern, Foreign, Inline, Invar, ModuleInit, ProcType, MethType };
         uint kind : 4;
         uint isPublic : 1;
-        uint isVararg : 1;
         quint32 endLine;
         QByteArray name;
         QList<Op> body, finally;
@@ -74,7 +73,7 @@ namespace Mil
         Quali retType;
         QByteArray binding; // if not empty, the first param is receiver
         QByteArray origName; // extern
-        ProcData():kind(Invalid),isPublic(0),isVararg(0),endLine(0) {}
+        ProcData():kind(Invalid),isPublic(0),endLine(0) {}
     };
 
     class Constant;

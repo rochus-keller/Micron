@@ -1344,13 +1344,17 @@ void Parser2::ProcedureDeclaration() {
         if( proc->typebound )
         {
             DeclList params = proc->getParams();
+#if 0
+            // we cannot check this here because the pointer type might not yet be declared
             if( params.isEmpty() || params.first()->kind != Declaration::ParamDecl ||
                     params.first()->getType() == 0 || params.first()->getType()->getType() == 0 ||
                     params.first()->getType()->kind != Type::Pointer || params.first()->getType()->getType()->kind != Type::Object ||
                     params.first()->getType()->getType() != proc->outer->getType() )
                 error(tok, "first parameter of a bound procedure must be a pointer to the object type");
-            else if(!params.isEmpty())
-                params.first()->typebound = true;
+            else
+#endif
+                if(!params.isEmpty())
+                    params.first()->typebound = true;
         }
 
 		if( la.d_type == Tok_Semi ) {
