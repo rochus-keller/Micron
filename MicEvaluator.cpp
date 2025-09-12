@@ -200,8 +200,9 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         out->ldmeth_(trident);
     }else
     {
+        Type* rhs = stack.back().type;
         assureTopOnMilStack(false, pos); // modifies stack.back() i.e. rhs
-        adjustNumType(stack.back().type,lhs);
+        adjustNumType(rhs,lhs);
     }
 
     return true;
@@ -981,6 +982,15 @@ void Evaluator::adjustNumType(Type* me, Type* other)
         else if( me->isUInt() && other->isUInt() &&
                  other->kind == Type::UINT64 && me->kind < Type::UINT64 )
             out->conv_(Mil::EmiTypes::U8);
+        else if( me->isUInt() && other->isInt() )
+        {
+            // Tv is a signed integer and e is an unsigned integer constant, and Tv includes the
+            // smallest integer type necessary to represent e.
+            if( other->kind == Type::INT64 && me->kind < Type::UINT64 )
+                out->conv_(Mil::EmiTypes::I8);
+            else
+                out->conv_(Mil::EmiTypes::I4);
+        }
         else if( me->isReal() && other->isReal() &&
                  other->kind == Type::FLT64 && me->kind < Type::FLT64 )
             out->conv_(Mil::EmiTypes::R8);

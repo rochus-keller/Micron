@@ -34,6 +34,8 @@
 #include "MilCilAsmGen.h"
 #include "MilLlvmGen.h"
 #include "MilAstSerializer.h"
+#include "MilInterpreter.h"
+#include "MilVmOakwood.h"
 using namespace Mic;
 
 struct HitTest
@@ -685,6 +687,28 @@ bool Project2::generateMil(const QString &outDir)
             Mil::IlAsmRenderer r(&body, false);
             Mil::AstSerializer::render(&r,module, Mil::AstSerializer::None);
         } // else TODO
+    }
+    return true;
+}
+
+bool Project2::interpret()
+{
+    Mil::Interpreter r(&loader.getModel());
+
+    if( d_useBuiltInOakwood )
+        Mil::VmOakwood::addTo(&r);
+
+    loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
+
+    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    {
+        if( !r.precompile(module) )
+            return false;
+    }
+    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    {
+        if( !r.run(module) )
+            return false; // TODO: error handling
     }
     return true;
 }

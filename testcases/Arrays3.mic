@@ -11,11 +11,11 @@ begin
 	new(a)
 	new(b,5)
 	new(c,3)
-	
+
 	b[3] := 33
+
 	println(b[3])
 	println(a[2])
-	
 	
 	c[2] := "test"
 	println(c[2])

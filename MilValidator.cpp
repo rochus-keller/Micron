@@ -1122,7 +1122,6 @@ Expression* Validator::visitExpr(Expression* e)
                 if( !expectN(numOfParams, e) )
                     break;
                 // TODO: check param compat?
-                // TODO: varargs?
 
                 if(e->kind == IL_callvirt )
                 {

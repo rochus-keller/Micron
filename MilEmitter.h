@@ -51,7 +51,7 @@ namespace Mil
         void beginType(const QByteArray& name, const RowCol&, bool isPublic = true, quint8 typeKind = EmiTypes::Struct,
                        const Quali& super = Quali() );
             // use for Struct, Union, Object, ProcType, MethType
-            // supports addField, addArgument, setReturnType, setVararg depending on typeKind
+            // supports addField, addArgument, setReturnType
         void endType();
 
         void addType( const QByteArray& name, const RowCol&, bool isPublic, const Quali& baseType,

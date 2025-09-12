@@ -245,12 +245,6 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
             throw "expecting signed integer";
         }
         break;
-    case Builtin::VARARG:
-        expectingNMArgs(args,2,3);
-        break;
-    case Builtin::VARARGS:
-        expectingNArgs(args,0);
-        break;
 
     // procedures:
     case Builtin::ASSERT:

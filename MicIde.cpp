@@ -44,6 +44,7 @@
 #include <QTextBrowser>
 #include <QProcess>
 #include <QTreeWidget>
+#include <stdarg.h>
 #include <GuiTools/AutoMenu.h>
 #include <GuiTools/CodeEditor.h>
 #include <GuiTools/AutoShortcut.h>
@@ -311,6 +312,24 @@ public:
 };
 
 static Ide* s_this = 0;
+
+extern "C" {
+    typedef int (*MIC$$PRINTF)(const char *fmt, va_list ap);
+    extern MIC$$PRINTF MIC$$printf; // defined in MIC++.c
+
+    static int my_logger(const char *fmt, va_list ap)
+    {
+        va_list apcopy;
+        va_copy(apcopy, ap);
+        const int size = vsnprintf(0, 0, fmt, ap);
+
+        QByteArray buffer(size + 1, '\0');
+        vsnprintf(buffer.data(), size + 1, fmt, apcopy);
+        va_end(apcopy);
+        s_this->logMessage( buffer, Ide::LogInfo, false);
+    }
+}
+
 static void report(QtMsgType type, const QString& message )
 {
     if( s_this )
@@ -396,6 +415,7 @@ Ide::Ide(QWidget *parent)
     createMenuBar();
 
     s_oldHandler = qInstallMessageHandler(messageHander);
+    MIC$$printf = my_logger;
 
     QSettings s;
 
@@ -689,7 +709,8 @@ void Ide::createModsMenu()
     pop->addCommand( "Compile", this, SLOT(onCompile()), tr("CTRL+B"), false );
     pop->addCommand( "Set Command...", this, SLOT(onSetRunCommand()) );
     pop->addCommand( "Set Input File...", this, SLOT(onSetInputFile()) );
-    pop->addCommand( "Run", this, SLOT(onRun()), tr("CTRL+R"), false );
+    pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
+    pop->addCommand( "Run on Mono", this, SLOT(onRun()), tr("CTRL+R"), false );
     addDebugMenu(pop);
     addTopCommands(pop);
 
@@ -698,6 +719,7 @@ void Ide::createModsMenu()
     new Gui::AutoShortcut( tr("CTRL+SHIFT+N"), this, this, SLOT(onNewModule()) );
     new Gui::AutoShortcut( tr("CTRL+SHIFT+S"), this, this, SLOT(onSavePro()) );
     new Gui::AutoShortcut( tr("CTRL+S"), this, this, SLOT(onSaveFile()) );
+    new Gui::AutoShortcut( tr("CTRL+SHIFT+R"), this, this, SLOT(onInterpret()) );
     new Gui::AutoShortcut( tr("CTRL+R"), this, this, SLOT(onRun()) );
     new Gui::AutoShortcut( tr("CTRL+T"), this, this, SLOT(onParse()) );
     new Gui::AutoShortcut( tr("CTRL+B"), this, this, SLOT(onCompile()) );
@@ -774,7 +796,8 @@ void Ide::createMenuBar()
     pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
     pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
-    pop->addCommand( "Run", this, SLOT(onRun()), tr("CTRL+R"), false );
+    pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
+    pop->addCommand( "Run on Mono", this, SLOT(onRun()), tr("CTRL+R"), false );
 
     pop = new Gui::AutoMenu( tr("Debug"), this );
     pop->addCommand( "Enable debugging", this, SLOT(onEnableDebug()),tr(OBN_ENDBG_SC), false );
@@ -831,6 +854,14 @@ void Ide::onRun()
 
     if( run() && d_debugging )
         d_suspended = false;
+}
+
+void Ide::onInterpret()
+{
+    ENABLED_IF( !d_pro->getFiles().isEmpty() && d_status == Idle );
+
+    logMessage("\nStarting application...\n\n",SysInfo,false);
+    d_pro->interpret();
 }
 
 void Ide::onAbort()
@@ -2055,7 +2086,8 @@ void Ide::createModsMenu(Ide::Editor* edit)
     pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
     pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
-    pop->addCommand( "Run", this, SLOT(onRun()), tr("CTRL+R"), false );
+    pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
+    pop->addCommand( "Run on Mono", this, SLOT(onRun()), tr("CTRL+R"), false );
     addDebugMenu(pop);
     pop->addSeparator();
     pop->addCommand( "Undo", edit, SLOT(handleEditUndo()), tr("CTRL+Z"), true );
@@ -3434,7 +3466,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2.10");
+    a.setApplicationVersion("0.2.11");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

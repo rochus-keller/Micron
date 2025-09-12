@@ -11,8 +11,8 @@ WorkingDir=
 size=0
 
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/BoundProcs.mic
-1\RelPath=BoundProcs.mic
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Arrays3.mic
+1\RelPath=Arrays3.mic
 2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Fibonacci.mic
 2\RelPath=Fibonacci.mic
 3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Mandelbrot.mic

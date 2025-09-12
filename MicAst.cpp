@@ -26,7 +26,7 @@ Type* AstModel::types[Type::MaxBasicType] = {0};
 const char* Builtin::name[] = {
     "ABS", "CAP", "BITAND", "BITASR", "BITNOT", "BITOR", "BITS", "BITSHL", "BITSHR",
     "BITXOR", "CAST", "CHR", "DEFAULT", "FLOOR", "FLT", "GETENV", "LEN", "LONG", "MAX",
-    "MIN", "ODD", "ORD", "SHORT", "SIGNED", "SIZE", "STRLEN", "UNSIGNED", "VARARG", "VARARGS",
+    "MIN", "ODD", "ORD", "SHORT", "SIGNED", "SIZE", "STRLEN", "UNSIGNED",
     "ASSERT", "DEC", "DISPOSE", "EXCL", "HALT", "INC",
     "INCL", "NEW", "PCALL", "PRINT", "PRINTLN", "RAISE", "SETENV",
 };
@@ -125,8 +125,6 @@ AstModel::AstModel():helper(0),helperId(0)
         addBuiltin("SIZE", Builtin::SIZE);
         addBuiltin("STRLEN", Builtin::STRLEN);
         addBuiltin("UNSIGNED", Builtin::UNSIGNED);
-        addBuiltin("VARARG", Builtin::VARARG);
-        addBuiltin("VARARGS", Builtin::VARARGS);
         addBuiltin("ASSERT", Builtin::ASSERT);
         addBuiltin("DEC", Builtin::DEC);
         addBuiltin("DISPOSE", Builtin::DISPOSE);
@@ -590,9 +588,6 @@ bool Expression::isConst() const
                 return true;
             case Builtin::CAST:
                 return args.size() == 2 && args[1]->isConst();
-            case Builtin::VARARG:
-            case Builtin::VARARGS:
-                return false;
             default:
                 return allConst(args);
             }

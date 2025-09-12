@@ -2903,7 +2903,6 @@ Expression* Parser2::component(Type* constrType, int& index) {
         index++;
     } else
         invalid("component");
-    // TODO: for arrays change the array type to correct len
     return res;
 }
 

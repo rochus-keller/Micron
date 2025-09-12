@@ -31,7 +31,7 @@ namespace Mic
             // functions
             ABS, CAP, BITAND, BITASR, BITNOT, BITOR, BITS, BITSHL, BITSHR,
             BITXOR, CAST, CHR, DEFAULT, FLOOR, FLT, GETENV, LEN, LONG, MAX,
-            MIN, ODD, ORD, SHORT, SIGNED, SIZE, STRLEN, UNSIGNED, VARARG, VARARGS,
+            MIN, ODD, ORD, SHORT, SIGNED, SIZE, STRLEN, UNSIGNED,
             // procedures
             ASSERT, DEC, DISPOSE, EXCL, HALT, INC,
             INCL, NEW, PCALL, PRINT, PRINTLN, RAISE, SETENV,

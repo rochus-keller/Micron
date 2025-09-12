@@ -17,6 +17,8 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
+// TODO: consider re-implementing using MilEmitter instead of MilAst directly?
+
 #include "MilParser2.h"
 #include <QtDebug>
 using namespace Mil;

@@ -117,6 +117,7 @@ namespace Mic
     protected slots:
         void onParse();
         void onRun();
+        void onInterpret();
         void onAbort();
         void onCompile();
         void onNewPro();

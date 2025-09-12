@@ -24,7 +24,7 @@ TEMPLATE = app
 
 INCLUDEPATH += .. 
 
-DEFINES += _MONO_ENGINE_EXT_ 
+DEFINES += _MONO_ENGINE_EXT_
 
 SOURCES +=  MicProject2.cpp \
     MicHighlighter.cpp \
