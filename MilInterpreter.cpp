@@ -526,6 +526,11 @@ bool Interpreter::Imp::run(quint32 proc)
     *(type*)frame->slot(-2) = *(type*)frame->slot(-2) op *(type*)frame->slot(-1); \
     frame->pop(Frame::stackAlig); pc++;
 
+#define VM_COMPARE_OP(type, op) \
+    Q_ASSERT(sizeof(quint64) == Frame::stackAlig); \
+    *(quint64*)frame->slot(-2) = *(type*)frame->slot(-2) op *(type*)frame->slot(-1); \
+    frame->pop(Frame::stackAlig); pc++;
+
 #define VM_UNARY_OP(type, op) \
     *(type*)frame->slot(-1) = op *(type*)frame->slot(-1); \
     pc++;
@@ -736,52 +741,52 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_BINARY_OP(quint64,>>)
             vmbreak;
         vmcase(ceq_i4)
-                VM_BINARY_OP(qint32,==)
+                VM_COMPARE_OP(qint32,==)
             vmbreak;
         vmcase(ceq_i8)
-                VM_BINARY_OP(qint64,==)
+                VM_COMPARE_OP(qint64,==)
             vmbreak;
         vmcase(ceq_r4)
-                VM_BINARY_OP(float,==)
+                VM_COMPARE_OP(float,==)
             vmbreak;
         vmcase(ceq_r8)
-                VM_BINARY_OP(double,==)
+                VM_COMPARE_OP(double,==)
             vmbreak;
         vmcase(cgt_i4)
-                VM_BINARY_OP(qint32,>)
+                VM_COMPARE_OP(qint32,>)
             vmbreak;
         vmcase(cgt_i8)
-                VM_BINARY_OP(qint64,>)
+                VM_COMPARE_OP(qint64,>)
             vmbreak;
         vmcase(cgt_r4)
-                VM_BINARY_OP(float,>)
+                VM_COMPARE_OP(float,>)
             vmbreak;
         vmcase(cgt_r8)
-                VM_BINARY_OP(double,>)
+                VM_COMPARE_OP(double,>)
             vmbreak;
         vmcase(cgt_u4)
-                VM_BINARY_OP(quint32,>)
+                VM_COMPARE_OP(quint32,>)
             vmbreak;
         vmcase(cgt_u8)
-                VM_BINARY_OP(quint64,>)
+                VM_COMPARE_OP(quint64,>)
             vmbreak;
         vmcase(clt_i4)
-                VM_BINARY_OP(qint32,<)
+                VM_COMPARE_OP(qint32,<)
             vmbreak;
         vmcase(clt_i8)
-                VM_BINARY_OP(qint64,<)
+                VM_COMPARE_OP(qint64,<)
             vmbreak;
         vmcase(clt_r4)
-                VM_BINARY_OP(float,<)
+                VM_COMPARE_OP(float,<)
             vmbreak;
         vmcase(clt_r8)
-                VM_BINARY_OP(double,<)
+                VM_COMPARE_OP(double,<)
             vmbreak;
         vmcase(clt_u4)
-                VM_BINARY_OP(quint32,<)
+                VM_COMPARE_OP(quint32,<)
             vmbreak;
         vmcase(clt_u8)
-                VM_BINARY_OP(quint64,<)
+                VM_COMPARE_OP(quint64,<)
             vmbreak;
         vmcase(conv_i1_i4)
                 VM_CONV_OP(qint32, qint8, qint32)

@@ -709,6 +709,7 @@ void Ide::createModsMenu()
     pop->addCommand( "Compile", this, SLOT(onCompile()), tr("CTRL+B"), false );
     pop->addCommand( "Set Command...", this, SLOT(onSetRunCommand()) );
     pop->addCommand( "Set Input File...", this, SLOT(onSetInputFile()) );
+    pop->addSeparator();
     pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
     pop->addCommand( "Run on Mono", this, SLOT(onRun()), tr("CTRL+R"), false );
     addDebugMenu(pop);
@@ -792,10 +793,13 @@ void Ide::createMenuBar()
     //pop->addCommand( "Incremental Build (alpha!)", this, SLOT(onIncremental()) );
     pop->addCommand( "Set Command...", this, SLOT(onSetRunCommand()) );
     pop->addCommand( "Set Input File...", this, SLOT(onSetInputFile()) );
+    pop->addSeparator();
     pop->addCommand( "Export MIL...", this, SLOT(onExportMil()) );
+    pop->addCommand( "Export low-level bytecode...", this, SLOT(onExportLl()) );
     pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
     pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
+    pop->addSeparator();
     pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
     pop->addCommand( "Run on Mono", this, SLOT(onRun()), tr("CTRL+R"), false );
 
@@ -862,6 +866,21 @@ void Ide::onInterpret()
 
     logMessage("\nStarting application...\n\n",SysInfo,false);
     d_pro->interpret();
+}
+
+void Ide::onExportLl()
+{
+    ENABLED_IF( !d_pro->getFiles().isEmpty() && d_status == Idle );
+
+    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save Micron Low-Level Bytecode (LL)"), d_pro->getBuildDir(true) );
+
+    if (dirPath.isEmpty())
+        return;
+
+    // TODO
+    if( !compile(false,false) ) // otherwise allocated flag is already set after one generator run
+        return;
+    d_pro->interpret(dirPath);
 }
 
 void Ide::onAbort()
@@ -2086,6 +2105,7 @@ void Ide::createModsMenu(Ide::Editor* edit)
     pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
     pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
+    pop->addSeparator();
     pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
     pop->addCommand( "Run on Mono", this, SLOT(onRun()), tr("CTRL+R"), false );
     addDebugMenu(pop);
@@ -3466,7 +3486,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2.11");
+    a.setApplicationVersion("0.2.12");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

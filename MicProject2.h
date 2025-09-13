@@ -124,7 +124,7 @@ namespace Mic
         bool generateLlvm(const QString& outDir);
         bool generateMil(const QString& outDir);
 
-        bool interpret();
+        bool interpret(const QString &outDir = QString());
 
         const FileHash& getFiles() const { return d_files; }
         const FileGroups& getFileGroups() const { return d_groups; }

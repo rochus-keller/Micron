@@ -900,6 +900,8 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 Q_ASSERT(false);
             break;
         case IL_ceq:
+            Q_ASSERT(lhsT);
+            t = lhsT;
             if( t->isInt32OnStack() )
                 emitOp(proc, LL_ceq_i4);
             else if( t->isInt64())
@@ -912,6 +914,8 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 Q_ASSERT(false);
             break;
         case IL_cgt:
+            Q_ASSERT(lhsT);
+            t = lhsT;
             if( t->isInt32OnStack() )
                 emitOp(proc, LL_cgt_i4);
             else if( t->isInt64())
@@ -924,6 +928,8 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 Q_ASSERT(false);
             break;
         case IL_cgt_un:
+            Q_ASSERT(lhsT);
+            t = lhsT;
             if( t->isInt32OnStack() )
                 emitOp(proc, LL_cgt_u4);
             else if( t->isInt64())
@@ -932,6 +938,8 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 Q_ASSERT(false);
             break;
         case IL_clt:
+            Q_ASSERT(lhsT);
+            t = lhsT;
             if( t->isInt32OnStack() )
                 emitOp(proc, LL_clt_i4);
             else if( t->isInt64())
@@ -944,6 +952,8 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 Q_ASSERT(false);
             break;
         case IL_clt_un:
+            Q_ASSERT(lhsT);
+            t = lhsT;
             if( t->isInt32OnStack() )
                 emitOp(proc, LL_clt_u4);
             else if( t->isInt64())

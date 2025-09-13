@@ -691,7 +691,7 @@ bool Project2::generateMil(const QString &outDir)
     return true;
 }
 
-bool Project2::interpret()
+bool Project2::interpret(const QString& outDir)
 {
     Mil::Interpreter r(&loader.getModel());
 
@@ -702,9 +702,18 @@ bool Project2::interpret()
 
     foreach( Mil::Declaration* module, loader.getModel().getModules() )
     {
-        if( !r.precompile(module) )
+        if( !r.precompile(module) )            
             return false;
+        else if( !outDir.isEmpty() )
+        {
+            QFile body( QDir(outDir).absoluteFilePath(QString::fromLatin1(module->name) + ".ll"));
+            body.open(QFile::WriteOnly);
+            QTextStream out(&body);
+            r.dumpModule(out, module);
+        }
     }
+    if( !outDir.isEmpty() )
+        return true;
     foreach( Mil::Declaration* module, loader.getModel().getModules() )
     {
         if( !r.run(module) )
