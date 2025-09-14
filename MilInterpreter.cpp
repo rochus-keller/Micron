@@ -752,6 +752,12 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(ceq_r8)
                 VM_COMPARE_OP(double,==)
             vmbreak;
+        vmcase(ceq_p)
+                VM_COMPARE_OP(void*,==)
+            vmbreak;
+        vmcase(ceq_pp)
+                qWarning() << "TODO: interpreter ceq_pp not yet implemented";
+            vmbreak;
         vmcase(cgt_i4)
                 VM_COMPARE_OP(qint32,>)
             vmbreak;
@@ -770,6 +776,9 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(cgt_u8)
                 VM_COMPARE_OP(quint64,>)
             vmbreak;
+        vmcase(cgt_p)
+                VM_COMPARE_OP(void*,>)
+            vmbreak;
         vmcase(clt_i4)
                 VM_COMPARE_OP(qint32,<)
             vmbreak;
@@ -787,6 +796,9 @@ bool Interpreter::Imp::execute(Frame* frame)
             vmbreak;
         vmcase(clt_u8)
                 VM_COMPARE_OP(quint64,<)
+            vmbreak;
+        vmcase(clt_p)
+                VM_COMPARE_OP(void*,<)
             vmbreak;
         vmcase(conv_i1_i4)
                 VM_CONV_OP(qint32, qint8, qint32)

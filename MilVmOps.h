@@ -32,11 +32,11 @@ OPDEF(xor_i4, NoOpArgs), OPDEF(xor_i8, NoOpArgs), OPDEF(not_i4, NoOpArgs), OPDEF
 OPDEF(shl_i4, NoOpArgs), OPDEF(shl_i8, NoOpArgs), OPDEF(shr_i4, NoOpArgs), OPDEF(shr_i8, NoOpArgs),
 OPDEF(shr_un_i4, NoOpArgs), OPDEF(shr_un_i8, NoOpArgs),
 
-OPDEF(ceq_i4, NoOpArgs), OPDEF(ceq_i8, NoOpArgs), OPDEF(ceq_r4, NoOpArgs), OPDEF(ceq_r8, NoOpArgs),
+OPDEF(ceq_i4, NoOpArgs), OPDEF(ceq_i8, NoOpArgs), OPDEF(ceq_r4, NoOpArgs), OPDEF(ceq_r8, NoOpArgs), OPDEF(ceq_p, NoOpArgs), OPDEF(ceq_pp, NoOpArgs),
 OPDEF(cgt_i4, NoOpArgs), OPDEF(cgt_i8, NoOpArgs), OPDEF(cgt_r4, NoOpArgs), OPDEF(cgt_r8, NoOpArgs),
-OPDEF(cgt_u4, NoOpArgs), OPDEF(cgt_u8, NoOpArgs),
+OPDEF(cgt_u4, NoOpArgs), OPDEF(cgt_u8, NoOpArgs), OPDEF(cgt_p, NoOpArgs),
 OPDEF(clt_i4, NoOpArgs), OPDEF(clt_i8, NoOpArgs), OPDEF(clt_r4, NoOpArgs), OPDEF(clt_r8, NoOpArgs),
-OPDEF(clt_u4, NoOpArgs), OPDEF(clt_u8, NoOpArgs),
+OPDEF(clt_u4, NoOpArgs), OPDEF(clt_u8, NoOpArgs), OPDEF(clt_p, NoOpArgs),
 
 OPDEF(conv_i1_i4, NoOpArgs), OPDEF(conv_i1_i8, NoOpArgs), OPDEF(conv_i1_r4, NoOpArgs), OPDEF(conv_i1_r8, NoOpArgs), // to_from
 OPDEF(conv_i2_i4, NoOpArgs), OPDEF(conv_i2_i8, NoOpArgs), OPDEF(conv_i2_r4, NoOpArgs), OPDEF(conv_i2_r8, NoOpArgs),

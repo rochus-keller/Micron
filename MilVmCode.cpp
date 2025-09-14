@@ -575,6 +575,7 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
     {
         Type* t = deref(e->getType());
         Type* lhsT = deref(e->lhs ? e->lhs->getType() : 0);
+        Type* rhsT = deref(e->rhs ? e->rhs->getType() : 0);
         switch(e->kind)
         {
         case IL_add:
@@ -901,6 +902,7 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
             break;
         case IL_ceq:
             Q_ASSERT(lhsT);
+            Q_ASSERT(rhsT);
             t = lhsT;
             if( t->isInt32OnStack() )
                 emitOp(proc, LL_ceq_i4);
@@ -910,6 +912,11 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, LL_ceq_r4);
             else if(t->kind == Type::FLOAT64)
                 emitOp(proc, LL_ceq_r8);
+            else if(lhsT->kind == Type::Pointer || (lhsT->kind == Type::Proc && !lhsT->typebound) ||
+                    rhsT->kind == Type::Pointer || (rhsT->kind == Type::Proc && !rhsT->typebound) )
+                emitOp(proc, LL_ceq_p);
+            else if( (lhsT->kind == Type::Proc && lhsT->typebound) || (rhsT->kind == Type::Proc && rhsT->typebound) )
+                emitOp(proc, LL_ceq_pp);
             else
                 Q_ASSERT(false);
             break;
@@ -934,6 +941,8 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, LL_cgt_u4);
             else if( t->isInt64())
                 emitOp(proc, LL_cgt_u8);
+            else if(t->kind == Type::Pointer || t->kind == Type::NIL)
+                emitOp(proc, LL_cgt_p);
             else
                 Q_ASSERT(false);
             break;
@@ -958,6 +967,8 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, LL_clt_u4);
             else if( t->isInt64())
                 emitOp(proc, LL_clt_u8);
+            else if(t->kind == Type::Pointer || t->kind == Type::NIL)
+                emitOp(proc, LL_clt_p);
             else
                 Q_ASSERT(false);
             break;

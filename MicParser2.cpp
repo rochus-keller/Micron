@@ -2074,14 +2074,17 @@ void Parser2::checkRelOp(Expression* e)
               e->lhs->getType()->kind == Type::Pointer && e->rhs->getType()->kind == Type::Nil ||
               e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Pointer ||
               e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Nil ||
-              e->lhs->getType()->kind == Type::ConstEnum  && e->rhs->getType()->kind == Type::ConstEnum ||
-              e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Proc ||
-              e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Nil ||
-              e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Proc )
+              e->lhs->getType()->kind == Type::ConstEnum  && e->rhs->getType()->kind == Type::ConstEnum )
     {
         if( e->lhs->getType()->kind == Type::ConstEnum  && e->rhs->getType()->kind == Type::ConstEnum &&
                 e->lhs->getType() != e->rhs->getType() )
             error(e->pos.d_row, e->pos.d_col, "cannot compare the elements of different enumeration types");
+    }else if(e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Proc && e->lhs->getType()->typebound == e->rhs->getType()->typebound ||
+             e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Nil ||
+             e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Proc )
+    {
+        if( (e->lhs->getType()->typebound || e->rhs->getType()->typebound) && e->kind != Expression::Eq && e->kind != Expression::Neq )
+            error(e->pos.d_row, e->pos.d_col, "operation not supported for type-bound procedure types");
     }else if( ( e->lhs->getType()->isSet() && e->rhs->getType()->isSet() ) ||
               (e->lhs->getType()->isBoolean() && e->rhs->getType()->isBoolean()) )
     {

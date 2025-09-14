@@ -906,7 +906,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
 
         quint32 pc = 0;
         decl->body = translateStat(proc.body, pc);
-        if( proc.endLine )
+        if( proc.endLine && !decl->forward )
             decl->getPd()->end = Mic::RowCol(proc.endLine);
         curProc = 0;
     }
