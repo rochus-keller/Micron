@@ -20,3 +20,10 @@ begin
 
 	println("ProcType1 done")
 end ProcType1
+
+(*
+ProcType1 start
+hello from inner:
+1234
+ProcType1 done
+*)

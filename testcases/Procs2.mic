@@ -41,3 +41,14 @@ begin
 	println(ap[3])
 	println("Procs2 done")
 end Procs2
+
+(*
+Procs2 start
+22
+33
+22
+13
+12
+44
+Procs2 done
+*)

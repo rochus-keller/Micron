@@ -399,9 +399,13 @@ void Validator::visitStatSeq(Statement* stat)
             error(curProc, QString("unexpected statement operator '%1'").arg(s_opName[stat->kind]));
             break;
         }
+#if 0
+        // this assertion is not generally valid. E.g. "inc(i,off)" generates the following valid MIL:
+        // ldvara i, ldvar off, stloc_0; after stloc_0 the stack is not expected to be empty!
         if( stat->kind != IL_pop // pop is a special statement after which the stack might not be empty
                 && stat->kind != Statement::ExprStat && stack.size() != 0 )
             error(curProc,QString("evaluation stack not empty after statement"));
+#endif
 
         stat = nextStat(stat);
     }
@@ -684,6 +688,23 @@ Expression* Validator::visitExpr(Expression* e)
                 error(curProc, "expecting an unbound procedure");
             if( e->d && e->d->inline_ )
                 error(curProc, "cannot take address of inline procedure");
+            else
+            {
+                Type* pt = new Type();
+                pt->kind = Type::Proc;
+                pt->setType(e->d->getType());
+                QList<Declaration*> params = e->d->getParams();
+                for( int i = 0; i < params.size(); i++ )
+                {
+                    Declaration* p2 = new Declaration();
+                    *p2 = *params[i];
+                    p2->outer = 0;
+                    p2->ownstype = false;
+                    p2->next = 0;
+                    pt->subs.append(p2);
+                }
+                e->setType(pt);
+            }
             stack.push_back(e);
             break;
         case IL_ldmeth:
@@ -699,7 +720,25 @@ Expression* Validator::visitExpr(Expression* e)
                 }
                 if( e->d && (e->d->kind != Declaration::Procedure || !e->d->typebound) )
                     error(curProc, "expecting a bound procedure");
+
                 // TODO: check whether object on stack is compat with e->d
+
+                Type* pt = new Type();
+                pt->kind = Type::Proc;
+                pt->typebound = true;
+                pt->setType(e->d->getType());
+                QList<Declaration*> params = e->d->getParams(false);
+                for( int i = 0; i < params.size(); i++ )
+                {
+                    Declaration* p2 = new Declaration();
+                    *p2 = *params[i];
+                    p2->outer = 0;
+                    p2->ownstype = false;
+                    p2->next = 0;
+                    pt->subs.append(p2);
+                }
+                e->setType(pt);
+
                 stack.back() = e; // replace the stack top with methref
             }
             break;

@@ -22,8 +22,10 @@
 #include "MilOps.h"
 #include "MilAst.h"
 #include "MilValidator.h"
+#include "MilAstSerializer.h"
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QFile>
 #include <QtDebug>
 using namespace Mil;
 
@@ -664,8 +666,16 @@ void IlAstRenderer::endModule()
         }
         unresolved.clear();
 
-        Validator v(mdl);
+#if 0
+        // print not yet validated MIL to stdout
+        QFile out;
+        out.open(stdout, QIODevice::WriteOnly);
+        IlAsmRenderer r(&out, false);
+        AstSerializer::render(&r,module, Mil::AstSerializer::None);
+#endif
+
 #if 1
+        Validator v(mdl);
         if( !v.validate(module) )
         {
             foreach( const Validator::Error& e, v.errors )

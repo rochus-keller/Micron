@@ -24,3 +24,13 @@ begin
 		
 	println("ProcType3 done")
 end ProcType3
+
+
+(*
+ProcType3 start
+hello from proc:
+1234
+hello from proc:
+5678
+ProcType3 done
+*)
