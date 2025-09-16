@@ -368,6 +368,9 @@ bool Evaluator::derefPointer(bool byVal)
     v.type = v.type->getType();
     v.ref = true;
 
+    if( v.type->isCharArray() && v.type->len == 0 && byVal )
+        byVal = false; // avoid ldind for an open array of char
+
     stack.push_back(v);
 
     if( byVal )
@@ -1730,7 +1733,6 @@ bool Evaluator::recursiveRun(Expression* e)
         if( !recursiveRun(e->lhs) )
             return false;
         derefPointer(e->byVal);
-        // TODO: derefValue?
         break;
     case Expression::Addr:
         if( !recursiveRun(e->lhs) )

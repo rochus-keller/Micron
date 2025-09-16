@@ -288,7 +288,7 @@ static void renderStats(ProcData& proc, Statement* s, quint32& line, AstSerializ
                 proc.body << ProcData::Op(IL_end);
                 break;
             case IL_switch:
-                proc.body << ProcData::Op(IL_repeat);
+                proc.body << ProcData::Op(IL_switch);
                 renderExprs(proc, s->e, line, dbi);
                 while( s->next && s->next->kind == IL_case )
                 {

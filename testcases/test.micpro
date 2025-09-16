@@ -11,10 +11,10 @@ WorkingDir=
 size=0
 
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Fibonacci.mic
-1\RelPath=Fibonacci.mic
-2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/ProcType2.mic
-2\RelPath=ProcType2.mic
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Enum2.mic
+1\RelPath=Enum2.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/PassByValue2.mic
+2\RelPath=PassByValue2.mic
 3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/ProcType3.mic
 3\RelPath=ProcType3.mic
 4\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Procs3.mic
@@ -29,7 +29,7 @@ size=0
 8\RelPath=ProcType2.mic
 9\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/ProcType3.mic
 9\RelPath=ProcType3.mic
-size=0
+size=1
 
 [Packages]
 1\Name=@ByteArray()

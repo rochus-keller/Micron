@@ -13,10 +13,7 @@ begin
 	ptr[1] := "i"
 	ptr[2] := "!"
 	ptr[3] := 0x
-	
 	Proc5(ptr^)
-	
 	str := ptr^
 	Proc5(str)
-
 end Test

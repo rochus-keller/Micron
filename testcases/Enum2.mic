@@ -17,12 +17,14 @@ begin
 	else
 		println("case else")
 	end
-	
+
 	if t = A then println("A")
 	elsif t = B then println("B")
 	elsif t = C then println("C")
 	else
 		println("if else")
 	end
+
 	println("end Enum2")
+	
 end Enum2

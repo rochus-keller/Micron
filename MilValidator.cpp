@@ -466,10 +466,14 @@ Statement*Validator::visitSwitch(Statement* stat)
         Expression* e = stat->e;
         while( e )
         {
+            Q_ASSERT( e->kind == IL_case );
             // stat->e is a list of integers, each as an Expression
+#if 0
+            // there is no type information
             Type* tt = deref(e->getType());
             if( !isInt32(tt) && !tt->isInt64() )
                 error(curProc,"expecting a 32 or 64 bit integer expression");
+#endif
             e = e->next;
         }
         pc++; // THEN
@@ -1038,6 +1042,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* baseInOp = tokToBasicType(mdl, e->kind);
                 if( e->kind == IL_ldind )
                     baseInOp = deref(e->d->getType());
+
                 if( e->kind == IL_ldind &&
                         (baseOnStack->kind == Type::Array && baseOnStack->len == 0 &&
                             deref(baseOnStack->getType())->kind == Type::CHAR ||

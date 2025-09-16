@@ -1155,7 +1155,7 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
             break;
         case IL_ldind:
             if( lhsT && (lhsT->kind == Type::StringLit || lhsT->isPtrToOpenCharArray()) )
-                emitOp(proc, LL_ldind_str,t->getByteSize(pointerWidth));
+                emitOp(proc, LL_ldind_str,e->getType()->len);
             else
                 emitOp(proc, LL_ldind_vt,t->getByteSize(pointerWidth));
             break;

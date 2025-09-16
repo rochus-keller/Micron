@@ -419,11 +419,9 @@ void IlAsmRenderer::render(const ProcData& m)
         case IL_case:
             level--;
             out << ws() << s_opName[op.op];
-            out << endl;
-            level++;
-            out << ws();
             foreach(qint64 i, op.arg.value<CaseLabelList>() )
-                out << i << " ";
+                out << " " << i;
+            level++;
             out << endl;
             break;
         case IL_ldc_obj:
@@ -1172,18 +1170,19 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
                         return res;
                     pc++;
                     tmp->body = translateStat(ops, pc);
-                    if( pc < ops.size() && ops[pc].op == IL_else )
-                    {
-                        expect(ops, pc, IL_else);
-                        tmp = new Statement();
-                        tmp->kind = IL_else;
-                        res->append(tmp);
-                        tmp->pos = curPos;
-                        tmp->body = translateStat(ops, pc);
-                    }
-                    if( !expect(ops, pc, IL_end) )
-                        return res;
                 }
+                if( pc < ops.size() && ops[pc].op == IL_else )
+                {
+                    expect(ops, pc, IL_else);
+                    pc++;
+                    tmp = new Statement();
+                    tmp->kind = IL_else;
+                    res->append(tmp);
+                    tmp->pos = curPos;
+                    tmp->body = translateStat(ops, pc);
+                }
+                if( !expect(ops, pc, IL_end) )
+                    return res;
             }
             break;
         case IL_goto:

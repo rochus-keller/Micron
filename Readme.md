@@ -2,7 +2,7 @@ This project implements a compiler for the [Micron programming language](https:/
 
 Micron is a systems programming language with a syntax similar to Oberon+ and the flexibility of C. The name "Micron" is an abbreviation of "MicroOberon". 
 
-Code examples can be found [here](https://github.com/rochus-keller/Are-we-fast-yet/tree/main/Micron); and [here](https://github.com/rochus-keller/Micron/blob/master/testcases/awfy.mil) is the corresponding intermediate representation (text version).
+Code examples can be found [here](https://github.com/rochus-keller/Are-we-fast-yet/tree/main/Micron); and [here](https://github.com/rochus-keller/Micron/blob/master/testcases/mil/awfy.mil) is the corresponding intermediate representation (text version).
 
 The project is the result of the author's many years of work with the Oberon programming language and the analysis and migration of several versions of the Oberon system. It turned out that Oberon as such is in fact not particularly suitable for low-level and system-oriented programming, and that the systems mentioned could only be developed by direct memory manipulation and pointer arithmetic via SYSTEM module and other (partly undocumented) backdoors of the language, for large parts without the support of a type checker. 
 
