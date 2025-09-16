@@ -22,6 +22,7 @@
 
 #include <Micron/MilAst.h>
 #include <QTextStream>
+#include <QSet>
 
 class QIODevice;
 
@@ -54,6 +55,8 @@ namespace Mil
         void emitSoaInit(QTextStream& out, const QByteArray& name, bool nameIsPtr, Type* t, int level);
         Type* deref(Type* t);
         void emitInitializer(Type*);
+        void createLdindLocals(Statement*);
+        void createLdindLocals(Expression*);
 
         inline QByteArray ws(int level)
         {
@@ -66,6 +69,7 @@ namespace Mil
         QTextStream bout;
         Declaration* curMod;
         Declaration* curProc;
+        QSet<Declaration*> done;
         int curLevel;
     };
 }

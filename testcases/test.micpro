@@ -11,8 +11,8 @@ WorkingDir=
 size=0
 
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Enum2.mic
-1\RelPath=Enum2.mic
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/PassByValue3.mic
+1\RelPath=PassByValue3.mic
 2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/PassByValue2.mic
 2\RelPath=PassByValue2.mic
 3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/ProcType3.mic

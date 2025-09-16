@@ -196,6 +196,7 @@ void CeeGen::visitProcedure(Declaration* proc)
     hout << "extern ";
     procHeader(hout, proc);
     hout << ";" << endl;
+    done.clear();
     if( !proc->forward && !proc->extern_ && !proc->foreign_ )
     {
         procHeader(bout, proc);
@@ -230,6 +231,7 @@ void CeeGen::visitProcedure(Declaration* proc)
             }
             sub = sub->next;
         }
+        createLdindLocals(proc->body);
         statementSeq(bout, proc->body);
         bout << "}" << endl << endl;
     }
@@ -895,6 +897,36 @@ void CeeGen::emitInitializer(Type* t)
     bout << "}" << endl << endl;
 }
 
+void CeeGen::createLdindLocals(Statement * s)
+{
+    while( s )
+    {
+        // createLdindLocals(s->args);
+        if( (s->kind == Statement::ExprStat || s->kind == IL_if || s->kind == IL_switch || s->kind == IL_case ||
+             s->kind == IL_repeat || s->kind == IL_while) && s->e )
+            createLdindLocals(s->e);
+        s = s->next;
+    }
+}
+
+void CeeGen::createLdindLocals(Expression * e)
+{
+    while( e )
+    {
+        if( e->kind == IL_ldind && e->lhs && e->lhs->getType()->isPtrToOpenCharArray() )
+        {
+            if( !done.contains(e->d) )
+            {
+                done.insert(e->d);
+                bout << ws(0) << typeRef(e->d->getType()) << " __tmp$" << typeRef(e->d->getType()) << ";" << endl;
+            }
+        }
+        if( (e->kind == IL_iif || e->kind == IL_if || e->kind == IL_then || e->kind == IL_else ) && e->e != 0 )
+            createLdindLocals(e->e);
+        e = e->next;
+    }
+}
+
 void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
 {
     switch(e->kind)
@@ -1069,8 +1101,16 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_ldind_u4:
     case IL_ldind_u8:
     case IL_ldind:
-        out << "*";
-        expression(out, e->lhs);
+        if( e->kind == IL_ldind && e->lhs->getType()->isPtrToOpenCharArray() )
+        {
+            out << "(strcpy(" << " __tmp$" << typeRef(e->d->getType()) << "._, ";
+            expression(out, e->lhs);
+            out << "), " << " __tmp$" << typeRef(e->d->getType()) << ")";
+        }else
+        {
+            out << "*";
+            expression(out, e->lhs);
+        }
         break;
 
     case IL_ldelem_i1:
