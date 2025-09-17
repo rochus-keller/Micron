@@ -1852,7 +1852,7 @@ Type *Parser2::addHelperType(Type * t)
         return t;
     if( t->deferred )
         return t;
-    Type* res = searchType(t->kind, t->len, t->getType());
+    Type* res = searchType((Type::Kind)t->kind, t->len, t->getType());
     if( res == 0 )
         return t;
     // else

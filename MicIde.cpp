@@ -22,7 +22,7 @@
 #include "MicAst.h"
 #include "MicLexer.h"
 #include "MicProject2.h"
-#include "MilCeeGen.h".h"
+#include "MilCeeGen.h"
 #include <QtDebug>
 #include <QDockWidget>
 #include <QApplication>
@@ -327,6 +327,9 @@ extern "C" {
         vsnprintf(buffer.data(), size + 1, fmt, apcopy);
         va_end(apcopy);
         s_this->logMessage( buffer, Ide::LogInfo, false);
+        if( buffer.contains('\n') )
+            QApplication::processEvents();
+        return size;
     }
 }
 
@@ -349,6 +352,7 @@ static void report(QtMsgType type, const QString& message )
         }
     }
 }
+
 static QtMessageHandler s_oldHandler = 0;
 void messageHander(QtMsgType type, const QMessageLogContext& ctx, const QString& message)
 {
@@ -3486,7 +3490,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2.17");
+    a.setApplicationVersion("0.2.18");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

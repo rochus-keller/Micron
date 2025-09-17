@@ -585,7 +585,7 @@ QByteArray Lexer::extractText(QIODevice* in)
 bool Lexer::skipBom(QIODevice* in)
 {
     const QByteArray buf = in->peek(3);
-    if( buf.size() == 3 && buf[0] == 0xef && buf[1] == 0xbb && buf[2] == 0xbf )
+    if( buf.size() == 3 && buf[0] == (char)0xef && buf[1] == (char)0xbb && buf[2] == (char)0xbf )
     {
         in->read(3);
         return true;
