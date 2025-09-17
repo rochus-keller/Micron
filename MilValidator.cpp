@@ -1106,8 +1106,8 @@ Expression* Validator::visitExpr(Expression* e)
             {
                 e->lhs = stackAt(-1); // ptr
                 Type* lhsT = deref(e->lhs->getType());
-                Type* t1 = deref(lhsT->getType());
-                if( lhsT->kind != Type::Pointer || t1->kind != Type::Object )
+                Type* obj = deref(lhsT->getType());
+                if( lhsT->kind != Type::Pointer || obj->kind != Type::Object )
                 {
                     error(curProc, "expecting a pointer to object on the stack");
                     break;

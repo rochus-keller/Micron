@@ -1631,9 +1631,16 @@ bool Interpreter::Imp::execute(Frame* frame)
                 Q_ASSERT(false); // instead consumed by other ops
             vmbreak;
         vmcase(isinst) {
-                Vtable* obj = (Vtable*)frame->popP();
+                void* obj = frame->popP();
                 Vtable* ref = code.getVtable(frame->proc->ops[pc].val);
-                frame->pushI4(Type::isA(obj->type, ref->type));
+                if( obj )
+                {
+                    Vtable* cls;
+                    memcpy(&cls, obj, sizeof(cls));
+                    frame->pushI4(Type::isA(cls->type, ref->type));
+                }else
+                    frame->pushI4(0);
+                pc++;
             } vmbreak;
         vmcase(newvla)
         vmcase(line)

@@ -36,3 +36,11 @@ BEGIN
   t.test0()
   t.test1("Cheers")
 END TypeCase.
+
+(*
+false
+true
+found T0
+hello from test0
+Cheers from test1 33
+*)

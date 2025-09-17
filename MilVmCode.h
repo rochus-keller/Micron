@@ -38,6 +38,7 @@ enum OpArgCode {
     ByteArrayArg,
     ProcArg,
     JumpArg,
+    VtableArg,
     OffSizeArgs
 };
 

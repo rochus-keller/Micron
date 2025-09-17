@@ -1336,7 +1336,7 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                         temp.mem.resize(len);
                         initMemory(temp.mem.data(), tt, true);
                     }
-                    emitOp(proc,op, id, true);
+                    emitOp(proc,op, id, true); // minus -> template id
                 }else
                     emitOp(proc,op, len);
             }
@@ -1390,7 +1390,7 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
             }
             break;
         case IL_isinst: {
-                const int id = findVtable(t);
+                const int id = findVtable(deref(e->d->getType()));
                 if( id < 0 )
                 {
                     qCritical() << "cannot find vtable of" << t->decl->toPath();
@@ -1560,6 +1560,8 @@ bool Code::dumpProc(QTextStream& out, Declaration* proc)
             out << " " << p->ops[pc].val;
             break;
         case SizeArg:
+            if( p->ops[pc].minus )
+                out << " template";
             out << " " << p->ops[pc].val;
             break;
         case IntArg:
@@ -1592,6 +1594,13 @@ bool Code::dumpProc(QTextStream& out, Declaration* proc)
             out << " " << p->ops[pc+1].val;
             pc++;
            break;
+        case VtableArg:
+            if( p->ops[pc].val < vtables.size() )
+                out << " " << vtables[p->ops[pc].val]->type->decl->toPath();
+            else
+                out << " invalid vtable " << p->ops[pc].val;
+            break;
+
         default:
             Q_ASSERT(false);
         }
@@ -1608,6 +1617,14 @@ bool Code::dumpModule(QTextStream& out, Declaration* module)
     {
         if(d->kind == Declaration::Procedure)
             dumpProc(out, d);
+        else if( d->kind == Declaration::TypeDecl && d->getType()->kind == Type::Object )
+        {
+            foreach( Declaration* sub, d->getType()->subs )
+            {
+                if(sub->kind == Declaration::Procedure)
+                    dumpProc(out, sub);
+            }
+        }
         d = d->next;
     }
     return true;
@@ -1627,21 +1644,21 @@ void Code::initMemory(char* mem, Type* t, bool doPointerInit )
         memset(mem, 0, t->getByteSize(sizeof(void*)));
     if( !t->objectInit )
         return;
-    if( t->kind == Type::Object )
-    {
-        *((Vtable**) mem) = getVtable(t);
-    }
     if( t->kind == Type::Struct || t->kind == Type::Object )
     {
+        if( t->kind == Type::Object )
+        {
+            Vtable* vt = getVtable(t);
+            memcpy(mem, &vt, sizeof(vt));
+        }
+
         DeclList fields = t->getFieldList(true);
-        int off = 0;
         foreach(Declaration* field, fields)
         {
 
             Type* tt = deref(field->getType());
             if( tt->objectInit )
-                initMemory(mem + off, tt, false);
-            off += field->f.off;
+                initMemory(mem + field->f.off, tt, false);
         }
     }else if( t->kind == Type::Array && t->len != 0)
     {

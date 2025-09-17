@@ -142,6 +142,16 @@ void CeeGen::visitModule()
        }
        sub = sub->next;
    }
+
+   bout << "typedef struct $Class { struct $Class* super; } $Class;" << endl;
+   bout << "static int $isinst(void* super, void* sub) {" << endl;
+   bout << "    $Class* cls = ($Class*)sub;" << endl;
+   bout << "    while(cls) {" << endl;
+   bout << "        if( cls == super ) return 1;" << endl;
+   bout << "        cls = cls->super;" << endl;
+   bout << "    }" << endl;
+   bout << "}" << endl << endl;
+
    bool initFound = false;
    sub = curMod->subs;
    while( sub )
@@ -607,9 +617,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                 Expression* e = s->e;
                 while(e)
                 {
-                    out << ws(level) << "case ";
-                    expression(out, e);
-                    out << ":" << endl;
+                    out << ws(level) << "case " << e->i << ":" << endl;
                     e = e->next;
                 }
                 out << ws(level+1) << "{" << endl;
@@ -619,12 +627,12 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             if( s->next && s->next->kind == IL_else )
             {
                 s = s->next;
-                out << "default:" << endl;
+                out << ws(level) << "default:" << endl;
                 out << ws(level+1) << "{" << endl;
                 statementSeq(out, s->body, level+2);
                 out << ws(level+1) << "} break;" << endl;
             }
-            out << endl;
+            out << ws(level) << "}" << endl;
             break;
 
         case IL_while:
@@ -780,11 +788,19 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
 
         case IL_strcpy: {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument && s->args->lhs && s->args->rhs );
-                out << ws(level) << "strcpy(";
+                out << ws(level) << "strncpy(";
                 expression(out, s->args->lhs);
                 out << ", ";
                 expression(out, s->args->rhs);
-                out << ");" << endl;
+                out << ", ";
+                Type* lhsT = deref(s->args->lhs->getType());
+                Type* a = deref(lhsT->getType());
+                Q_ASSERT( a->len );
+                out << a->len << " - 1";
+                out << "); ";
+                expression(out, s->args->rhs);
+                out << "[" << a->len << " - 1] = 0;";
+                out << endl;
             } break;
 
         default:
@@ -1103,9 +1119,11 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_ldind:
         if( e->kind == IL_ldind && e->lhs->getType()->isPtrToOpenCharArray() )
         {
-            out << "(strcpy(" << " __tmp$" << typeRef(e->d->getType()) << "._, ";
+            out << "(strncpy(" << " __tmp$" << typeRef(e->d->getType()) << "._, ";
             expression(out, e->lhs);
-            out << "), " << " __tmp$" << typeRef(e->d->getType()) << ")";
+            out << ", " << e->d->getType()->len << " - 1)";
+            out << ", __tmp$" << typeRef(e->d->getType()) << "._[" << e->d->getType()->len << " - 1] = 0";
+            out << ", __tmp$" << typeRef(e->d->getType()) << ")";
         }else
         {
             out << "*";
@@ -1330,11 +1348,19 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             out << ") ";
         } break;
 
+    case IL_isinst: {
+            out << "$isinst(&" << typeRef(e->d->getType()) << "$class$, ";
+            expression(out, e->lhs );
+            Q_ASSERT(deref(e->lhs->getType())->kind == Type::Pointer);
+            // we pass the pointer to the instance, not the class pointer, because the former can be NULL
+            out << ")";
+        } break;
+
     case IL_sizeof:
     case IL_newvla:
-    case IL_isinst:
-        out << "TODO: " << s_opName[e->kind];
+        qWarning() << "TODO: CeeGen" << s_opName[e->kind] << "not implemented";
         break;
+
     default:
         Q_ASSERT(false);
     }

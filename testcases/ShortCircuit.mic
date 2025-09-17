@@ -3,7 +3,7 @@ module ShortCircuit
 procedure a():boolean
 begin
 	println("running a")
-	return true
+	return false
 end a
 
 procedure b(): boolean

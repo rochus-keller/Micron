@@ -125,14 +125,16 @@ OPDEF(pop, SizeArg), OPDEF(dup, SizeArg),
 OPDEF(ret, SizeArg), OPDEF(ret_void, NoOpArgs),
 OPDEF(call, ProcArg), OPDEF(calli, NoOpArgs),
 OPDEF(alloc1, SizeArg), OPDEF(allocN, SizeArg), OPDEF(free, NoOpArgs),
+OPDEF(initobj, SizeArg),
 
 OPDEF(vt_size, SizeArg), // suffix of ldarg_vt, starg_vt, ldloc_vt, stloc_vt, ldfld_vt, stfld_vt,
                 //   ldvar_vt, stvar_vt
+OPDEF(callvirt, ProcArg), OPDEF(isinst, VtableArg),
+OPDEF(callvi, NoOpArgs),
 
 // TODO:
 OPDEF(newvla, NoOpArgs),
-OPDEF(callvi, NoOpArgs), OPDEF(callvirt, NoOpArgs),
 OPDEF(line, NoOpArgs),
-OPDEF(initobj, NoOpArgs), OPDEF(isinst, NoOpArgs),
+
 
 
