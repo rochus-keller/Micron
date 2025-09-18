@@ -1,0 +1,17 @@
+[General]
+BuildDir=
+BuiltInOakwood=false
+MainModule=@ByteArray()
+MainProc=@ByteArray()
+Options=@ByteArray()
+Suffixes=@Invalid()
+WorkingDir=
+
+[Modules]
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Arrays2.mic
+1\RelPath=Arrays2.mic
+size=1
+
+[Packages]
+1\Name=@ByteArray()
+size=1

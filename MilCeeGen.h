@@ -57,6 +57,8 @@ namespace Mil
         void emitInitializer(Type*);
         void createLdindLocals(Statement*);
         void createLdindLocals(Expression*);
+        void prefix(QTextStream& out,Type*);
+        void postfix(QTextStream& out,Type*);
 
         inline QByteArray ws(int level)
         {

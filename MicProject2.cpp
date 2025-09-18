@@ -536,6 +536,16 @@ bool Project2::generateC(const QString &outDir)
     QTextStream out(&main);
     out << "// main+.c" << endl;
     out << Mil::CeeGen::genDedication() << endl << endl;
+
+    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    {
+        // if a module is not in "used", it is never imported and thus a root module
+        if( !used.contains(module) && !module->nobody && !module->generic )
+            out << "#include \"" <<  escapeFilename(module->name) << ".h\"" << endl;
+    }
+
+    out << endl;
+
     out << "int main(int argc, char** argv) {" << endl;
 
     foreach( Mil::Declaration* module, loader.getModel().getModules() )

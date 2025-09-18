@@ -13,7 +13,7 @@ module Arrays2
 		end
 	end P
 	
-begin
+begin 
 	println("Arrays2 start")
 	a[0] := -2
 	a[1] := -1
@@ -26,10 +26,12 @@ begin
 	println(b[3])
 	
 	println(c[2])
+
 	c[0] := "alpha"
 	c[1] := "beta"
 	c[2] := "gamma"
 	println(c[2])
+
 	P(@a,len(a))
 	println("Arrays2 done")
 end Arrays2

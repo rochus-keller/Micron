@@ -61,6 +61,7 @@ bool CeeGen::generate(Declaration* module, QIODevice* header, QIODevice* body)
     bout << "// " << module->name << ".c" << endl;
     bout << dedication << endl << endl;
     bout << "#include \"" << Project::escapeFilename(module->name) << ".h\"" << endl;
+    bout << "#include \"MIC+.h\"" << endl;
     bout << "#include <stdlib.h>" << endl;
     bout << "#include <string.h>" << endl;
     bout << "#include <math.h>" << endl << endl;
@@ -565,6 +566,8 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
 {
     while(s)
     {
+        if( s->pos.d_row == 35 )
+            qDebug() << "hit";
         switch( s->kind )
         {
         case Statement::ExprStat:
@@ -755,7 +758,6 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
 
         case IL_ret:
             out << ws(level) << "return";
-            // TODO: return arrays by value, either via dynamc allocation or hidden parameter
             if( s->args )
             {
                 out << " ";
@@ -765,7 +767,9 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             break;
 
         case IL_pop:
-            expression(out, s->args);
+            // pop removes a value from the stack without using it
+            // this corresponds to not evaluating the expression which pushed this value altogether
+            // expression(out, s->args);
             break;
 
         case IL_free:
@@ -790,6 +794,8 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument && s->args->lhs && s->args->rhs );
                 out << ws(level) << "strncpy(";
                 expression(out, s->args->lhs);
+                Q_ASSERT( deref(s->args->lhs->getType())->isPtrToFixArray() );
+                out << "->_";
                 out << ", ";
                 expression(out, s->args->rhs);
                 out << ", ";
@@ -798,7 +804,9 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                 Q_ASSERT( a->len );
                 out << a->len << " - 1";
                 out << "); ";
-                expression(out, s->args->rhs);
+                expression(out, s->args->lhs);
+                if( deref(s->args->lhs->getType())->isPtrToFixArray() )
+                    out << "->_";
                 out << "[" << a->len << " - 1] = 0;";
                 out << endl;
             } break;
@@ -943,6 +951,21 @@ void CeeGen::createLdindLocals(Expression * e)
     }
 }
 
+void CeeGen::prefix(QTextStream &out, Type * t)
+{
+    t = deref(t);
+    if( !t->isPtrToOpenArray() )
+        out << "(&";
+    // TODO: check whether we should return the "_" member of fixed size arrays instead of &struct
+}
+
+void CeeGen::postfix(QTextStream &out, Type * t)
+{
+    t = deref(t);
+    if( !t->isPtrToOpenArray() )
+        out << ")";
+}
+
 void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
 {
     switch(e->kind)
@@ -1063,7 +1086,9 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         out << qualident(e->d);
         break;
     case IL_ldvara:
-        out << "(" << ( !deref(e->getType())->isPtrToOpenArray() ? "&" : "") << qualident(e->d) << ")";
+        prefix(out, e->getType());
+        out << qualident(e->d);
+        postfix(out, e->getType());
         break;
 
     case IL_ldarg_0:
@@ -1072,16 +1097,21 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_ldarg_3:
     case IL_ldarg_s:
     case IL_ldarg:
+        {
+            DeclList params = curProc->getParams();
+            Q_ASSERT( e->id < params.size() );
+            out << params[e->id]->name;
+        }
+        break;
+
     case IL_ldarga_s:
     case IL_ldarga:
         {
             DeclList params = curProc->getParams();
             Q_ASSERT( e->id < params.size() );
-            if( (e->kind == IL_ldarga_s || e->kind == IL_ldarga) && !deref(e->getType())->isPtrToOpenArray() )
-                out << "(&";
+            prefix(out,e->getType());
             out << params[e->id]->name;
-            if( (e->kind == IL_ldarga_s || e->kind == IL_ldarga) && !deref(e->getType())->isPtrToOpenArray() )
-                out << ")";
+            postfix(out,e->getType());;
         }
         break;
 
@@ -1091,16 +1121,21 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_ldloc_3:
     case IL_ldloc_s:
     case IL_ldloc:
+        {
+            DeclList locals = curProc->getLocals();
+            Q_ASSERT( e->id < locals.size() );
+            out << locals[e->id]->name;
+        }
+        break;
+
     case IL_ldloca_s:
     case IL_ldloca:
         {
             DeclList locals = curProc->getLocals();
             Q_ASSERT( e->id < locals.size() );
-            if( (e->kind == IL_ldloca_s || e->kind == IL_ldloca) && !deref(e->getType())->isPtrToOpenArray() )
-                out << "(&";
+            prefix(out,e->getType());
             out << locals[e->id]->name;
-            if( (e->kind == IL_ldloca_s || e->kind == IL_ldloca) && !deref(e->getType())->isPtrToOpenArray() )
-                out << ")";
+            postfix(out,e->getType());
         }
         break;
 
@@ -1143,29 +1178,39 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_ldelem_u4:
     case IL_ldelem_u8:
     case IL_ldelem:
-    case IL_ldelema:
-        if( e->kind == IL_ldelema && !deref(e->getType())->isPtrToOpenArray() )
-            out << "(&";
         expression(out, e->lhs);
         if( deref(e->lhs->getType())->isPtrToFixArray() )
             out << "->_";
         out << "[";
         expression(out, e->rhs);
         out << "]";
-        if( e->kind == IL_ldelema && !deref(e->getType())->isPtrToOpenArray() )
-            out << ")";
+        break;
+
+    case IL_ldelema:
+        prefix(out,e->getType());
+        expression(out, e->lhs);
+        if( deref(e->lhs->getType())->isPtrToFixArray() )
+            out << "->_";
+        out << "[";
+        expression(out, e->rhs);
+        out << "]";
+        postfix(out,e->getType());
         break;
 
     case IL_ldfld:
-    case IL_ldflda:
-        if( e->kind == IL_ldflda && !deref(e->getType())->isPtrToOpenArray() )
-            out << "(&";
         out << "(";
         expression(out, e->lhs );
         out << "->" << e->d->name;
         out << ")";
-        if( e->kind == IL_ldflda && !deref(e->getType())->isPtrToOpenArray() )
-            out << ")";
+        break;
+
+    case IL_ldflda:
+        prefix(out,e->getType());
+        out << "(";
+        expression(out, e->lhs );
+        out << "->" << e->d->name;
+        out << ")";
+        postfix(out,e->getType());
         break;
 
     case IL_ldproc:

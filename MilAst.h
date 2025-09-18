@@ -130,6 +130,7 @@ namespace Mil
         bool isSUO() const { return kind == Struct || kind == Union || kind == Object; }
         bool isSO() const { return kind == Struct || kind == Object; }
         bool isSOA() const { return isSO() || (kind == Array && len); }
+        bool isA() const { return kind == Array && len; }
         bool isSUOA() const { return isSUO() || (kind == Array && len); }
         bool isInt32OnStack() const;
         bool isFuncOnStack() const;
