@@ -566,8 +566,6 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
 {
     while(s)
     {
-        if( s->pos.d_row == 35 )
-            qDebug() << "hit";
         switch( s->kind )
         {
         case Statement::ExprStat:
@@ -845,7 +843,7 @@ void CeeGen::emitSoapInit(QTextStream& out, const QByteArray& name, Type* t, int
     else if( t->isSUOA() )
     {
         if( t->pointerInit ) // it's cheaper to directly zero the whole thing
-            out << ws(level) << "memset(" << (t->isSUO() ? "&" : "") << name << ", 0, sizeof(" << typeRef(t) << "));" << endl;
+            out << ws(level) << "memset(&" << name << ", 0, sizeof(" << typeRef(t) << "));" << endl;
     }
     emitSoaInit(out, name, false, t, level);
 }
@@ -937,7 +935,8 @@ void CeeGen::createLdindLocals(Expression * e)
 {
     while( e )
     {
-        if( e->kind == IL_ldind && e->lhs && e->lhs->getType()->isPtrToOpenCharArray() )
+        Type* t = deref(e->lhs ? e->lhs->getType() : 0);
+        if( e->kind == IL_ldind && (t->isPtrToOpenCharArray() || t->kind == Type::StringLit ) )
         {
             if( !done.contains(e->d) )
             {
@@ -1152,7 +1151,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_ldind_u4:
     case IL_ldind_u8:
     case IL_ldind:
-        if( e->kind == IL_ldind && e->lhs->getType()->isPtrToOpenCharArray() )
+        if( e->kind == IL_ldind && (deref(e->lhs->getType())->isPtrToOpenCharArray() || deref(e->lhs->getType())->kind == Type::StringLit) )
         {
             out << "(strncpy(" << " __tmp$" << typeRef(e->d->getType()) << "._, ";
             expression(out, e->lhs);
@@ -1161,8 +1160,9 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             out << ", __tmp$" << typeRef(e->d->getType()) << ")";
         }else
         {
-            out << "*";
+            out << "(*";
             expression(out, e->lhs);
+            out << ")";
         }
         break;
 

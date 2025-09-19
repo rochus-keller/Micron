@@ -83,7 +83,9 @@ procedure run()
 var s: Storage
 begin
 	benchmark(@s)
-	assert(s.count = 5461)
+	println(s.count)
+	// not valid since we don't use Random:
+	// assert(s.count = 5461)
 	println("success")
 end run
 
