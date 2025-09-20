@@ -1,0 +1,60 @@
+module Procs6
+
+	type
+		Super = ^object end
+		A = ^object (Super) end
+		B = ^object (Super) end
+		
+	proc (this: Super) Hello(i : ^integer):integer 
+	begin 
+  	println("Hello from Super")
+  	return 0 
+  end Hello
+	
+	proc (this: A) Hello(i : ^integer):integer
+	begin
+		println("Hello from A")
+		i^ := 22;
+		return 33
+	end Hello
+	
+	proc (this: B) Hello(i : ^integer):integer
+	begin
+		println("Hello from B")
+		i^ := 44
+		return 55
+	end Hello
+	
+	proc SayHello( obj : Super )
+		var a,b : integer
+	begin
+  	a := 0
+  	b := 0
+		a := obj.Hello(@b)
+		println(b)
+		println(a)
+	end SayHello
+	
+	var 
+		a : A
+		b : B
+
+begin
+	println("Procs6 start")
+	new(a)
+	new(b)
+	SayHello(a)
+	SayHello(b)
+	println("Procs6 done")
+end Procs6
+
+(*
+Procs6 start
+Hello from A
+22
+33
+Hello from B
+44
+55
+Procs6 done
+*)

@@ -1653,6 +1653,11 @@ void Code::initMemory(char* mem, Type* t, bool doPointerInit )
         {
             Vtable* vt = getVtable(t);
             memcpy(mem, &vt, sizeof(vt));
+            foreach( Declaration* d, t->subs )
+            {
+                if( d->kind == Declaration::Procedure )
+                    translateProc(d);
+            }
         }
 
         DeclList fields = t->getFieldList(true);

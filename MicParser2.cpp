@@ -733,8 +733,10 @@ bool Parser2::expect(int tt, bool pkw, const char* where) {
 
 void Parser2::error(const Token& t, const QString& msg)
 {
-    Q_ASSERT(!msg.isEmpty());
-    errors << Error(msg,t.d_lineNr, t.d_colNr, t.d_sourcePath);
+    if(msg.isEmpty())
+        errors << Error("<no message>",t.d_lineNr, t.d_colNr, t.d_sourcePath);
+    else
+        errors << Error(msg,t.d_lineNr, t.d_colNr, t.d_sourcePath);
 }
 
 void Parser2::error(int row, int col, const QString& msg)
@@ -2968,7 +2970,7 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
         if( tmp == 0 )
             return 0; // reported elsewhere
 
-        if( !tmp->isLvalue() )
+        if( !tmp->hasAddress() )
             error(tok,"cannot take address of this object");
 
         res = Expression::create(Expression::Addr, cur.toRowCol());
@@ -3032,22 +3034,17 @@ void Parser2::assignmentOrProcedureCall() {
         const Token tok = la;
         expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
         Expression* rhs = expression(lhs->getType());
-        // TODO: avoid assigning to structured return values of functions on left side
         if( rhs && !assigCompat( lhs->getType(), rhs ) )
             error(tok, "right side is not assignment compatible with left side");
-#if 0
-        if( !ev->evaluate(lhs) )
-            error(t, ev->getErr());
-        if( rhs && !ev->evaluate(rhs) )
-            error(tok, ev->getErr());         // value is pushed in ev->assign
-        if( rhs && !ev->assign() )
-            error(tok, ev->getErr() );
-#else
-        // now both lhs and rhs expression ASTs are ready; do analysis to recognize
-        // array element and field assignments
-        if( rhs && !ev->assign(lhs,rhs, tok.toRowCol()) )
-            error(tok, ev->getErr() );
-#endif
+        if( !lhs->isAssignable() )
+            error(t, "cannot assign to lhs" );
+        else
+        {
+            // now both lhs and rhs expression ASTs are ready; do analysis to recognize
+            // array element and field assignments
+            if( rhs && !ev->assign(lhs,rhs, tok.toRowCol()) )
+                error(tok, ev->getErr() );
+        }
         Expression::deleteAllExpressions();
     }else
     {

@@ -154,6 +154,7 @@ void AstModel::clear()
     if( helper )
         delete helper;
     helper = 0;
+    helperId = 0;
     openScope(&globalScope); // establish the same status as the constructor
 }
 
@@ -626,7 +627,7 @@ QVariant Expression::getLiteralValue() const
 
 DeclList Expression::getFormals(bool includeReceiver) const
 {
-    if( kind == ProcDecl )
+    if( kind == ProcDecl || kind == MethDecl )
         return val.value<Declaration*>()->getParams(includeReceiver);
     else if( type && type->kind == Type::Proc )
         return type->subs; // subs doesn't include a receiver by definition
@@ -644,9 +645,31 @@ bool Expression::isLvalue() const
             kind == Index || kind == Deref;
 }
 
+bool Expression::hasAddress() const
+{
+    return isAssignable();
+}
+
+bool Expression::isAssignable() const
+{
+    if( kind == LocalVar || kind == Param || kind == ModuleVar )
+        return true; // TODO: check visibility
+    switch( kind )
+    {
+    case Call:
+        return false;
+    case Select:
+    case Index:
+        return lhs->isAssignable();
+    case Deref:
+        return true;
+    }
+    return false;
+}
+
 void Expression::setByVal()
 {
-    // go back the desig leaving a ref to type on the stack and mark it to leave a value instead
+    // go back the desig which leaves a ref to type on the stack and mark it to leave a value instead
     Expression* cur = this;
     while( cur && !cur->isLvalue() )
         cur = cur->lhs;

@@ -215,6 +215,8 @@ namespace Mic
         QVariant getLiteralValue() const;
         DeclList getFormals(bool includeReceiver = false) const;
         bool isLvalue() const; // true if result of expression is usually a ref to type; can be changed with byVal
+        bool hasAddress() const;
+        bool isAssignable() const;
         void setByVal();
         void appendRhs(Expression*);
         static Expression* createFromToken(quint16,const RowCol&);
