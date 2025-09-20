@@ -307,6 +307,13 @@ void Emitter::callvi_(const Quali& methodRef, int argCount, bool hasRet)
     delta(-argCount + (hasRet?1:0) );
 }
 
+void Emitter::callinst_(const Trident &methodRef, int argCount, bool hasRet)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_callinst,QVariant::fromValue(methodRef)) );
+    delta(-argCount - 1 + (hasRet?1:0) ); // this + args
+}
+
 void Emitter::callvirt_(const Trident& methodRef, int argCount, bool hasRet)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );

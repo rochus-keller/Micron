@@ -6,8 +6,8 @@ module Procs0
 	end test
 		
 begin
-	//println("Procs0 start")
+	println("Procs0 start")
 	test(41x)
 	test("B")
-	//println("Procs0 done")
+	println("Procs0 done")
 end Procs0

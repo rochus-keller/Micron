@@ -1366,6 +1366,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
                 }
             } break;
         case IL_callvirt:
+        case IL_callinst:
         case IL_ldfld:
         case IL_ldflda:
         case IL_ldmeth: {

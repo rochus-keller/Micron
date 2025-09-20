@@ -183,7 +183,8 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
                 proc.body << ProcData::Op(e->kind, QVariant::fromValue(q));
             } break;
         case IL_callvirt:
-        case IL_ldfld:
+        case IL_callinst:
+       case IL_ldfld:
         case IL_ldflda:
         case IL_ldmeth: {
                 Trident td;

@@ -1727,6 +1727,12 @@ Expression* Parser2::ExpInstr() {
         res->d = trident();
         if( res->d && (res->d->kind != Declaration::Procedure || !res->d->typebound) )
             error(cur, "expecting a bound procedure");
+    } else if( la.d_code == Tok_CALLINST ) {
+        expect(Tok_CALLVIRT, true, "ExpInstr");
+        res->kind = IL_callinst;
+        res->d = trident();
+        if( res->d && (res->d->kind != Declaration::Procedure || !res->d->typebound) )
+            error(cur, "expecting a bound procedure");
     } else if( la.d_code == Tok_CASTPTR ) {
         expect(Tok_CASTPTR, true, "ExpInstr");
         res->kind = IL_castptr;

@@ -41,6 +41,7 @@ namespace Mil {
 		Tok_BEGIN,
 		Tok_CALL,
 		Tok_CALLI,
+		Tok_CALLINST,
 		Tok_CALLVI,
 		Tok_CALLVIRT,
 		Tok_CASE,

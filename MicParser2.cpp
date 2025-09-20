@@ -2231,17 +2231,33 @@ Expression* Parser2::designator(bool needsLvalue) {
         } else if( la.d_type == Tok_Hat ) {
             tok = la;
             expect(Tok_Hat, false, "selector");
-            if( res->getType()->kind != Type::Pointer )
+            if( res->kind == Expression::MethDecl )
             {
-                error(tok,"only a pointer type can be dereferenced");
+                if( langLevel < 3 )
+                {
+                    error(cur,"object types not available on current language level");
+                    return 0;
+                }
+                Expression* tmp = Expression::create(Expression::Super, tok.toRowCol() );
+                tmp->lhs = res;
+                tmp->setType(res->getType());
+                res = tmp;
+            }else if( res->getType()->kind == Type::Pointer )
+            {
+                res->setByVal();
+                Expression* tmp = Expression::create(Expression::Deref, tok.toRowCol() );
+                tmp->lhs = res;
+                checkPointerResolved(res->getType());
+                tmp->setType(res->getType()->getType());
+                res = tmp;
+            }else
+            {
+                if( langLevel >= 3 )
+                    error(tok,"operator only applicable to pointer types or method super calls");
+                else
+                    error(tok,"only a pointer type can be dereferenced");
                 return 0;
             }
-            res->setByVal();
-            Expression* tmp = Expression::create(Expression::Deref, tok.toRowCol() );
-            tmp->lhs = res;
-            checkPointerResolved(res->getType());
-            tmp->setType(res->getType()->getType());
-            res = tmp;
         } else if( la.d_type == Tok_Lpar ) {
             expect(Tok_Lpar, false, "selector");
             const Token lpar = cur;
@@ -2285,7 +2301,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             Type* retType;
             if( isTypeCast )
                 retType = args.first()->getType();
-            else if( proc->kind == Expression::ProcDecl || proc->kind == Expression::MethDecl )
+            else if( proc->kind == Expression::ProcDecl || proc->kind == Expression::MethDecl || proc->kind == Expression::Super )
                 retType = proc->getType();
             else if( proc->kind == Expression::Builtin )
             {
@@ -3035,19 +3051,24 @@ void Parser2::assignmentOrProcedureCall() {
         Expression::deleteAllExpressions();
     }else
     {
-        if( lhs->kind == Expression::ProcDecl || lhs->kind == Expression::MethDecl ||
+        if( lhs->kind == Expression::ProcDecl || lhs->kind == Expression::MethDecl || lhs->kind == Expression::Super ||
                 lhs->getType() && lhs->getType()->kind == Type::Proc )
         {
-            // call procedure without "()"
-            const DeclList formals = lhs->getFormals();
+            // something to call
+            Expression* decl = lhs;
+            if( lhs->kind == Expression::Super )
+                decl = lhs->lhs;
+
+            // add the missing call expression "()"
+            const DeclList formals = decl->getFormals();
             if( !formals.isEmpty() )
                 error(t,"expecting actual parameters to call this procedure");
             Expression* tmp = Expression::create(Expression::Call, lhs->pos);
             tmp->lhs = lhs;
-            if( lhs->kind == Expression::ProcDecl || lhs->kind == Expression::MethDecl )
-                tmp->setType(lhs->getType());
+            if( decl->kind == Expression::ProcDecl || decl->kind == Expression::MethDecl )
+                tmp->setType(decl->getType());
             else
-                tmp->setType(lhs->getType()->getType());
+                tmp->setType(decl->getType()->getType()); // decl->getType is the proctype
             lhs = tmp;
         }
         if( !ev->evaluate(lhs) )

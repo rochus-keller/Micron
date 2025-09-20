@@ -1349,6 +1349,7 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
             break;
         case IL_call:
         case IL_callvirt:
+        case IL_callinst:
             {
                 if( !translateProc(e->d) )
                     return false;
@@ -1360,6 +1361,8 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 }
                 if( e->kind == IL_call )
                     emitOp(proc, LL_call, id);
+                else if( e->kind == IL_callinst )
+                    emitOp(proc, LL_callinst, id);
                 else
                     emitOp(proc, LL_callvirt, id);
             }

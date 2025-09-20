@@ -25,7 +25,7 @@ const char* s_opName[] =
     "invalid",
     // expressions
     "",
-    "add", "abs", "and", "call", "calli", "callvi", "callvirt", "castptr",
+    "add", "abs", "and", "call", "calli", "callinst", "callvi", "callvirt", "castptr",
     "ceq", "cgt", "cgt_un", "clt", "clt_un",
     "conv_i1", "conv_i2", "conv_i4", "conv_i8", "conv_r4", "conv_r8",
     "conv_u1", "conv_u2", "conv_u4", "conv_u8",

@@ -1344,6 +1344,7 @@ void CilAsmGen::expression(Expression* e)
         break;
         
     case IL_call:
+    case IL_callinst:
         emitCall(e);
         break;
         

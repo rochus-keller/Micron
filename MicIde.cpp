@@ -2628,6 +2628,17 @@ static void createModItem(T* parent, Declaration* n, Type* t, bool nonbound, boo
         }else
             switch( t->kind )
             {
+            case Type::Pointer:
+                if( (t->getType()->kind == Type::Record || t->getType()->kind == Type::Object) && t->getType()->decl->getModule() == n->getModule() )
+                {
+                    QTreeWidgetItem* item = new QTreeWidgetItem(parent);
+                    Type* base = t->getType();
+                    if( !isAlias  )
+                        fillRecord(item,n,base,sort,idx, pro);
+                    else
+                        fillModItems(item,n, 0, 0, sort, idx, pro);
+                }
+                break;
             case Type::Record:
             case Type::Object:
                 {
@@ -3490,7 +3501,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2.20");
+    a.setApplicationVersion("0.2.21");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

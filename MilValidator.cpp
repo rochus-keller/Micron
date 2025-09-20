@@ -1159,15 +1159,16 @@ Expression* Validator::visitExpr(Expression* e)
             break;
         case IL_call:
         case IL_callvirt:
+        case IL_callinst:
             {
                 Declaration* proc = e->d;
                 DeclList params = proc->getParams();
                 const int numOfParams = params.size();
                 if( !expectN(numOfParams, e) )
                     break;
-                // TODO: check param compat?
+                // TODO: check param compat? Check obj on stack compatible with method decl?
 
-                if(e->kind == IL_callvirt )
+                if(e->kind == IL_callvirt || e->kind == IL_callinst )
                 {
 
                     e->rhs = eatStack(numOfParams-1); // all true params without self
@@ -1528,6 +1529,7 @@ bool Validator::assigCompat(Type* lhs, Expression* rhs)
     case IL_call:
     case IL_calli:
     case IL_callvirt:
+    case IL_callinst:
     case IL_callvi:
     case IL_initobj:
     case IL_isinst:

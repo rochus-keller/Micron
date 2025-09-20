@@ -1,0 +1,47 @@
+module Procs5
+
+	type 
+		Superclass = object end
+		Class = object (Superclass) end
+	
+	var inst : Class
+	
+	proc ( this : Superclass ) Hello()
+	begin
+		println("Hello Superclass!")
+	end Hello
+	
+	proc ( this : Superclass ) Hello2(const str: ^array of char)
+	begin
+		println("Hello2 Superclass!")
+		println(str)
+	end Hello2
+
+	proc ( this : Class ) Hello()
+	begin
+		this.Hello^
+		println("Hello Class!")
+	end Hello
+	
+	proc ( this : Class ) Hello2(const str: ^array of char)
+	begin
+		this.Hello2^(str)
+		println("Hello2 Class!")
+	end Hello2
+
+begin
+	println("Procs5 start")
+	inst.Hello
+	inst.Hello2("this is a string")
+	println("Procs5 done")
+end Procs5
+
+(*
+Procs5 start
+Hello Superclass!
+Hello Class!
+Hello2 Superclass!
+this is a string
+Hello2 Class!
+Procs5 done
+*)

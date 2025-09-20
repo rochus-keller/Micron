@@ -1560,6 +1560,11 @@ bool Interpreter::Imp::execute(Frame* frame)
                     return false;
                 pc++;
             } vmbreak;
+        vmcase(callinst){
+                if( !call(frame, pc, code.getProc(frame->proc->ops[pc].val), locals, stack ) )
+                    return false;
+                pc++;
+            } vmbreak;
         vmcase(callvi) {
                 MethRef r = frame->popPP();
                 // make room for SELF on stack and copy r.obj to the first argument slot

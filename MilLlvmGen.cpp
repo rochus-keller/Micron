@@ -1688,6 +1688,7 @@ QByteArray LlvmGen::expression(Expression* e, int level)
         break;
 
     case IL_call:
+    case IL_callinst:
         result = emitCall(e, level);
         break;
 

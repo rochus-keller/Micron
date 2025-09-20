@@ -78,6 +78,7 @@ namespace Mil
         void call_( const Quali& methodRef, int argCount = 0, bool hasRet = false);
         void calli_( const Quali& methodRef, int argCount, bool hasRet = false );
         void callvi_(const Quali& methodRef, int argCount, bool hasRet = false );
+        void callinst_( const Trident& methodRef, int argCount, bool hasRet = false );
         void callvirt_( const Trident& methodRef, int argCount, bool hasRet = false );
         void case_(const CaseLabelList&);
         void castptr_(const Quali& typeRef);

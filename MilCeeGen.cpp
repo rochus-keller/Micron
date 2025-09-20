@@ -1233,9 +1233,12 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         break;
 
     case IL_call:
+    case IL_callinst:
         {
             out << qualident(e->d) << "(";
             QList<Expression*> args;
+            if( e->kind == IL_callinst )
+                args << e->lhs;
             collectArgs(e->rhs, args);
             QList<Declaration*> formals = e->d->getParams(true);
             Q_ASSERT( args.size() == formals.size() );

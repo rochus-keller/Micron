@@ -612,7 +612,17 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
             Q_ASSERT(proc);
             ret = proc->getType();
             out->line_(pos);
-            out->call_(toQuali(proc),nArgs, ret != 0); // TODO: desig in imported module
+            out->call_(toQuali(proc),nArgs, ret != 0);
+        }
+        break;
+    case Value::Super:
+        {
+            Declaration* proc = callee.val.value<Declaration*>();
+            Q_ASSERT(proc);
+            ret = proc->getType();
+            out->line_(pos);
+            const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
+            out->callinst_(trident,nArgs, ret != 0);
         }
         break;
     case Value::Method:
@@ -623,7 +633,6 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
             const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
             out->line_(pos);
             out->callvirt_(trident,nArgs, ret != 0);
-
         }
         break;
     case Value::VarDecl:
@@ -1787,16 +1796,21 @@ bool Evaluator::recursiveRun(Expression* e)
         break;
     case Expression::Call:
         {
-            if( e->lhs->lhs && e->lhs->kind == Expression::MethDecl )
+            if( e->lhs->lhs && (e->lhs->kind == Expression::MethDecl || e->lhs->kind == Expression::Super) )
             {
                 // assure that in a virtual call via designator like a.b(), 'a' is evaluated before the args
-                if( !recursiveRun(e->lhs->lhs) )
+                Expression* proc = e->lhs;
+                if( proc->kind == Expression::Super )
+                    proc = proc->lhs;
+                if( !recursiveRun(proc->lhs) ) // fetch self
                     return false;
-                e->lhs->lhs = 0;
+                proc->lhs = 0; // to avoid yet another evaluation
             }
 
             ExpList args = e->val.value<ExpList>();
-            const DeclList formals = e->lhs->getFormals(); // no receiver here because args doesn't include it
+            const DeclList formals = e->lhs->kind == Expression::Super && e->lhs->lhs
+                    ? e->lhs->lhs->getFormals()
+                    : e->lhs->getFormals(); // no receiver here because args doesn't include it
             for(int i = 0; i < args.size(); i++ )
             {
                 if( !recursiveRun(args[i]) )
@@ -1806,7 +1820,7 @@ bool Evaluator::recursiveRun(Expression* e)
                 else
                     assureTopOnMilStack(false, args[i]->pos); // effects builtin args and variable args
             }
-            if( !recursiveRun(e->lhs) ) // here 'b' of "a.b()" is evaluated in case of proc type calls
+            if( !recursiveRun(e->lhs) ) // here 'b' of "a.b()" is evaluated in case of proc type calls;
                 return false;
             call(args.size(), e->pos);
         }
@@ -1819,6 +1833,25 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Constructor:
         constructor(e);
         break;
+
+    case Expression::Super: {
+            Q_ASSERT(e->lhs && e->lhs->kind == Expression::MethDecl);
+
+            Declaration* method = e->lhs->val.value<Declaration*>();
+
+            if( curProcs.isEmpty() || curProcs.back() != method )
+            {
+                err = "invalid super call (wrong method)";
+                return false;
+            }
+            method = method->data.value<Declaration*>(); // super
+            if( method == 0 )
+            {
+                err = "there is no overridden method";
+                return false;
+            }
+            stack.push_back(Value(e->getType(),QVariant::fromValue(method),Value::Super));
+        } break;
 
     default:
     case Expression::Invalid:
