@@ -237,6 +237,8 @@ namespace Mil
         Declaration* derefTrident(const Trident& ) const;
         Declaration* resolve(const Quali&) const;
         void error(Declaration *d, const QString&, int pc = -1);
+        void error(Type *t, const QString&, int pc = -1);
+        void resolveAll(bool reportError = false);
         RowCol setline(quint32 line)
         {
             if( line )

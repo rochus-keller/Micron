@@ -1200,6 +1200,7 @@ void Parser2::TypeDeclaration() {
     Type* t = 0;
 
     // declare the type immediately so it is known in the forthcoming declaration
+    // NOTE: we no longer support this, instead use the Item = pointer to ItemDesc trick
 #ifdef HAVE_SELFREF
     Declaration* d = addDecl(id,Declaration::TypeDecl);
     thisDecl = d;
@@ -3777,7 +3778,6 @@ Parser2::NameAndType Parser2::Receiver2()
 
 void Parser2::block() {
 	expect(Tok_BEGIN, true, "block");
-    resolveDeferreds();
     beginFinallyEnd(false, cur.toRowCol());
     if( la.d_type == Tok_FINALLY ) {
         expect(Tok_FINALLY, false, "block");
@@ -3788,8 +3788,7 @@ void Parser2::block() {
 }
 
 void Parser2::DeclarationSequence() {
-    while( la.d_type == Tok_CONST || la.d_type == Tok_TYPE || la.d_type == Tok_VAR ||
-           FIRST_ProcedureDeclaration(la.d_type) ) {
+    while( la.d_type == Tok_CONST || la.d_type == Tok_TYPE || la.d_type == Tok_VAR || FIRST_ProcedureDeclaration(la.d_type) ) {
 		if( la.d_type == Tok_CONST ) {
 			expect(Tok_CONST, true, "DeclarationSequence");
 			while( FIRST_ConstDeclaration(la.d_type) ) {
@@ -3815,6 +3814,7 @@ void Parser2::DeclarationSequence() {
 				}
 			}
 		} else if( FIRST_ProcedureDeclaration(la.d_type) ) {
+            resolveDeferreds();
 			ProcedureDeclaration();
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "DeclarationSequence");
@@ -4078,11 +4078,19 @@ void Parser2::module(const Import & import) {
              out->addConst(ev->toQuali(type), modata.metaParams[i]->name, modata.metaParams[i]->pos, val );
              if( val.isNull() )
                  modecl->generic = true; // not fully instantiated
+#if 0
+             // TODO: fix intantiated generics
+        }else if( type && type->kind == Type::Generic )
+            out->addType(ev->toQuali(type).second, type->decl->pos,type->decl->isPublic(), ev->toQuali(type), Mil::EmiTypes::Generic);
+        else if( type )
+             out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(type),Mil::EmiTypes::Alias);
+#else
         }else if( type && type->isSimple() )
         {
-             out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(type),Mil::EmiTypes::Alias);
+           out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(type),Mil::EmiTypes::Alias);
         }else if( type )
-            emitType(type);
+            emitType(type); // why would we replicate the structured types here?
+#endif
     }
 
 	while( FIRST_ImportList(la.d_type) || FIRST_DeclarationSequence(la.d_type) ) {
@@ -4104,6 +4112,7 @@ void Parser2::module(const Import & import) {
         Declaration* procDecl = addDecl(id, Declaration::Procedure);
         mdl->openScope(procDecl);
         out->beginProc("begin$", la.toRowCol(),0, Mil::ProcData::ModuleInit);
+        resolveDeferreds();
         block();
         out->endProc(RowCol());
         mdl->closeScope();

@@ -11,11 +11,15 @@ WorkingDir=
 size=0
 
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/RecReturnTest.mic
-1\RelPath=RecReturnTest.mic
-2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Procs5b.mic
-2\RelPath=Procs5b.mic
-size=1
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Generic3.mic
+1\RelPath=Generic3.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/GenericTest6.mic
+2\RelPath=GenericTest6.mic
+3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/GenericTest2.mic
+3\RelPath=GenericTest2.mic
+4\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/GenericTest3.mic
+4\RelPath=GenericTest3.mic
+size=2
 
 [Packages]
 1\Name=@ByteArray()

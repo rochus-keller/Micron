@@ -48,8 +48,10 @@ public:
 
     const QString& getErr() const { return err; }
 
-    Qualident toQuali(Declaration*);
+    static Qualident toQuali(Declaration*, Declaration* module);
+    static Qualident toQuali(Type*, Declaration* module);
     Qualident toQuali(Type*);
+    Qualident toQuali(Declaration*);
     static QByteArray dequote(const QByteArray& str);
 
 protected:

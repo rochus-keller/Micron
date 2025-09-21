@@ -8,7 +8,7 @@ MODULE TypeCase;
      PRINTLN("hello from test0")
    END test0
     
-   PROC T1.test1(str: ^ARRAY OF CHAR)
+   PROC T1.test1(const str: ^ARRAY OF CHAR)
    BEGIN
    	 PRINT(str)
      PRINT(" from test1 ")

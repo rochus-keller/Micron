@@ -1,0 +1,9 @@
+module Generic1(T)
+
+type
+  List* = pointer to ListDesc
+	ListDesc = record 
+            value* : T
+            next*  : List
+        end
+end Generic1

@@ -10,7 +10,7 @@ module Procs5b
 		println("Hello Superclass!")
 	end Hello
 	
-	proc ( this : Superclass ) Hello2(str: ^array of char)
+	proc ( this : Superclass ) Hello2(const str: ^array of char)
 	begin
 		println("Hello2 Superclass!")
 		println(str)
@@ -22,7 +22,7 @@ module Procs5b
 		println("Hello Class!")
 	end Hello
 	
-	proc ( this : Class ) Hello2(str: ^array of char)
+	proc ( this : Class ) Hello2(const str: ^array of char)
 	begin
 		this.Hello2^(str)
 		println("Hello2 Class!")

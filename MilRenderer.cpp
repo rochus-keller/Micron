@@ -623,6 +623,7 @@ void IlAstRenderer::beginModule(const QByteArray& moduleName, const QString& sou
 {
     Q_ASSERT(module == 0);
     errors.clear();
+    unresolved.clear();
     module = new Declaration();
     module->kind = Declaration::Module;
     if( !sourceFile.isEmpty() || !mp.isEmpty() )
@@ -643,7 +644,6 @@ void IlAstRenderer::endModule()
     if( module->md )
         module->md->end = curPos;
 
-
     bool success = true;
     if( !errors.isEmpty() )
     {
@@ -651,18 +651,7 @@ void IlAstRenderer::endModule()
         module = 0;
     }else
     {
-        foreach( Type* t, unresolved)
-        {
-            if( t->getType() == 0 && t->quali )
-            {
-                Declaration* d = resolve(*t->quali);
-                if( d && d->kind != Declaration::TypeDecl )
-                    error(d, "the reference is no type declaration");
-                else if( d )
-                    t->setType(d->getType());
-            }
-        }
-        unresolved.clear();
+        resolveAll(true);
 
 #if 0
         // print not yet validated MIL to stdout
@@ -871,7 +860,9 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
                 delete decl;
             }else
             {
+                resolveAll(); // because of binding pointer which can point to a named ref
                 Type* rt = receiver->getType();
+                if( rt ) rt = rt->deref();
                 Declaration* forward = rt->findSubByName(decl->name, false);
                 if( forward && forward->forward && forward->kind == Declaration::Procedure )
                 {
@@ -880,10 +871,13 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
                 }else if( forward )
                     error(curProc, QString("duplicate name: %1").arg(decl->name.constData()));
 
+                Type* ptr = decl->subs ? decl->subs->getType() : 0;
+                if( ptr ) ptr = ptr->deref();
+                Type* obj = ptr ? ptr->getType() : 0;
+                if( obj ) obj = obj->deref();
                 if( decl->subs == 0 || decl->subs->kind != Declaration::ParamDecl ||
-                        decl->subs->getType() == 0 || decl->subs->getType()->getType() == 0 ||
-                        decl->subs->getType()->kind != Type::Pointer || decl->subs->getType()->getType()->kind != Type::Object ||
-                        decl->subs->getType()->getType() != rt )
+                        ptr == 0 ||  ptr->kind != Type::Pointer ||
+                        obj == 0 || obj->kind != Type::Object || obj != rt )
                     error(curProc, QString("first parameter of a bound procedure must be a pointer to the object type"));
                 else if( decl->subs )
                     decl->subs->typebound = true;
@@ -1509,6 +1503,42 @@ void IlAstRenderer::error(Declaration* d, const QString& msg, int pc)
     if( curProc)
         e.pc = pc;
     errors << e;
+}
+
+void IlAstRenderer::error(Type *t, const QString & msg, int pc)
+{
+    if( t->decl )
+        error(t->decl, msg, pc);
+    else
+    {
+        Error e;
+        e.msg = msg;
+        e.where = module->name;
+        if( curProc)
+            e.pc = pc;
+        errors << e;
+    }
+}
+
+void IlAstRenderer::resolveAll(bool reportError)
+{
+    foreach( Type* t, unresolved)
+    {
+        Q_ASSERT(t && t->quali);
+        if( t->getType() == 0 )
+        {
+            Declaration* d = resolve(*t->quali);
+            if( reportError )
+            {
+                if( d == 0 )
+                    error(t, "the reference cannot be resolved");
+                else if( d->kind != Declaration::TypeDecl )
+                    error(t, "the reference is no type declaration");
+            }
+            if( d && d->kind == Declaration::TypeDecl )
+                t->setType(d->getType());
+        }
+    }
 }
 
 QVariant ConstrLiteral::toVariant(Constant* c, Type* t)

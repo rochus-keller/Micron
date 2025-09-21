@@ -1,0 +1,23 @@
+module Generic4(T)
+
+type
+	Element = object 
+				value* : T 
+		  end
+	
+	List = pointer to ListDesc
+	ListDesc = object (Element)
+            next*  : List
+        end
+        
+   proc (this: Element) print*()
+   begin
+	   println(this.value)
+   end print
+   
+   proc (this: Element) setValue*(v: T )
+   begin
+	   this.value := v
+	end setValue
+   
+end Generic4

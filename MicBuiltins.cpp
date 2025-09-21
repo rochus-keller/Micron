@@ -282,7 +282,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
             expectingNArgs(args,1);
             Q_ASSERT(args.size() == 1);
             Type* t = args.first()->getType();
-            if( t->kind != Type::Array && t->kind != Type::Record && t->kind != Type::Object )
+            if( t && t->kind != Type::Array && t->kind != Type::Record && t->kind != Type::Object )
                 args.first()->setByVal();
         } break;
     case Builtin::RAISE:
@@ -722,7 +722,8 @@ void Builtins::PRINT(int nArgs, bool ln)
     if( nArgs < 1 || ev->stack.back().type == 0 ||
             !(ev->stack.back().type->isSimple() ||
               ev->stack.back().type->isText() ||
-              ev->stack.back().type->kind == Type::ConstEnum ))
+              ev->stack.back().type->kind == Type::ConstEnum ||
+              ev->stack.back().type->kind == Type::Generic ))
     {
         ev->err = "expecting one argument of basic, enum or char array type";
         return;
@@ -757,6 +758,8 @@ void Builtins::PRINT(int nArgs, bool ln)
         ev->out->call_(coreName("printBool"),1,false);
     else if( ev->stack.back().type->isSet() )
         ev->out->call_(coreName("printSet"),1,false);
+    else if( ev->stack.back().type->kind == Type::Generic )
+        ev->out->pop_(); // we don't have a generic print operation, just remove the argument from stack
     else
         ev->err = "given type not supported with PRINT or PRINTLN";
     if( ln )

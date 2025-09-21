@@ -1009,6 +1009,16 @@ void Evaluator::adjustNumType(Type* me, Type* other)
     }
 }
 
+Qualident Evaluator::toQuali(Type * t)
+{
+    return toQuali(t, mdl->getTopModule());
+}
+
+Qualident Evaluator::toQuali(Declaration * d)
+{
+    return toQuali(d, mdl->getTopModule());
+}
+
 void Evaluator::notOp(Value& v, const RowCol& pos)
 {
     Q_ASSERT( v.type->isBoolean() );
@@ -1588,7 +1598,7 @@ void Evaluator::unaryPlusOp(Value& v, const RowCol& pos)
     // NOP
 }
 
-Qualident Evaluator::toQuali(Declaration* d)
+Qualident Evaluator::toQuali(Declaration* d, Declaration *module)
 {
     Q_ASSERT( d && d->kind != Declaration::Field ); // use toTriple for fields
 
@@ -1604,7 +1614,7 @@ Qualident Evaluator::toQuali(Declaration* d)
         if( d->kind == Declaration::Procedure && d->typebound )
             return qMakePair(QByteArray(),d->name); // bound procs are in the namespace of the type
         if( d->kind == Declaration::TypeDecl && d->outer == 0 && last == 0 )
-            return toQuali(d->getType()); // this is a built-in type
+            return toQuali(d->getType(), module); // this is a built-in type
         if( !desig.isEmpty() )
         {
             desig = "$" + desig;
@@ -1618,14 +1628,14 @@ Qualident Evaluator::toQuali(Declaration* d)
         desig = Token::getSymbol(desig);
 
     Q_ASSERT( d && d->kind == Declaration::Module );
-    if( d == mdl->getTopModule() )
+    if( d == module )
         return qMakePair(QByteArray(),desig); // local symbol
     // else imported symbol
     ModuleData md = d->data.value<ModuleData>();
     return qMakePair(md.fullName, desig);
 }
 
-Qualident Evaluator::toQuali(Type* t)
+Qualident Evaluator::toQuali(Type* t, Declaration *module)
 {
     static QByteArray symbols[Type::MaxBasicType];
 
@@ -1655,7 +1665,7 @@ Qualident Evaluator::toQuali(Type* t)
     }else if( t->decl)
     {
         Q_ASSERT( t && t->decl );
-        return toQuali(t->decl);
+        return toQuali(t->decl, module);
     }
     return Qualident();
 }

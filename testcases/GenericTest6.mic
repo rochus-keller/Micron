@@ -1,0 +1,30 @@
+module GenericTest6
+
+type 
+	R = record
+			name: array 32 of char
+			age: integer
+		end
+
+import 
+	RL := Generic3(R)
+
+var
+	l : RL.List
+	r : R
+
+	proc print( elem: ^R )
+	begin
+		println(elem.name)
+		println(elem.age)
+	end print
+begin
+	new(l)
+	r.name := "So long"
+	r.age := 52
+	l.setValue( r )
+	println(l.value.name)
+	println(l.value.age)
+	l.print(print)
+	println("GenericTest6 done")
+end GenericTest6

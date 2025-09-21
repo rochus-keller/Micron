@@ -1,0 +1,29 @@
+module Generic3(T)
+
+type
+	Element = object 
+				value* : T 
+		  end
+   // illegal: Element2 = record(T) end
+	
+	List* = pointer to ListDesc
+	ListDesc = object (Element)
+            next*  : List
+        end
+        
+    Printer = proc(const elem: ^T );
+        
+    var test : integer
+    
+   proc (this: Element) print*(p: Printer)
+   begin
+	   p(@this.value)
+   end print
+   
+   proc (this: Element) setValue*(const v: ^T )
+   begin
+	   this.value := v^
+	   test := 3
+	end setValue
+   
+end Generic3

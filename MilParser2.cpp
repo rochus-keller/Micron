@@ -2514,7 +2514,9 @@ void Parser2::MetaParams() {
     if( nextIsLine() ) {
         Line();
     }
+    QByteArrayList names;
     expect(Tok_ident, false, "MetaParams");
+    names << cur.d_val;
 	while( ( ( peek(1).d_type == Tok_Comma || peek(1).d_type == Tok_ident ) && peek(2).d_type == Tok_ident )  ) {
 		if( la.d_type == Tok_Comma ) {
 			expect(Tok_Comma, false, "MetaParams");
@@ -2523,9 +2525,12 @@ void Parser2::MetaParams() {
             Line();
         }
         expect(Tok_ident, false, "MetaParams");
+        names << cur.d_val;
 	}
 	expect(Tok_Rpar, false, "MetaParams");
-    // TODO
+    if( curMod->md == 0 )
+        curMod->md = new ModuleData();
+    curMod->md->metaParamNames = names;
 }
 
 Constant* Parser2::ConstExpression() {
