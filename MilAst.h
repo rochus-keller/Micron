@@ -188,7 +188,7 @@ namespace Mil
     class Declaration : public Node
     {
     public:
-        enum Kind { NoMode, Module, TypeDecl, ConstDecl, Import,
+        enum Kind { NoMode, Module, TypeDecl, ConstDecl, Import, Importer,
                     Field, VarDecl, LocalDecl, ParamDecl,
                     Procedure,
                     Max };
@@ -209,7 +209,7 @@ namespace Mil
             int off;  // LocalDecl & ParamDecl offset in bytes
             Declaration* forwardTo; // Procedure: if forward==true, not owned
             ProcedureData* pd; // Procedure: if forward==false, optionally, owned
-            Declaration* imported; // Import, not owned
+            Declaration* imported; // Import, Importer, not owned
             ModuleData* md; // Module
         };
         // QVariant data; // value for Const, path for Import, name for Extern

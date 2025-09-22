@@ -70,6 +70,7 @@ namespace Mil {
 			case Tok_IF: return "IF";
 			case Tok_IIF: return "IIF";
 			case Tok_IMPORT: return "IMPORT";
+			case Tok_IMPORTER: return "IMPORTER";
 			case Tok_INIT: return "INIT";
 			case Tok_INITOBJ: return "INITOBJ";
 			case Tok_INLINE: return "INLINE";
@@ -289,6 +290,7 @@ namespace Mil {
 			case Tok_IF: return "Tok_IF";
 			case Tok_IIF: return "Tok_IIF";
 			case Tok_IMPORT: return "Tok_IMPORT";
+			case Tok_IMPORTER: return "Tok_IMPORTER";
 			case Tok_INIT: return "Tok_INIT";
 			case Tok_INITOBJ: return "Tok_INITOBJ";
 			case Tok_INLINE: return "Tok_INLINE";
@@ -818,7 +820,13 @@ namespace Mil {
 					if( at(str,len,i+3) == 'O' ){
 						if( at(str,len,i+4) == 'R' ){
 							if( at(str,len,i+5) == 'T' ){
-								res = Tok_IMPORT; i += 6;
+								if( at(str,len,i+6) == 'E' ){
+									if( at(str,len,i+7) == 'R' ){
+										res = Tok_IMPORTER; i += 8;
+									}
+								} else {
+									res = Tok_IMPORT; i += 6;
+								}
 							}
 						}
 					}

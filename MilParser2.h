@@ -77,7 +77,9 @@ namespace Mil {
 		void FPSection();
 		void module();
 		void ImportList();
-		void import();
+        void ImporterList();
+        void import();
+        void importer();
 		void DeclarationSequence();
         void Line();
         Expression* Expression_();

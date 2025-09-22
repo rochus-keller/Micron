@@ -75,9 +75,9 @@ void IlAsmRenderer::endModule()
     state = Idle;
 }
 
-void IlAsmRenderer::addImport(const QByteArray& path)
+void IlAsmRenderer::addImport(const QByteArray& path, bool reverse)
 {
-    out << ws() << "import ";
+    out << ws() << (reverse? "importer " : "import ");
     lineout();
     out << path;
     out << endl;
@@ -553,10 +553,10 @@ void RenderSplitter::endModule()
         r->endModule();
 }
 
-void RenderSplitter::addImport(const QByteArray& path)
+void RenderSplitter::addImport(const QByteArray& path, bool reverse)
 {
     foreach(AbstractRenderer* r, renderer)
-        r->addImport(path);
+        r->addImport(path, reverse);
 }
 
 void RenderSplitter::addVariable(const Quali& typeRef, QByteArray name, bool isPublic)
@@ -624,6 +624,7 @@ void IlAstRenderer::beginModule(const QByteArray& moduleName, const QString& sou
     Q_ASSERT(module == 0);
     errors.clear();
     unresolved.clear();
+    toDelete = false;
     module = new Declaration();
     module->kind = Declaration::Module;
     if( !sourceFile.isEmpty() || !mp.isEmpty() )
@@ -636,6 +637,14 @@ void IlAstRenderer::beginModule(const QByteArray& moduleName, const QString& sou
     module->name = moduleName;
     module->pos = curPos;
     // TODO module->metaParams = mp;
+
+    // we register the module immediately so that a generic which depends on this module
+    // can see the types declared here and passed to the generic
+    if( !mdl->addModule(module) )
+    {
+        error(module, "a module with this name already existes");
+        toDelete = true;
+    }
 }
 
 void IlAstRenderer::endModule()
@@ -644,49 +653,40 @@ void IlAstRenderer::endModule()
     if( module->md )
         module->md->end = curPos;
 
-    bool success = true;
-    if( !errors.isEmpty() )
+    resolveAll(true);
+
+#if 0
+    // print not yet validated MIL to stdout
+    QFile out;
+    out.open(stdout, QIODevice::WriteOnly);
+    IlAsmRenderer r(&out, false);
+    AstSerializer::render(&r,module, Mil::AstSerializer::None);
+#endif
+
+    if( toDelete )
     {
         delete module;
         module = 0;
-    }else
-    {
-        resolveAll(true);
-
-#if 0
-        // print not yet validated MIL to stdout
-        QFile out;
-        out.open(stdout, QIODevice::WriteOnly);
-        IlAsmRenderer r(&out, false);
-        AstSerializer::render(&r,module, Mil::AstSerializer::None);
-#endif
+        return;
+    }
 
 #if 1
-        Validator v(mdl);
-        if( !v.validate(module) )
+    Validator v(mdl);
+    if( !v.validate(module) )
+    {
+        foreach( const Validator::Error& e, v.errors )
         {
-            foreach( const Validator::Error& e, v.errors )
-            {
-                Error ee;
-                ee.msg = e.msg;
-                ee.pc = e.pc;
-                ee.where = e.where;
-                errors << ee;
-            }
-            success = false;
-        }
-#endif
-        if( !mdl->addModule(module) )
-        {
-            error(module, "a module with this name already existes");
-            delete module;
-            module = 0;
-            success = false;
+            Error ee;
+            ee.msg = e.msg;
+            ee.pc = e.pc;
+            ee.where = e.where;
+            errors << ee;
         }
     }
+#endif
 }
 
-void IlAstRenderer::addImport(const QByteArray& path)
+void IlAstRenderer::addImport(const QByteArray& path, bool reverse)
 {
     Q_ASSERT(module);
 
@@ -696,7 +696,7 @@ void IlAstRenderer::addImport(const QByteArray& path)
     else
     {
         Declaration* import = new Declaration();
-        import->kind = Declaration::Import;
+        import->kind = reverse ? Declaration::Importer : Declaration::Import;
         import->name = path;
         module->appendSub(import);
         import->imported = imported;
@@ -794,6 +794,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
         }
     }else
     {
+        resolveAll();
         Declaration* decl = new Declaration();
         decl->kind = Declaration::Procedure;
         decl->name = proc.name;
@@ -953,6 +954,7 @@ void IlAstRenderer::endType()
 {
     Q_ASSERT(module);
     type = 0;
+    resolveAll();
 }
 
 void IlAstRenderer::addType(const QByteArray& name, bool isPublic, const Quali& baseType, quint8 typeKind, quint32 len)

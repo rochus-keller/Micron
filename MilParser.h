@@ -54,6 +54,7 @@ namespace Mil {
 		void ReturnType(SynTree*);
 		void FPSection(SynTree*);
 		void module(SynTree*);
+		void ImporterList(SynTree*);
 		void ImportList(SynTree*);
 		void import(SynTree*);
 		void instantiation(SynTree*);

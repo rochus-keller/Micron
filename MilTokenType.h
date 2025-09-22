@@ -77,6 +77,7 @@ namespace Mil {
 		Tok_IF,
 		Tok_IIF,
 		Tok_IMPORT,
+		Tok_IMPORTER,
 		Tok_INIT,
 		Tok_INITOBJ,
 		Tok_INLINE,

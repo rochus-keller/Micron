@@ -108,7 +108,7 @@ namespace Mil
                                   const QByteArrayList& metaParams = QByteArrayList() ) {}
         virtual void endModule() {}
 
-        virtual void addImport( const QByteArray& fullName ) {}
+        virtual void addImport( const QByteArray& fullName, bool reverse = false ) {}
 
         virtual void addVariable( const Quali& typeRef, QByteArray name,  bool isPublic ) {}
         virtual void addConst(const Quali& typeRef, const QByteArray& name, const QVariant& val ) {}
@@ -135,7 +135,7 @@ namespace Mil
         virtual void beginModule(const QByteArray& moduleName,const QString& sourceFile, const QByteArrayList& mp );
         virtual void endModule();
 
-        virtual void addImport(const QByteArray& path );
+        virtual void addImport(const QByteArray& path, bool reverse = false );
 
         virtual void addVariable( const Quali& typeRef, QByteArray name,  bool isPublic );
         virtual void addConst(const Quali& typeRef, const QByteArray& name, const QVariant& val );
@@ -177,7 +177,7 @@ namespace Mil
         virtual void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& );
         virtual void endModule();
 
-        virtual void addImport(const QByteArray& path );
+        virtual void addImport(const QByteArray& path, bool reverse = false );
 
         virtual void addVariable( const Quali& typeRef, QByteArray name,  bool isPublic );
         virtual void addConst(const Quali& typeRef, const QByteArray& name, const QVariant& val );
@@ -209,7 +209,7 @@ namespace Mil
         void beginModule( const QByteArray& moduleName, const QString& sourceFile, const QByteArrayList& );
         void endModule();
 
-        void addImport(const QByteArray& path);
+        void addImport(const QByteArray& path, bool reverse = false);
 
         void addVariable(const Quali& typeRef, QByteArray name , bool isPublic);
         void addConst(const Quali& typeRef, const QByteArray& name, const QVariant& val );
@@ -253,6 +253,7 @@ namespace Mil
         Declaration* curProc;
         RowCol curPos;
         QString source;
+        bool toDelete;
         mutable QList<Type*> unresolved;
     };
 }

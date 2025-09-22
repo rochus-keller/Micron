@@ -871,6 +871,7 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
             case Type::UINT32:
             case Type::SET:
                 out->ldc_i4(v.val.toUInt());
+                //v.type = mdl->getType(Type::INT32);
                 break;
             case Type::UINT64:
                 out->ldc_i8(v.val.toULongLong());
@@ -880,6 +881,7 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
             case Type::INT32:
             case Type::ConstEnum:
                 out->ldc_i4(v.val.toInt());
+                //v.type = mdl->getType(Type::INT32);
                 break;
             case Type::INT64:
                 out->ldc_i8(v.val.toLongLong());
@@ -904,13 +906,9 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
         break;
     case Value::VarDecl:
     case Value::LocalDecl:
-        {
-            // TODO
-        }
-        break;
     case Value::ParamDecl:
         {
-            // TODO
+            qWarning() << "TODO: Evaluator::pushMilStack value not yet supported";
         }
         break;
     default:

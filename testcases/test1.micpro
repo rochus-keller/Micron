@@ -15,13 +15,7 @@ size=0
 1\RelPath=GenericTest6.mic
 2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Generic3.mic
 2\RelPath=Generic3.mic
-3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/GenericTest1.mic
-3\RelPath=GenericTest1.mic
-4\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/GenericTest2.mic
-4\RelPath=GenericTest2.mic
-5\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/GenericTest3.mic
-5\RelPath=GenericTest3.mic
-size=2
+size=0
 
 [Packages]
 1\Name=@ByteArray()

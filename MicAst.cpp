@@ -279,7 +279,7 @@ QByteArray AstModel::getTempName()
 
 Declaration*AstModel::getTopModule() const
 {
-#if 0
+#if 1
     for( int i = scopes.size()-1; i >= 0; i--)
         if( scopes[i]->kind == Declaration::Module )
             return scopes[i];

@@ -180,8 +180,10 @@ void Project::interpret(bool dump)
 
     mdl->calcMemoryLayouts(sizeof(void*), 8);
 
-    foreach( Declaration* module, mdl->getModules() )
+    QList<Mil::Declaration*> modules = mdl->getModules();
+    for(int i = modules.size()-1; i >= 0; i--)
     {
+        Mil::Declaration* module = modules[i];
         if( !r.precompile(module) )
             return;
     }
@@ -190,7 +192,7 @@ void Project::interpret(bool dump)
         QTextStream out(stdout);
         r.dumpAll(out);
     }
-    foreach( Declaration* module, mdl->getModules() )
+    foreach( Declaration* module, modules )
     {
         if( !r.run(module) )
             return; // TODO: error handling

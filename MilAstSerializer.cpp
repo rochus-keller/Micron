@@ -440,6 +440,9 @@ bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, 
         case Declaration::Import:
             r->addImport(sub->imported->name);
             break;
+        case Declaration::Importer:
+            r->addImport(sub->imported->name, true);
+            break;
         case Declaration::ConstDecl:
             renderConst(sub,r);
             break;

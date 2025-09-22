@@ -328,7 +328,7 @@ void Validator::visitStatSeq(Statement* stat)
                     error(curProc,"first argument must be a pointer to struct, union or object");
 
                 Type* refObj = deref(stat->d->outer->getType());
-                if( objOs && !equal(objOs, refObj) )
+                if( objOs && !equal(objOs, refObj) && !Type::isA(objOs,refObj) )
                     error(curProc,"the pointer base type on stack is not compatible with the required type");
 
                 Type* refFld = deref(stat->d->getType());
@@ -969,7 +969,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* ft = deref(e->d->getType());
                 Q_ASSERT(e->d->outer);
                 Type* ot2 = deref(e->d->outer->getType());
-                if( !equal(ot2, ot1) )
+                if( !equal(ot2, ot1) && !Type::isA(ot1, ot2) )
                 {
                     error(curProc, "ldfld type not compatible with type on the stack");
                     break;

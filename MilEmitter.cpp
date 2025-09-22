@@ -52,11 +52,11 @@ void Emitter::endModule(const RowCol& pos)
     d_out->endModule();
 }
 
-void Emitter::addImport(const QByteArray& fullName, const RowCol & pos)
+void Emitter::addImport(const QByteArray& fullName, const RowCol & pos, bool reverse)
 {
     Q_ASSERT( d_proc.isEmpty() && d_typeKind == 0 );
     lineout(pos);
-    d_out->addImport(fullName);
+    d_out->addImport(fullName, reverse);
 }
 
 void Emitter::addVariable(const Quali& typeRef, QByteArray name, const RowCol & pos, bool isPublic)
@@ -1138,6 +1138,8 @@ void Emitter::delta(int d)
 
 void Emitter::lineout(const RowCol & pos)
 {
+    if( !pos.isValid() )
+        return;
     const quint32 cur = lineset(pos);
     if( cur )
         d_out->line(cur);

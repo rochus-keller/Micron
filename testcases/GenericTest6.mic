@@ -13,18 +13,18 @@ var
 	l : RL.List
 	r : R
 
-	proc print( elem: ^R )
+	proc myprint( const elem: ^R )
 	begin
 		println(elem.name)
 		println(elem.age)
-	end print
+	end myprint
 begin
 	new(l)
 	r.name := "So long"
 	r.age := 52
-	l.setValue( r )
+	l.setValue( @r )
 	println(l.value.name)
 	println(l.value.age)
-	l.print(print)
+	l.print(myprint)
 	println("GenericTest6 done")
 end GenericTest6

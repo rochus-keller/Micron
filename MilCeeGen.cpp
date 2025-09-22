@@ -60,6 +60,15 @@ bool CeeGen::generate(Declaration* module, QIODevice* header, QIODevice* body)
 
     bout << "// " << module->name << ".c" << endl;
     bout << dedication << endl << endl;
+
+    Declaration* sub = curMod->subs;
+    while( sub )
+    {
+        if(sub->kind == Declaration::Importer )
+             bout << "#include \"" << Project::escapeFilename(sub->name) << ".h\"" << endl;
+
+        sub = sub->next;
+    }
     bout << "#include \"" << Project::escapeFilename(module->name) << ".h\"" << endl;
     bout << "#include \"MIC+.h\"" << endl;
     bout << "#include <stdlib.h>" << endl;
@@ -92,6 +101,16 @@ bool CeeGen::requiresBody(Declaration* module)
             if( !sub->extern_ && !sub->foreign_ )
                 return true;
             break;
+        case Declaration::TypeDecl:
+            if( sub->getType()->kind == Type::Object )
+            {
+                foreach( Declaration* d, sub->getType()->subs )
+                {
+                    if( d->kind == Declaration::Procedure && !d->forward )
+                        return true;
+                }
+            }
+            break;
         }
 
         sub = sub->next;
@@ -110,39 +129,28 @@ void CeeGen::visitModule()
    Declaration* sub = curMod->subs;
    while( sub )
    {
-       if( sub->kind == Declaration::Import )
+       switch(sub->kind)
        {
+       case Declaration::Import:
             hout << "#include \"" << Project::escapeFilename(sub->name) << ".h\"" << endl;
-       }
-       sub = sub->next;
-   }
-   hout << endl;
-
-   sub = curMod->subs;
-   while( sub )
-   {
-       if( sub->kind == Declaration::TypeDecl )
-       {
+            break;
+       case Declaration::TypeDecl:
            typeDecl(hout, sub);
            hout << ";" << endl;
            if( sub->getType()->objectInit && sub->getType()->isSOA() )
                // for structs, objects and fixlen arrays whose fields or elements need object initialization, create an initializer
                emitInitializer(sub->getType());
-       }
-       sub = sub->next;
-   }
-
-   sub = curMod->subs;
-   while( sub )
-   {
-       if( sub->kind == Declaration::ConstDecl )
-       {
+           break;
+       case Declaration::ConstDecl:
            hout << "#define " << qualident(sub);
            constValue(hout, sub->c, 0);
-           hout << endl << endl;
+           hout << endl;
+           break;
        }
+
        sub = sub->next;
    }
+   hout << endl;
 
    bout << "typedef struct $Class { struct $Class* super; } $Class;" << endl;
    bout << "static int $isinst(void* super, void* sub) {" << endl;
@@ -904,14 +912,14 @@ void CeeGen::emitInitializer(Type* t)
         if( field->kind != Declaration::Field )
             continue;
         Type* tt = deref(field->getType());
-        if( tt->isSO() )
+        if( tt->objectInit && tt->isSO() )
         {
-            bout << ws(1) << qualident(tt->decl) << "$init$(&obj->" << field->name << ", 1);" << endl;
-        }else if( tt->kind == Type::Array && tt->len )
+            bout << ws(1) << qualident(tt->decl) << "$init$(&obj[i]." << field->name << ", 1);" << endl;
+        }else if( tt->objectInit && tt->isA() )
         {
             Type* et = deref(tt->getType());
             if( et->isSO() )
-                bout << ws(1) << qualident(tt->decl) << "$init$(obj->" << field->name << ", " << tt->len << ");" << endl;
+                bout << ws(1) << qualident(tt->decl) << "$init$(obj[i]." << field->name << ", " << tt->len << ");" << endl;
         }
     }
 

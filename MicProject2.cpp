@@ -710,8 +710,10 @@ bool Project2::interpret(const QString& outDir)
 
     loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
 
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    QList<Mil::Declaration*> mods = loader.getModel().getModules();
+    for(int i = mods.size()-1; i >= 0; i--)
     {
+        Mil::Declaration* module = mods[i];
         if( !r.precompile(module) )            
             return false;
         else if( !outDir.isEmpty() )
@@ -724,7 +726,7 @@ bool Project2::interpret(const QString& outDir)
     }
     if( !outDir.isEmpty() )
         return true;
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    foreach( Mil::Declaration* module, mods )
     {
         if( !r.run(module) )
             return false; // TODO: error handling

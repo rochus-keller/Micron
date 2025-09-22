@@ -1547,10 +1547,12 @@ void Parser2::module() {
             expect(Tok_Semi, false, "module");
         }
     }
-    while( FIRST_ImportList(la.d_type) || FIRST_DeclarationSequence(la.d_type) ) {
+    while( FIRST_ImportList(la.d_type) || la.d_type == Tok_IMPORTER || FIRST_DeclarationSequence(la.d_type) ) {
 		if( FIRST_ImportList(la.d_type) ) {
 			ImportList();
-		} else if( FIRST_DeclarationSequence(la.d_type) || la.d_type == Tok_IMPORT || la.d_type == Tok_END || la.d_type == Tok_PROC || la.d_type == Tok_CONST || la.d_type == Tok_VAR || la.d_type == Tok_PROCEDURE || la.d_type == Tok_TYPE ) {
+        } if( la.d_type == Tok_IMPORTER ) {
+            ImporterList();
+        } else if( FIRST_DeclarationSequence(la.d_type) || la.d_type == Tok_IMPORT || la.d_type == Tok_END || la.d_type == Tok_PROC || la.d_type == Tok_CONST || la.d_type == Tok_VAR || la.d_type == Tok_PROCEDURE || la.d_type == Tok_TYPE ) {
 			DeclarationSequence();
 		} else
 			invalid("module");
@@ -1586,6 +1588,21 @@ void Parser2::ImportList() {
     // ok
 }
 
+void Parser2::ImporterList()
+{
+    expect(Tok_IMPORTER, false, "ImporterList");
+    importer();
+    while( la.d_type == Tok_Comma || la.d_type == Tok_ident ) {
+        if( la.d_type == Tok_Comma ) {
+            expect(Tok_Comma, false, "ImporterList");
+        }
+        importer();
+    }
+    if( la.d_type == Tok_Semi ) {
+        expect(Tok_Semi, false, "ImporterList");
+    }
+}
+
 void Parser2::import() {
     // QList<Token> path;
 #if 0
@@ -1605,12 +1622,30 @@ void Parser2::import() {
         MetaActuals(); // TODO
 	}
 #endif
-    Declaration* d = addDecl(cur, Declaration::Import);
-    Import i;
-    i.moduleName = cur.d_val;
-    Declaration* m = imp->loadModule(i);
+    if( imp )
+    {
+        Declaration* d = addDecl(cur, Declaration::Import);
+        Import i;
+        i.moduleName = cur.d_val;
+        Declaration* m = imp->loadModule(i);
+        if( m == 0 )
+            error(cur, QString("cannot import '%1'").arg(cur.d_val.constData()));
+        else
+            d->imported = m;
+    }else
+        qWarning() << "Parser2::import: importing" << cur.d_val << "without module loader";
+}
+
+void Parser2::importer()
+{
+    if( nextIsLine() ) {
+        Line();
+    }
+    expect(Tok_ident, false, "importer");
+    Declaration* d = addDecl(cur, Declaration::Importer);
+    Declaration* m = mdl->findModuleByName(cur.d_val);
     if( m == 0 )
-        error(cur, QString("cannot import '%1'").arg(cur.d_val.constData()));
+        error(cur, QString("cannot find importer '%1'").arg(cur.d_val.constData()));
     else
         d->imported = m;
 }

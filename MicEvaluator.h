@@ -90,7 +90,7 @@ protected:
     Value isOp(const Value& lhs, const Value& rhs, const RowCol &pos);
     void unaryMinusOp(Value&, const RowCol &pos);
     void unaryPlusOp(Value&, const RowCol &pos);
-    bool pushMilStack(const Value&, const RowCol &pos);
+    bool pushMilStack(const Value &, const RowCol &pos);
     void emitRelOp(quint8 op, bool unsig, const RowCol &pos);
     void emitArithOp(quint8 op, bool unsig, bool i64, const RowCol& pos);
     void adjustNumType(Type* me, Type* other);

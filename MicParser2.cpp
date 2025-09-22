@@ -4036,6 +4036,7 @@ void Parser2::module(const Import & import) {
                                         importedAt.d_row, importedAt.d_col, importer);
                     }
 
+#if 1
                     // we have to always replace the type.
                     // otherwise the wrong type is created when doing new(T) in the generic, and there
                     // is a loophole in type checking
@@ -4043,6 +4044,9 @@ void Parser2::module(const Import & import) {
                         delete modata.metaParams[i]->getType();
                     modata.metaParams[i]->setType(import.metaActuals[i].type);
                     modata.metaParams[i]->ownstype = false;
+                    if( import.metaActuals[i].isConst() && modata.metaParams[i]->kind == Declaration::ConstDecl)
+                        modata.metaParams[i]->data = import.metaActuals[i].val;
+#endif
                 }
         }else
         {
@@ -4062,28 +4066,22 @@ void Parser2::module(const Import & import) {
 
     for( int i = 0; i < modata.metaParams.size(); i++ )
     {
-        QVariant val;
         Type* type = modata.metaParams[i]->getType();
-        if( i < import.metaActuals.size() )
-        {
-            type = import.metaActuals[i].type;
-            val = import.metaActuals[i].val;
-        }
 
         if( type && type->kind == Type::Generic )
             modecl->generic = true; // not fully instantiated
 
         if( modata.metaParams[i]->kind == Declaration::ConstDecl )
         {
-             out->addConst(ev->toQuali(type), modata.metaParams[i]->name, modata.metaParams[i]->pos, val );
-             if( val.isNull() )
+             out->addConst(ev->toQuali(type), modata.metaParams[i]->name, modata.metaParams[i]->pos, modata.metaParams[i]->data );
+             if( modata.metaParams[i]->data.isNull() )
                  modecl->generic = true; // not fully instantiated
-#if 0
-             // TODO: fix intantiated generics
+#if 1
+        // TODO: fix intantiated generics
         }else if( type && type->kind == Type::Generic )
             out->addType(ev->toQuali(type).second, type->decl->pos,type->decl->isPublic(), ev->toQuali(type), Mil::EmiTypes::Generic);
-        else if( type )
-             out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(type),Mil::EmiTypes::Alias);
+        // else if( type )
+        //    out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(type),Mil::EmiTypes::Alias);
 #else
         }else if( type && type->isSimple() )
         {
@@ -4092,6 +4090,9 @@ void Parser2::module(const Import & import) {
             emitType(type); // why would we replicate the structured types here?
 #endif
     }
+
+    if( !import.metaActuals.isEmpty() && import.importer )
+        out->addImport(import.importer->data.value<ModuleData>().fullName, import.importedAt, true);
 
 	while( FIRST_ImportList(la.d_type) || FIRST_DeclarationSequence(la.d_type) ) {
 		if( FIRST_ImportList(la.d_type) ) {

@@ -949,7 +949,7 @@ quint32 Type::getAlignment(quint8 pointerWidth) const
 
 bool Type::isA(Type* sub, Type* super)
 {
-    if( sub == 0 || super == 0 )
+    if( sub == 0 || super == 0 || sub->kind != Object || super->kind != Object)
         return false;
     while(sub)
     {

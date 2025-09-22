@@ -37,7 +37,7 @@ namespace Mil
         void beginModule( const QByteArray& fullName, const QString& sourceFile, const RowCol&, const QByteArrayList& metaParamNames = QByteArrayList() );
         void endModule(const RowCol&);
 
-        void addImport(const QByteArray& fullName, const RowCol&);
+        void addImport(const QByteArray& fullName, const RowCol&, bool reverse = false);
 
         void addVariable( const Quali& typeRef, QByteArray name, const RowCol&, bool isPublic = true );
 
