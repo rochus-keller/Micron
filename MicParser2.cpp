@@ -4256,7 +4256,7 @@ MetaParamList Parser2::MetaParams() {
     res << MetaSection(isType);
     while( la.d_type == Tok_Semi || FIRST_MetaSection(la.d_type) ) {
         if( la.d_type == Tok_Semi ) {
-            expect(Tok_Comma, false, "MetaParams");
+            expect(Tok_Semi, false, "MetaParams");
 		}
         res << MetaSection(isType);
 	}

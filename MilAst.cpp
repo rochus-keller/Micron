@@ -386,7 +386,8 @@ Node::~Node()
 
 void Node::setType(Type* t)
 {
-    Q_ASSERT(type == 0);
+    if( type && ownstype )
+        delete type;
     type = t;
     if( t && !t->owned )
     {
