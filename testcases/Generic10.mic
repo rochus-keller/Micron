@@ -1,0 +1,24 @@
+module Generic10(type T)
+  
+  type Comparable = interface
+    proc compare(other: ^T): int32;
+  end;
+  
+  where T : Comparable;
+  
+  var items: array 100 of T;
+  
+  proc Find*(what: ^T): int32
+  var i: int32
+      t: ^T
+  begin
+    //for i := 0 to 99 do
+      i := 0
+      t := @items[i]
+      if t.compare(what) = 0 then
+        return i
+      end
+    //end
+    return -1
+  end Find
+end Generic10

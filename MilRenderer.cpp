@@ -164,6 +164,9 @@ void IlAsmRenderer::addType(const QByteArray& name, bool isPublic, const Quali& 
             out << len << " ";
         out << "of " << toString(baseType) << endl;
         break;
+    case EmiTypes::Interface:
+        out << "interface" << endl;
+        break;
     default:
         Q_ASSERT(false);
     }
@@ -855,7 +858,8 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
         {
             decl->typebound = true;
             Declaration* receiver = module->findSubByName(proc.binding);
-            if( receiver == 0 || receiver->kind != Declaration::TypeDecl || receiver->getType()->kind != Type::Object )
+            if( receiver == 0 || receiver->kind != Declaration::TypeDecl ||
+                    !(receiver->getType()->kind == Type::Object || receiver->getType()->kind == Type::Interface))
             {
                 error(curProc, QString("invalid receiver: %1").arg(proc.binding.constData()));
                 delete decl;
@@ -872,16 +876,21 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
                 }else if( forward )
                     error(curProc, QString("duplicate name: %1").arg(decl->name.constData()));
 
-                Type* ptr = decl->subs ? decl->subs->getType() : 0;
-                if( ptr ) ptr = ptr->deref();
-                Type* obj = ptr ? ptr->getType() : 0;
-                if( obj ) obj = obj->deref();
-                if( decl->subs == 0 || decl->subs->kind != Declaration::ParamDecl ||
-                        ptr == 0 ||  ptr->kind != Type::Pointer ||
-                        obj == 0 || obj->kind != Type::Object || obj != rt )
-                    error(curProc, QString("first parameter of a bound procedure must be a pointer to the object type"));
-                else if( decl->subs )
-                    decl->subs->typebound = true;
+                if( rt->kind == Type::Interface )
+                    decl->nobody = true; // interface procedures have no body and no self param
+                else
+                {
+                    Type* ptr = decl->subs ? decl->subs->getType() : 0;
+                    if( ptr ) ptr = ptr->deref();
+                    Type* obj = ptr ? ptr->getType() : 0;
+                    if( obj ) obj = obj->deref();
+                    if( decl->subs == 0 || decl->subs->kind != Declaration::ParamDecl ||
+                            ptr == 0 ||  ptr->kind != Type::Pointer ||
+                            obj == 0 || obj->kind != Type::Object || obj != rt )
+                        error(curProc, QString("first parameter of a bound procedure must be a pointer to the object type"));
+                    else if( decl->subs )
+                        decl->subs->typebound = true;
+                }
                 rt->subs.append(decl);
                 decl->outer = receiver;
             }
@@ -961,7 +970,8 @@ void IlAstRenderer::addType(const QByteArray& name, bool isPublic, const Quali& 
 {
     Q_ASSERT(module);
     Q_ASSERT(type == 0);
-    Q_ASSERT(typeKind == EmiTypes::Alias || typeKind == EmiTypes::Array || typeKind == EmiTypes::Pointer || typeKind == EmiTypes::Generic);
+    Q_ASSERT(typeKind == EmiTypes::Alias || typeKind == EmiTypes::Array || typeKind == EmiTypes::Pointer
+             || typeKind == EmiTypes::Generic || typeKind == EmiTypes::Interface);
 
     Declaration* decl = new Declaration();
     decl->kind = Declaration::TypeDecl;
@@ -983,6 +993,9 @@ void IlAstRenderer::addType(const QByteArray& name, bool isPublic, const Quali& 
         t->quali = new Quali();
         *t->quali = baseType;
         unresolved << t;
+        break;
+    case EmiTypes::Interface:
+        t->kind = Type::Interface;
         break;
     case EmiTypes::Generic:
         t->kind = Type::Generic;
@@ -1356,7 +1369,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
                 tmp->d = resolve(q);
                 if(tmp->d == 0)
                 {
-                    tmp->d = resolve(q); // TEST
+                    //tmp->d = resolve(q); // TEST
                     error(curProc,QString("cannot resolve qualident: %1").arg(format(q).constData()),pc++);
                     return res;
                 }

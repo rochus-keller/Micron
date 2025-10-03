@@ -105,7 +105,7 @@ namespace Mil
             FLOAT32, FLOAT64,
             INTPTR, DBLINTPTR,
             MaxBasicType,
-            Pointer, Proc, Array, Struct, Union, Object, NameRef, Generic
+            Pointer, Proc, Array, Struct, Union, Object, Interface, NameRef, Generic
         };
 #ifdef _DEBUG
         Kind kind;

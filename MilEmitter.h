@@ -56,7 +56,7 @@ namespace Mil
 
         void addType( const QByteArray& name, const RowCol&, bool isPublic, const Quali& baseType,
                       quint8 typeKind = EmiTypes::Alias, quint32 len = 0);
-            // use for Alias, Pointer, Array
+            // use for Alias, Pointer, Array, Interfaces
 
         void addField(const QByteArray& fieldName, const RowCol&, // on top level or in struct/union
                        const Quali& typeRef, bool isPublic = true, quint8 bits = 0);

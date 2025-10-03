@@ -110,7 +110,7 @@ namespace Mic
             FLT32, FLT64,
             SET,
             MaxBasicType,
-            Pointer, Proc, Array, Record, Object, ConstEnum, Generic };
+            Pointer, Proc, Array, Record, Object, Interface, ConstEnum, Generic };
         static const char* name[];
 #ifdef _DEBUG
         Kind kind;

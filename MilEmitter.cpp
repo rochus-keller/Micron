@@ -150,7 +150,8 @@ void Emitter::endType()
 void Emitter::addType(const QByteArray& name, const RowCol & pos, bool isPublic, const Quali& baseType, quint8 typeKind, quint32 len)
 {
     Q_ASSERT( d_typeKind == 0 );
-    Q_ASSERT( typeKind == EmiTypes::Alias || typeKind == EmiTypes::Pointer || typeKind == EmiTypes::Array || typeKind == EmiTypes::Generic);
+    Q_ASSERT( typeKind == EmiTypes::Alias || typeKind == EmiTypes::Pointer || typeKind == EmiTypes::Array
+              || typeKind == EmiTypes::Generic || typeKind == EmiTypes::Interface );
     lineout(pos);
     d_out->addType(name,isPublic,baseType,typeKind,len);
 }

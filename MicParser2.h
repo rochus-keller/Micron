@@ -139,6 +139,10 @@ namespace Mic {
         void module(const Import &import);
 		void ImportList();
 		void import();
+        Type *InterfaceType();
+        void InterfaceProc();
+        void WhereDecls();
+        void WhereDeclaration();
 
         static bool isUnique(const MetaParamList&, const Declaration*);
         MetaParamList MetaParams();
@@ -188,6 +192,8 @@ namespace Mic {
         Symbol *markDecl(Declaration* d);
         Symbol* markRef(Declaration* d, const RowCol& pos, quint8 what = 0);
         void checkPointerResolved(Type*);
+        void replaceAll(Type* what, Type* by);
+        void replaceAll(Declaration*,Type* what, Type* by);
 
     private:
         AstModel* mdl;

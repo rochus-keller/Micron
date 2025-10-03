@@ -34,6 +34,8 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_IdentList: return "IdentList";
 		case R_IfStatement: return "IfStatement";
 		case R_ImportList: return "ImportList";
+		case R_InterfaceProc: return "InterfaceProc";
+		case R_InterfaceType: return "InterfaceType";
 		case R_LabelRange: return "LabelRange";
 		case R_LoopStatement: return "LoopStatement";
 		case R_MetaActuals: return "MetaActuals";
@@ -58,6 +60,8 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_TypeDeclaration: return "TypeDeclaration";
 		case R_VariableDeclaration: return "VariableDeclaration";
 		case R_VariantPart: return "VariantPart";
+		case R_WhereDeclaration: return "WhereDeclaration";
+		case R_WhereDecls: return "WhereDecls";
 		case R_WhileStatement: return "WhileStatement";
 		case R_assignmentOrProcedureCall: return "assignmentOrProcedureCall";
 		case R_block: return "block";

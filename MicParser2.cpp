@@ -78,7 +78,8 @@ static inline bool FIRST_type(int tt) {
 	case Tok_ident:
 	case Tok_RECORD:
 	case Tok_PROC:
-		return true;
+    case Tok_INTERFACE:
+        return true;
 	default: return false;
 	}
 }
@@ -551,13 +552,13 @@ static inline bool FIRST_ProcedureBody(int tt) {
 	case Tok_CONST:
 	case Tok_BEGIN:
 	case Tok_PROC:
-		return true;
+        return true;
 	default: return false;
 	}
 }
 
 static inline bool FIRST_DeclarationSequence(int tt) {
-	return tt == Tok_VAR || tt == Tok_PROCEDURE || tt == Tok_TYPE || tt == Tok_CONST || tt == Tok_PROC;
+    return tt == Tok_VAR || tt == Tok_PROCEDURE || tt == Tok_TYPE || tt == Tok_CONST || tt == Tok_PROC;
 }
 
 static inline bool FIRST_ReturnStatement(int tt) {
@@ -594,6 +595,18 @@ static inline bool FIRST_MetaParams(int tt) {
 
 static inline bool FIRST_MetaSection(int tt) {
 	return tt == Tok_TYPE || tt == Tok_CONST || tt == Tok_ident;
+}
+
+static inline bool FIRST_InterfaceType(int tt) {
+    return tt == Tok_INTERFACE;
+}
+
+static inline bool FIRST_InterfaceProc(int tt) {
+    return tt == Tok_PROCEDURE || tt == Tok_ident || tt == Tok_PROC;
+}
+
+static inline bool FIRST_WhereDeclaration(int tt) {
+    return tt == Tok_ident;
 }
 
 #if 0
@@ -698,6 +711,46 @@ void Parser2::checkPointerResolved(Type * ptr)
             return;
         }
     }
+}
+
+void Parser2::replaceAll(Type *what, Type *by)
+{
+    Declaration* d = thisMod->link;
+    while(d)
+    {
+        replaceAll(d, what, by);
+        d = d->next;
+    }
+    d = mdl->getHelper();
+    while(d)
+    {
+        replaceAll(d, what, by);
+        d = d->next;
+    }
+}
+
+void Parser2::replaceAll(Declaration * d, Type *what, Type *by)
+{
+    switch(d->kind)
+    {
+    case Declaration::TypeDecl: {
+            Type* t = d->getType();
+            foreach(Declaration* sub, t->subs)
+                replaceAll(sub, what, by);
+            if( t->getType() == what ) // check Array, Proc and Pointer types
+                t->setType(by);
+        } break;
+    case Declaration::Procedure: {
+            Declaration* sub = d->link;
+            while(sub)
+            {
+                replaceAll(sub,what, by);
+                sub = sub->next;
+            }
+        } break;
+    }
+    if( d->getType() == what )
+        d->setType(by);
 }
 
 void Parser2::next() {
@@ -1266,7 +1319,9 @@ Type* Parser2::type(bool needsHelperDecl) {
         res = ProcedureType();
 	} else if( FIRST_enumeration(la.d_type) ) {
         res = enumeration();
-	} else
+    } else if( FIRST_InterfaceType(la.d_type) ) {
+        res = InterfaceType();
+    }  else
 		invalid("type");
     if( res && res->kind != Type::Undefined && isNewType && needsHelperDecl )
     {
@@ -1815,6 +1870,14 @@ void Parser2::emitType(Type* t)
         out->addType(ev->toQuali(t).second, t->decl->pos,t->decl->isPublic(),
                      ev->toQuali(t), Mil::EmiTypes::Generic);
 
+    }else if( t->kind == Type::Interface )
+    {
+        out->addType(ev->toQuali(t).second,t->decl->pos, t->decl->isPublic(), Mil::Quali(), Mil::EmiTypes::Interface );
+        foreach( Declaration* proc, t->subs )
+        {
+            out->beginProc(proc->name, proc->pos, true, Mil::ProcData::Normal, ev->toQuali(t).second);
+            out->endProc(proc->pos);
+        }
     }else
         Q_ASSERT(false);
 }
@@ -2181,7 +2244,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 tmp->setType(res->getType()->getType());
                 res = tmp;
             }
-            if( res->getType()->kind == Type::Record || res->getType()->kind == Type::Object )
+            if( res->getType()->kind == Type::Record || res->getType()->kind == Type::Object || res->getType()->kind == Type::Interface )
             {
                 Declaration* field = res->getType()->findMember(cur.d_val,res->getType()->kind == Type::Object);
                 if( field == 0 ) {
@@ -2389,7 +2452,7 @@ Expression* Parser2::maybeQualident(Symbol** s)
             mdl->getTopScope()->typebound && mdl->getTopScope()->autoself )
         cur.d_val = SELF;
 
-    Declaration* d = mdl->findDecl(cur.d_val);
+    Declaration* d = findDecl(cur);
     if( d )
     {
         quint8 visi = Declaration::NA; // symbol is local, no read/write restriction
@@ -2419,10 +2482,7 @@ Expression* Parser2::maybeQualident(Symbol** s)
             res->visi = visi;
         return res;
     }else
-    {
-        error(cur,QString("cannot find declaration of '%1'").arg(cur.d_val.constData()));
         return 0;
-    }
 }
 
 Declaration* Parser2::resolveQualident(Parser2::Quali* qq, bool allowUnresovedLocal)
@@ -2518,8 +2578,10 @@ void Parser2::resolveDeferreds(bool reportError)
     {
         if( deferred[i].first == 0 )
             continue; // already handled
-        Declaration* d = mdl->findDecl(deferred[i].second.d_val);
-        if( d == 0 || d->getType() == 0 || d->kind != Declaration::TypeDecl )
+        Declaration* d = findDecl(deferred[i].second);
+        if( d == 0 )
+            deferred[i].first = 0; // already reported
+        else if( d->getType() == 0 || d->kind != Declaration::TypeDecl )
         {
             if( reportError && !deferred[i].first->invalid )
             {
@@ -3354,8 +3416,10 @@ void Parser2::RepeatStatement() {
 void Parser2::ForStatement() {
 	expect(Tok_FOR, true, "ForStatement");
 	expect(Tok_ident, false, "ForStatement");
-    Declaration* idxvar = mdl->findDecl(cur.d_val);
-    if( idxvar == 0 || !idxvar->isLvalue() )
+    Declaration* idxvar = findDecl(cur);
+    if( idxvar == 0 )
+        return; // already reported
+    if( !idxvar->isLvalue() )
     {
         error(cur,"identifier must reference a variable or parameter");
         return;
@@ -3739,8 +3803,10 @@ Parser2::NameAndType Parser2::Receiver() {
     expect(Tok_Colon, false, "Receiver");
     expect(Tok_ident, false, "Receiver");
     const Token type = cur;
-    Declaration* d = mdl->findDecl(cur.d_val);
-    if( d == 0 || d->kind != Declaration::TypeDecl || d->getType() == 0 ||
+    Declaration* d = findDecl(cur);
+    if( d == 0 )
+        return res; // already reported
+    if( d->kind != Declaration::TypeDecl || d->getType() == 0 ||
             (d->getType()->kind != Type::Object && d->getType()->kind != Type::Pointer ) ||
             (d->getType()->kind == Type::Pointer && ( d->getType()->getType() == 0 ||
                                                       d->getType()->getType()->kind != Type::Object)))
@@ -3761,8 +3827,10 @@ Parser2::NameAndType Parser2::Receiver2()
     res.id.d_val = SELF;
     expect(Tok_ident, false, "Receiver");
     const Token type = cur;
-    Declaration* d = mdl->findDecl(cur.d_val);
-    if( d == 0 || d->kind != Declaration::TypeDecl || d->getType() == 0 ||
+    Declaration* d = findDecl(cur);
+    if( d == 0 )
+        return res; // already reported
+    if( d->kind != Declaration::TypeDecl || d->getType() == 0 ||
             (d->getType()->kind != Type::Object && d->getType()->kind != Type::Pointer ) ||
             (d->getType()->kind == Type::Pointer && ( d->getType()->getType() == 0 ||
                                                       d->getType()->getType()->kind != Type::Object)))
@@ -3805,7 +3873,7 @@ void Parser2::DeclarationSequence() {
 					expect(Tok_Semi, false, "DeclarationSequence");
 				}
 			}
-		} else if( la.d_type == Tok_VAR ) {
+        } else if( la.d_type == Tok_VAR ) {
 			expect(Tok_VAR, true, "DeclarationSequence");
 			while( FIRST_VariableDeclaration(la.d_type) ) {
 				VariableDeclaration();
@@ -4076,31 +4144,27 @@ void Parser2::module(const Import & import) {
              out->addConst(ev->toQuali(type), modata.metaParams[i]->name, modata.metaParams[i]->pos, modata.metaParams[i]->data );
              if( modata.metaParams[i]->data.isNull() )
                  modecl->generic = true; // not fully instantiated
-#if 1
-        // TODO: fix intantiated generics
-        }else if( type && type->kind == Type::Generic )
-            out->addType(ev->toQuali(type).second, type->decl->pos,type->decl->isPublic(), ev->toQuali(type), Mil::EmiTypes::Generic);
-        // else if( type )
-        //    out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(type),Mil::EmiTypes::Alias);
-#else
-        }else if( type && type->isSimple() )
+        } else if( type && type->kind == Type::Generic )
         {
-           out->addType(modata.metaParams[i]->name,modata.metaParams[i]->pos, false,ev->toQuali(type),Mil::EmiTypes::Alias);
-        }else if( type )
-            emitType(type); // why would we replicate the structured types here?
-#endif
+            // TODO: don't register generic parameters here because we might have later where clauses
+            // but so far we have the problem that AstRenderer expects declarations in order
+            out->addType(ev->toQuali(type).second, type->decl->pos,type->decl->isPublic(), ev->toQuali(type), Mil::EmiTypes::Generic);
+        }
     }
 
     if( !import.metaActuals.isEmpty() && import.importer )
         out->addImport(import.importer->data.value<ModuleData>().fullName, import.importedAt, true);
 
-	while( FIRST_ImportList(la.d_type) || FIRST_DeclarationSequence(la.d_type) ) {
+    while( FIRST_ImportList(la.d_type) || la.d_type == Tok_WHERE || FIRST_DeclarationSequence(la.d_type) ) {
 		if( FIRST_ImportList(la.d_type) ) {
 			ImportList();
+        }else if( la.d_type == Tok_WHERE )
+        {
+            WhereDecls();
         } else if( FIRST_DeclarationSequence(la.d_type) || la.d_type == Tok_BEGIN ||
                    la.d_type == Tok_TYPE || la.d_type == Tok_VAR || la.d_type == Tok_CONST ||
-                   la.d_type == Tok_IMPORT || la.d_type == Tok_END || la.d_type == Tok_PROCEDURE ||
-                   la.d_type == Tok_PROC ) {
+                   la.d_type == Tok_IMPORT || la.d_type == Tok_END ||
+                   la.d_type == Tok_PROCEDURE || la.d_type == Tok_PROC ) {
             DeclarationSequence();
 		} else
 			invalid("module");
@@ -4119,6 +4183,17 @@ void Parser2::module(const Import & import) {
         mdl->closeScope();
     }
 	expect(Tok_END, true, "module");
+
+#if 0
+    for( int i = 0; i < modata.metaParams.size(); i++ )
+    {
+        // TODO here are finally all generic params declared, for which there was no where clause
+        Type* type = modata.metaParams[i]->getType();
+        if( type && type->kind == Type::Generic )
+            out->addType(ev->toQuali(type).second, type->decl->pos,type->decl->isPublic(), ev->toQuali(type), Mil::EmiTypes::Generic);
+    }
+#endif
+
     out->endModule(la.toRowCol());
     expect(Tok_ident, false, "module");
     if( cur.d_val.constData() != unsuffixedName.constData() )
@@ -4331,4 +4406,74 @@ Xref Parser2::takeXref()
     subs.clear();
     first = last = new Symbol();
     return res;
+}
+
+Type* Parser2::InterfaceType() {
+    expect(Tok_INTERFACE, false, "InterfaceType");
+    Type* rec = new Type();
+    rec->pos = cur.toRowCol();
+    rec->kind = Type::Interface;
+    typeStack.push_back(rec);
+    mdl->openScope(0);
+    while( FIRST_InterfaceProc(la.d_type) ) {
+        InterfaceProc();
+    }
+    expect(Tok_END, false, "InterfaceType");
+    rec->subs = toList(mdl->closeScope(true));
+    typeStack.pop_back();
+    return rec;
+}
+
+void Parser2::InterfaceProc() {
+    if( FIRST_procedure(la.d_type) ) {
+        procedure();
+    }
+    expect(Tok_ident, false, "InterfaceProc");
+    Declaration* d = addDecl(cur, Declaration::ReadWrite, Declaration::Procedure);
+    mdl->openScope(d);
+    if( FIRST_FormalParameters(la.d_type) ) {
+        d->setType(FormalParameters());
+    }
+    if( la.d_type == Tok_Semi ) {
+        expect(Tok_Semi, false, "InterfaceProc");
+    }
+    mdl->closeScope();
+}
+
+void Parser2::WhereDecls() {
+    expect(Tok_WHERE, false, "WhereDecls");
+    while( FIRST_WhereDeclaration(la.d_type) ) {
+        WhereDeclaration();
+        if( la.d_type == Tok_Semi ) {
+            expect(Tok_Semi, false, "WhereDecls");
+        }
+    }
+}
+
+void Parser2::WhereDeclaration() {
+    expect(Tok_ident, false, "WhereDeclaration");
+    const Token name = cur;
+    expect(Tok_Colon, false, "WhereDeclaration");
+    Type* t = type();
+
+    Declaration* d = mdl->findDecl(name.d_val);
+    if( d == 0 || !d->generic )
+    {
+        error(name, QString("name is not a generic parameter '%1'").arg(name.d_val.constData()) );
+        if( t && !t->owned )
+            delete t;
+        return;
+    }
+    markRef(d, name.toRowCol());
+    if( d->getType() && d->getType()->kind != Type::Generic )
+    {
+        error(name, "only one WHERE clause per generic parameter supported" );
+        if( t && !t->owned )
+            delete t;
+        return;
+    }
+    Type* what = d->getType();
+    replaceAll(what, t);
+    out->addType(d->name,d->pos,false,ev->toQuali(t), Mil::EmiTypes::Alias);
+
 }

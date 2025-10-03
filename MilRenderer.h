@@ -36,7 +36,7 @@ namespace Mil
 
     struct EmiTypes // types used in the Emitter interface
     {
-        enum Structured { Invalid, Struct, Union, Object, ProcType, MethType, Alias, Pointer, Array, Generic, MaxType };
+        enum Structured { Invalid, Struct, Union, Object, Interface, ProcType, MethType, Alias, Pointer, Array, Generic, MaxType };
         enum Basic { Unknown, I1, I2, I4, I8, R4, R8, U1, U2, U4, U8, IntPtr, IPP };
     };
 

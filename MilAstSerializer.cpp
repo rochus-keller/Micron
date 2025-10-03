@@ -89,6 +89,14 @@ static void renderType(const Declaration* d, AbstractRenderer* r, AstSerializer:
                 renderProc(p, r, dbi);
             }
         } break;
+    case Type::Interface:
+        r->addType(d->name, d->public_, Quali(), Mil::EmiTypes::Interface);
+        foreach( Declaration* p, t->getMethodTable(false) )
+        {
+            lineout(r, p->pos, dbi);
+            renderProc(p, r, dbi);
+        }
+        break;
     case Type::Proc:
         {
             Mil::ProcData proc;
@@ -179,7 +187,9 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
         case IL_newarr:
         case IL_ptroff:
         case IL_sizeof: {
-                Quali q = e->d->forwardToProc()->toQuali();
+                Quali q;
+                if( e->d )
+                    q = e->d->forwardToProc()->toQuali();
                 proc.body << ProcData::Op(e->kind, QVariant::fromValue(q));
             } break;
         case IL_callvirt:
@@ -188,8 +198,11 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
         case IL_ldflda:
         case IL_ldmeth: {
                 Trident td;
-                td.second = e->d->forwardToProc()->name;
-                td.first = e->d->outer->toQuali();
+                if( e->d )
+                {
+                    td.second = e->d->forwardToProc()->name;
+                    td.first = e->d->outer->toQuali();
+                }
                 proc.body << ProcData::Op(e->kind, QVariant::fromValue(td));
             } break;
         case IL_ldarg_s:
@@ -328,13 +341,20 @@ static void renderStats(ProcData& proc, Statement* s, quint32& line, AstSerializ
             case IL_stelem:
             case IL_stind:
             case IL_stvar:
-                proc.body << ProcData::Op(s->kind, QVariant::fromValue(s->d->toQuali()));
+                if( s->d )
+                    proc.body << ProcData::Op(s->kind, QVariant::fromValue(s->d->toQuali()));
+                else
+                    qCritical() << proc.name << proc.body.size() << s_opName[s->kind] << ": invalid declaration";
                 break;
             case IL_stfld: {
                     Trident td;
-                    td.second = s->d->name;
-                    td.first = s->d->outer->toQuali();
-                    proc.body << ProcData::Op(s->kind, QVariant::fromValue(td));
+                    if( s->d )
+                    {
+                        td.second = s->d->name;
+                        td.first = s->d->outer->toQuali();
+                        proc.body << ProcData::Op(s->kind, QVariant::fromValue(td));
+                    }else
+                        qCritical() << proc.name << proc.body.size() << s_opName[s->kind] << ": invalid declaration";
                 } break;
             default:
                 proc.body << ProcData::Op(s->kind);

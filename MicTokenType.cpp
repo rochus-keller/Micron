@@ -85,6 +85,7 @@ namespace Mic {
 			case Tok_TYPE: return "TYPE";
 			case Tok_UNTIL: return "UNTIL";
 			case Tok_VAR: return "VAR";
+			case Tok_WHERE: return "WHERE";
 			case Tok_WHILE: return "WHILE";
 			case Tok_ident: return "ident";
 			case Tok_integer: return "integer";
@@ -180,6 +181,7 @@ namespace Mic {
 			case Tok_TYPE: return "Tok_TYPE";
 			case Tok_UNTIL: return "Tok_UNTIL";
 			case Tok_VAR: return "Tok_VAR";
+			case Tok_WHERE: return "Tok_WHERE";
 			case Tok_WHILE: return "Tok_WHILE";
 			case Tok_ident: return "Tok_ident";
 			case Tok_integer: return "Tok_integer";
@@ -707,12 +709,21 @@ namespace Mic {
 			break;
 		case 'W':
 			if( at(str,len,i+1) == 'H' ){
-				if( at(str,len,i+2) == 'I' ){
+				switch( at(str,len,i+2) ){
+				case 'E':
+					if( at(str,len,i+3) == 'R' ){
+						if( at(str,len,i+4) == 'E' ){
+							res = Tok_WHERE; i += 5;
+						}
+					}
+					break;
+				case 'I':
 					if( at(str,len,i+3) == 'L' ){
 						if( at(str,len,i+4) == 'E' ){
 							res = Tok_WHILE; i += 5;
 						}
 					}
+					break;
 				}
 			}
 			break;

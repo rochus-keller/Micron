@@ -47,6 +47,7 @@ namespace Mic {
 		void PointerType();
 		void enumeration();
 		void constEnum();
+		void WhereDeclaration();
 		void VariableDeclaration();
 		void designator();
 		void selector();
@@ -82,6 +83,8 @@ namespace Mic {
 		void ExitStatement();
 		void procedure();
 		void ProcedureType();
+		void InterfaceType();
+		void InterfaceProc();
 		void ProcedureDeclaration();
 		void ProcedureHeading();
 		void ForwardDecl();
@@ -96,6 +99,7 @@ namespace Mic {
 		void FormalType();
 		void module();
 		void ImportList();
+		void WhereDecls();
 		void import();
 		void MetaActuals();
 		void MetaParams();

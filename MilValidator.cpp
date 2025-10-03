@@ -419,7 +419,7 @@ Statement* Validator::visitIfThenElse(Statement* stat)
     visitExpr(stat->e);
     pc++; // THEN
     expectN(1, stat); // IF args points to the boolean expression,
-    if( !isInt32(deref(stat->args->getType())) )
+    if( stat->args == 0 || !isInt32(deref(stat->args->getType())) )
         error(curProc,"expecting a 32 bit result of boolean expression");
     visitStatSeq(stat->body);
     if( stat->next && stat->next->kind == IL_else )
@@ -1162,6 +1162,8 @@ Expression* Validator::visitExpr(Expression* e)
         case IL_callinst:
             {
                 Declaration* proc = e->d;
+                if( proc == 0 )
+                    break; // reported elsewhere
                 DeclList params = proc->getParams();
                 const int numOfParams = params.size();
                 if( !expectN(numOfParams, e) )

@@ -95,6 +95,7 @@ namespace Mic {
 		Tok_TYPE,
 		Tok_UNTIL,
 		Tok_VAR,
+		Tok_WHERE,
 		Tok_WHILE,
 
 		TT_Specials,
