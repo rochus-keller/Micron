@@ -172,7 +172,7 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
         {
         case IL_call:
         case IL_calli:
-        case IL_callvi:
+        case IL_callmi:
         case IL_castptr:
         case IL_initobj:
         case IL_isinst:
@@ -388,6 +388,8 @@ static void renderProc(const Declaration* p, AbstractRenderer* r, AstSerializer:
         proc.kind = ProcData::Inline;
     else if(p->invar)
         proc.kind = ProcData::Invar;
+    else if(p->nobody)
+        proc.kind = ProcData::Abstract;
     else
         proc.kind = ProcData::Normal;
 

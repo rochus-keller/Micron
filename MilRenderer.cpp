@@ -347,6 +347,9 @@ void IlAsmRenderer::render(const ProcData& m)
     case ProcData::Invar:
         out << " invar ";
         break;
+    case ProcData::Abstract:
+        out << " abstract ";
+        break;
     case ProcData::ModuleInit:
         out << " init ";
         break;
@@ -358,7 +361,7 @@ void IlAsmRenderer::render(const ProcData& m)
     out << endl;
 
     if(m.kind == ProcData::ProcType || m.kind == ProcData::MethType ||
-            m.kind == ProcData::Extern || m.kind == ProcData::Foreign || m.kind == ProcData::Forward )
+            m.kind == ProcData::Extern || m.kind == ProcData::Foreign || m.kind == ProcData::Forward || m.kind == ProcData::Abstract )
         return;
 
     if( !m.locals.isEmpty() )
@@ -658,13 +661,7 @@ void IlAstRenderer::endModule()
 
     resolveAll(true);
 
-#if 0
-    // print not yet validated MIL to stdout
-    QFile out;
-    out.open(stdout, QIODevice::WriteOnly);
-    IlAsmRenderer r(&out, false);
-    AstSerializer::render(&r,module, Mil::AstSerializer::None);
-#endif
+    //dump("before validation");
 
     if( toDelete )
     {
@@ -686,6 +683,7 @@ void IlAstRenderer::endModule()
             errors << ee;
         }
     }
+    dump("after validation");
 #endif
 }
 
@@ -1278,10 +1276,11 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
         case IL_stelem_ip:
         case IL_stelem_ipp:
         case IL_pop:
-        case IL_ret:
         case IL_strcpy:
         case IL_free:
         case IL_exit:
+            break;
+        case IL_ret:
             break;
         default:
             error(curProc,QString("unexpected operation '%1'").arg(s_opName[ops[pc].op]), pc);
@@ -1297,7 +1296,9 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
     Expression* res = 0;
     while(pc < ops.size() && (isExprOp((IL_op)ops[pc].op) || ops[pc].op == IL_line) )
     {
-        if( ops[pc].op == IL_line )
+        const IL_op op = (IL_op)ops[pc].op;
+
+        if( op == IL_line )
         {
             curPos = Mic::RowCol(ops[pc].arg.toUInt());
             pc++;
@@ -1306,14 +1307,14 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
 
         Expression* tmp = new Expression();
         tmp->pos = curPos;
-        tmp->kind = (IL_op)ops[pc].op;
+        tmp->kind = op;
 
         if( res )
             res->append(tmp);
         else
             res = tmp;
 
-        switch(ops[pc].op)
+        switch(op)
         {
         case IL_iif: {
                 // we use this compound to assure next always points to the next expression,
@@ -1350,7 +1351,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
             break;
         case IL_call:
         case IL_calli:
-        case IL_callvi:
+        case IL_callmi:
         case IL_castptr:
         case IL_initobj:
         case IL_isinst:
@@ -1383,9 +1384,10 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
                 tmp->d = derefTrident(td);
                 if(tmp->d == 0 )
                 {
+                    tmp->d = derefTrident(td);
                     error(curProc,QString("cannot resolve trident: %1.%2").arg(format(td.first).constData()).
                           arg(td.second.constData()), pc++);
-                    return res;
+                    //return res;
                 }
             } break;
         case IL_ldarg_s:
@@ -1554,6 +1556,18 @@ void IlAstRenderer::resolveAll(bool reportError)
                 t->setType(d->getType());
         }
     }
+}
+
+void IlAstRenderer::dump(const char *title)
+{
+    // print not yet validated MIL to stdout
+    QFile out;
+    out.open(stdout, QIODevice::WriteOnly);
+    out.write("// ");
+    out.write(title);
+    out.write("\n\n");
+    IlAsmRenderer r(&out, false);
+    AstSerializer::render(&r,module, Mil::AstSerializer::None);
 }
 
 QVariant ConstrLiteral::toVariant(Constant* c, Type* t)

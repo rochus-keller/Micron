@@ -1256,7 +1256,6 @@ void Parser2::TypeDeclaration() {
     // NOTE: we no longer support this, instead use the Item = pointer to ItemDesc trick
 #ifdef HAVE_SELFREF
     Declaration* d = addDecl(id,Declaration::TypeDecl);
-    thisDecl = d;
 #else
     thisDecl = 0;
 #endif
@@ -1292,6 +1291,10 @@ void Parser2::TypeDeclaration() {
             d->data = QVariant::fromValue(super->decl);
             subs[super->decl].append(d);
         }
+    }else if( t && t->kind == Type::Interface )
+    {
+        foreach( Declaration* sub, t->subs )
+            sub->outer = d;
     }
 
     thisDecl = 0;
@@ -1353,6 +1356,7 @@ Type* Parser2::NamedType(Quali* qout,bool allowUnresovedLocal) {
         return 0;
     if( d->kind != Declaration::TypeDecl )
         error(tok, QString("invalid type: %1").arg(d->name.constData()) );
+#ifdef HAVE_SELFREF
     if( !allowUnresovedLocal && thisDecl && thisDecl == d )
     {
         // this is a reference to the current type declaration.
@@ -1369,6 +1373,7 @@ Type* Parser2::NamedType(Quali* qout,bool allowUnresovedLocal) {
             return 0;
         }
     }else
+#endif
         return d->getType();
 }
 
@@ -4146,9 +4151,11 @@ void Parser2::module(const Import & import) {
                  modecl->generic = true; // not fully instantiated
         } else if( type && type->kind == Type::Generic )
         {
-            // TODO: don't register generic parameters here because we might have later where clauses
-            // but so far we have the problem that AstRenderer expects declarations in order
-            out->addType(ev->toQuali(type).second, type->decl->pos,type->decl->isPublic(), ev->toQuali(type), Mil::EmiTypes::Generic);
+#if 1
+            // when the type is not yet determined we need an up-front generic declaration of the type, otherwise we cannot resolve all
+            // required symbols. A WHERE clause can later update the type of this declaration.
+            out->addType(ev->toQuali(type).second, type->decl->pos,type->decl->isPublic(), Mil::Quali(), Mil::EmiTypes::Generic);
+#endif
         }
     }
 

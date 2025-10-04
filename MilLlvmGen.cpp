@@ -1760,7 +1760,7 @@ QByteArray LlvmGen::expression(Expression* e, int level)
         break;
 
     case IL_calli:
-    case IL_callvi:
+    case IL_callmi:
         {
             // Indirect call
             QByteArray fptr = expression(e->lhs, level+1);

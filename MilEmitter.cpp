@@ -301,10 +301,10 @@ void Emitter::calli_(const Quali& methodRef, int argCount, bool hasRet)
     delta(-argCount + (hasRet?1:0) );
 }
 
-void Emitter::callvi_(const Quali& methodRef, int argCount, bool hasRet)
+void Emitter::callmi_(const Quali& methodRef, int argCount, bool hasRet)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    ops->append(ProcData::Op(IL_callvi,QVariant::fromValue(methodRef)) );
+    ops->append(ProcData::Op(IL_callmi,QVariant::fromValue(methodRef)) );
     delta(-argCount + (hasRet?1:0) );
 }
 

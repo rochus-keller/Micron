@@ -1393,7 +1393,7 @@ void CilAsmGen::expression(Expression* e)
         }
         break;
         
-    case IL_callvi:
+    case IL_callmi:
         {
             // Call through typebound procedure
             expression(e->lhs);  // Typebound proc struct

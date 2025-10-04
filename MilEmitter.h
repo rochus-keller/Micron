@@ -77,7 +77,7 @@ namespace Mil
         void and_();
         void call_( const Quali& methodRef, int argCount = 0, bool hasRet = false);
         void calli_( const Quali& methodRef, int argCount, bool hasRet = false );
-        void callvi_(const Quali& methodRef, int argCount, bool hasRet = false );
+        void callmi_(const Quali& methodRef, int argCount, bool hasRet = false );
         void callinst_( const Trident& methodRef, int argCount, bool hasRet = false );
         void callvirt_( const Trident& methodRef, int argCount, bool hasRet = false );
         void case_(const CaseLabelList&);
@@ -111,6 +111,7 @@ namespace Mil
         void ldfld_(const Trident& fieldRef);
         void ldflda_(const Trident& fieldRef);
         void ldmeth_(const Trident& methodRef); // CIL ldvirtftn, returns methref
+        void lditfmeth_(const Trident& methodRef);
         void ldproc_(const Quali& methodRef); // CIL ldftn
         void ldind_(const Quali& typeRef); // was CIL ldobj
         void ldind_(EmiTypes::Basic);

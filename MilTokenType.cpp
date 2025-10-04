@@ -35,7 +35,7 @@ namespace Mil {
 			case Tok_CALL: return "CALL";
 			case Tok_CALLI: return "CALLI";
 			case Tok_CALLINST: return "CALLINST";
-			case Tok_CALLVI: return "CALLVI";
+			case Tok_CALLMI: return "CALLMI";
 			case Tok_CALLVIRT: return "CALLVIRT";
 			case Tok_CASE: return "CASE";
 			case Tok_CASTPTR: return "CASTPTR";
@@ -255,7 +255,7 @@ namespace Mil {
 			case Tok_CALL: return "Tok_CALL";
 			case Tok_CALLI: return "Tok_CALLI";
 			case Tok_CALLINST: return "Tok_CALLINST";
-			case Tok_CALLVI: return "Tok_CALLVI";
+			case Tok_CALLMI: return "Tok_CALLMI";
 			case Tok_CALLVIRT: return "Tok_CALLVIRT";
 			case Tok_CASE: return "Tok_CASE";
 			case Tok_CASTPTR: return "Tok_CASTPTR";
@@ -575,14 +575,17 @@ namespace Mil {
 								res = Tok_CALLI; i += 5;
 							}
 							break;
+						case 'M':
+							if( at(str,len,i+5) == 'I' ){
+								res = Tok_CALLMI; i += 6;
+							}
+							break;
 						case 'V':
 							if( at(str,len,i+5) == 'I' ){
 								if( at(str,len,i+6) == 'R' ){
 									if( at(str,len,i+7) == 'T' ){
 										res = Tok_CALLVIRT; i += 8;
 									}
-								} else {
-									res = Tok_CALLVI; i += 6;
 								}
 							}
 							break;

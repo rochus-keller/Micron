@@ -1,0 +1,298 @@
+(* This code is derived from the SOM benchmarks, see AUTHORS.md file.
+ *
+ * Copyright (c) 2024 Rochus Keller <me@rochus-keller.ch> (for Micron migration)
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the 'Software'), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *)
+ 
+module Vector(T)
+
+import I := Interfaces(T)
+
+type
+	Equal* = proc(const lhs,rhs: ^T):boolean
+	Vector* = pointer to record
+				firstIdx, lastIdx, length: integer
+				storage: pointer to array of T
+			 end
+
+proc expand*(me: Vector; newLength: integer)
+var i: integer; old: pointer to array of T
+begin
+    if newLength <= me.length then
+        return
+    end
+
+    if newLength > 0 then
+    	old := me.storage
+        new(me.storage, newLength) 
+        if old # nil then
+		    for i := 0 to me.length -1 do
+		    	me.storage[i] := old[i]
+		    end
+		end
+    end
+    me.length := newLength
+end expand
+
+proc enlarge(me: Vector; idx: integer)
+var newLength: integer
+begin
+    newLength := me.length
+    while newLength <= idx do
+        newLength := newLength * 2
+        newLength := newLength + 50
+    end
+    expand(me, newLength)
+end enlarge
+
+proc at*(me: Vector; idx: integer): ^T
+begin
+    if (idx < 0) or (idx >= me.length) then
+        assert(false) // "out of bounds"
+    end
+    return @ me.storage[idx]
+end at
+
+proc atPut*(me: Vector; idx: integer; const val: ^T)
+begin
+    if idx >= me.length then
+        enlarge(me, idx)
+    end
+    me.storage[idx] := val^
+    if me.lastIdx < idx + 1 then
+        me.lastIdx := idx + 1
+    end
+end atPut
+
+proc forEach*(me: Vector; iter: I.ValueIterator; data: I.Data)
+var i: integer
+begin
+    for i := me.firstIdx to me.lastIdx - 1 do
+        iter(@me.storage[i], data)
+    end
+end forEach
+
+proc hasSome*(me: Vector; iter: I.TestIterator; data: I.Data): boolean
+var i: integer
+begin
+    for i := me.firstIdx to me.lastIdx - 1 do
+        if iter(@ me.storage[i], data) then
+            return true
+        end
+    end
+    return false
+end hasSome
+
+type 
+	Remove_Iterator = record
+    	newArray: pointer to array of T
+    	newLast: integer
+    	obj: ^T
+    	found: boolean
+    	eq: Equal
+	end
+
+proc remove_iter(const value: ^T; data: I.Data)
+var me: ^Remove_Iterator
+begin
+    me := data(Remove_Iterator)
+    if me.eq(value, me.obj) then
+        me.found := true
+    else
+        me.newArray[me.newLast] := value^
+        inc(me.newLast)
+    end
+end remove_iter
+
+proc remove*(me: Vector; const obj: ^T; eq: Equal): boolean 
+var iter: Remove_Iterator
+begin
+    if me.length = 0 then
+        return false
+    end
+
+	new( iter.newArray, me.length )
+    iter.found := false
+    iter.obj := obj
+    iter.newLast := 0
+    iter.eq := eq
+
+    forEach(me, remove_iter, @iter)
+
+    dispose(me.storage)
+    me.storage  := iter.newArray
+    me.lastIdx  := iter.newLast
+    me.firstIdx := 0
+    return iter.found
+end remove
+
+
+proc append*(me: Vector; const elem: ^T) 
+begin
+    if me.lastIdx >= me.length then
+        enlarge(me, me.lastIdx)
+    end
+	me.storage[me.lastIdx] := elem^
+    inc(me.lastIdx)
+end append
+
+proc isEmpty*(me: Vector):boolean
+begin
+    return me.lastIdx = me.firstIdx
+end isEmpty
+
+proc removeFirst*(me: Vector): ^T
+begin
+    if isEmpty(me) then
+        assert(false) // "empty"
+    end
+    inc(me.firstIdx)
+    return @ me.storage[me.firstIdx - 1]
+end removeFirst
+
+proc removeAll*(me: Vector) 
+begin
+    me.firstIdx := 0
+    me.lastIdx := 0
+end removeAll
+
+proc size*(me: Vector):integer
+begin
+    return me.lastIdx - me.firstIdx
+end size
+
+proc capacity*(me: Vector):integer
+begin
+    return me.length
+end capacity
+
+proc create*(len: integer):Vector
+var v: Vector
+begin
+    new(v)
+    v.firstIdx := 0
+    v.lastIdx := 0
+    v.length := 0
+    v.storage := nil
+    expand(v, len)
+    return v
+end create
+
+proc createDefault*():Vector
+begin
+    return create(0)
+end createDefault
+
+proc copy*(const in_: Vector):Vector
+var me: Vector; i: integer
+begin
+    me := create(in_.length)
+    me.firstIdx := in_.firstIdx
+    me.lastIdx := in_.lastIdx
+    for i := 0 to in_.length -1 do
+    	me.storage[i] := in_.storage[i]
+    end
+    return me
+end copy
+
+proc free*(me: Vector)
+begin
+    if me = nil then
+        return
+    end
+    if me.storage # nil then
+        dispose(me.storage)
+    end
+    dispose(me)
+end free
+
+proc swap(storage: pointer to array of T; i, j: integer) inline
+begin
+    assert(false) // "NotImplemented"
+end swap
+
+proc sort_imp(me: Vector; i, j: integer; c: I.CompareIterator; data: I.Data) 
+var n, ij, k, l: integer
+	di, dj, tt, dij: ^T
+begin
+
+    n := j + 1 - i
+    if n <= 1 then
+        return
+    end
+
+    di := @me.storage[i]
+    dj := @me.storage[j]
+
+    if c(di, dj, data) > 0 then
+        swap(me.storage, i, j)
+        tt := di
+        di := dj
+        dj := tt
+    end
+
+    if n > 2 then
+        ij := (i + j) div 2
+        dij := @me.storage[ij]
+
+        if c(di, dij, data) <= 0 then
+            if c(dij, dj, data) > 0 then
+                swap(me.storage, j, ij)
+                dij := dj
+            end
+        else
+            swap(me.storage, i, ij)
+            dij := di
+        end
+
+        if n > 3 then
+            k := i
+            l := j - 1
+
+            loop
+                while (k <= l) and (c(dij, @me.storage[l], data) <= 0) do
+                    dec(l)
+                end
+
+                inc(k)
+                while (k <= l) and (c( @me.storage[k], dij, data) <= 0) do
+                    inc(k)
+                end
+
+                if k > l then
+                    exit
+                end
+                swap(me.storage, k, l)
+            end
+
+            sort_imp(me, i, l, c, data)
+            sort_imp(me, k, j, c, data)
+        end
+    end
+end sort_imp
+
+proc sort*( me: Vector; c: I.CompareIterator; data: I.Data)
+begin
+    if size(me) > 0 then
+        sort_imp(me, me.firstIdx, me.lastIdx - 1, c, data)
+    end
+end sort
+
+end Vector

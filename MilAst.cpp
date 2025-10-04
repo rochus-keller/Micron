@@ -740,7 +740,7 @@ Type* Type::getBaseObject() const
 QList<Declaration*> Type::getMethodTable(bool recursive) const
 {
     DeclList tbl;
-    if( kind != Object )
+    if( kind != Object && kind != Interface )
         return tbl;
     if( recursive )
     {

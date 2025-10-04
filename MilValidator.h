@@ -43,6 +43,7 @@ namespace Mil
 
     protected:
         Type* deref(Type*);
+        Type* deref(Declaration*);
         void visitProcedure(Declaration* proc);
         void visitStatSeq(Statement* stat);
         Statement* visitIfThenElse(Statement* stat);

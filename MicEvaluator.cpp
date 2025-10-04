@@ -644,7 +644,7 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
         {
             out->line_(pos);
             if( callee.type->typebound )
-                out->callvi_(toQuali(callee.type), nArgs, ret != 0);
+                out->callmi_(toQuali(callee.type), nArgs, ret != 0);
             else
                 out->calli_(toQuali(callee.type), nArgs, ret != 0);
             break;

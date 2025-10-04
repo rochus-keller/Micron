@@ -1297,7 +1297,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         }
         break;
 
-    case IL_callvi:
+    case IL_callmi:
         {
             out << "(_ptr$ = &";
             expression(out, e->lhs );

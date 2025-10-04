@@ -62,7 +62,7 @@ namespace Mil
                 type(type),name(name),isPublic(0),bits(0),line(line){}
         };
 
-        enum Kind { Invalid, Intrinsic, Normal, Forward, Extern, Foreign, Inline, Invar, ModuleInit, ProcType, MethType };
+        enum Kind { Invalid, Intrinsic, Normal, Forward, Extern, Foreign, Abstract, Inline, Invar, ModuleInit, ProcType, MethType };
         uint kind : 4;
         uint isPublic : 1;
         quint32 endLine;
@@ -245,6 +245,7 @@ namespace Mil
                 curPos = RowCol(line);
             return curPos;
         }
+        void dump(const char* title);
 
     private:
         AstModel* mdl;

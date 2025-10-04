@@ -13,8 +13,8 @@ size=0
 [Modules]
 1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Generic10.mic
 1\RelPath=Generic10.mic
-2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/GenericTest7.mic
-2\RelPath=GenericTest7.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Interfaces.mic
+2\RelPath=Interfaces.mic
 size=1
 
 [Packages]

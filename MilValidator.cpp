@@ -109,6 +109,11 @@ Type*Validator::deref(Type* t)
         return mdl->getBasicType(Type::Undefined);
 }
 
+Type *Validator::deref(Declaration * d)
+{
+    return deref(d ? d->getType() : 0);
+}
+
 void Validator::visitProcedure(Declaration* proc)
 {
     if( proc->forward || proc->extern_ || proc->foreign_ )
@@ -305,7 +310,7 @@ void Validator::visitStatSeq(Statement* stat)
                 Type* etOs = deref(aos->getType()); // element type on stack
                 Type* refT = tokToBasicType(mdl, stat->kind);
                 if( stat->kind == IL_stelem )
-                    refT = deref(stat->d->getType());
+                    refT = deref(stat->d);
 
                 if( etOs && !equal(etOs,refT) )
                     error(curProc,"the element type on stack is not compatible with the required type");
@@ -692,7 +697,7 @@ Expression* Validator::visitExpr(Expression* e)
                 error(curProc, "expecting an unbound procedure");
             if( e->d && e->d->inline_ )
                 error(curProc, "cannot take address of inline procedure");
-            else
+            else if(e->d)
             {
                 Type* pt = new Type();
                 pt->kind = Type::Proc;
@@ -727,21 +732,24 @@ Expression* Validator::visitExpr(Expression* e)
 
                 // TODO: check whether object on stack is compat with e->d
 
-                Type* pt = new Type();
-                pt->kind = Type::Proc;
-                pt->typebound = true;
-                pt->setType(e->d->getType());
-                QList<Declaration*> params = e->d->getParams(false);
-                for( int i = 0; i < params.size(); i++ )
+                if( e->d )
                 {
-                    Declaration* p2 = new Declaration();
-                    *p2 = *params[i];
-                    p2->outer = 0;
-                    p2->ownstype = false;
-                    p2->next = 0;
-                    pt->subs.append(p2);
+                    Type* pt = new Type();
+                    pt->kind = Type::Proc;
+                    pt->typebound = true;
+                    pt->setType(e->d->getType());
+                    QList<Declaration*> params = e->d->getParams(false);
+                    for( int i = 0; i < params.size(); i++ )
+                    {
+                        Declaration* p2 = new Declaration();
+                        *p2 = *params[i];
+                        p2->outer = 0;
+                        p2->ownstype = false;
+                        p2->next = 0;
+                        pt->subs.append(p2);
+                    }
+                    e->setType(pt);
                 }
-                e->setType(pt);
 
                 stack.back() = e; // replace the stack top with methref
             }
@@ -796,7 +804,8 @@ Expression* Validator::visitExpr(Expression* e)
                 }
                 Type* ptr = new Type();
                 ptr->kind = Type::Pointer;
-                ptr->setType(e->d->getType());
+                if( e->d )
+                    ptr->setType(e->d->getType());
                 e->setType(ptr);
                 stack.back() = e;
             }
@@ -815,7 +824,7 @@ Expression* Validator::visitExpr(Expression* e)
                     error(curProc, "expecting a pointer to struct, union, object or fixed size array on the stack");
                     break;
                 }
-                Type* t2 = deref(e->d->getType());
+                Type* t2 = deref(e->d);
                 if( !equal(t2, t1) )
                 {
                     error(curProc, "initobj type not compatible with type on the stack");
@@ -934,7 +943,7 @@ Expression* Validator::visitExpr(Expression* e)
                 }
                 Type* et1 = tokToBasicType(mdl, e->kind);
                 if( e->kind == IL_ldelem )
-                    et1 = deref(e->d->getType());
+                    et1 = deref(e->d);
                 Type* et2 = deref(array->getType());
                 if( et1 && !equal(et1,et2) )
                 {
@@ -966,9 +975,9 @@ Expression* Validator::visitExpr(Expression* e)
                     error(curProc, "expecting a pointer to struct, union or object on the stack");
                     break;
                 }
-                Type* ft = deref(e->d->getType());
+                Type* ft = deref(e->d);
                 Q_ASSERT(e->d->outer);
-                Type* ot2 = deref(e->d->outer->getType());
+                Type* ot2 = deref(e->d ? e->d->outer : 0);
                 if( !equal(ot2, ot1) && !Type::isA(ot1, ot2) )
                 {
                     error(curProc, "ldfld type not compatible with type on the stack");
@@ -989,7 +998,7 @@ Expression* Validator::visitExpr(Expression* e)
         case IL_ldvar:
         case IL_ldvara:
             {
-                Type* varType = deref(e->d->getType());
+                Type* varType = deref(e->d);
                 if( e->kind == IL_ldvara )
                 {
                     Type* ptr = new Type();
@@ -1041,7 +1050,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* baseOnStack = deref(ptrT->getType());
                 Type* baseInOp = tokToBasicType(mdl, e->kind);
                 if( e->kind == IL_ldind )
-                    baseInOp = deref(e->d->getType());
+                    baseInOp = deref(e->d);
 
                 if( e->kind == IL_ldind &&
                         (baseOnStack->kind == Type::Array && baseOnStack->len == 0 &&
@@ -1065,7 +1074,7 @@ Expression* Validator::visitExpr(Expression* e)
             break;
         case IL_newobj:
             {
-                Type* t = deref(e->d->getType());
+                Type* t = deref(e->d);
                 Type* ptr = new Type();
                 ptr->kind = Type::Pointer;
                 ptr->setType(t);
@@ -1086,7 +1095,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* lhsT = deref(e->lhs->getType());
                 if( !isInt32(lhsT) )
                     error(curProc, "expecing an 32 bit integer on stack");
-                Type* t = deref(e->d->getType());
+                Type* t = deref(e->d);
                 Type* array = new Type();
                 array->kind = Type::Array;
                 array->objectInit = t->objectInit;
@@ -1127,13 +1136,13 @@ Expression* Validator::visitExpr(Expression* e)
         case IL_nop:
             break;
         case IL_calli:
-        case IL_callvi:
+        case IL_callmi:
             if( expectN(1,e) )
             {
                 e->lhs = stackAt(-1); // func/methref
                 stack.pop_back();
                 Type* proc = deref(e->lhs->getType());
-                if( e->kind == IL_callvi && !proc->typebound )
+                if( e->kind == IL_callmi && !proc->typebound )
                 {
                     error(curProc, "expecting a methref on the stack");
                     break;
@@ -1174,7 +1183,9 @@ Expression* Validator::visitExpr(Expression* e)
                 {
 
                     e->rhs = eatStack(numOfParams-1); // all true params without self
-                    e->lhs = stack.takeLast(); // self
+                    if( !stack.isEmpty() )
+                        e->lhs = stack.takeLast(); // self
+                    // else error already reported
                 }else
                     e->rhs = eatStack(numOfParams);
 
@@ -1532,7 +1543,7 @@ bool Validator::assigCompat(Type* lhs, Expression* rhs)
     case IL_calli:
     case IL_callvirt:
     case IL_callinst:
-    case IL_callvi:
+    case IL_callmi:
     case IL_initobj:
     case IL_isinst:
     case IL_ldelem:

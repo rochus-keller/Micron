@@ -174,7 +174,7 @@ static inline bool FIRST_Expression(int tt) {
 	case Tok_AND:
 	case Tok_NEG:
     case Tok_ABS:
-	case Tok_CALLVI:
+    case Tok_CALLMI:
 	case Tok_LDC_I4_1:
 	case Tok_NEWARR:
 	case Tok_LDIND_R4:
@@ -293,7 +293,7 @@ static inline bool FIRST_ExpInstr(int tt) {
 	case Tok_AND:
 	case Tok_NEG:
     case Tok_ABS:
-	case Tok_CALLVI:
+    case Tok_CALLMI:
 	case Tok_LDC_I4_1:
 	case Tok_NEWARR:
 	case Tok_LDIND_R4:
@@ -434,7 +434,7 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_STELEM_R4:
 	case Tok_LDARG_2:
 	case Tok_GOTO:
-	case Tok_CALLVI:
+    case Tok_CALLMI:
 	case Tok_LDELEMA:
 	case Tok_DUP:
 	case Tok_NEWVLA:
@@ -1746,9 +1746,9 @@ Expression* Parser2::ExpInstr() {
             if( t->kind != Type::Proc || t->typebound )
                 error(cur, "expecting an unbound procedure type");
         }
-    } else if( la.d_code == Tok_CALLVI ) {
-        expect(Tok_CALLVI, true, "ExpInstr");
-        res->kind = IL_callvi;
+    } else if( la.d_code == Tok_CALLMI ) {
+        expect(Tok_CALLMI, true, "ExpInstr");
+        res->kind = IL_callmi;
         res->d = qualident();
         if( res->d && res->d->getType() )
         {

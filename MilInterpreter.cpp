@@ -1565,7 +1565,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                     return false;
                 pc++;
             } vmbreak;
-        vmcase(callvi) {
+        vmcase(callmi) {
                 MethRef r = frame->popPP();
                 // make room for SELF on stack and copy r.obj to the first argument slot
                 frame->insert(-r.proc->fixArgSize + StackAlign, r.obj); // fixArgSize already includes SELF

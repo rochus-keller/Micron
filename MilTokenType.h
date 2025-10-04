@@ -42,7 +42,7 @@ namespace Mil {
 		Tok_CALL,
 		Tok_CALLI,
 		Tok_CALLINST,
-		Tok_CALLVI,
+		Tok_CALLMI,
 		Tok_CALLVIRT,
 		Tok_CASE,
 		Tok_CASTPTR,

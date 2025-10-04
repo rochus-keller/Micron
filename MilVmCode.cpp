@@ -1370,8 +1370,8 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
         case IL_calli:
             emitOp(proc, LL_calli);
             break;
-        case IL_callvi:
-            emitOp(proc, LL_callvi);
+        case IL_callmi:
+            emitOp(proc, LL_callmi);
             break;
         case IL_iif:
             {
