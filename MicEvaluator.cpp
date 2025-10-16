@@ -1804,7 +1804,8 @@ bool Evaluator::recursiveRun(Expression* e)
         break;
     case Expression::Call:
         {
-            if( e->lhs->lhs && (e->lhs->kind == Expression::MethDecl || e->lhs->kind == Expression::Super) )
+            if( e->lhs->lhs && (e->lhs->kind == Expression::MethDecl || e->lhs->kind == Expression::Super) &&
+                    e->lhs->lhs->getType()->kind != Type::Interface )
             {
                 // assure that in a virtual call via designator like a.b(), 'a' is evaluated before the args
                 Expression* proc = e->lhs;

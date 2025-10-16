@@ -2566,6 +2566,7 @@ void Parser2::MetaParams() {
     if( curMod->md == 0 )
         curMod->md = new ModuleData();
     curMod->md->metaParamNames = names;
+    curMod->generic = true;
 }
 
 Constant* Parser2::ConstExpression() {

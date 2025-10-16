@@ -1881,6 +1881,11 @@ void Parser2::emitType(Type* t)
         foreach( Declaration* proc, t->subs )
         {
             out->beginProc(proc->name, proc->pos, true, Mil::ProcData::Normal, ev->toQuali(t).second);
+            const QList<Declaration*> params = proc->getParams(true);
+            foreach( Declaration* p, params )
+                out->addArgument(ev->toQuali(p->getType()),p->name, p->pos);
+            if( proc->getType() && proc->getType()->kind != Type::NoType )
+                out->setReturnType(ev->toQuali(proc->getType()));
             out->endProc(proc->pos);
         }
     }else
@@ -4426,7 +4431,8 @@ Type* Parser2::InterfaceType() {
         InterfaceProc();
     }
     expect(Tok_END, false, "InterfaceType");
-    rec->subs = toList(mdl->closeScope(true));
+    rec->subs =
+            toList(mdl->closeScope(true));
     typeStack.pop_back();
     return rec;
 }

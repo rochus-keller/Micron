@@ -451,7 +451,8 @@ bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, 
         switch(sub->kind)
         {
         case Declaration::TypeDecl:
-            renderType(sub,r, dbi);
+            if( !sub->name.isEmpty() ) // can be empty in generic modules after a WHERE clause
+                renderType(sub,r, dbi);
             break;
         case Declaration::VarDecl:
             renderVar(sub,r);

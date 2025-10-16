@@ -638,6 +638,7 @@ void IlAstRenderer::beginModule(const QByteArray& moduleName, const QString& sou
         module->md = new ModuleData();
         module->md->source = sourceFile;
         module->md->metaParamNames = mp;
+        module->generic = true;
         source = sourceFile;
     }
     module->name = moduleName;
@@ -1038,7 +1039,7 @@ Type*IlAstRenderer::derefType(const Quali &q)
     {
         error(type, QString("not a type declaration: %1").arg(type->toPath().constData()));
         return 0;
-    }else if( type == 0 )
+    }else if( type == 0 ) // TODO: why not make a NameRef for all qualis?
     {
         Type* ref = new Type();
         ref->kind = Type::NameRef;
