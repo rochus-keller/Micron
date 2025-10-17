@@ -10,11 +10,11 @@ module Generic10(type T)
   
   proc Find*(what: ^T): int32
   var i: int32
-      t: T
+      t: ^T
   begin
     //for i := 0 to 99 do
       i := 3
-      t := items[i]
+      t := @items[i]
       if t.compare(what) = 0 then
         return i
       end

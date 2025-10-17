@@ -192,8 +192,9 @@ namespace Mic
             Deref, // ^, requires a pointer value (not ref) and converts it to a ref of type.base
             LocalVar, Param, Builtin, // val is index of local or param or builtin
             ModuleVar, ProcDecl, ConstDecl, TypeDecl, // val is declaration
-            Select, // f.g, val is field declaration
-            MethDecl, // obj.proc, val is procedure declaration
+            FieldSelect, // f.g, val is field declaration
+            MethSelect, // obj.proc, obj ist record/object, val is procedure declaration
+            IntfSelect, // obj.proc, obj ist interface, val ist procdecl
             Index, // a[i]
             Cast, AutoCast,
             Call,
@@ -238,7 +239,7 @@ namespace Mic
     typedef QList<Expression*> ExpList;
 
     struct Value {
-        enum Mode { None, Val, Const, Builtin, Procedure, Method, Super, VarDecl, LocalDecl, ParamDecl, TypeDecl };
+        enum Mode { None, Val, Const, Builtin, Procedure, Method, Intf, Super, VarDecl, LocalDecl, ParamDecl, TypeDecl };
         quint8 mode;
         quint8 visi;
         bool ref; // the value is a reference to the type

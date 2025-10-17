@@ -317,7 +317,7 @@ bool Evaluator::assign(Expression* lhs, Expression* rhs, const RowCol& pos)
     {
     case Expression::Index:
         return stelem(lhs, rhs, pos);
-    case Expression::Select:
+    case Expression::FieldSelect:
         return stfld(lhs, rhs, pos);
     case Expression::LocalVar:
         if( !evaluate(rhs) ) // value
@@ -446,6 +446,9 @@ bool Evaluator::derefValue()
     case Type::Array:
     case Type::Generic:
         out->ldind_(toQuali(v.type));
+        break;
+    case Type::Interface:
+        out->ldind_(Mil::EmiTypes::IPP);
         break;
     default:
         return false;
@@ -633,6 +636,17 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
             const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
             out->line_(pos);
             out->callvirt_(trident,nArgs, ret != 0);
+        }
+        break;
+    case Value::Intf:
+        {
+            Declaration* proc = callee.val.value<Declaration*>();
+            Q_ASSERT(proc);
+            ret = proc->getType();
+            const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
+            out->line_(pos);
+            out->ldmeth_(trident);
+            out->callmi_(trident, nArgs, ret != 0);
         }
         break;
     case Value::VarDecl:
@@ -1724,7 +1738,7 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::And:
         shortCircuitAnd(e);
         break;
-    case Expression::Select:
+    case Expression::FieldSelect:
         if( !recursiveRun(e->lhs) )
             return false;
         desigField(e->val.value<Declaration*>(), e->byVal, e->pos);
@@ -1774,7 +1788,7 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::ProcDecl:
         stack.push_back(Value(e->getType(),e->val,Value::Procedure));
         break;
-    case Expression::MethDecl:
+    case Expression::MethSelect:
         if( e->lhs )
         {
             // e->lhs for a call is evaluated in the call op before the arguments;
@@ -1784,8 +1798,20 @@ bool Evaluator::recursiveRun(Expression* e)
             stack.pop_back();
             // we have to remove it here, otherwise prepareRhs sees the wrong stack element;
             // logically removing this element would be a concern of out->ldmeth_
-        }
-        stack.push_back(Value(e->getType(),e->val,Value::Method));
+            stack.push_back(Value(e->getType(),e->val,Value::Method));
+        } // else already reported
+        break;
+    case Expression::IntfSelect:
+        if( e->lhs )
+        {
+            Q_ASSERT( e->lhs->getType()->kind == Type::Interface );
+
+            e->lhs->setByVal(); // we need an interface reference by value, not a pointer to it
+            if( !recursiveRun(e->lhs) )
+                return false;
+            stack.pop_back();
+            stack.push_back(Value(e->getType(),e->val,Value::Intf));
+        } // else already reported
         break;
     case Expression::Builtin:
         stack.push_back(Value(e->getType(),e->val,Value::Builtin));
@@ -1804,7 +1830,7 @@ bool Evaluator::recursiveRun(Expression* e)
         break;
     case Expression::Call:
         {
-            if( e->lhs->lhs && (e->lhs->kind == Expression::MethDecl || e->lhs->kind == Expression::Super) &&
+            if( e->lhs->lhs && (e->lhs->kind == Expression::MethSelect || e->lhs->kind == Expression::Super) &&
                     e->lhs->lhs->getType()->kind != Type::Interface )
             {
                 // assure that in a virtual call via designator like a.b(), 'a' is evaluated before the args
@@ -1844,7 +1870,7 @@ bool Evaluator::recursiveRun(Expression* e)
         break;
 
     case Expression::Super: {
-            Q_ASSERT(e->lhs && e->lhs->kind == Expression::MethDecl);
+            Q_ASSERT(e->lhs && e->lhs->kind == Expression::MethSelect);
 
             Declaration* method = e->lhs->val.value<Declaration*>();
 

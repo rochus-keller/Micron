@@ -932,7 +932,7 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs)
     if( lhs->isInt() && rhs->isConst() && rhs->getType()->isUInt() )
         return assigCompat(lhs, ev->smallestIntType(rhs->val));
 
-    if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl || rhs->kind == Expression::MethDecl )
+    if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl || rhs->kind == Expression::MethSelect )
         return assigCompat(lhs, rhs->val.value<Declaration*>() );
 
     // Tv is a non-open array of CHAR, Te is a string literal
@@ -959,7 +959,7 @@ bool Parser2::paramCompat(Declaration* lhs, const Expression* rhs)
 
     if( rhs->kind == Expression::TypeDecl )
         return false;
-    if( rhs->kind == Expression::ProcDecl || rhs->kind == Expression::MethDecl )
+    if( rhs->kind == Expression::ProcDecl || rhs->kind == Expression::MethSelect )
         return assigCompat(lhs->getType(),rhs);
 
     // Tf and Ta are equal types, or Ta is assignment compatible with Tf
@@ -2264,9 +2264,18 @@ Expression* Parser2::designator(bool needsLvalue) {
                 }else
                 {    
                     markRef(field, cur.toRowCol(), needsLvalue ? Symbol::Lval : 0);
+                    Expression::Kind k = Expression::FieldSelect;
 
-                    Expression* tmp = Expression::create(field->kind == Declaration::Procedure ?
-                                                             Expression::MethDecl : Expression::Select, tok.toRowCol() );
+                    if( field->kind == Declaration::Procedure )
+                    {
+                        if( res->getType()->kind == Type::Interface )
+                            k = Expression::IntfSelect;
+                        else
+                            k = Expression::MethSelect;
+                    }else if( field->kind != Declaration::Field )
+                        error(cur, "expecting a field or method");
+
+                    Expression* tmp = Expression::create(k, tok.toRowCol() );
                     tmp->val = QVariant::fromValue(field);
                     tmp->lhs = res;
                     tmp->setType(field->getType());
@@ -2307,7 +2316,7 @@ Expression* Parser2::designator(bool needsLvalue) {
         } else if( la.d_type == Tok_Hat ) {
             tok = la;
             expect(Tok_Hat, false, "selector");
-            if( res->kind == Expression::MethDecl )
+            if( res->kind == Expression::MethSelect )
             {
                 if( langLevel < 3 )
                 {
@@ -2377,7 +2386,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             Type* retType;
             if( isTypeCast )
                 retType = args.first()->getType();
-            else if( proc->kind == Expression::ProcDecl || proc->kind == Expression::MethDecl || proc->kind == Expression::Super )
+            else if( proc->kind == Expression::ProcDecl || proc->kind == Expression::MethSelect || proc->kind == Expression::Super )
                 retType = proc->getType();
             else if( proc->kind == Expression::Builtin )
             {
@@ -3121,7 +3130,7 @@ void Parser2::assignmentOrProcedureCall() {
         Expression::deleteAllExpressions();
     }else
     {
-        if( lhs->kind == Expression::ProcDecl || lhs->kind == Expression::MethDecl || lhs->kind == Expression::Super ||
+        if( lhs->kind == Expression::ProcDecl || lhs->kind == Expression::MethSelect || lhs->kind == Expression::Super ||
                 lhs->getType() && lhs->getType()->kind == Type::Proc )
         {
             // something to call
@@ -3135,7 +3144,7 @@ void Parser2::assignmentOrProcedureCall() {
                 error(t,"expecting actual parameters to call this procedure");
             Expression* tmp = Expression::create(Expression::Call, lhs->pos);
             tmp->lhs = lhs;
-            if( decl->kind == Expression::ProcDecl || decl->kind == Expression::MethDecl )
+            if( decl->kind == Expression::ProcDecl || decl->kind == Expression::MethSelect )
                 tmp->setType(decl->getType());
             else
                 tmp->setType(decl->getType()->getType()); // decl->getType is the proctype

@@ -172,7 +172,6 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
         {
         case IL_call:
         case IL_calli:
-        case IL_callmi:
         case IL_castptr:
         case IL_initobj:
         case IL_isinst:
@@ -192,9 +191,15 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
                     q = e->d->forwardToProc()->toQuali();
                 proc.body << ProcData::Op(e->kind, QVariant::fromValue(q));
             } break;
+        case IL_callmi: {
+                Quali q; // TODO: also support Trident
+                if( e->d )
+                    q = e->d->forwardToProc()->toQuali();
+                proc.body << ProcData::Op(e->kind, QVariant::fromValue(q));
+            } break;
         case IL_callvirt:
         case IL_callinst:
-       case IL_ldfld:
+        case IL_ldfld:
         case IL_ldflda:
         case IL_ldmeth: {
                 Trident td;

@@ -1350,9 +1350,25 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
                     return res;
             }
             break;
+        case IL_callmi: {
+                if( ops[pc].arg.canConvert<Quali>() ) {
+                    Quali q = ops[pc].arg.value<Quali>();
+                    tmp->d = resolve(q);
+                    if(tmp->d == 0)
+                        error(curProc,QString("cannot resolve qualident: %1").arg(format(q).constData()),pc++);
+                } else {
+                    Trident td = ops[pc].arg.value<Trident>();
+                    tmp->d = derefTrident(td);
+                    if(tmp->d == 0)
+                        error(curProc,QString("cannot resolve trident: %1.%2").arg(format(td.first).constData()).
+                              arg(td.second.constData()), pc++);
+                }
+                if(tmp->d == 0)
+                    return res;
+            }
+          break;
         case IL_call:
         case IL_calli:
-        case IL_callmi:
         case IL_castptr:
         case IL_initobj:
         case IL_isinst:
@@ -1385,7 +1401,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
                 tmp->d = derefTrident(td);
                 if(tmp->d == 0 )
                 {
-                    tmp->d = derefTrident(td);
+                    // tmp->d = derefTrident(td);
                     error(curProc,QString("cannot resolve trident: %1.%2").arg(format(td.first).constData()).
                           arg(td.second.constData()), pc++);
                     //return res;

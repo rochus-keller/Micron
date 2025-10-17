@@ -635,7 +635,7 @@ QVariant Expression::getLiteralValue() const
 
 DeclList Expression::getFormals(bool includeReceiver) const
 {
-    if( kind == ProcDecl || kind == MethDecl )
+    if( kind == ProcDecl || kind == MethSelect )
         return val.value<Declaration*>()->getParams(includeReceiver);
     else if( type && type->kind == Type::Proc )
         return type->subs; // subs doesn't include a receiver by definition
@@ -649,7 +649,7 @@ bool Expression::isLvalue() const
     //if( byVal )
     //    return false;
     return kind == LocalVar || kind == Param || kind == ModuleVar ||
-            kind == Select || kind == MethDecl || // Select and MethDecl are equivalent here, both require the address
+            kind == FieldSelect || kind == MethSelect || // Select and MethDecl are equivalent here, both require the address
             kind == Index || kind == Deref;
 }
 
@@ -666,7 +666,7 @@ bool Expression::isAssignable() const
     {
     case Call:
         return false;
-    case Select:
+    case FieldSelect:
     case Index:
         return lhs->isAssignable();
     case Deref:
