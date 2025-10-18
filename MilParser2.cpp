@@ -927,7 +927,7 @@ bool Parser2::nextIsLine()
     return false;
 }
 
-Declaration* Parser2::trident() {
+Declaration* Parser2::trident(bool maybeQuali) {
     Declaration* m = curMod;
     if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Bang )  ) {
 		expect(Tok_ident, false, "trident");
@@ -949,22 +949,26 @@ Declaration* Parser2::trident() {
               arg(cur.d_val.constData()).arg(m->name.constData()));
         return 0;
     }
-    expect(Tok_Dot, false, "trident");
-	expect(Tok_ident, false, "trident");
-    if( d->getType()->kind != Type::Struct && d->getType()->kind != Type::Object )
+    if( !maybeQuali || la.d_type == Tok_Dot )
     {
-        error(cur,QString("declaration '%1' in module '%2' is not a record nor object").
-              arg(cur.d_val.constData()).arg(m->name.constData()));
-        return 0;
-    }
-    Declaration* f = d->getType()->findSubByName(cur.d_val);
-    if( f == 0 )
-    {
-        error(cur,QString("cannot find element '%1' in declaration '%2' in module '%3'").
-              arg(cur.d_val.constData()).arg(d->name.constData()).arg(m->name.constData()));
-        return 0;
-    }
-    return f;
+        expect(Tok_Dot, false, "trident");
+        expect(Tok_ident, false, "trident");
+        if( d->getType()->kind != Type::Struct && d->getType()->kind != Type::Object && d->getType()->kind != Type::Interface )
+        {
+            error(cur,QString("declaration '%1' in module '%2' is not a record, object or interface").
+                  arg(cur.d_val.constData()).arg(m->name.constData()));
+            return 0;
+        }
+        Declaration* f = d->getType()->findSubByName(cur.d_val);
+        if( f == 0 )
+        {
+            error(cur,QString("cannot find element '%1' in declaration '%2' in module '%3'").
+                  arg(cur.d_val.constData()).arg(d->name.constData()).arg(m->name.constData()));
+            return 0;
+        }
+        return f;
+    }else
+        return d;
 }
 
 Declaration* Parser2::identdef(Declaration::Kind k) {
@@ -1749,12 +1753,20 @@ Expression* Parser2::ExpInstr() {
     } else if( la.d_code == Tok_CALLMI ) {
         expect(Tok_CALLMI, true, "ExpInstr");
         res->kind = IL_callmi;
-        res->d = qualident();
-        if( res->d && res->d->getType() )
+        res->d = trident(true);
+        if( res->d )
         {
-            Type* t = res->d->getType();
-            if( t->kind != Type::Proc || !t->typebound )
-                error(cur, "expecting a bound procedure type");
+            if( res->d->kind == Declaration::Procedure )
+            {
+                if( res->d->outer == 0 || res->d->outer->kind != Declaration::TypeDecl ||
+                        res->d->outer->getType() == 0 || res->d->outer->getType()->kind != Type::Interface )
+                    error(cur, "expecting an interface method");
+            }else if(res->d->getType())
+            {
+                Type* t = res->d->getType();
+                if( t == 0 || t->kind != Type::Proc || !t->typebound )
+                    error(cur, "expecting a bound procedure type");
+            }
         }
     } else if( la.d_code == Tok_CALLVIRT ) {
         expect(Tok_CALLVIRT, true, "ExpInstr");

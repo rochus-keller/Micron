@@ -192,10 +192,19 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
                 proc.body << ProcData::Op(e->kind, QVariant::fromValue(q));
             } break;
         case IL_callmi: {
-                Quali q; // TODO: also support Trident
-                if( e->d )
-                    q = e->d->forwardToProc()->toQuali();
-                proc.body << ProcData::Op(e->kind, QVariant::fromValue(q));
+                QVariant v;
+                if( e->d ) // d is either a bound proc type declaration or an interface method
+                {
+                    if( e->d->kind == Declaration::Procedure )
+                    {
+                        Trident td;
+                        td.second = e->d->forwardToProc()->name;
+                        td.first = e->d->outer->toQuali();
+                        v = QVariant::fromValue(td);
+                    }else
+                        v = QVariant::fromValue(e->d->toQuali());
+                }
+                proc.body << ProcData::Op(e->kind, v);
             } break;
         case IL_callvirt:
         case IL_callinst:

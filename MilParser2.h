@@ -52,7 +52,7 @@ namespace Mil {
         qint64 integer();
         void number(Constant* c);
         Declaration* qualident(Quali* = 0);
-        Declaration* trident();
+        Declaration* trident(bool maybeQuali = false);
         Declaration* identdef(Declaration::Kind k);
 		void ConstDeclaration();
 		void TypeDeclaration();

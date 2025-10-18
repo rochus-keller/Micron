@@ -655,8 +655,9 @@ Type::~Type()
 {
     if( kind == NameRef && quali )
         delete quali;
-    foreach( Declaration* sub, subs )
-        delete sub;
+    if( !subsborrowed )
+        foreach( Declaration* sub, subs )
+            delete sub;
 }
 
 bool Type::isInt32OnStack() const

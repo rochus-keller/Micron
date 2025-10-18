@@ -40,7 +40,7 @@ namespace Mil
     #endif
             meta(m),anonymous(false),objectInit(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),forward(false),validated(false),generic(0),
-            type(0),public_(0),entryPoint(0),owned(0),nobody(0),pointerInit(0),override_(0),translated(0),foreign_(0) {}
+            type(0),public_(0),entryPoint(0),owned(0),nobody(0),pointerInit(0),override_(0),translated(0),foreign_(0),subsborrowed(0) {}
         virtual ~Node();
 
         enum Meta { Inval, T, D, E, S };
@@ -55,6 +55,7 @@ namespace Mil
         uint public_ : 1; // Declaration
         uint anonymous : 1; // Type, Field
         uint generic : 1;
+        uint subsborrowed : 1; // Type
 
         // Type
         uint objectInit : 1; // this or enclosed type need object initialization (vtbl)

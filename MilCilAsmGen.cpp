@@ -1408,7 +1408,7 @@ void CilAsmGen::expression(Expression* e)
             }
             
             out << indent(1) << "ldfld void* " << typeRef(e->lhs->getType()) << "::proc" << endl;
-            out << indent(1) << "calli " << typeRef(e->getType()) << "(void*";
+            out << indent(1) << "calli " << typeRef(e->getType()) << "(void*"; // TODO: interface method support
             // Add parameter types
             out << ")" << endl;
         }

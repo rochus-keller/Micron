@@ -57,6 +57,7 @@ namespace Mil {
 			R_length,
 			R_module,
 			R_number,
+			R_qortrident,
 			R_qualident,
 			R_trident,
 			R_type,

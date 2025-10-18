@@ -123,7 +123,7 @@ bool Evaluator::binaryOp(quint8 op, const RowCol& pos)
     case Expression::Gt:
     case Expression::Geq:
         stack.push_back(relationOp(op, lhs,rhs, pos));
-       break;
+        break;
     case Expression::In:
         stack.push_back(inOp(lhs,rhs, pos));
         break;
@@ -1250,6 +1250,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
     if( lhs.type == 0 || rhs.type == 0 )
         return res;
 
+    static const char* msg = "INTERNAL ERROR: operation not supported for given operands"; // should not happen due to Parser::checkRelOp
     if( lhs.type->isNumber() && rhs.type->isNumber() )
     {
         if( lhs.type->isInt() && rhs.type->isInt() )
@@ -1278,8 +1279,8 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                     res.val = lhs.val.toLongLong() < rhs.val.toLongLong();
                     break;
                 default:
-                    return res; // Q_ASSERT(false);
-                    break;
+                    err = msg;
+                    return res;
                 }
             }else
             {
@@ -1311,8 +1312,8 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                     res.val = lhs.val.toULongLong() < rhs.val.toULongLong();
                     break;
                 default:
-                    return res; // Q_ASSERT(false);
-                    break;
+                    err = msg;
+                    return res;
                 }
             }else
             {
@@ -1344,15 +1345,18 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                     res.val = lhs.val.toDouble() < rhs.val.toDouble();
                     break;
                 default:
-                    return res; // Q_ASSERT(false);
-                    break;
+                    err = msg;
+                    return res;
                 }
             }else
             {
                 emitRelOp(op,false, pos);
             }
         }else
-            return res; // Q_ASSERT(false);
+        {
+            err = QString("INTERNAL ERROR: operands not compatible: %1 op %2").arg(Type::name[lhs.type->kind]).arg(Type::name[rhs.type->kind]);
+            return res;
+        }
     }else if( lhs.type->isText() && rhs.type->isText() )
     {
         switch(op)
@@ -1382,8 +1386,8 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
             out->ldc_i4(3);
             break;
         default:
-            return res; // Q_ASSERT(false);
-            break;
+            err = msg;
+            return res;
         }
         if( lhs.type->kind == Type::CHAR && rhs.type->kind == Type::CHAR )
             out->call_(coreName("relop4"),3,true);
@@ -1423,8 +1427,8 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                 res.val = lhs.val.toULongLong() < rhs.val.toULongLong();
                 break;
             default:
-                return res; // Q_ASSERT(false);
-                break;
+                err = msg;
+                return res;
             }
         }else
         {
@@ -1457,8 +1461,8 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                 res.val = lhs.val.toLongLong() < rhs.val.toLongLong();
                 break;
             default:
-                Q_ASSERT(false);
-                break;
+                err = msg;
+                return res;
             }
         }else
         {
@@ -1479,7 +1483,8 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                 res.val = lhs.val.toUInt() != rhs.val.toUInt();
                 break;
             default:
-                return res; // Q_ASSERT(false);
+                err = msg;
+                return res;
             }
         }else
         {
@@ -1497,8 +1502,10 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
             emitRelOp(op,true, pos);
         }
     }else
+    {
+        err = QString("INTERNAL ERROR: operands not compatible: %1 op %2").arg(Type::name[lhs.type->kind]).arg(Type::name[rhs.type->kind]);
         return res;
-        //Q_ASSERT(false);
+    }
 
     return res;
 }
@@ -1730,7 +1737,8 @@ bool Evaluator::recursiveRun(Expression* e)
             return false;
         if( !e->lhs->isConst() && e->rhs->isConst() )
             assureTopOnMilStack(false, e->rhs->pos);
-        binaryOp(e->kind, e->pos);
+        if( !binaryOp(e->kind, e->pos) )
+            return false;
         break;
     case Expression::Or:
         shortCircuitOr(e);

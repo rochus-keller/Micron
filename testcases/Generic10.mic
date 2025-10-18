@@ -12,13 +12,12 @@ module Generic10(type T)
   var i: int32
       t: ^T
   begin
-    //for i := 0 to 99 do
-      i := 3
+    for i := 0 to 99 do
       t := @items[i]
       if t.compare(what) = 0 then
         return i
       end
-    //end
+    end
     return -1
   end Find
 end Generic10

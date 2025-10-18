@@ -745,9 +745,9 @@ Expression* Validator::visitExpr(Expression* e)
                 e->lhs = stackAt(-1); // ptr
                 Type* lhsT = deref(e->lhs->getType());
                 Type* ot1 = deref(lhsT->getType());
-                if( lhsT->kind != Type::Pointer || ot1->kind != Type::Object)
+                if( !((lhsT->kind == Type::Pointer && ot1->kind == Type::Object) || lhsT->kind == Type::Interface) )
                 {
-                    error(curProc, "expecting a pointer to object on the stack");
+                    error(curProc, "expecting a pointer to object or interface on the stack");
                     break;
                 }
                 if( e->d && (e->d->kind != Declaration::Procedure || !e->d->typebound) )
@@ -760,19 +760,14 @@ Expression* Validator::visitExpr(Expression* e)
                     Type* pt = new Type();
                     pt->kind = Type::Proc;
                     pt->typebound = true;
+                    pt->subsborrowed = true;
+                    pt->decl = e->d;
                     pt->setType(e->d->getType());
                     QList<Declaration*> params = e->d->getParams(false);
                     for( int i = 0; i < params.size(); i++ )
-                    {
-                        Declaration* p2 = new Declaration();
-                        *p2 = *params[i];
-                        p2->outer = 0;
-                        p2->ownstype = false;
-                        p2->next = 0;
-                        pt->subs.append(p2);
-                    }
+                        pt->subs.append(params[i]); // borrow params
                     e->setType(pt);
-                }
+                } // else already reported
 
                 stack.back() = e; // replace the stack top with methref
             }
@@ -1167,6 +1162,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* proc = deref(e->lhs->getType());
                 if( e->kind == IL_callmi && !proc->typebound )
                 {
+                    // callmi got a synthetic bound proc type by ldmeth
                     error(curProc, "expecting a methref on the stack");
                     break;
                 }else if(e->kind == IL_calli && proc->typebound)
@@ -1495,6 +1491,9 @@ bool Validator::equal(Type* lhs, Type* rhs)
         return equal(deref(lhs->getType()), deref(rhs->getType()));
     if( lhs->kind == Type::Array && rhs->kind == Type::Array && lhs->len == rhs->len )
         return equal(deref(lhs->getType()), deref(rhs->getType()));
+    if( (lhs->kind == Type::DBLINTPTR && rhs->kind == Type::Interface) ||
+            (lhs->kind == Type::Interface && rhs->kind == Type::DBLINTPTR) )
+        return true;
     if( (lhs->kind == Type::DBLINTPTR && rhs->kind == Type::Proc && rhs->typebound) ||
             (lhs->kind == Type::Proc && lhs->typebound && rhs->kind == Type::DBLINTPTR) )
         return true;

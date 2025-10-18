@@ -1303,7 +1303,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             expression(out, e->lhs );
             Type* proc = deref(e->lhs->getType());
             out << ", ((" << typeRef(e->lhs->getType()) << "*)_ptr$)->proc(((";
-            out << typeRef(e->lhs->getType()) << "*)_ptr$)->self";
+            out << typeRef(e->lhs->getType()) << "*)_ptr$)->self"; // TODO: interface support
             QList<Expression*> args;
             collectArgs(e->rhs, args);
             Q_ASSERT( args.size() == proc->subs.size() );
