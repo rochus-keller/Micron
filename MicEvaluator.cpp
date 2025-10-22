@@ -1806,8 +1806,8 @@ bool Evaluator::recursiveRun(Expression* e)
             stack.pop_back();
             // we have to remove it here, otherwise prepareRhs sees the wrong stack element;
             // logically removing this element would be a concern of out->ldmeth_
-            stack.push_back(Value(e->getType(),e->val,Value::Method));
         } // else already reported
+        stack.push_back(Value(e->getType(),e->val,Value::Method));
         break;
     case Expression::IntfSelect:
         if( e->lhs )

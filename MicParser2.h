@@ -50,12 +50,13 @@ namespace Mic {
 		    int row, col;
 		    QString path;
 		    Error( const QString& m, int r, int c, const QString& p):msg(m),row(r),col(c),path(p){}
+            Error( const QString& m, const Token& t):msg(m),row(t.d_lineNr),col(t.d_colNr),path(t.d_sourcePath){}
 		};
 		QList<Error> errors;
 
         Xref takeXref();
 
-        bool assigCompat(Type* lhs, Type* rhs);
+        bool assigCompat(Type* lhs, Type* rhs, const RowCol &pos);
     protected:
         Expression* number();
         Expression* integer();
@@ -143,6 +144,7 @@ namespace Mic {
         void InterfaceProc();
         void WhereDecls();
         void WhereDeclaration();
+        bool satisfies(Type* lhs, Type* rhs, const RowCol &pos);
 
         static bool isUnique(const MetaParamList&, const Declaration*);
         MetaParamList MetaParams();
@@ -157,8 +159,8 @@ namespace Mic {
         void error( int row, int col, const QString& msg );
         void error( const RowCol&, const QString& msg );
         Declaration* findDecl(const Token& id );
-        bool assigCompat(Type* lhs, Declaration* rhs);
-        bool assigCompat(Type* lhs, const Expression* rhs);
+        bool assigCompat(Type* lhs, Declaration* rhs, const RowCol &pos);
+        bool assigCompat(Type* lhs, const Expression* rhs, const RowCol &pos);
         bool paramCompat(Declaration* lhs, const Expression* rhs);
         bool matchFormals(const QList<Declaration*>& a, const QList<Declaration*>& b) const;
         bool matchResultType(Type* lhs, Type* rhs) const;
@@ -209,16 +211,17 @@ namespace Mic {
         QList<RowCol> loopStack;
         typedef QList<RowCol> Depth;
         Depth blockDepth; // stack of RowCol, top is current StatSeq
+
+        bool inFinally;
+        quint8 langLevel;
+        bool haveExceptions;
+
         struct Label {
             Depth depth;
             Token tok;
             bool used;
             Label(const Depth& d, const Token& t):depth(d),tok(t),used(false) {}
         };
-        bool inFinally;
-        quint8 langLevel;
-        bool haveExceptions;
-
         typedef QHash<const char*,Label> Labels;
         Labels labels;
         typedef QList<QPair<Depth,Token> > Gotos;
@@ -229,6 +232,7 @@ namespace Mic {
         QHash<Declaration*,SymList> xref;
         QHash<Declaration*,DeclList> subs;
         QList<Type*> allTypes;
+        Token importer;
     };
 }
 

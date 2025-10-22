@@ -8,6 +8,14 @@ module Generic10(type T)
   
   var items: array 100 of T;
   
+  proc Init*()
+  var i: integer
+  begin
+    for i := 0 to 99 do
+      items[i] := default(T)
+    end
+  end Init
+  
   proc Find*(what: ^T): int32
   var i: int32
       t: ^T

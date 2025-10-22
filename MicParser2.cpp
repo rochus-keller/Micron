@@ -812,7 +812,7 @@ Declaration* Parser2::findDecl(const Token& id)
     return x;
 }
 
-bool Parser2::assigCompat(Type* lhs, Type* rhs)
+bool Parser2::assigCompat(Type* lhs, Type* rhs, const RowCol& pos)
 {
     if( lhs == 0 || rhs == 0 )
         return false;
@@ -832,8 +832,9 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs)
         checkPointerResolved(rhs);
 
     // Te and Tv are pointer types and the pointers have equal base types;
+    // Tv is an interface type and Te is a pointer to a record or object type
     if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer &&
-            equalTypes(lhs->getType(), rhs->getType()) )
+            (equalTypes(lhs->getType(), rhs->getType()) ) || satisfies(lhs->getType(), rhs->getType(), pos))
         return true;
 
     // Te and Tv are non-open array types with the same length and have equal base types;
@@ -894,7 +895,7 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs)
     return false;
 }
 
-bool Parser2::assigCompat(Type* lhs, Declaration* rhs)
+bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
 {
     // Tv is a procedure type and e is the name of a procedure whose formal parameters match those of Tv.
     if( rhs->kind == Declaration::Procedure )
@@ -916,10 +917,10 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs)
             rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == Type::String )
         return strlen(rhs->data.toByteArray().constData()) < lhs->len;
 
-    return assigCompat(lhs, rhs->getType());
+    return assigCompat(lhs, rhs->getType(), pos);
 }
 
-bool Parser2::assigCompat(Type* lhs, const Expression* rhs)
+bool Parser2::assigCompat(Type* lhs, const Expression* rhs, const RowCol& pos)
 {
     if( lhs == 0 || rhs == 0 )
         return false;
@@ -930,11 +931,11 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs)
     // Tv is a signed integer and e is an unsigned integer constant, and Tv includes the
     // smallest integer type necessary to represent e.
     if( lhs->isInt() && rhs->isConst() && rhs->getType()->isUInt() )
-        return assigCompat(lhs, ev->smallestIntType(rhs->val));
+        return assigCompat(lhs, ev->smallestIntType(rhs->val), pos);
 
     if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl ||
             rhs->kind == Expression::MethSelect || rhs->kind == Expression::IntfSelect )
-        return assigCompat(lhs, rhs->val.value<Declaration*>() );
+        return assigCompat(lhs, rhs->val.value<Declaration*>(), pos );
 
     // Tv is a non-open array of CHAR, Te is a string literal
     if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
@@ -945,7 +946,7 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs)
     if( lhs->kind == Type::CHAR && rhs->getType()->kind == Type::String )
         return strlen(rhs->val.toByteArray().constData()) == 1;
 
-    return assigCompat(lhs, rhs->getType());
+    return assigCompat(lhs, rhs->getType(), pos);
 }
 
 bool Parser2::paramCompat(Declaration* lhs, const Expression* rhs)
@@ -961,10 +962,10 @@ bool Parser2::paramCompat(Declaration* lhs, const Expression* rhs)
     if( rhs->kind == Expression::TypeDecl )
         return false;
     if( rhs->kind == Expression::ProcDecl || rhs->kind == Expression::MethSelect || rhs->kind == Expression::IntfSelect )
-        return assigCompat(lhs->getType(),rhs);
+        return assigCompat(lhs->getType(),rhs, rhs->pos);
 
     // Tf and Ta are equal types, or Ta is assignment compatible with Tf
-    return equalTypes(lhs->getType(),rhs->getType()) || assigCompat(lhs->getType(),rhs);
+    return equalTypes(lhs->getType(),rhs->getType()) || assigCompat(lhs->getType(),rhs, rhs->pos);
 }
 
 bool Parser2::matchFormals(const QList<Declaration*>& a, const QList<Declaration*>& b) const
@@ -2363,7 +2364,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 if( arg == 0 )
                     return 0;
                 args.append(arg);
-                isTypeCast = arg->kind == Expression::TypeDecl;
+                isTypeCast = arg->kind == Expression::TypeDecl && proc->kind != Expression::Builtin;
                 if( !isTypeCast && proc->kind != Expression::Builtin )
                     prepareParam(formals,args);
                 while( la.d_type == Tok_Comma || FIRST_expression(la.d_type) ) {
@@ -2912,7 +2913,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
         res = Expression::create(Expression::NameValue, colon.toRowCol());
         res->val = QVariant::fromValue(field);
         res->rhs = rhs;
-        if( !assigCompat(field->getType(), rhs ) )
+        if( !assigCompat(field->getType(), rhs, rhs->pos ) )
             error(rhs->pos, "incompatible value");
         index = constrType->subs.indexOf(field);
     } else if( la.d_type == Tok_Lbrack ) {
@@ -2939,7 +2940,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
         res->val = ev->pop().val;
         index = res->val.toLongLong();
         res->rhs = rhs;
-        if( !assigCompat(constrType->getType(), rhs ) )
+        if( !assigCompat(constrType->getType(), rhs, rhs->pos ) )
             error(rhs->pos, "incompatible value");
     } else if( FIRST_expression(la.d_type) ) {
         if( constrType->kind == Type::Pointer )
@@ -2987,7 +2988,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
             Expression* res2 = Expression::create(Expression::NameValue, res->pos);
             res2->val = QVariant::fromValue(constrType->subs[index]);
             res2->rhs = res;
-            if( !assigCompat(constrType->subs[index]->getType(), res ) )
+            if( !assigCompat(constrType->subs[index]->getType(), res, res->pos ) )
                 error(res->pos, "incompatible value");
             res = res2;
         }else if( constrType->kind == Type::Array)
@@ -2997,7 +2998,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
             Expression* res2 = Expression::create(Expression::IndexValue, res->pos);
             res2->val = index;
             res2->rhs = res;
-            if( !assigCompat(constrType->getType(), res ) )
+            if( !assigCompat(constrType->getType(), res, res->pos ) )
                 error(res->pos, "incompatible value");
             res = res2;
         }else if( constrType->kind == Type::Pointer)
@@ -3118,7 +3119,7 @@ void Parser2::assignmentOrProcedureCall() {
         const Token tok = la;
         expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
         Expression* rhs = expression(lhs->getType());
-        if( rhs && !assigCompat( lhs->getType(), rhs ) )
+        if( rhs && !assigCompat( lhs->getType(), rhs, tok.toRowCol() ) )
             error(tok, "right side is not assignment compatible with left side");
         if( !lhs->isAssignable() )
             error(t, "cannot assign to lhs" );
@@ -3370,7 +3371,7 @@ void Parser2::TypeCase(Expression* e)
         line(e->pos).ldnull_();
     else
         ev->pop();
-    if( !assigCompat(e->getType(), tyname->getType()) )
+    if( !assigCompat(e->getType(), tyname->getType(), e->pos) )
         error(tyname->pos,"label has incompatible type");
 
     if( tyname->getType()->kind == Type::Nil )
@@ -3394,7 +3395,7 @@ Value Parser2::label(Type* t) {
     if( !ev->evaluate(e) )
         error(tok, ev->getErr());
     Value res = ev->pop();
-    if( !assigCompat(t, e) )
+    if( !assigCompat(t, e, e->pos) )
         error(tok,"label has incompatible type");
     Expression::deleteAllExpressions();
     return res;
@@ -3481,7 +3482,7 @@ void Parser2::ForStatement() {
         if( !ev->evaluate(e) )
             error(tok, ev->getErr());
         Value v = ev->pop();
-        if( idxvar && !assigCompat(idxvar->getType(), e) )
+        if( idxvar && !assigCompat(idxvar->getType(), e, e->pos) )
             error(tok,"constant expression is not compatible with control variable");
         else
             by = v.val.toInt();
@@ -3927,7 +3928,7 @@ void Parser2::ReturnStatement() {
         Expression* e = expression(mdl->getTopScope()->getType());
         if( e && !ev->evaluate(e) )
             error(tok, ev->getErr()); // value is pushed on stack by prepareRhs
-        if( !assigCompat( mdl->getTopScope()->getType(), e ) )
+        if( !assigCompat( mdl->getTopScope()->getType(), e, e->pos ) )
             error(tok,"expression is not compatible with the return type");
         if( !ev->prepareRhs(mdl->getTopScope()->getType(), false, e->pos) )
             error(tok, ev->getErr());
@@ -4095,12 +4096,12 @@ void Parser2::module(const Import & import) {
     }else
         modata.fullName = Token::getSymbol(modata.path.join('$'));
 
-    QString importer = cur.d_sourcePath;
-    RowCol importedAt(cur.d_lineNr, cur.d_colNr);
+    importer = Token();
     if( import.importer )
     {
-        importer = import.importer->data.value<ModuleData>().source;
-        importedAt = import.importedAt;
+        importer.d_sourcePath = import.importer->data.value<ModuleData>().source;
+        importer.d_lineNr = import.importedAt.d_row;
+        importer.d_colNr = import.importedAt.d_col;
     }
 
     QByteArrayList metaParamNames;
@@ -4113,16 +4114,14 @@ void Parser2::module(const Import & import) {
             // create an instance of a generic module
             if( import.metaActuals.size() != modata.metaParams.size() )
             {
-                errors << Error("number of formal and actual meta parameters doesn't match",
-                                    importedAt.d_row, importedAt.d_col, importer);
+                errors << Error("number of formal and actual meta parameters doesn't match", importer);
             }else
                 for( int i = 0; i < modata.metaParams.size(); i++ )
                 {
                     if( (import.metaActuals[i].isConst() && modata.metaParams[i]->kind != Declaration::ConstDecl) ||
                             (!import.metaActuals[i].isConst() && modata.metaParams[i]->kind == Declaration::ConstDecl) )
                     {
-                        errors << Error(QString("formal and actual meta parameter %1 not compatible").arg(i+1),
-                                        importedAt.d_row, importedAt.d_col, importer);
+                        errors << Error(QString("formal and actual meta parameter %1 not compatible").arg(i+1), importer);
                     }
 
 #if 1
@@ -4144,7 +4143,7 @@ void Parser2::module(const Import & import) {
                 metaParamNames << modata.metaParams[i]->name;
         }
     }else if( !import.metaActuals.isEmpty() )
-        errors << Error("cannot instantiate a non generic module",importedAt.d_row, importedAt.d_col, importer);
+        errors << Error("cannot instantiate a non generic module",importer);
 
     modecl->data = QVariant::fromValue(modata);
 
@@ -4475,29 +4474,82 @@ void Parser2::WhereDecls() {
 }
 
 void Parser2::WhereDeclaration() {
+
+    ModuleData md = thisMod->data.value<ModuleData>();
+    if( md.metaParams.isEmpty() )
+        error(cur, "WHERE clauses only supported in generic modules");
+
     expect(Tok_ident, false, "WhereDeclaration");
-    const Token name = cur;
-    expect(Tok_Colon, false, "WhereDeclaration");
-    Type* t = type();
+    Token name = cur;
 
     Declaration* d = mdl->findDecl(name.d_val);
-    if( d == 0 || !d->generic )
+    if( d == 0 )
     {
-        error(name, QString("name is not a generic parameter '%1'").arg(name.d_val.constData()) );
-        if( t && !t->owned )
-            delete t;
+        error(name, QString("declaration not found '%1'").arg(name.d_val.constData()) );
         return;
     }
     markRef(d, name.toRowCol());
-    if( d->getType() && d->getType()->kind != Type::Generic )
-    {
-        error(name, "only one WHERE clause per generic parameter supported" );
-        if( t && !t->owned )
-            delete t;
-        return;
-    }
-    Type* what = d->getType();
-    replaceAll(what, t);
-    out->addType(d->name,d->pos,false,ev->toQuali(t), Mil::EmiTypes::Alias);
 
+    expect(Tok_Colon, false, "WhereDeclaration");
+    Type* t = type();
+
+    if( md.metaActuals.isEmpty() )
+    {
+        if( !d->generic )
+        {
+            error(name, QString("name is not a generic parameter '%1'").arg(name.d_val.constData()) );
+            if( t && !t->owned )
+                delete t;
+            return;
+        }
+        if( d->getType() && d->getType()->kind != Type::Generic )
+        {
+            error(name, "only one WHERE clause per generic parameter supported" );
+            if( t && !t->owned )
+                delete t;
+            return;
+        }
+        replaceAll(d->getType(), t);
+        out->addType(d->name,d->pos,false,ev->toQuali(t), Mil::EmiTypes::Alias);
+    }else
+    {
+        if( !importer.d_sourcePath.isEmpty() )
+            name = importer;
+        if( !assigCompat( t, d->getType(), name.toRowCol() ) && !satisfies(t, d->getType(), name.toRowCol()) )
+        {
+            // assigCompat( t, d->getType(), name.toRowCol() ); // TEST
+            error(name, QString("the meta actual is not compatible with the WHERE clause of the meta param '%1'").
+                  arg(d->name.constData()));
+        }
+    }
+
+}
+
+bool Parser2::satisfies(Type *lhs, Type *rhs, const RowCol& pos)
+{
+    if( lhs == 0 || rhs == 0 )
+        return false;
+    if( lhs->kind == Type::Pointer )
+        lhs = lhs->getType();
+    if( rhs->kind == Type::Pointer )
+        rhs = rhs->getType();
+    if( lhs->kind != Type::Interface )
+        return false;
+    if( rhs->kind != Type::Record && rhs->kind != Type::Object && rhs->kind != Type::Interface )
+        return false;
+    foreach( Declaration* proc, lhs->subs )
+    {
+        Q_ASSERT( proc->kind == Declaration::Procedure );
+        Declaration* imp = rhs->findMember(proc->name);
+        if( imp == 0 || imp->kind != Declaration::Procedure )
+        {
+            error(pos, QString("interface not satisfied because of missing method '%1'").arg(proc->name.constData()));
+            return false;
+        }else if( !matchFormals(proc->getParams(false), imp->getParams(false)) || !matchResultType(proc->getType(), imp->getType()) )
+        {
+            error(pos, QString("interface not satisfied because method '%1' has incompatible signature").arg(proc->name.constData()));
+            return false;
+        }
+    }
+    return true;
 }

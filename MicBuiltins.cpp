@@ -160,6 +160,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::DEFAULT:
         expectingNArgs(args,1);
+        *ret = args.first()->getType();
        break;
     case Builtin::FLOOR:
         expectingNArgs(args,1);
@@ -399,6 +400,37 @@ void Builtins::bitnot()
         ev->out->not_();
         v.mode = Value::Val;
     }
+    ev->stack.push_back(v);
+}
+
+void Builtins::doDefault()
+{
+    Value v = ev->stack.takeLast();
+
+    v.mode = Value::Const;
+
+    if( v.type->isInteger() || v.type->kind == Type::BOOL || v.type->kind == Type::CHAR ||
+            v.type->kind == Type::SET || v.type->kind == Type::ConstEnum )
+        v.val = 0;
+    else if( v.type->isReal() )
+        v.val = 0.0;
+    else if( v.type->kind == Type::Nil || v.type->kind == Type::Pointer || (v.type->kind == Type::Proc && !v.type->typebound) )
+        v.val = 0;
+    else if( v.type->kind == Type::Interface || (v.type->kind == Type::Proc && v.type->typebound) )
+    {
+        Mil::RecordLiteral rec;
+        v.val = QVariant::fromValue(rec); // TODO
+    }else if( v.type->kind == Type::Record || v.type->kind == Type::Object )
+    {
+        Mil::RecordLiteral rec;
+        v.val = QVariant::fromValue(rec); // TODO
+    }else if( v.type->kind == Type::Array )
+    {
+        QVector<QVariant> arr(1);
+        v.val = QVariant::fromValue(arr.toList()); // TODO
+    }else
+        Q_ASSERT(false);
+
     ev->stack.push_back(v);
 }
 
@@ -915,6 +947,11 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs)
     case Builtin::FLT:
         checkNumOfActuals(nArgs, 1);
         doFlt();
+        handleStack = false;
+        break;
+    case Builtin::DEFAULT:
+        checkNumOfActuals(nArgs, 1);
+        doDefault();
         handleStack = false;
         break;
     default:

@@ -1,4 +1,17 @@
 module GenericTest10
 
+type
+  Person = object
+    name: array 32 of char
+    end
+    
+  procedure Person.compare(other: ^Person): int32
+  begin
+    return 0
+  end compare
+  
+import G := Generic10(Person)
 
+begin
+  G.Init
 end GenericTest10

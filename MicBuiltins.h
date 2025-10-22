@@ -48,6 +48,7 @@ protected:
     void bitnot();
     void doSigned();
     void doUnsigned();
+    void doDefault();
     void doAbs();
     void doFlt();
     void doShiftRight();
