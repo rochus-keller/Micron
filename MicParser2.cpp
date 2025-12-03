@@ -4513,12 +4513,10 @@ void Parser2::WhereDeclaration() {
         out->addType(d->name,d->pos,false,ev->toQuali(t), Mil::EmiTypes::Alias);
     }else
     {
-        if( !importer.d_sourcePath.isEmpty() )
-            name = importer;
         if( !assigCompat( t, d->getType(), name.toRowCol() ) && !satisfies(t, d->getType(), name.toRowCol()) )
         {
             // assigCompat( t, d->getType(), name.toRowCol() ); // TEST
-            error(name, QString("the meta actual is not compatible with the WHERE clause of the meta param '%1'").
+            error(importer, QString("the meta actual is not compatible with the WHERE clause of the meta param '%1'").
                   arg(d->name.constData()));
         }
     }
@@ -4543,11 +4541,11 @@ bool Parser2::satisfies(Type *lhs, Type *rhs, const RowCol& pos)
         Declaration* imp = rhs->findMember(proc->name);
         if( imp == 0 || imp->kind != Declaration::Procedure )
         {
-            error(pos, QString("interface not satisfied because of missing method '%1'").arg(proc->name.constData()));
+            error(importer, QString("interface not satisfied because of missing method '%1'").arg(proc->name.constData()));
             return false;
         }else if( !matchFormals(proc->getParams(false), imp->getParams(false)) || !matchResultType(proc->getType(), imp->getType()) )
         {
-            error(pos, QString("interface not satisfied because method '%1' has incompatible signature").arg(proc->name.constData()));
+            error(importer, QString("interface not satisfied because method '%1' has incompatible signature").arg(proc->name.constData()));
             return false;
         }
     }

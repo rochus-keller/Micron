@@ -638,7 +638,7 @@ void IlAstRenderer::beginModule(const QByteArray& moduleName, const QString& sou
         module->md = new ModuleData();
         module->md->source = sourceFile;
         module->md->metaParamNames = mp;
-        module->generic = true;
+        module->generic = !mp.isEmpty();
         source = sourceFile;
     }
     module->name = moduleName;
@@ -684,7 +684,7 @@ void IlAstRenderer::endModule()
             errors << ee;
         }
     }
-    dump("after validation");
+    // dump("after validation");
 #endif
 }
 

@@ -12,6 +12,10 @@ type
   
 import G := Generic10(Person)
 
+var g: G.Comparable
+    p: Person
+    
 begin
   G.Init
+  g := @p
 end GenericTest10

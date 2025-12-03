@@ -554,9 +554,59 @@ bool Code::translateStatSeq(Procedure& proc, Statement* s)
                 const int pc = emitOp(proc, LL_br );
                 ctxStack.back().gotos << Where(s->name,pc);
             } break;
-        case IL_switch:
-            qCritical() << "ERROR: not yet implemented in interpreter:" << s_opName[s->kind];
-            return false;
+        case IL_switch: {
+            // TODO: true jump table instead of ifs
+
+                if( !translateExprSeq(proc, s->e) )
+                    return false;
+
+                bool is64 = s->e->getType()->isInt64();
+                QList<int> after;
+                while( s->next && s->next->kind == IL_case )
+                {
+                    s = s->next;
+
+                    // stat->e is a list of integers, each as an Expression
+                    Expression* e = s->e;
+                    QList<int> toBody, afterBody;
+                    while( e )
+                    {
+                        emitOp(proc, LL_dup, is64 ? 8 : 4); // duplicate the case expression value on stack
+                        emitOp(proc, is64 ? LL_ldc_i8 : LL_ldc_i4, addInt(e->i));
+                        emitOp(proc, is64 ? LL_ceq_i8 : LL_ceq_i4);
+                        const int nextCond = emitOp(proc, LL_brfalse_i4);
+                        emitOp(proc, LL_pop, is64 ? 8 : 4); // remove case expression
+                        toBody << emitOp(proc, LL_br);
+                        e = e->next;
+                        if( e )
+                            branch_here(proc,nextCond);
+                        else
+                            afterBody << nextCond;
+                    }
+
+                    foreach( int pc, toBody )
+                        branch_here(proc,pc);
+
+                    if( !translateStatSeq(proc, s->body) )
+                        return false;
+                    after << emitOp(proc, LL_br);
+
+                    foreach( int pc, afterBody )
+                        branch_here(proc,pc);
+                }
+
+                if( s->next && s->next->kind == IL_else )
+                {
+                    s = s->next;
+                    emitOp(proc, LL_pop, is64 ? 8 : 4); // remove case expression
+                    if( !translateStatSeq(proc, s->body) )
+                        return false;
+                }
+
+                foreach( int pc, after )
+                    branch_here(proc,pc);
+
+            } break;
         case IL_line:
             break; // NOP
         default:

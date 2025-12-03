@@ -40,24 +40,27 @@ bool Validator::validate(Declaration* module)
     {
         Type* t = deref(sub->getType());
 
-        Declaration* d = module->findSubByName(sub->name);
-        if( d && d != sub )
+        if( !sub->forward )
         {
-            if( module->generic && d->kind == Declaration::TypeDecl && d->getType()->kind == Type::Generic )
+            Declaration* d = module->findSubByName(sub->name);
+            if( d && d != sub )
             {
-                if( d->getType()->getType() )
-                    error(sub, "the generic type with the same name already has a constraining type");
-                else
+                if( module->generic && d->kind == Declaration::TypeDecl && d->getType()->kind == Type::Generic )
                 {
-                    d->name.clear();
-                    Type* ref = d->getType();
-                    ref->kind = Type::NameRef;
-                    ref->quali = new Quali();
-                    ref->quali->second = sub->name;
-                    ref->setType(t);
-                }
-            }else
-                error(sub, "duplicate name");
+                    if( d->getType()->getType() )
+                        error(sub, "the generic type with the same name already has a constraining type");
+                    else
+                    {
+                        d->name.clear();
+                        Type* ref = d->getType();
+                        ref->kind = Type::NameRef;
+                        ref->quali = new Quali();
+                        ref->quali->second = sub->name;
+                        ref->setType(t);
+                    }
+                }else
+                    error(sub, "duplicate name");
+            }
         }
         switch(sub->kind)
         {

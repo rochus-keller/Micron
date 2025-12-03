@@ -1,6 +1,6 @@
 [General]
 BuildDir=
-BuiltInOakwood=true
+BuiltInOakwood=false
 MainModule=@ByteArray()
 MainProc=@ByteArray()
 Options=@ByteArray()
@@ -11,6 +11,9 @@ WorkingDir=
 size=0
 
 [Modules]
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/Enum2.mic
+1\RelPath=Enum2.mic
+size=1
 
 [Packages]
 1\Name=@ByteArray()
