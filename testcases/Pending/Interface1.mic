@@ -1,0 +1,40 @@
+module Interface1
+
+type
+  Point = record x,y: integer end
+  Viewport = pointer to record end
+  Drawable = interface
+              proc Draw(vp: Viewport)
+             end
+            
+  proc Point.Draw(vp: Viewport)
+  begin
+    println("drawing")
+  end Draw
+  
+  proc Point.Move(x,y: integer)
+  begin
+    self.x := x; self.y := y
+  end Move
+  
+  proc Test(d: Drawable; vp: Viewport)
+  begin
+    d.Draw(vp)
+  end Test
+  
+var
+  d, d1: Drawable
+  p: Point
+  vp: Viewport
+  
+begin
+  p.Move(12, 34)
+
+  d := @p
+  d.Draw(vp)
+  Test(@p, vp)
+  d1 := d
+  d1.Draw(vp)
+
+  println(p.y)
+end Interface1

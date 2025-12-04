@@ -178,6 +178,7 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
         case IL_ldelema:
         case IL_ldelem:
         case IL_ldind:
+        case IL_ldiface:
         case IL_ldproc:
         case IL_ldvar:
         case IL_ldvara:

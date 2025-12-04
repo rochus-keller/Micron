@@ -111,6 +111,7 @@ namespace Mil
         void ldelema_(const Quali& typeRef);
         void ldfld_(const Trident& fieldRef);
         void ldflda_(const Trident& fieldRef);
+        void ldiface_(const Quali& typeRef);
         void ldmeth_(const Trident& methodRef); // CIL ldvirtftn, returns methref
         void lditfmeth_(const Trident& methodRef);
         void ldproc_(const Quali& methodRef); // CIL ldftn

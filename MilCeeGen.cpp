@@ -1225,6 +1225,10 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         out << qualident(e->d);
         break;
 
+    case IL_ldiface:
+        qWarning() << "CeeGen ldiface not yet supported";
+        break;
+
     case IL_ldmeth:
         if( hint )
             out << "(" << typeRef(hint) << ")";

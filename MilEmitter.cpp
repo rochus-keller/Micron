@@ -673,6 +673,13 @@ void Emitter::ldflda_(const Trident& fieldRef)
     delta(-1+1);
 }
 
+void Emitter::ldiface_(const Quali &typeRef)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_ldiface,QVariant::fromValue(typeRef)));
+    delta(-1+1);
+}
+
 void Emitter::ldmeth_(const Trident& methodRef)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );

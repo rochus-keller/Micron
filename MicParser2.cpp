@@ -626,11 +626,10 @@ static bool isPtrToOpenCharArray(Type* t)
 
 Parser2::Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* i, bool xref):
     mdl(m),scanner(s),out(out),imp(i),thisMod(0),thisDecl(0),inFinally(false),
-    langLevel(3),haveExceptions(false),first(0),last(0)
+    langLevel(1),haveExceptions(false),first(0),last(0)
 {
     ev = new Evaluator(m,out);
     self = Token::getSymbol("self");
-    SELF = Token::getSymbol("SELF");
     if( xref )
         first = last = new Symbol();
 }
@@ -832,9 +831,11 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs, const RowCol& pos)
         checkPointerResolved(rhs);
 
     // Te and Tv are pointer types and the pointers have equal base types;
+    if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer && equalTypes(lhs->getType(), rhs->getType()) )
+        return true;
+
     // Tv is an interface type and Te is a pointer to a record or object type
-    if( lhs->kind == Type::Pointer && rhs->kind == Type::Pointer &&
-            (equalTypes(lhs->getType(), rhs->getType()) ) || satisfies(lhs->getType(), rhs->getType(), pos))
+    if( lhs->kind == Type::Interface && rhs->kind == Type::Pointer && satisfiesIntf(lhs, rhs, pos))
         return true;
 
     // Te and Tv are non-open array types with the same length and have equal base types;
@@ -2469,10 +2470,10 @@ Expression* Parser2::maybeQualident(Symbol** s)
     expect(Tok_ident, false, "designator");
     Token tok = cur;
 
-    if( langLevel >= 3 && cur.d_val.constData() == self.constData() &&
+    if( langLevel >= 1 && cur.d_val.constData() == self.constData() &&
             mdl->getTopScope()->kind == Declaration::Procedure &&
             mdl->getTopScope()->typebound && mdl->getTopScope()->autoself )
-        cur.d_val = SELF;
+        cur.d_val = self;
 
     Declaration* d = findDecl(cur);
     if( d )
@@ -3120,7 +3121,10 @@ void Parser2::assignmentOrProcedureCall() {
         expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
         Expression* rhs = expression(lhs->getType());
         if( rhs && !assigCompat( lhs->getType(), rhs, tok.toRowCol() ) )
+        {
+            // assigCompat( lhs->getType(), rhs, tok.toRowCol() ); // TEST
             error(tok, "right side is not assignment compatible with left side");
+        }
         if( !lhs->isAssignable() )
             error(t, "cannot assign to lhs" );
         else
@@ -3598,12 +3602,12 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
     NameAndType receiver;
     bool autoself = false;
     if( FIRST_Receiver(la.d_type) ) {
-        if( langLevel < 3 )
+        if( langLevel < 1 )
             error(la, "type-bound procedures not available on current language level");
         receiver = Receiver();
     }else if( la.d_type == Tok_ident && peek(2).d_type == Tok_Dot )
     {
-        if( langLevel < 3 )
+        if( langLevel < 1 )
             error(la, "type-bound procedures not available on current language level");
         receiver = Receiver2();
         autoself = true;
@@ -3657,6 +3661,7 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
         Q_ASSERT(procDecl->outer == 0);
         procDecl->outer = objectType->decl;
         procDecl->typebound = true;
+        procDecl->dynamic = objectType->kind == Type::Object;
         procDecl->autoself = autoself;
 
         Declaration* param = addDecl(receiver.id, 0, Declaration::ParamDecl);
@@ -3846,22 +3851,22 @@ Parser2::NameAndType Parser2::Receiver2()
 {
     NameAndType res;
     res.id = la;
-    res.id.d_val = SELF;
+    res.id.d_val = self;
     expect(Tok_ident, false, "Receiver");
     const Token type = cur;
-    Declaration* d = findDecl(cur);
-    if( d == 0 )
+    Declaration* cls = findDecl(cur);
+    if( cls == 0 )
         return res; // already reported
-    if( d->kind != Declaration::TypeDecl || d->getType() == 0 ||
-            (d->getType()->kind != Type::Object && d->getType()->kind != Type::Pointer ) ||
-            (d->getType()->kind == Type::Pointer && ( d->getType()->getType() == 0 ||
-                                                      d->getType()->getType()->kind != Type::Object)))
+    if( cls->kind != Declaration::TypeDecl || cls->getType() == 0 ||
+            (cls->getType()->kind != Type::Object && cls->getType()->kind != Type::Pointer && cls->getType()->kind != Type::Record ) ||
+            (cls->getType()->kind == Type::Pointer &&
+                ( cls->getType()->getType() == 0 || (cls->getType()->getType()->kind != Type::Object && cls->getType()->getType()->kind != Type::Record))))
     {
-        error(type, "receiver must be an object or pointer to object type");
+        error(type, "receiver must be an object or record or pointer to object or record type");
         return res;
     }else
-        res.t = d->getType(); // res is an object or pointer to object
-    markRef(d, type.toRowCol());
+        res.t = cls->getType(); // res is an object or pointer to object
+    markRef(cls, type.toRowCol());
     expect(Tok_Dot, false, "Receiver");
     return res;
 }
@@ -4451,8 +4456,8 @@ void Parser2::InterfaceProc() {
     if( FIRST_procedure(la.d_type) ) {
         procedure();
     }
-    expect(Tok_ident, false, "InterfaceProc");
-    Declaration* d = addDecl(cur, Declaration::ReadWrite, Declaration::Procedure);
+    const IdentDef id = identdef();
+    Declaration* d = addDecl(id, Declaration::Procedure);
     mdl->openScope(d);
     if( FIRST_FormalParameters(la.d_type) ) {
         d->setType(FormalParameters());
@@ -4513,7 +4518,7 @@ void Parser2::WhereDeclaration() {
         out->addType(d->name,d->pos,false,ev->toQuali(t), Mil::EmiTypes::Alias);
     }else
     {
-        if( !assigCompat( t, d->getType(), name.toRowCol() ) && !satisfies(t, d->getType(), name.toRowCol()) )
+        if( !assigCompat( t, d->getType(), name.toRowCol() ) && !satisfiesIntf(t, d->getType(), name.toRowCol()) )
         {
             // assigCompat( t, d->getType(), name.toRowCol() ); // TEST
             error(importer, QString("the meta actual is not compatible with the WHERE clause of the meta param '%1'").
@@ -4523,7 +4528,7 @@ void Parser2::WhereDeclaration() {
 
 }
 
-bool Parser2::satisfies(Type *lhs, Type *rhs, const RowCol& pos)
+bool Parser2::satisfiesIntf(Type *lhs, Type *rhs, const RowCol& pos)
 {
     if( lhs == 0 || rhs == 0 )
         return false;
@@ -4541,11 +4546,11 @@ bool Parser2::satisfies(Type *lhs, Type *rhs, const RowCol& pos)
         Declaration* imp = rhs->findMember(proc->name);
         if( imp == 0 || imp->kind != Declaration::Procedure )
         {
-            error(importer, QString("interface not satisfied because of missing method '%1'").arg(proc->name.constData()));
+            error(pos, QString("interface not satisfied because of missing method '%1'").arg(proc->name.constData()));
             return false;
         }else if( !matchFormals(proc->getParams(false), imp->getParams(false)) || !matchResultType(proc->getType(), imp->getType()) )
         {
-            error(importer, QString("interface not satisfied because method '%1' has incompatible signature").arg(proc->name.constData()));
+            error(pos, QString("interface not satisfied because method '%1' has incompatible signature").arg(proc->name.constData()));
             return false;
         }
     }

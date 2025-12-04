@@ -125,6 +125,7 @@ namespace Mil {
 		Tok_LDELEM_U8,
 		Tok_LDFLD,
 		Tok_LDFLDA,
+		Tok_LDIFACE,
 		Tok_LDIND,
 		Tok_LDIND_I1,
 		Tok_LDIND_I2,

@@ -748,7 +748,7 @@ Expression* Validator::visitExpr(Expression* e)
                 e->lhs = stackAt(-1); // ptr
                 Type* lhsT = deref(e->lhs->getType());
                 Type* ot1 = deref(lhsT->getType());
-                if( !((lhsT->kind == Type::Pointer && ot1->kind == Type::Object) || lhsT->kind == Type::Interface) )
+                if( !((lhsT->kind == Type::Pointer && (ot1->kind == Type::Object || ot1->kind == Type::Struct)) || lhsT->kind == Type::Interface) )
                 {
                     error(curProc, "expecting a pointer to object or interface on the stack");
                     break;
@@ -773,6 +773,24 @@ Expression* Validator::visitExpr(Expression* e)
                 } // else already reported
 
                 stack.back() = e; // replace the stack top with methref
+            }
+            break;
+        case IL_ldiface:
+            {
+                // expect the object instance pointer on the stack
+                e->lhs = stackAt(-1); // ptr
+                Type* lhsT = deref(e->lhs->getType());
+                Type* ot1 = deref(lhsT->getType());
+                if( !(lhsT->kind == Type::Pointer && (ot1->kind == Type::Object || ot1->kind == Type::Struct)) )
+                {
+                    error(curProc, "expecting a pointer to object or record on the stack");
+                    break;
+                }
+                if( e->d && (e->d->kind != Declaration::TypeDecl || deref(e->d->getType())->kind != Type::Interface) )
+                    error(curProc, "expecting an interface");
+
+                e->setType(e->d->getType());
+                stack.back() = e; // replace the stack top with ldiface
             }
             break;
         case IL_sizeof:
@@ -1137,7 +1155,7 @@ Expression* Validator::visitExpr(Expression* e)
                 e->lhs = stackAt(-1); // ptr
                 Type* lhsT = deref(e->lhs->getType());
                 Type* obj = deref(lhsT->getType());
-                if( lhsT->kind != Type::Pointer || obj->kind != Type::Object )
+                if( lhsT->kind != Type::Pointer || !(obj->kind == Type::Object || obj->kind == Type::Struct) )
                 {
                     error(curProc, "expecting a pointer to object on the stack");
                     break;
@@ -1562,6 +1580,7 @@ bool Validator::assigCompat(Type* lhs, Expression* rhs)
     {
     case IL_ldproc:
     case IL_ldmeth:
+    case IL_ldiface:
         return assigCompat(lhs, rhs->d);
     case IL_castptr:
     case IL_call:
@@ -1590,6 +1609,7 @@ bool Validator::assigCompat(Type* lhs, Expression* rhs)
 
 bool Validator::assigCompat(Type* lhs, Declaration* rhs)
 {
+    // TODO ldiface
     if( lhs->kind == Type::Proc && rhs->kind == Declaration::Procedure )
     {
         if( lhs->typebound != rhs->typebound )

@@ -858,7 +858,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
             decl->typebound = true;
             Declaration* receiver = module->findSubByName(proc.binding);
             if( receiver == 0 || receiver->kind != Declaration::TypeDecl ||
-                    !(receiver->getType()->kind == Type::Object || receiver->getType()->kind == Type::Interface))
+                    !(receiver->getType()->kind == Type::Object || receiver->getType()->kind == Type::Interface || receiver->getType()->kind == Type::Struct))
             {
                 error(curProc, QString("invalid receiver: %1").arg(proc.binding.constData()));
                 delete decl;
@@ -885,7 +885,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
                     if( obj ) obj = obj->deref();
                     if( decl->subs == 0 || decl->subs->kind != Declaration::ParamDecl ||
                             ptr == 0 ||  ptr->kind != Type::Pointer ||
-                            obj == 0 || obj->kind != Type::Object || obj != rt )
+                            obj == 0 || (obj->kind != Type::Object && obj->kind != Type::Struct) || obj != rt )
                         error(curProc, QString("first parameter of a bound procedure must be a pointer to the object type"));
                     else if( decl->subs )
                         decl->subs->typebound = true;
@@ -1375,6 +1375,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
         case IL_ldelema:
         case IL_ldelem:
         case IL_ldind:
+        case IL_ldiface:
         case IL_ldproc:
         case IL_ldvar:
         case IL_ldvara:

@@ -198,6 +198,17 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
         out->line_(pos);
         out->ldmeth_(trident);
+    }else if( lhs && lhs->kind == Type::Interface && rhs.type && rhs.type->kind != Type::Interface )
+    {
+        Type* t = rhs.type;
+        if( rhs.type->kind != Type::Pointer || rhs.type->getType() == 0
+                || !(rhs.type->getType()->kind == Type::Object || rhs.type->getType()->kind == Type::Record) )
+        {
+            err = "expecting pointer to object or record";
+            return false;
+        }
+        out->line_(pos);
+        out->ldiface_(toQuali(lhs));
     }else
     {
         Type* rhs = stack.back().type;
@@ -635,7 +646,10 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
             ret = proc->getType();
             const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
             out->line_(pos);
-            out->callvirt_(trident,nArgs, ret != 0);
+            if( proc->dynamic )
+                out->callvirt_(trident,nArgs, ret != 0);
+            else
+                out->callinst_(trident,nArgs, ret != 0);
         }
         break;
     case Value::Intf:

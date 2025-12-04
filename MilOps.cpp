@@ -39,6 +39,7 @@ const char* s_opName[] =
     "ldelem_i4", "ldelem_i8", "ldelem_u1", "ldelem_u2",
     "ldelem_u4", "ldelem_u8", "ldelem_r4", "ldelem_r8", "ldelem_ip", "ldelem_ipp",
     "ldfld", "ldflda",
+    "ldiface",
     "ldind_i1", "ldind_i2", "ldind_i4", "ldind_i8", "ldind_u1", "ldind_u2",
     "ldind_u4", "ldind_r4", "ldind_u8", "ldind_r8", "ldind_ip", "ldind_ipp",
     "ldloc", "ldloc_s", "ldloca", "ldloca_s",

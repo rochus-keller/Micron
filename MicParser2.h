@@ -144,7 +144,7 @@ namespace Mic {
         void InterfaceProc();
         void WhereDecls();
         void WhereDeclaration();
-        bool satisfies(Type* lhs, Type* rhs, const RowCol &pos);
+        bool satisfiesIntf(Type* lhs, Type* rhs, const RowCol &pos);
 
         static bool isUnique(const MetaParamList&, const Declaration*);
         MetaParamList MetaParams();
@@ -226,7 +226,7 @@ namespace Mic {
         Labels labels;
         typedef QList<QPair<Depth,Token> > Gotos;
         Gotos gotos;
-        QByteArray self, SELF;
+        QByteArray self;
         Symbol* first;
         Symbol* last;
         QHash<Declaration*,SymList> xref;

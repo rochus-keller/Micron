@@ -118,6 +118,7 @@ namespace Mil {
 			case Tok_LDELEM_U8: return "LDELEM_U8";
 			case Tok_LDFLD: return "LDFLD";
 			case Tok_LDFLDA: return "LDFLDA";
+			case Tok_LDIFACE: return "LDIFACE";
 			case Tok_LDIND: return "LDIND";
 			case Tok_LDIND_I1: return "LDIND_I1";
 			case Tok_LDIND_I2: return "LDIND_I2";
@@ -338,6 +339,7 @@ namespace Mil {
 			case Tok_LDELEM_U8: return "Tok_LDELEM_U8";
 			case Tok_LDFLD: return "Tok_LDFLD";
 			case Tok_LDFLDA: return "Tok_LDFLDA";
+			case Tok_LDIFACE: return "Tok_LDIFACE";
 			case Tok_LDIND: return "Tok_LDIND";
 			case Tok_LDIND_I1: return "Tok_LDIND_I1";
 			case Tok_LDIND_I2: return "Tok_LDIND_I2";
@@ -1090,7 +1092,17 @@ namespace Mil {
 					}
 					break;
 				case 'I':
-					if( at(str,len,i+3) == 'N' ){
+					switch( at(str,len,i+3) ){
+					case 'F':
+						if( at(str,len,i+4) == 'A' ){
+							if( at(str,len,i+5) == 'C' ){
+								if( at(str,len,i+6) == 'E' ){
+									res = Tok_LDIFACE; i += 7;
+								}
+							}
+						}
+						break;
+					case 'N':
 						if( at(str,len,i+4) == 'D' ){
 							if( at(str,len,i+5) == '_' ){
 								switch( at(str,len,i+6) ){
@@ -1148,6 +1160,7 @@ namespace Mil {
 								res = Tok_LDIND; i += 5;
 							}
 						}
+						break;
 					}
 					break;
 				case 'L':

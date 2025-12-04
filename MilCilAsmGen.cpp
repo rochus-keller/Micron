@@ -1326,6 +1326,12 @@ void CilAsmGen::expression(Expression* e)
         out << indent(1) << "ldflda " << typeRef(e->d->getType()) << " ";
         out << mangledName(e->d->outer) << "::'" << e->d->name << "'" << endl;
         break;
+
+    case IL_ldiface:
+        expression(e->lhs);
+        out << indent(1) << "ldiface " << typeRef(e->d->getType()) << " ";
+        qWarning() << "CilAsmGen ldiface not yet supported";
+        break;
         
     case IL_ldproc:
         out << indent(1) << "ldftn void " << mangledName(e->d) << "()" << endl;

@@ -2016,6 +2016,13 @@ Expression* Parser2::ExpInstr() {
         res->d = trident();
         if( res->d && res->d->kind != Declaration::Field )
             error(cur, "expecting a field");
+
+    } else if( la.d_code == Tok_LDIFACE ) {
+        expect(Tok_LDIFACE, true, "ExpInstr");
+        res->kind = IL_ldiface;
+        res->d = qualident();
+        if( res->d && (res->d->kind != Declaration::TypeDecl) )
+            error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_LDIND_I1 ) {
         expect(Tok_LDIND_I1, true, "ExpInstr");
         res->kind = IL_ldind_i1;

@@ -88,7 +88,7 @@ bool Code::translateModule(Declaration* m)
     Declaration* sub = m->subs;
     while(sub)
     {
-        if( sub->kind == Declaration::TypeDecl && sub->getType() && sub->getType()->kind == Type::Object )
+        if( sub->kind == Declaration::TypeDecl && sub->getType() && (sub->getType()->kind == Type::Object && sub->getType()->kind == Type::Struct) )
         {
             Vtable* vt = new Vtable();
             vtables.push_back(vt);
@@ -1455,6 +1455,7 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
         case IL_sizeof:
         case IL_ptroff:
         case IL_newvla:
+        case IL_ldiface:
             qCritical() << "ERROR: not yet implemented in interpreter:" << s_opName[e->kind];
             return false;
         default:

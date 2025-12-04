@@ -1645,6 +1645,7 @@ QByteArray LlvmGen::expression(Expression* e, int level)
         result = mangle(qualident(e->d));
         break;
 
+        // TODO: ld_iface
     case IL_ldmeth:
         {
             // Load method from vtable

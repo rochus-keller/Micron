@@ -42,6 +42,7 @@ enum IL_op
     IL_ldelem_i4, IL_ldelem_i8, IL_ldelem_u1, IL_ldelem_u2,
     IL_ldelem_u4, IL_ldelem_u8, IL_ldelem_r4, IL_ldelem_r8, IL_ldelem_ip, IL_ldelem_ipp,
     IL_ldfld, IL_ldflda,
+    IL_ldiface,
     IL_ldind_i1, IL_ldind_i2, IL_ldind_i4, IL_ldind_i8, IL_ldind_u1, IL_ldind_u2,
     IL_ldind_u4, IL_ldind_r4, IL_ldind_u8, IL_ldind_r8, IL_ldind_ip, IL_ldind_ipp,
     IL_ldloc, IL_ldloc_s, IL_ldloca, IL_ldloca_s,

@@ -52,7 +52,7 @@ namespace Mic
     #endif
             meta(m),deferred(false),anonymous(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
-            owned(false),type(0),autoself(0),invalid(0),hasSubs(0),ffi_(0){}
+            owned(false),type(0),autoself(0),invalid(0),hasSubs(0),ffi_(0),dynamic(0){}
         ~Node();
 
         enum Meta { Inval, T, D, E };
@@ -81,9 +81,12 @@ namespace Mic
         uint autoself : 1;
         uint invalid : 1; // module
         uint hasSubs : 1; // class/method: has overrides; module: has clients
+        uint dynamic : 1; // true virtual method
 
         // Expression
         uint byVal : 1; // option for LocalVar, Param, ModuleVar, Select, Index
+
+        // 25
 
         RowCol pos; // Declaration, Expression
 

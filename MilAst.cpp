@@ -274,7 +274,7 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
             case Type::Union:
                 {
                     int size = 0;
-                    foreach( Declaration* field, type->getType()->subs)
+                    foreach( Declaration* field, type->subs)
                     {
                         if( field->kind == Declaration::Field )
                         {
@@ -899,18 +899,19 @@ quint32 Type::getAlignment(quint8 pointerWidth) const
         while( i < subs.size() )
         {
             Declaration* f = subs[i];
-            if( f->kind != Declaration::Field )
-                continue;
-            quint32 a = 0;
-            if( f->f.bw )
+            if( f->kind == Declaration::Field )
             {
-                AstModel::BitFieldUnit unit = AstModel::collectBitFields(subs, i, pointerWidth);
-                i += unit.len-1;
-                a = unit.bytelen;
-            }else
-                a = f->getType()->getAlignment(pointerWidth);
-            if( a > res )
-                res = a;
+                quint32 a = 0;
+                if( f->f.bw )
+                {
+                    AstModel::BitFieldUnit unit = AstModel::collectBitFields(subs, i, pointerWidth);
+                    i += unit.len-1;
+                    a = unit.bytelen;
+                }else
+                    a = f->getType()->getAlignment(pointerWidth);
+                if( a > res )
+                    res = a;
+            }
             i++;
         }
         break;

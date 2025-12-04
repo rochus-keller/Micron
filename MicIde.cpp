@@ -2641,6 +2641,7 @@ static void createModItem(T* parent, Declaration* n, Type* t, bool nonbound, boo
                 break;
             case Type::Record:
             case Type::Object:
+            case Type::Interface:
                 {
                     QTreeWidgetItem* item = new QTreeWidgetItem(parent);
                     if( !isAlias  )
@@ -3501,7 +3502,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2.30");
+    a.setApplicationVersion("0.2.31");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 
