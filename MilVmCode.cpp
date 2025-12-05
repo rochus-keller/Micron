@@ -88,7 +88,8 @@ bool Code::translateModule(Declaration* m)
     Declaration* sub = m->subs;
     while(sub)
     {
-        if( sub->kind == Declaration::TypeDecl && sub->getType() && (sub->getType()->kind == Type::Object && sub->getType()->kind == Type::Struct) )
+        if( sub->kind == Declaration::TypeDecl && sub->getType() && sub->getType()->typebound &&
+                (sub->getType()->kind == Type::Object || sub->getType()->kind == Type::Struct) )
         {
             Vtable* vt = new Vtable();
             vtables.push_back(vt);
@@ -138,19 +139,23 @@ bool Code::translateProc(Declaration* proc)
         return false;
     if( proc->typebound )
     {
-        const int off = findVtable(proc->outer->getType());
-        Q_ASSERT(off != -1);
-        vtables[off]->methods[proc->getPd()->slot] = cur;
-        if(proc->override_)
+        Type* cls = proc->outer->getType();
+        if( cls && cls->typebound && cls->kind == Type::Object )
         {
-            // go up the inheritance chain and assure all super methods are translated
-            Type* super = deref(proc->outer->getType()->getType());
-            Q_ASSERT(super && super->kind == Type::Object);
-            Declaration* baseproc = super->findSubByName(proc->name, true);
-            if( baseproc )
+            const int off = findVtable(cls);
+            Q_ASSERT(off != -1);
+            vtables[off]->methods[proc->getPd()->slot] = cur;
+            if(proc->override_)
             {
-                Q_ASSERT(proc->getPd()->slot == baseproc->getPd()->slot );
-                translateProc(baseproc);
+                // go up the inheritance chain and assure all super methods are translated
+                Type* super = deref(proc->outer->getType()->getType());
+                Q_ASSERT(super && super->kind == Type::Object);
+                Declaration* baseproc = super->findSubByName(proc->name, true);
+                if( baseproc )
+                {
+                    Q_ASSERT(proc->getPd()->slot == baseproc->getPd()->slot );
+                    translateProc(baseproc);
+                }
             }
         }
     }
@@ -838,9 +843,14 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
             emitOp(proc, LL_ldproc, findProc(e->d));
             break;
         case IL_ldmeth:
-            if( !translateProc(e->d) )
-                return false;
-            emitOp(proc, LL_ldmeth, e->d->getPd()->slot);
+            if( e->d->subs && e->d->subs->getType() && e->d->subs->getType()->kind == Type::Interface )
+                emitOp(proc, LL_ldmeth_iface, e->d->getPd()->slot);
+            else
+            {
+                if( !translateProc(e->d) )
+                    return false;
+                emitOp(proc, LL_ldmeth, e->d->getPd()->slot);
+            }
             break;
         case IL_conv_i1:
             if( lhsT->isInt32OnStack() )
@@ -1671,7 +1681,7 @@ bool Code::dumpModule(QTextStream& out, Declaration* module)
     {
         if(d->kind == Declaration::Procedure)
             dumpProc(out, d);
-        else if( d->kind == Declaration::TypeDecl && d->getType()->kind == Type::Object )
+        else if( d->kind == Declaration::TypeDecl && d->getType() && (d->getType()->kind == Type::Object || d->getType()->kind == Type::Struct) )
         {
             foreach( Declaration* sub, d->getType()->subs )
             {
@@ -1700,7 +1710,7 @@ void Code::initMemory(char* mem, Type* t, bool doPointerInit )
         return;
     if( t->kind == Type::Struct || t->kind == Type::Object )
     {
-        if( t->kind == Type::Object )
+        if( t->typebound )
         {
             Vtable* vt = getVtable(t);
             memcpy(mem, &vt, sizeof(vt));

@@ -68,7 +68,7 @@ bool Validator::validate(Declaration* module)
             if( module->generic )
             {
             }
-            if( t->kind == Type::Object )
+            if( t->typebound && (t->kind == Type::Object || t->kind == Type::Struct || t->kind == Type::Interface) )
             {
                 Type* base = deref(t->getType());
                 int id = base->numOfNonFwdNonOverrideProcs();
@@ -152,9 +152,12 @@ void Validator::visitProcedure(Declaration* proc)
     if( proc->typebound )
     {
         DeclList params = proc->getParams();
-        if( proc->outer && (deref(params.first()->getType())->kind != Type::Pointer ||
-                 deref(deref(params.first()->getType())->getType()) != proc->outer->getType() ) )
-            error(params.first(), "the SELF parameter must be a pointer to the bound object type");
+        const bool firstIsSelf = !params.isEmpty() && params.first()->typebound && params.first()->getType() &&
+                ( params.first()->getType()->kind == Type::Interface ||
+                  (params.first()->getType()->kind == Type::Pointer && params.first()->getType()->getType() &&
+                    (params.first()->getType()->getType()->kind == Type::Object || params.first()->getType()->getType()->kind == Type::Struct)) );
+        if( !firstIsSelf )
+            error(proc, "the SELF parameter must point to the receiver");
     }
     // TODO: check that
     gotos.clear(); labels.clear();

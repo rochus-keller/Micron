@@ -3663,6 +3663,7 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
         procDecl->typebound = true;
         procDecl->dynamic = objectType->kind == Type::Object;
         procDecl->autoself = autoself;
+        objectType->typebound = true;
 
         Declaration* param = addDecl(receiver.id, 0, Declaration::ParamDecl);
         param->typebound = true;
@@ -4443,22 +4444,28 @@ Type* Parser2::InterfaceType() {
     typeStack.push_back(rec);
     mdl->openScope(0);
     while( FIRST_InterfaceProc(la.d_type) ) {
-        InterfaceProc();
+        InterfaceProc(rec);
     }
     expect(Tok_END, false, "InterfaceType");
-    rec->subs =
-            toList(mdl->closeScope(true));
+    rec->subs = toList(mdl->closeScope(true));
     typeStack.pop_back();
     return rec;
 }
 
-void Parser2::InterfaceProc() {
+void Parser2::InterfaceProc(Type* t) {
     if( FIRST_procedure(la.d_type) ) {
         procedure();
     }
     const IdentDef id = identdef();
     Declaration* d = addDecl(id, Declaration::Procedure);
+
     mdl->openScope(d);
+
+    Declaration* param = mdl->addDecl(self);
+    param->kind = Declaration::ParamDecl;
+    param->typebound = true;
+    param->setType(t);
+
     if( FIRST_FormalParameters(la.d_type) ) {
         d->setType(FormalParameters());
     }

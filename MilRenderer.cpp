@@ -877,19 +877,20 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
 
                 if( rt->kind == Type::Interface )
                     decl->nobody = true; // interface procedures have no body and no self param
-                else
-                {
-                    Type* ptr = decl->subs ? decl->subs->getType() : 0;
-                    if( ptr ) ptr = ptr->deref();
-                    Type* obj = ptr ? ptr->getType() : 0;
-                    if( obj ) obj = obj->deref();
-                    if( decl->subs == 0 || decl->subs->kind != Declaration::ParamDecl ||
-                            ptr == 0 ||  ptr->kind != Type::Pointer ||
-                            obj == 0 || (obj->kind != Type::Object && obj->kind != Type::Struct) || obj != rt )
-                        error(curProc, QString("first parameter of a bound procedure must be a pointer to the object type"));
-                    else if( decl->subs )
-                        decl->subs->typebound = true;
-                }
+
+                Type* ptr = decl->subs ? decl->subs->getType() : 0;
+                if( ptr ) ptr = ptr->deref();
+                Type* obj = ptr ? ptr->getType() : 0;
+                if( obj ) obj = obj->deref();
+
+                const bool firstPointerIsSelf = decl->subs && decl->subs->kind == Declaration::ParamDecl && ptr &&
+                        ( ptr->kind == Type::Interface ||
+                          ptr->kind == Type::Pointer && obj && (obj->kind == Type::Object || obj->kind == Type::Struct ));
+                if( !firstPointerIsSelf )
+                    error(curProc, QString("first parameter of a bound procedure must point to the receiver"));
+                else if( decl->subs )
+                    decl->subs->typebound = true;
+                rt->typebound = true;
                 rt->subs.append(decl);
                 decl->outer = receiver;
             }

@@ -141,7 +141,7 @@ namespace Mic {
 		void ImportList();
 		void import();
         Type *InterfaceType();
-        void InterfaceProc();
+        void InterfaceProc(Type *t);
         void WhereDecls();
         void WhereDeclaration();
         bool satisfiesIntf(Type* lhs, Type* rhs, const RowCol &pos);

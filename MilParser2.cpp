@@ -1034,6 +1034,7 @@ Type* Parser2::type() {
         return StructUnionType();
 	} else if( FIRST_ObjectType(la.d_type) || FIRST_ObjectType(la.d_code) ) {
         return ObjectType();
+        // TODO: Interfaces
 	} else if( FIRST_PointerType(la.d_type) || FIRST_PointerType(la.d_code) ) {
         return PointerType();
 	} else if( FIRST_ProcedureType(la.d_type) ) {
@@ -1322,12 +1323,12 @@ void Parser2::ProcedureDeclaration() {
             proc->typebound = true;
             scopeStack.pop_back();
             object = scopeStack.back()->findSubByName(receiver);
-            if( object && object->getType() && object->getType()->kind != Type::Object )
+            if( object && object->getType() && object->getType()->kind != Type::Object && object->getType()->kind != Type::Struct ) // TODO: interfaces
                 error(tok, "binding doesn't reference an object type");
             else if( object && object->getType() )
             {
-                Type* t = object->getType();
-                Declaration* forward = t->findSubByName(proc->name, false);
+                Type* cls = object->getType();
+                Declaration* forward = cls->findSubByName(proc->name, false);
                 if( forward && (forward->kind != Declaration::Procedure || !forward->forward) )
                     error(tok, "method name not unique in object");
                 else if( forward )
@@ -1336,8 +1337,9 @@ void Parser2::ProcedureDeclaration() {
                     forward->forwardTo = proc;
                 }
                 tmp.subs = 0;
-                t->subs.append(proc);
-                proc->outer = t->decl;
+                cls->subs.append(proc);
+                proc->outer = cls->decl;
+                cls->typebound = true;
             }
         }else
             error(tok, "cannot find the receiver type");
