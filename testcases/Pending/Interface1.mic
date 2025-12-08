@@ -30,11 +30,13 @@ var
 begin
   p.Move(12, 34)
 
+(*
   d := @p
   d.Draw(vp)
   Test(@p, vp)
   d1 := d
   d1.Draw(vp)
+  *)
 
   println(p.y)
 end Interface1

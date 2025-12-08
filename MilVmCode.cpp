@@ -140,11 +140,11 @@ bool Code::translateProc(Declaration* proc)
     if( proc->typebound )
     {
         Type* cls = proc->outer->getType();
-        if( cls && cls->typebound && cls->kind == Type::Object )
+        if( cls && cls->typebound && (cls->kind == Type::Object || cls->kind == Type::Struct) )
         {
-            const int off = findVtable(cls);
-            Q_ASSERT(off != -1);
-            vtables[off]->methods[proc->getPd()->slot] = cur;
+            const int vtidx = findVtable(cls);
+            Q_ASSERT(vtidx != -1);
+            vtables[vtidx]->methods[proc->getPd()->slot] = cur;
             if(proc->override_)
             {
                 // go up the inheritance chain and assure all super methods are translated
@@ -267,6 +267,9 @@ bool Code::translateStatSeq(Procedure& proc, Statement* s)
                     else
                         emitOp(proc, LL_starg_p,params[s->id]->off);
                     break;
+                case Type::Interface:
+                    emitOp(proc, LL_starg_pp,params[s->id]->off);
+                    break;
                 case Type::Struct:
                 case Type::Union:
                 case Type::Object:
@@ -323,6 +326,9 @@ bool Code::translateStatSeq(Procedure& proc, Statement* s)
                         emitOp(proc, LL_stloc_pp,locals[s->id]->off);
                     else
                         emitOp(proc, LL_stloc_p,locals[s->id]->off);
+                    break;
+                case Type::Interface:
+                    emitOp(proc, LL_stloc_pp,locals[s->id]->off);
                     break;
                 case Type::Struct:
                 case Type::Union:
@@ -429,6 +435,9 @@ bool Code::translateStatSeq(Procedure& proc, Statement* s)
                 else
                     emitOp(proc, LL_stfld_p,s->d->f.off);
                 break;
+            case Type::Interface:
+                emitOp(proc, LL_stfld_pp,s->d->f.off);
+                break;
             case Type::Struct:
             case Type::Union:
             case Type::Object:
@@ -474,6 +483,9 @@ bool Code::translateStatSeq(Procedure& proc, Statement* s)
                     emitOp(proc, LL_stvar_pp,s->d->off);
                 else
                     emitOp(proc, LL_stvar_p,s->d->off);
+                break;
+            case Type::Interface:
+                emitOp(proc, LL_stvar_pp,s->d->off);
                 break;
             case Type::Struct:
             case Type::Union:
@@ -977,6 +989,8 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, LL_ceq_p);
             else if( (lhsT->kind == Type::Proc && lhsT->typebound) || (rhsT->kind == Type::Proc && rhsT->typebound) )
                 emitOp(proc, LL_ceq_pp);
+            else if( (lhsT->kind == Type::Interface) || (rhsT->kind == Type::Interface) )
+                emitOp(proc, LL_ceq_pp);
             else
                 Q_ASSERT(false);
             break;
@@ -1083,6 +1097,9 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                     else
                         emitOp(proc, LL_ldarg_p,params[e->id]->off);
                     break;
+                case Type::Interface:
+                    emitOp(proc, LL_ldarg_pp,params[e->id]->off);
+                    break;
                 case Type::Struct:
                 case Type::Union:
                 case Type::Object:
@@ -1155,6 +1172,9 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                         emitOp(proc, LL_ldloc_pp,params[e->id]->off);
                     else
                         emitOp(proc, LL_ldloc_p,params[e->id]->off);
+                    break;
+                case Type::Interface:
+                    emitOp(proc, LL_ldloc_pp,params[e->id]->off);
                     break;
                 case Type::Struct:
                 case Type::Union:
@@ -1303,6 +1323,9 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 else
                     emitOp(proc, LL_ldfld_p,e->d->f.off);
                 break;
+            case Type::Interface:
+                emitOp(proc, LL_ldfld_pp,e->d->f.off);
+                break;
             case Type::Struct:
             case Type::Union:
             case Type::Object:
@@ -1359,6 +1382,9 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                     emitOp(proc, LL_ldvar_pp,e->d->off);
                 else
                     emitOp(proc, LL_ldvar_p,e->d->off);
+                break;
+            case Type::Interface:
+                emitOp(proc, LL_ldvar_pp,e->d->off);
                 break;
             case Type::Struct:
             case Type::Union:
@@ -1462,10 +1488,63 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, LL_isinst, id);
             }
             break;
+
+        case IL_ldiface: {
+                int id = findIface(e->d->getType());
+                if( id == -1 )
+                {
+                    id = interfaces.size();
+                    interfaces.push_back(Interface(e->d->getType()));
+                }
+                Q_ASSERT( id >= 0 && id < interfaces.size() );
+                Q_ASSERT(e->lhs);
+                Type* cls = deref(e->lhs->getType());
+                if( cls->kind == Type::Pointer )
+                    cls = deref(cls->getType());
+                Interface& iface = interfaces[id];
+                id = iface.find(cls);
+
+                if( id == -1 )
+                {
+                    // create new vtable for the interface/cls pair, composing methods of cls in the order required by the interface
+                    Vtable* vt = new Vtable();
+                    vtables.push_back(vt);
+                    vt->type = e->d->getType();
+                    QList<Declaration*> imethods = vt->type->getMethodTable();
+                    QList<Declaration*> clsmeths = cls->getMethodTable();
+                    vt->methods.resize(imethods.size());
+
+                    for( int i = 0; i < vt->methods.size(); i++ )
+                    {
+                        for( int j = 0; j < clsmeths.size(); j++ )
+                        {
+                            if( !translateProc(clsmeths[j]) )
+                                return false;
+                            if( clsmeths[j]->name.constData() == imethods[i]->name.constData() )
+                            {
+                                const int off = findProc(clsmeths[j]);
+                                if( off < 0 )
+                                    return false;
+                                vt->methods[i] = procs[off];
+                                break;
+                            }
+                        }
+                        if( vt->methods[i] == 0 )
+                            return false;
+                    }
+                    // update id
+                    iface.mappings.append(qMakePair(cls,vtables.size()-1));
+                    id = iface.mappings.size()-1;
+                }
+
+                id = iface.mappings[id].second;
+                emitOp(proc, LL_ldiface, id); // id is the interface vtable index
+            } break;
+
         case IL_sizeof:
         case IL_ptroff:
         case IL_newvla:
-        case IL_ldiface:
+
             qCritical() << "ERROR: not yet implemented in interpreter:" << s_opName[e->kind];
             return false;
         default:

@@ -89,6 +89,20 @@ struct Template
     Template():type(0){}
 };
 
+struct Interface
+{
+    Type* type;
+    QList<QPair<Type*, quint32> > mappings; // record/object -> vtable index
+    Interface(Type* t):type(t) {}
+    int find(Type* t) const
+    {
+        for(int i = 0; i < mappings.size(); i++ )
+            if( mappings[i].first == t )
+                return i;
+        return -1;
+    }
+};
+
 struct MethRef
 {
     void* obj;
@@ -248,6 +262,17 @@ protected:
         return -1;
     }
 
+    int findIface(Type* iface) const
+    {
+        for( int i = 0; i < interfaces.size(); i++ )
+        {
+            if( interfaces[i].type == iface )
+                return i;
+        }
+        return -1;
+    }
+
+
 private:
     const quint8 pointerWidth;
     const quint8 stackAlignment;
@@ -261,6 +286,7 @@ private:
     std::vector<Procedure*> procs;
     std::vector<Vtable*> vtables;
     std::vector<Template> templates;
+    std::vector<Interface> interfaces;
 
     // the following are only used during compilation:
     struct Where {

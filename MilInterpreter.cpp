@@ -1652,6 +1652,13 @@ bool Interpreter::Imp::execute(Frame* frame)
                 qWarning() << "TODO not yet implemented" << Code::op_names[frame->proc->ops[pc].op];
                 pc++;
             vmbreak;
+        vmcase(ldiface)
+        vmcase(ldmeth_iface)
+                qWarning() << "TODO not yet implemented" << Code::op_names[frame->proc->ops[pc].op];
+                pc++;
+                frame->push(VM_VAR_ADDR, stackAligned(sizeof(MethRef)));
+                pc++;
+            vmbreak;
         }
     }
     return true;
