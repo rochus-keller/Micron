@@ -155,9 +155,10 @@ void Validator::visitProcedure(Declaration* proc)
         const bool firstIsSelf = !params.isEmpty() && params.first()->typebound && params.first()->getType() &&
                 ( params.first()->getType()->kind == Type::Interface ||
                   (params.first()->getType()->kind == Type::Pointer && params.first()->getType()->getType() &&
-                    (params.first()->getType()->getType()->kind == Type::Object || params.first()->getType()->getType()->kind == Type::Struct)) );
+                    (deref(params.first()->getType()->getType())->kind == Type::Object ||
+                     deref(params.first()->getType()->getType())->kind == Type::Struct)) );
         if( !firstIsSelf )
-            error(proc, "the SELF parameter must point to the receiver");
+            error(proc, "the 'self' parameter must point to the receiver");
     }
     // TODO: check that
     gotos.clear(); labels.clear();

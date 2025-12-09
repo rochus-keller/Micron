@@ -12,7 +12,7 @@ MODULE TypeCase;
    BEGIN
    	 PRINT(str)
      PRINT(" from test1 ")
-     PRINTLN(SELF.i)
+     PRINTLN(self.i)
    END test1
    
    VAR t : T1; v: T0;

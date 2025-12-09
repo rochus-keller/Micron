@@ -626,7 +626,7 @@ static bool isPtrToOpenCharArray(Type* t)
 
 Parser2::Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* i, bool xref):
     mdl(m),scanner(s),out(out),imp(i),thisMod(0),thisDecl(0),inFinally(false),
-    langLevel(1),haveExceptions(false),first(0),last(0)
+    langLevel(3),haveExceptions(false),first(0),last(0)
 {
     ev = new Evaluator(m,out);
     self = Token::getSymbol("self");

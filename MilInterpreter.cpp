@@ -1549,11 +1549,12 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             } vmbreak;
         vmcase(callvirt) {
-                // dispatch using the SELF pointer on stack; but we can only access the
-                // SELF pointer after we have the size of the parameters
+                // dispatch using the self pointer on stack; but we can only access the
+                // self pointer after we have the size of the parameters
                 Procedure* proc = code.getProc(frame->proc->ops[pc].val);
                 void* obj = *(void**)(frame->stack.data()+frame->sp-proc->fixArgSize);
                 Vtable* vtbl = *(Vtable**)(obj);
+                Q_ASSERT(vtbl);
                 Q_ASSERT(proc->decl->pd);
                 proc = vtbl->methods[proc->decl->pd->slot];
                 if( !call(frame, pc, proc, locals, stack ) )
@@ -1561,7 +1562,8 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             } vmbreak;
         vmcase(callinst){
-                if( !call(frame, pc, code.getProc(frame->proc->ops[pc].val), locals, stack ) )
+                Procedure* proc = code.getProc(frame->proc->ops[pc].val);
+                if( !call(frame, pc, proc, locals, stack ) )
                     return false;
                 pc++;
             } vmbreak;

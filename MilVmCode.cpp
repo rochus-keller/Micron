@@ -88,8 +88,8 @@ bool Code::translateModule(Declaration* m)
     Declaration* sub = m->subs;
     while(sub)
     {
-        if( sub->kind == Declaration::TypeDecl && sub->getType() && sub->getType()->typebound &&
-                (sub->getType()->kind == Type::Object || sub->getType()->kind == Type::Struct) )
+        if( sub->kind == Declaration::TypeDecl && sub->getType() &&
+                (sub->getType()->kind == Type::Object || (sub->getType()->typebound && sub->getType()->kind == Type::Struct)) )
         {
             Vtable* vt = new Vtable();
             vtables.push_back(vt);
@@ -140,7 +140,8 @@ bool Code::translateProc(Declaration* proc)
     if( proc->typebound )
     {
         Type* cls = proc->outer->getType();
-        if( cls && cls->typebound && (cls->kind == Type::Object || cls->kind == Type::Struct) )
+        Q_ASSERT(cls);
+        if( cls->kind == Type::Object || (cls->typebound && cls->kind == Type::Struct) )
         {
             const int vtidx = findVtable(cls);
             Q_ASSERT(vtidx != -1);
@@ -1789,9 +1790,11 @@ void Code::initMemory(char* mem, Type* t, bool doPointerInit )
         return;
     if( t->kind == Type::Struct || t->kind == Type::Object )
     {
-        if( t->typebound )
+        if( t->kind == Type::Object )
         {
+            // set the vtable pointer at offset 0 of object instance
             Vtable* vt = getVtable(t);
+            Q_ASSERT(vt);
             memcpy(mem, &vt, sizeof(vt));
             foreach( Declaration* d, t->subs )
             {

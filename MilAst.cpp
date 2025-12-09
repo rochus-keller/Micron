@@ -269,6 +269,11 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
                         i++;
                     }
                     type->bytesize = off + AstModel::padding(off, maxAlig);
+                    foreach( Declaration* sub, type->subs )
+                    {
+                        if( sub->kind == Declaration::Procedure )
+                            calcParamsLocalsLayout(sub, pointerWidth, stackAlignment, firstParamOffset);
+                    }
                 }
                 break;
             case Type::Union:
