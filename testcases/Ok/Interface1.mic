@@ -17,12 +17,16 @@ type
     self.x := x; self.y := y
   end Move
   
-  (*
-  proc Test(d: Drawable; vp: Viewport)
+  proc Test(d: Drawable; vp: Viewport): Drawable
   begin
     d.Draw(vp)
+    return d
   end Test
-  *)
+  
+  proc Test2(p: ^Point): Drawable
+  begin
+    return p
+  end Test2
   
 var
   d, d1: Drawable
@@ -33,12 +37,13 @@ begin
   p.Move(12, 34)
 
   d := @p
-(*
   d.Draw(vp)
-  Test(@p, vp)
-  d1 := d
+  
+  d1 := Test(@p, vp)
   d1.Draw(vp)
-  *)
+  
+  d1 := Test2(@p)
+  d1.Draw(vp)
 
   println(p.y)
 end Interface1

@@ -74,6 +74,13 @@ public:
     inline int size() const { return s; }
 };
 
+struct IfaceRef
+{
+    void* obj;
+    Vtable* iface;
+    IfaceRef(Vtable* o = 0, Vtable* i = 0):obj(o),iface(i){}
+};
+
 class Frame
 {
 public:
@@ -158,11 +165,19 @@ public:
         pop(stackAlig);
         return res;
     }
-    MethRef popPP()
+    MethRef popMethRef()
     {
         MethRef res;
         const int sos = Interpreter::stackAligned(sizeof(MethRef));
         copy(&res, -sos, sizeof(MethRef));
+        pop(sos);
+        return res;
+    }
+    IfaceRef popIfaceRef()
+    {
+        IfaceRef res;
+        const int sos = Interpreter::stackAligned(sizeof(IfaceRef));
+        copy(&res, -sos, sizeof(IfaceRef));
         pop(sos);
         return res;
     }
@@ -511,6 +526,10 @@ bool Interpreter::run(Declaration* proc)
     }catch( const QString& err )
     {
         qCritical() << err.toUtf8().constData();
+        return false;
+    }catch(...)
+    {
+        qCritical() << "memory error";
         return false;
     }
 }
@@ -1520,6 +1539,25 @@ bool Interpreter::Imp::execute(Frame* frame)
                 frame->push(&m, stackAligned(sizeof(MethRef)));
                 pc++;
             }vmbreak;
+        vmcase(ldiface) {
+                IfaceRef r;
+                r.obj = frame->popP();
+                r.iface = code.getVtable(frame->proc->ops[pc].val);
+                Q_ASSERT(r.iface != 0);
+                Q_ASSERT(r.obj != 0);
+                frame->push(&r, stackAligned(sizeof(IfaceRef)));
+                pc++;
+            }vmbreak;
+        vmcase(ldmeth_iface) {
+                IfaceRef r = frame->popIfaceRef();
+                Q_ASSERT(r.iface != 0);
+                Q_ASSERT(r.obj != 0);
+                MethRef m;
+                m.obj = r.obj;
+                m.proc = r.iface->methods[frame->proc->ops[pc].val];
+                frame->push(&m, stackAligned(sizeof(MethRef)));
+                pc++;
+            }vmbreak;
         vmcase(sizeof)
         vmcase(ptroff)
                 qWarning() << "TODO not yet implemented" << Code::op_names[frame->proc->ops[pc].op];
@@ -1568,7 +1606,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             } vmbreak;
         vmcase(callmi) {
-                MethRef r = frame->popPP();
+                MethRef r = frame->popMethRef();
                 // make room for SELF on stack and copy r.obj to the first argument slot
                 frame->insert(-r.proc->fixArgSize + StackAlign, r.obj); // fixArgSize already includes SELF
                 if( !call(frame, pc, r.proc, locals, stack ) )
@@ -1652,13 +1690,6 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(newvla)
         vmcase(line)
                 qWarning() << "TODO not yet implemented" << Code::op_names[frame->proc->ops[pc].op];
-                pc++;
-            vmbreak;
-        vmcase(ldiface)
-        vmcase(ldmeth_iface)
-                qWarning() << "TODO not yet implemented" << Code::op_names[frame->proc->ops[pc].op];
-                pc++;
-                frame->push(VM_VAR_ADDR, stackAligned(sizeof(MethRef)));
                 pc++;
             vmbreak;
         }

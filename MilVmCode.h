@@ -101,13 +101,18 @@ struct Interface
                 return i;
         return -1;
     }
+    // NOTE:
+    // instead of explicit vtables for each class/interface combination, we could use the same approach as
+    // in TinyGo, where the interface reference only contains a type symbol instead of a pointer to a vtable
+    // and the compiler generates switch statements based on this type symbol which selects the procedure
+    // which has O(N) instead of O(1).
 };
 
 struct MethRef
 {
     void* obj;
     Procedure* proc;
-    MethRef(Vtable* o = 0, Procedure* p = 0):obj(o),proc(p){}
+    MethRef(void* o = 0, Procedure* p = 0):obj(o),proc(p){}
 };
 
 class Code

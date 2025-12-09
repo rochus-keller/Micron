@@ -13,7 +13,7 @@ size=0
 [Modules]
 1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/Interface1.mic
 1\RelPath=Interface1.mic
-size=1
+size=0
 
 [Packages]
 1\Name=@ByteArray()

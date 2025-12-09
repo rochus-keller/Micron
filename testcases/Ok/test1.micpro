@@ -115,6 +115,8 @@ size=0
 55\RelPath=Storage.mic
 56\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/TypeCase.mic
 56\RelPath=TypeCase.mic
+57\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/Interface1.mic
+57\RelPath=Interface1.mic
 6\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/Arrays5.mic
 6\RelPath=Arrays5.mic
 7\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/BoundProcs.mic
@@ -123,7 +125,7 @@ size=0
 8\RelPath=CompCon1.mic
 9\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/CompCon2.mic
 9\RelPath=CompCon2.mic
-size=56
+size=57
 
 [Packages]
 1\Name=@ByteArray()
