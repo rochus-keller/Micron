@@ -145,6 +145,8 @@ namespace Mic {
         void WhereDecls();
         void WhereDeclaration();
         bool satisfiesIntf(Type* lhs, Type* rhs, const RowCol &pos);
+        void ModuleAttributes();
+        QByteArray Attribute();
 
         static bool isUnique(const MetaParamList&, const Declaration*);
         MetaParamList MetaParams();

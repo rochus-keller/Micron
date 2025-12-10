@@ -5,8 +5,8 @@
 
 #include <QByteArray>
 
-#define MIC_LEVEL1
 #define MIC_LEVEL3
+#define MIC_LEVEL1
 
 namespace Mic {
 	enum TokenType {

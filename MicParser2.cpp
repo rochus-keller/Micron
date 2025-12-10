@@ -4153,6 +4153,10 @@ void Parser2::module(const Import & import) {
 
     modecl->data = QVariant::fromValue(modata);
 
+    if( la.d_type == Tok_Lbrack ) {
+        ModuleAttributes();
+    }
+
     if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
 	}
@@ -4562,4 +4566,54 @@ bool Parser2::satisfiesIntf(Type *lhs, Type *rhs, const RowCol& pos)
         }
     }
     return true;
+}
+
+void Parser2::ModuleAttributes()
+{
+    expect(Tok_Lbrack, false, "ModuleAttributes");
+    QByteArray name = Attribute();
+    QSet<QByteArray> test;
+    test << name;
+    while( la.d_type == Tok_Comma || la.d_type == Tok_ident ) {
+        if( la.d_type == Tok_Comma ) {
+            expect(Tok_Comma, false, "ModuleAttributes");
+        }
+        const Token t = la;
+        name = Attribute();
+        if( test.contains(name) )
+            error(t, "dupplicate attribute" );
+        test << name;
+    }
+    expect(Tok_Rbrack, false, "ModuleAttributes");
+    Expression::deleteAllExpressions();
+}
+
+QByteArray Parser2::Attribute()
+{
+    const Token t = la;
+    expect(Tok_ident, false, "Attribute");
+    const QByteArray name = cur.d_val.toLower();
+    Value v;
+    if( la.d_type == Tok_Eq ) {
+        expect(Tok_Eq, false, "Attribute");
+        const Token t = la;
+        Expression* e = ConstExpression(0);
+        if( e && !ev->evaluate(e) )
+        {
+            error(t, ev->getErr());
+            return name;
+        }
+        v = ev->pop();
+    }
+    if( name == "standard" || name == "level" )
+    {
+        if( v.type == 0 || !v.type->isUInt() || v.val.toInt() < 0 || v.val.toInt() > 4 )
+        {
+            error(t, "expecting a level number 0..4");
+            return name;
+        }else
+            langLevel = v.val.toInt();
+    }else
+        error(t, "unknown attribute");
+    return name;
 }

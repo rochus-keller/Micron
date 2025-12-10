@@ -98,6 +98,8 @@ namespace Mic {
 		void FPSection();
 		void FormalType();
 		void module();
+		void ModuleAttributes();
+		void Attribute();
 		void ImportList();
 		void WhereDecls();
 		void import();

@@ -1,4 +1,4 @@
-module Interface1
+module Interface1 [ level = 1 ]
 
 type
   Point = record x,y: integer end
