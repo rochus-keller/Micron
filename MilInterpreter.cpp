@@ -33,6 +33,13 @@ using namespace Vm;
 
 enum { PreAllocSize = 1024 };
 
+enum { StackAlig = 8, StackAligM1 = StackAlig - 1, StackAligM1Inv = ~(StackAlig - 1)};
+
+#define _stackAligned(off) ((off + StackAligM1) & StackAligM1Inv)
+    // precondition: a is power of two and > 0
+
+enum { TwiceStackAlignedPtrSize = 2*_stackAligned(sizeof(void*)), StackAlignedDblPtrSize = _stackAligned(sizeof(MethRef)) };
+
 class ByteArray
 {
     char* d;
@@ -84,7 +91,6 @@ struct IfaceRef
 class Frame
 {
 public:
-    enum { stackAlig = 8 };
     Procedure* proc;
     Frame* outer;
     ByteArray locals;
@@ -93,8 +99,8 @@ public:
     Frame():proc(0),outer(0),sp(0){}
     void* alloc(int len)
     {
-        if( len < stackAlig )
-            len = stackAlig;
+        if( len < StackAlig )
+            len = StackAlig;
         if( sp + len > stack.size() )
             stack.resize(len);
         void* res = stack.data()+sp;
@@ -133,42 +139,42 @@ public:
     qint32 popI4()
     {
         qint32 res;
-        copy(&res, -stackAlig, sizeof(qint32));
-        pop(stackAlig);
+        copy(&res, -StackAlig, sizeof(qint32));
+        pop(StackAlig);
         return res;
     }
     float popR4()
     {
         float res;
-        copy(&res, -stackAlig, sizeof(float));
-        pop(stackAlig);
+        copy(&res, -StackAlig, sizeof(float));
+        pop(StackAlig);
         return res;
     }
     qint64 popI8()
     {
         qint64 res;
-        copy(&res, -stackAlig, sizeof(qint64));
-        pop(stackAlig);
+        copy(&res, -StackAlig, sizeof(qint64));
+        pop(StackAlig);
         return res;
     }
     double popR8()
     {
         double res;
-        copy(&res, -stackAlig, sizeof(double));
-        pop(stackAlig);
+        copy(&res, -StackAlig, sizeof(double));
+        pop(StackAlig);
         return res;
     }
     void* popP()
     {
         void* res;
-        copy(&res, -stackAlig, sizeof(void*));
-        pop(stackAlig);
+        copy(&res, -StackAlig, sizeof(void*));
+        pop(StackAlig);
         return res;
     }
     MethRef popMethRef()
     {
         MethRef res;
-        const int sos = Interpreter::stackAligned(sizeof(MethRef));
+        const int sos = StackAlignedDblPtrSize;
         copy(&res, -sos, sizeof(MethRef));
         pop(sos);
         return res;
@@ -176,7 +182,7 @@ public:
     IfaceRef popIfaceRef()
     {
         IfaceRef res;
-        const int sos = Interpreter::stackAligned(sizeof(IfaceRef));
+        const int sos = StackAlignedDblPtrSize;
         copy(&res, -sos, sizeof(IfaceRef));
         pop(sos);
         return res;
@@ -204,7 +210,7 @@ public:
     }
     inline void* slot(int off)
     {
-        return stack.data()+sp+off*stackAlig;
+        return stack.data()+sp+off*StackAlig;
     }
 private:
     static void* operator new(size_t);      // Block scalar heap allocation
@@ -216,7 +222,7 @@ static bool MIC_relop1(void* args, void* ret)
     // int MIC$$relop1(const char* l, const char* r, int op)
     const int res = MIC$$relop1((char*)Interpreter::toP(args, 0),
                                 (char*)Interpreter::toP(args, sizeof(void*)),
-                                Interpreter::toI4(args, 2*Interpreter::stackAligned(sizeof(void*))));
+                                Interpreter::toI4(args, TwiceStackAlignedPtrSize));
     Interpreter::retI4(ret, res);
     return true;
 }
@@ -226,7 +232,7 @@ static bool MIC_relop2(void* args, void* ret)
     // int MIC$$relop2(const char* lhs, char rhs, int op)
     const int res = MIC$$relop2((char*)Interpreter::toP(args, 0),
                                 Interpreter::toI4(args, sizeof(void*)),
-                                Interpreter::toI4(args, 2*Interpreter::stackAligned(sizeof(void*))));
+                                Interpreter::toI4(args, TwiceStackAlignedPtrSize));
     Interpreter::retI4(ret, res);
     return true;
 }
@@ -236,7 +242,7 @@ static bool MIC_relop3(void* args, void* ret)
     // int MIC$$relop3(char lhs, const char* rhs, int op)
     const int res = MIC$$relop3(Interpreter::toI4(args, 0),
                                 (char*)Interpreter::toP(args, sizeof(int)),
-                                Interpreter::toI4(args, 2*Interpreter::stackAligned(sizeof(void*))));
+                                Interpreter::toI4(args, TwiceStackAlignedPtrSize));
     Interpreter::retI4(ret, res);
     return true;
 }
@@ -246,7 +252,7 @@ static bool MIC_relop4(void* args, void* ret)
     // int MIC$$relop4(char lhs, char rhs, int op)
     const int res = MIC$$relop4(Interpreter::toI4(args, 0),
                                 Interpreter::toI4(args, sizeof(void*)),
-                                Interpreter::toI4(args, 2*Interpreter::stackAligned(sizeof(void*))));
+                                Interpreter::toI4(args, TwiceStackAlignedPtrSize));
     Interpreter::retI4(ret, res);
     return true;
 }
@@ -333,7 +339,7 @@ struct Interpreter::Imp
     std::vector<char> moduleData;
     std::vector<FfiProc> ffiProcs;
 
-    Imp(AstModel* mdl):mdl(mdl), code(mdl, sizeof(void*), Frame::stackAlig)
+    Imp(AstModel* mdl):mdl(mdl), code(mdl, sizeof(void*), StackAlig)
     {
 #if 0
         QTextStream out(stdout);
@@ -355,11 +361,6 @@ struct Interpreter::Imp
         REGISTER_MICPROC(printBool);
         REGISTER_MICPROC(printSet);
         REGISTER_MICPROC(assert);
-    }
-
-    static inline int stackAligned(int off)
-    {
-        return AstModel::align(off, Frame::stackAlig );
     }
 
     bool run(Declaration* proc)
@@ -389,35 +390,35 @@ Interpreter::~Interpreter()
 qint32 Interpreter::toI4(void* args, int off)
 {
     qint32 res;
-    memcpy(&res, args + Imp::stackAligned(off), sizeof(res));
+    memcpy(&res, args + _stackAligned(off), sizeof(res));
     return res;
 }
 
 qint64 Interpreter::toI8(void* args, int off)
 {
     qint64 res;
-    memcpy(&res, args + Imp::stackAligned(off), sizeof(res));
+    memcpy(&res, args + _stackAligned(off), sizeof(res));
     return res;
 }
 
 float Interpreter::toR4(void* args, int off)
 {
     float res;
-    memcpy(&res, args + Imp::stackAligned(off), sizeof(res));
+    memcpy(&res, args + _stackAligned(off), sizeof(res));
     return res;
 }
 
 double Interpreter::toR8(void* args, int off)
 {
     double res;
-    memcpy(&res, args + Imp::stackAligned(off), sizeof(res));
+    memcpy(&res, args + _stackAligned(off), sizeof(res));
     return res;
 }
 
 void*Interpreter::toP(void* args, int off)
 {
     void* res;
-    memcpy(&res, args + Imp::stackAligned(off), sizeof(res));
+    memcpy(&res, args + _stackAligned(off), sizeof(res));
     return res;
 }
 
@@ -448,7 +449,7 @@ void Interpreter::retP(void* ret, void* val)
 
 int Interpreter::stackAligned(int off)
 {
-    return Imp::stackAligned(off);
+    return _stackAligned(off);
 }
 
 void Interpreter::registerProc(const QByteArray& module, const QByteArray& procName, Interpreter::FfiProc proc)
@@ -543,12 +544,12 @@ bool Interpreter::Imp::run(quint32 proc)
 
 #define VM_BINARY_OP(type, op) \
     *(type*)frame->slot(-2) = *(type*)frame->slot(-2) op *(type*)frame->slot(-1); \
-    frame->pop(Frame::stackAlig); pc++;
+    frame->pop(StackAlig); pc++;
 
 #define VM_COMPARE_OP(type, op) \
-    Q_ASSERT(sizeof(quint64) == Frame::stackAlig); \
+    Q_ASSERT(sizeof(quint64) == StackAlig); \
     *(quint64*)frame->slot(-2) = *(type*)frame->slot(-2) op *(type*)frame->slot(-1); \
-    frame->pop(Frame::stackAlig); pc++;
+    frame->pop(StackAlig); pc++;
 
 #define VM_UNARY_OP(type, op) \
     *(type*)frame->slot(-1) = op *(type*)frame->slot(-1); \
@@ -966,11 +967,11 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldarg_pp)
-                frame->push(VM_ARG_ADDR, stackAligned(sizeof(MethRef)));
+                frame->push(VM_ARG_ADDR, StackAlignedDblPtrSize);
                 pc++;
                 vmbreak;
         vmcase(ldarg_vt)
-                frame->push(VM_ARG_ADDR, stackAligned(frame->proc->ops[pc+1].val));
+                frame->push(VM_ARG_ADDR, _stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(ldarga)
@@ -1007,16 +1008,16 @@ bool Interpreter::Imp::execute(Frame* frame)
             vmbreak;
         vmcase(starg_pp)
                 frame->copy(VM_ARG_ADDR, // to
-                            -stackAligned(sizeof(MethRef)), // size on stack
+                            -StackAlignedDblPtrSize, // size on stack
                             sizeof(MethRef)); // true size
-                frame->pop(stackAligned(sizeof(MethRef)));
+                frame->pop(StackAlignedDblPtrSize);
                 pc++;
                 vmbreak;
         vmcase(starg_vt)
                 frame->copy(VM_ARG_ADDR, // to
-                            -stackAligned(frame->proc->ops[pc+1].val), // size on stack
+                            -_stackAligned(frame->proc->ops[pc+1].val), // size on stack
                             frame->proc->ops[pc+1].val); // true size
-                frame->pop(stackAligned(frame->proc->ops[pc+1].val));
+                frame->pop(_stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(ldelem_i1)
@@ -1059,7 +1060,7 @@ bool Interpreter::Imp::execute(Frame* frame)
             } vmbreak;
         vmcase(ldelem_vt) {
                 const quint32 i = frame->popI4(); quint8* a = (quint8*)frame->popP();
-                frame->push(a + i * frame->proc->ops[pc].val, stackAligned(frame->proc->ops[pc].val));
+                frame->push(a + i * frame->proc->ops[pc].val, _stackAligned(frame->proc->ops[pc].val));
                 pc++;
             } vmbreak;
         vmcase(stelem_i1)
@@ -1084,13 +1085,13 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_STELEM(void*, P)
             vmbreak;
         vmcase(stelem_vt) {
-                const int lenonstack = stackAligned(frame->proc->ops[pc].val);
+                const int lenonstack = _stackAligned(frame->proc->ops[pc].val);
                 const int etlen = frame->proc->ops[pc].val;
                 quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
-                const quint32 i = *(quint32*)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
-                quint8* a = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig - Frame::stackAlig);
+                const quint32 i = *(quint32*)(frame->stack.data() + frame->sp - lenonstack - StackAlig);
+                quint8* a = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - StackAlig - StackAlig);
                 memcpy(a + i * etlen, v, etlen);
-                frame->pop(lenonstack + Frame::stackAlig + Frame::stackAlig);
+                frame->pop(lenonstack + StackAlig + StackAlig);
                 pc++;
             } vmbreak;
         vmcase(ldfld_i1)
@@ -1127,12 +1128,12 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_LDFLD(void*, P)
             vmbreak;
         vmcase(ldfld_pp)
-                frame->push( frame->popP() + frame->proc->ops[pc].val, stackAligned(sizeof(MethRef)) );
+                frame->push( frame->popP() + frame->proc->ops[pc].val, StackAlignedDblPtrSize );
                 pc++;
                 vmbreak;
         vmcase(ldfld_vt) {
                 quint8* obj = (quint8*)frame->popP();
-                frame->push( obj + frame->proc->ops[pc].val, stackAligned(frame->proc->ops[pc+1].val) );
+                frame->push( obj + frame->proc->ops[pc].val, _stackAligned(frame->proc->ops[pc+1].val) );
                 pc += 2;
             } vmbreak;
         vmcase(ldflda) {
@@ -1161,21 +1162,21 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_STFLD(void*, P)
             vmbreak;
         vmcase(stfld_pp){
-                const int lenonstack = stackAligned(sizeof(MethRef));
+                const int lenonstack = StackAlignedDblPtrSize;
                 const int flen = sizeof(MethRef);
                 quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
-                quint8* obj = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
+                quint8* obj = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - StackAlig);
                 memcpy(obj + frame->proc->ops[pc].val, v, flen);
-                frame->pop(lenonstack + Frame::stackAlig);
+                frame->pop(lenonstack + StackAlig);
                 pc++;
             } vmbreak;
         vmcase(stfld_vt) {
-                const int lenonstack = stackAligned(frame->proc->ops[pc+1].val);
+                const int lenonstack = _stackAligned(frame->proc->ops[pc+1].val);
                 const int flen = frame->proc->ops[pc+1].val;
                 quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
-                quint8* obj = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
+                quint8* obj = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - StackAlig);
                 memcpy(obj + frame->proc->ops[pc].val, v, flen);
-                frame->pop(lenonstack + Frame::stackAlig);
+                frame->pop(lenonstack + StackAlig);
                 pc += 2;
             } vmbreak;
         vmcase(ldind_i1)
@@ -1213,10 +1214,10 @@ bool Interpreter::Imp::execute(Frame* frame)
             vmbreak;
         vmcase(ldind_vt){
                 void* ptr = frame->popP();
-                frame->push(ptr, stackAligned(frame->proc->ops[pc].val)); pc++;
+                frame->push(ptr, _stackAligned(frame->proc->ops[pc].val)); pc++;
             } vmbreak;
        vmcase(ldind_str) {
-                const int n = stackAligned(frame->proc->ops[pc].val);
+                const int n = _stackAligned(frame->proc->ops[pc].val);
                 const char* from = (const char*)frame->popP();
                 char* to = (char*)frame->alloc(n);
                 strncpy(to, from, n-1);
@@ -1245,12 +1246,12 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_STIND(void*, P)
             vmbreak;
         vmcase(stind_vt) {
-                const int lenonstack = stackAligned(frame->proc->ops[pc].val);
+                const int lenonstack = _stackAligned(frame->proc->ops[pc].val);
                 const int len = frame->proc->ops[pc].val;
                 quint8* v = (quint8*)(frame->stack.data() + frame->sp - lenonstack);
-                quint8* ptr = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - Frame::stackAlig);
+                quint8* ptr = *(quint8**)(frame->stack.data() + frame->sp - lenonstack - StackAlig);
                 memcpy(ptr, v, len);
-                frame->pop(lenonstack + Frame::stackAlig);
+                frame->pop(lenonstack + StackAlig);
                 pc++;
             } vmbreak;
         vmcase(ldloc_i1)
@@ -1298,7 +1299,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldloc_pp)
-                frame->push(VM_LOCAL_ADDR, stackAligned(sizeof(MethRef)));
+                frame->push(VM_LOCAL_ADDR, StackAlignedDblPtrSize);
                 pc++;
                 vmbreak;
         vmcase(ldloca)
@@ -1306,7 +1307,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldloc_vt)
-                frame->push(VM_LOCAL_ADDR, stackAligned(frame->proc->ops[pc+1].val));
+                frame->push(VM_LOCAL_ADDR, _stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(stloc_i1)
@@ -1339,16 +1340,16 @@ bool Interpreter::Imp::execute(Frame* frame)
             vmbreak;
         vmcase(stloc_pp)
                 frame->copy(VM_LOCAL_ADDR, // to
-                            -stackAligned(sizeof(MethRef)), // size on stack
+                            -StackAlignedDblPtrSize, // size on stack
                             sizeof(MethRef)); // true size
-                frame->pop(stackAligned(sizeof(MethRef)));
+                frame->pop(StackAlignedDblPtrSize);
                 pc++;
                 vmbreak;
         vmcase(stloc_vt)
                 frame->copy(VM_LOCAL_ADDR, // to
-                            -stackAligned(frame->proc->ops[pc+1].val), // size on stack
+                            -_stackAligned(frame->proc->ops[pc+1].val), // size on stack
                             frame->proc->ops[pc+1].val); // true size
-                frame->pop(stackAligned(frame->proc->ops[pc+1].val));
+                frame->pop(_stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(ldvar_i1)
@@ -1396,7 +1397,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldvar_pp)
-                frame->push(VM_VAR_ADDR, stackAligned(sizeof(MethRef)));
+                frame->push(VM_VAR_ADDR, StackAlignedDblPtrSize);
                 pc++;
                 vmbreak;
         vmcase(ldvara)
@@ -1404,7 +1405,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             vmbreak;
         vmcase(ldvar_vt)
-                frame->push(VM_VAR_ADDR, stackAligned(frame->proc->ops[pc+1].val));
+                frame->push(VM_VAR_ADDR, _stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(stvar_i1)
@@ -1437,16 +1438,16 @@ bool Interpreter::Imp::execute(Frame* frame)
             vmbreak;
         vmcase(stvar_pp)
                 frame->copy(VM_VAR_ADDR, // to
-                            -stackAligned(sizeof(MethRef)), // size on stack
+                            -StackAlignedDblPtrSize, // size on stack
                             sizeof(MethRef)); // true size
-                frame->pop(stackAligned(sizeof(MethRef)));
+                frame->pop(StackAlignedDblPtrSize);
                 pc++;
                 vmbreak;
         vmcase(stvar_vt)
                 frame->copy(VM_VAR_ADDR, // to
-                            -stackAligned(frame->proc->ops[pc+1].val), // size on stack
+                            -_stackAligned(frame->proc->ops[pc+1].val), // size on stack
                             frame->proc->ops[pc+1].val); // true size
-                frame->pop(stackAligned(frame->proc->ops[pc+1].val));
+                frame->pop(_stackAligned(frame->proc->ops[pc+1].val));
                 pc += 2;
             vmbreak;
         vmcase(ldc_i4)
@@ -1536,7 +1537,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 m.obj = frame->popP();
                 Vtable* vt = *(Vtable**)m.obj;
                 m.proc =vt->methods[frame->proc->ops[pc].val];
-                frame->push(&m, stackAligned(sizeof(MethRef)));
+                frame->push(&m, StackAlignedDblPtrSize);
                 pc++;
             }vmbreak;
         vmcase(ldiface) {
@@ -1545,7 +1546,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 r.iface = code.getVtable(frame->proc->ops[pc].val);
                 Q_ASSERT(r.iface != 0);
                 Q_ASSERT(r.obj != 0);
-                frame->push(&r, stackAligned(sizeof(IfaceRef)));
+                frame->push(&r, StackAlignedDblPtrSize);
                 pc++;
             }vmbreak;
         vmcase(ldmeth_iface) {
@@ -1555,7 +1556,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 MethRef m;
                 m.obj = r.obj;
                 m.proc = r.iface->methods[frame->proc->ops[pc].val];
-                frame->push(&m, stackAligned(sizeof(MethRef)));
+                frame->push(&m, StackAlignedDblPtrSize);
                 pc++;
             }vmbreak;
         vmcase(sizeof)
@@ -1564,11 +1565,11 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
                 vmbreak;
         vmcase(pop)
-                frame->pop(stackAligned(frame->proc->ops[pc].val));
+                frame->pop(_stackAligned(frame->proc->ops[pc].val));
                 pc++;
              vmbreak;
         vmcase(dup) {
-                const int len = stackAligned(frame->proc->ops[pc].val);
+                const int len = _stackAligned(frame->proc->ops[pc].val);
                 frame->push(frame->stack.data()+frame->sp-len, len);
                 pc++;
              }vmbreak;
@@ -1724,9 +1725,10 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
             proc->called = true;
         }
         newframe.locals.init(local,PreAllocSize);
-        DeclList locals = proc->decl->getLocals();
-        foreach( Declaration* d, locals )
+        for( int i = 0; i < proc->locals.size(); i++ )
+            // NOTE: surprisingly foreach is extremely slow
         {
+            Declaration* d = proc->locals[i];
             Type* t = d->getType()->deref();
             code.initMemory((char*)local+d->off, t,true);
         }
@@ -1738,7 +1740,7 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
         frame->pop( newframe.proc->fixArgSize );
     if( frame && newframe.proc->returnSize > 0 )
     {
-        if( stackAligned(newframe.proc->returnSize) != newframe.sp)
+        if( _stackAligned(newframe.proc->returnSize) != newframe.sp)
         {
             qCritical() << "wrong stack size at return of" << proc->decl->toPath();
             if( frame )

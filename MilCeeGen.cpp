@@ -170,7 +170,7 @@ void CeeGen::visitModule()
        case Declaration::TypeDecl:
            {
                Type* t = deref(sub->getType());
-               if( t && t->kind == Type::Object )
+               if( t && (t->kind == Type::Object || (t->typebound && t->kind == Type::Struct) || t->kind == Type::Interface) )
                {
                    foreach( Declaration* p, t->subs )
                    {
@@ -396,7 +396,7 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
         return;
     }
 
-    if( t->kind == Type::Object )
+    if( t->kind == Type::Object || (t->typebound && t->kind == Type::Struct) )
     {
         // forward declaration for class objects
         out << "typedef struct " << qualident(d) << "$Class$ " << qualident(d) << "$Class$;" << endl;
@@ -477,6 +477,12 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
             } break;
         case Type::NameRef:
             out << typeRef(t->getType());
+            break;
+        case Type::Interface:
+            out << "struct " << qualident(d) << " {" << endl;
+            out << ws(0) << "void* self;" << endl;
+            out << ws(0) << "struct " << qualident(d) << "$Class$* iface;" << endl;
+            out << "}";
             break;
         }
     out << " " << qualident(d);

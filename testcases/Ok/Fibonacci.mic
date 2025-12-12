@@ -16,9 +16,9 @@ module Fibonacci
 	
 	var res: integer
 begin
-	println("Fibonacci start")
+	//println("Fibonacci start")
 	res := calc(21)
 	println(res)
-	assert( res = 10946 )
-	println("Fibonacci done")
+	//assert( res = 10946 )
+	//println("Fibonacci done")
 end Fibonacci

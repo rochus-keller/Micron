@@ -801,7 +801,7 @@ void Ide::createMenuBar()
     pop->addCommand( "Export MIL...", this, SLOT(onExportMil()) );
     pop->addCommand( "Export low-level bytecode...", this, SLOT(onExportLl()) );
     pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
-    pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
+    //pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
     pop->addSeparator();
     pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
@@ -2107,7 +2107,7 @@ void Ide::createModsMenu(Ide::Editor* edit)
     pop->addCommand( "Compile", this, SLOT(onCompile()), tr("CTRL+B"), false );
     pop->addCommand( "Export MIL...", this, SLOT(onExportMil()) );
     pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
-    pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
+    //pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
     pop->addSeparator();
     pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
@@ -3502,7 +3502,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2.35");
+    a.setApplicationVersion("0.2.36");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

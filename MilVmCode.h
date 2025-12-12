@@ -71,6 +71,7 @@ struct Procedure
     uint id: 29;
     quint32 localsSize;
     quint32 fixArgSize, returnSize;
+    DeclList locals;
     Procedure():decl(0),init(0), called(0), external(0), id(0),
         localsSize(0),fixArgSize(0),returnSize(0),ops(0){}
 };

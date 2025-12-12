@@ -167,6 +167,7 @@ bool Code::translateProc(Procedure& proc)
 {
     Q_ASSERT( proc.decl && proc.decl->kind == Declaration::Procedure );
     const DeclList locals = proc.decl->getLocals();
+    proc.locals = locals;
     if( !locals.isEmpty() )
         proc.localsSize = locals.last()->off + locals.last()->getType()->getByteSize(sizeof(void*));
     const DeclList params = proc.decl->getParams();

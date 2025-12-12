@@ -1815,7 +1815,7 @@ void Parser2::emitType(Type* t)
     {
         if( t->kind == Type::Record )
         {
-            bool hasFixed = false;
+            bool hasFixed = true;
             bool hasVariant = false;
             foreach( Declaration* field, t->subs )
             {
@@ -1827,6 +1827,7 @@ void Parser2::emitType(Type* t)
 
             out->beginType(ev->toQuali(t).second,t->decl->pos,t->decl->isPublic(),
                            !hasFixed ? Mil::EmiTypes::Union : Mil::EmiTypes::Struct );
+            // TODO: represent a variant record as a struct with embedded union, even if there is no fixed part
             // TODO: record can have fixed and variable part which go to separate struct and union or embedded union
             foreach( Declaration* field, t->subs )
                 out->addField(field->name,field->pos,ev->toQuali(field->getType()),field->isPublic(),field->id);

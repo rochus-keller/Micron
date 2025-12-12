@@ -27,6 +27,8 @@ using namespace Mil;
 
 // Generate LLVM 4.0.1 textual IR
 
+// TODO: interfaces not yet implemented; debugging pending
+
 static inline QByteArray ws(int level)
 {
     return QByteArray((level+1)*2,' ');
