@@ -167,13 +167,28 @@ bool Code::translateProc(Procedure& proc)
 {
     Q_ASSERT( proc.decl && proc.decl->kind == Declaration::Procedure );
     const DeclList locals = proc.decl->getLocals();
-    proc.locals = locals;
     if( !locals.isEmpty() )
+    {
         proc.localsSize = locals.last()->off + locals.last()->getType()->getByteSize(sizeof(void*));
+        proc.locals.resize(locals.size());
+        for( int i = 0; i < locals.size(); i++ )
+        {
+            Declaration* d = locals[i];
+            Type* t = d->getType()->deref();
+            proc.locals[i].first = d->off;
+            if( t->objectInit || t->objectInit )
+            {
+                proc.locals[i].second.type = t;
+                const int len = t->getByteSize(pointerWidth);
+                proc.locals[i].second.mem.resize(len);
+                initMemory((char*)proc.locals[i].second.mem.data(), t,true);
+            }
+        }
+    }
     const DeclList params = proc.decl->getParams();
     if( !params.isEmpty() )
         // this always includes SELF
-        proc.fixArgSize = stackAligned(params.last()->off + params.last()->getType()->getByteSize(sizeof(void*)));
+        proc.argsSize = stackAligned(params.last()->off + params.last()->getType()->getByteSize(sizeof(void*)));
     if( proc.decl->getType() )
         proc.returnSize = stackAligned(proc.decl->getType()->getByteSize(sizeof(void*)));
     if( proc.decl->extern_ || proc.decl->foreign_ )

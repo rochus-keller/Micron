@@ -61,6 +61,13 @@ struct Operation
     Operation(LL_op op = LL_invalid, quint32 val = 0, bool minus = false):val(val),minus(minus),op(op){}
 };
 
+struct Template
+{
+    Type* type;
+    std::vector<char> mem; // preinitialized memory for type
+    Template():type(0){}
+};
+
 struct Procedure
 {
     std::vector<Operation> ops; // std::vector because QVector.detach() is very expensive
@@ -70,10 +77,10 @@ struct Procedure
     uint external : 1;
     uint id: 29;
     quint32 localsSize;
-    quint32 fixArgSize, returnSize;
-    DeclList locals;
+    quint32 argsSize, returnSize;
+    std::vector<std::pair<int,Template> > locals;
     Procedure():decl(0),init(0), called(0), external(0), id(0),
-        localsSize(0),fixArgSize(0),returnSize(0),ops(0){}
+        localsSize(0),argsSize(0),returnSize(0),ops(0){}
 };
 
 struct Vtable
@@ -81,13 +88,6 @@ struct Vtable
     Vtable* parent;
     Type* type;
     std::vector<Procedure*> methods;
-};
-
-struct Template
-{
-    Type* type;
-    std::vector<char> mem; // preinitialized memory for type
-    Template():type(0){}
 };
 
 struct Interface

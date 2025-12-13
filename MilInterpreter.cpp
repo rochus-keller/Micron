@@ -28,7 +28,7 @@ extern "C" {
 using namespace Mil;
 using namespace Vm;
 
-//#define _USE_JUMP_TABLE // instead of a big switch
+#define _USE_JUMP_TABLE // instead of a big switch
 //#define _CHECK_HEAP_ADDRESSES
 
 enum { PreAllocSize = 1024 };
@@ -567,7 +567,7 @@ bool Interpreter::Imp::run(quint32 proc)
 
 #define VM_VAR_ADDR (moduleData.data()+frame->proc->ops[pc].val)
 
-#define VM_ARG_ADDR (frame->outer->stack.data()+frame->outer->sp-frame->proc->fixArgSize+frame->proc->ops[pc].val)
+#define VM_ARG_ADDR (frame->outer->stack.data()+frame->outer->sp-frame->proc->argsSize+frame->proc->ops[pc].val)
 
 #define VM_LDELEM(etype, totype) { const quint32 i = frame->popI4(); etype* a = (etype*)frame->popP(); \
     frame->push##totype(a[i]); pc++; }
@@ -1591,7 +1591,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 // dispatch using the self pointer on stack; but we can only access the
                 // self pointer after we have the size of the parameters
                 Procedure* proc = code.getProc(frame->proc->ops[pc].val);
-                void* obj = *(void**)(frame->stack.data()+frame->sp-proc->fixArgSize);
+                void* obj = *(void**)(frame->stack.data()+frame->sp-proc->argsSize);
                 Vtable* vtbl = *(Vtable**)(obj);
                 Q_ASSERT(vtbl);
                 Q_ASSERT(proc->decl->pd);
@@ -1609,7 +1609,7 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(callmi) {
                 MethRef r = frame->popMethRef();
                 // make room for SELF on stack and copy r.obj to the first argument slot
-                frame->insert(-r.proc->fixArgSize + StackAlign, r.obj); // fixArgSize already includes SELF
+                frame->insert(-r.proc->argsSize + StackAlign, r.obj); // argsSize already includes SELF
                 if( !call(frame, pc, r.proc, locals, stack ) )
                     return false;
                 pc++;
@@ -1713,8 +1713,8 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
         if( newframe.stack.size() != 0 )
             retval = newframe.stack.data();
         char* args = 0;
-        if( frame && proc->fixArgSize )
-            args = frame->stack.data() + frame->sp - proc->fixArgSize;
+        if( frame && proc->argsSize )
+            args = frame->stack.data() + frame->sp - proc->argsSize;
         res = ffiProcs[proc->id](args, retval);
     }else
     {
@@ -1725,21 +1725,25 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
             proc->called = true;
         }
         newframe.locals.init(local,PreAllocSize);
+
         for( int i = 0; i < proc->locals.size(); i++ )
-            // NOTE: surprisingly foreach is extremely slow
         {
-            Declaration* d = proc->locals[i];
-            Type* t = d->getType()->deref();
-            code.initMemory((char*)local+d->off, t,true);
+            const Template& temp = proc->locals[i].second;
+            if( !temp.mem.empty() )
+            {
+                const int off = proc->locals[i].first;
+                memcpy(local+off, temp.mem.data(), temp.mem.size() );
+            }
         }
 
         newframe.stack.init(stack, PreAllocSize);
         res = execute(&newframe);
     }
-    if( frame && newframe.proc->fixArgSize )
-        frame->pop( newframe.proc->fixArgSize );
+    if( frame && newframe.proc->argsSize )
+        frame->pop( newframe.proc->argsSize );
     if( frame && newframe.proc->returnSize > 0 )
     {
+#ifdef _DEBUG
         if( _stackAligned(newframe.proc->returnSize) != newframe.sp)
         {
             qCritical() << "wrong stack size at return of" << proc->decl->toPath();
@@ -1747,6 +1751,7 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
                 qCritical() << "    called from" << frame->proc->decl->toPath() << "pc" << pc;
             return false;
         }
+#endif
         frame->push(newframe.stack.data(), newframe.sp);
     }
     return res;

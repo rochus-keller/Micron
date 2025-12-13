@@ -10,8 +10,10 @@ TEMPLATE = app
 
 INCLUDEPATH += ..
 
-DEFINES += _DEBUG
-    
+CONFIG(debug, debug|release) {
+        DEFINES += _DEBUG
+}
+
 include(MicParser.pri)
 
 SOURCES += \
