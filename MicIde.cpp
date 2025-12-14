@@ -1637,12 +1637,12 @@ void Ide::onNewModule()
         }
     }
 
-    QString filePath = QFileDialog::getSaveFileName(this,tr("New Module"), dir.absoluteFilePath(name + ".obx"),"*.obx");
+    QString filePath = QFileDialog::getSaveFileName(this,tr("New Module"), dir.absoluteFilePath(name + ".mic"),"*.mic");
     if( filePath.isEmpty() )
         return;
 
-    if( !filePath.toLower().endsWith(".obx") )
-        filePath += ".obx";
+    if( !filePath.toLower().endsWith(".mic") )
+        filePath += ".mic";
 
     QFile f(filePath);
     if( !f.open(QIODevice::WriteOnly) )
@@ -3502,7 +3502,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2.37");
+    a.setApplicationVersion("0.2.38");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

@@ -1,0 +1,47 @@
+module BoundProcs2
+
+type
+  Point = record x,y: integer end
+  Viewport = pointer to record end
+  Drawable = proc(^)(vp: Viewport)
+            
+  proc Point.Draw(vp: Viewport)
+  begin
+    println("drawing")
+  end Draw
+  
+  proc Point.Move(x,y: integer)
+  begin
+    self.x := x; self.y := y
+  end Move
+  
+  proc Test(d: Drawable; vp: Viewport): Drawable
+  begin
+    // d(vp)
+    return d
+  end Test
+  
+  proc Test2(p: ^Point): Drawable
+  begin
+    return p.Draw
+  end Test2
+  
+var
+  d, d1: Drawable
+  p: Point
+  vp: Viewport
+  
+begin
+  p.Move(12, 34)
+
+  d := p.Draw
+  d(vp)
+  
+  d1 := Test(p.Draw, vp)
+  d1(vp)
+  
+  d1 := Test2(@p)
+  d1(vp)
+
+  println(p.y)
+end BoundProcs2

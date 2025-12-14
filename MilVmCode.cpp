@@ -871,16 +871,26 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 return false;
             emitOp(proc, LL_ldproc, findProc(e->d));
             break;
-        case IL_ldmeth:
-            if( e->d->subs && e->d->subs->getType() && e->d->subs->getType()->kind == Type::Interface )
-                emitOp(proc, LL_ldmeth_iface, e->d->getPd()->slot);
-            else
-            {
-                if( !translateProc(e->d) )
-                    return false;
-                emitOp(proc, LL_ldmeth, e->d->getPd()->slot);
-            }
-            break;
+        case IL_ldmeth: {
+                Type* t = deref(e->d->subs ? e->d->subs->getType() : 0);
+                if( t && t->kind == Type::Interface )
+                    emitOp(proc, LL_ldmeth_iface, e->d->getPd()->slot);
+                else
+                {
+                    if( !translateProc(e->d) )
+                        return false;
+                    if( t->kind == Type::Pointer )
+                        t = deref(t->getType());
+                    if( t->kind == Type::Struct )
+                    {
+                        const int id = findProc(e->d);
+                        if( id < 0 )
+                            return false;
+                        emitOp(proc, LL_ldmeth_struct, id);
+                    }else
+                        emitOp(proc, LL_ldmeth, e->d->getPd()->slot);
+                }
+            } break;
         case IL_conv_i1:
             if( lhsT->isInt32OnStack() )
                 emitOp(proc, LL_conv_i1_i4);

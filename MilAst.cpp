@@ -883,8 +883,12 @@ quint32 Type::getByteSize(quint8 pointerWidth) const
             return len * et->getByteSize(pointerWidth);
         }
     case Pointer:
-    case Proc:
         return pointerWidth;
+    case Proc:
+        if( typebound )
+            return 2*pointerWidth;
+        else
+            return pointerWidth;
     case Interface:
         return 2*pointerWidth;
     case NameRef:

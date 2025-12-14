@@ -117,7 +117,7 @@ OPDEF(ldobj, ByteArrayArg),
 OPDEF(br, JumpArg),
 OPDEF(brfalse_i4, JumpArg),
 
-OPDEF(ldproc, ProcArg), OPDEF(ldmeth, ProcArg), OPDEF(ldmeth_iface, ProcArg),
+OPDEF(ldproc, ProcArg), OPDEF(ldmeth, ProcArg), OPDEF(ldmeth_iface, ProcArg), OPDEF(ldmeth_struct, ProcArg),
 OPDEF(ldiface, NoOpArgs), // TODO
 OPDEF(sizeof, 1), // TODO
 OPDEF(ptroff, NoOpArgs),

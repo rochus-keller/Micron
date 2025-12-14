@@ -1310,12 +1310,12 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_callmi:
         {
             out << "(_ptr$ = &";
-            expression(out, e->lhs );
-            Type* proc = deref(e->lhs->getType());
+            expression(out, e->lhs, e->lhs->getType() );
             out << ", ((" << typeRef(e->lhs->getType()) << "*)_ptr$)->proc(((";
             out << typeRef(e->lhs->getType()) << "*)_ptr$)->self"; // TODO: interface support
             QList<Expression*> args;
             collectArgs(e->rhs, args);
+            Type* proc = deref(e->lhs->getType());
             Q_ASSERT( args.size() == proc->subs.size() );
             for( int i = 0; i < args.size(); i++ )
             {

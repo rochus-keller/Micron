@@ -1540,6 +1540,13 @@ bool Interpreter::Imp::execute(Frame* frame)
                 frame->push(&m, StackAlignedDblPtrSize);
                 pc++;
             }vmbreak;
+        vmcase(ldmeth_struct) {
+                MethRef m;
+                m.obj = frame->popP();
+                m.proc = code.getProc(frame->proc->ops[pc].val);
+                frame->push(&m, StackAlignedDblPtrSize);
+                pc++;
+            }vmbreak;
         vmcase(ldiface) {
                 IfaceRef r;
                 r.obj = frame->popP();
