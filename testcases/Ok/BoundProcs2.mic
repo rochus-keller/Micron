@@ -17,7 +17,7 @@ type
   
   proc Test(d: Drawable; vp: Viewport): Drawable
   begin
-    // d(vp)
+    d(vp)
     return d
   end Test
   

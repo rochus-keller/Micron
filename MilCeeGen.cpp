@@ -773,7 +773,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             if( s->args )
             {
                 out << " ";
-                expression(out, s->args);
+                expression(out, s->args, curProc->getType() );
             }
             out << ";" << endl;
             break;
@@ -1235,14 +1235,31 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         qWarning() << "CeeGen ldiface not yet supported";
         break;
 
-    case IL_ldmeth:
-        if( hint )
-            out << "(" << typeRef(hint) << ")";
-        out << "{(_ptr$ = ";
-        expression(out, e->lhs);
-        out << ", _ptr$), ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
-        out << "->class$->" << e->d->name << "}";
-        break;
+    case IL_ldmeth: {
+            Type* cls = deref(e->lhs->getType());
+            if( cls->kind == Type::Pointer )
+                cls = deref(cls->getType());
+            if( cls->kind == Type::Interface )
+            {
+                qWarning() << "ceegen ldmeth interface";
+                out << "/* TODO */";
+            }else if( cls->kind == Type::Struct )
+            {
+                if( hint )
+                    out << "(" << typeRef(hint) << ")";
+                out << "{";
+                expression(out, e->lhs);
+                out << ", " << qualident(e->d) << "}";
+            }else
+            {
+                if( hint )
+                    out << "(" << typeRef(hint) << ")";
+                out << "{(_ptr$ = ";
+                expression(out, e->lhs);
+                out << ", _ptr$), ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
+                out << "->class$->" << e->d->name << "}";
+            }
+        } break;
 
     case IL_castptr:
         out << "((" << typeRef(e->d->getType()) << "*)";
