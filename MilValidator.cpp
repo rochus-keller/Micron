@@ -286,7 +286,7 @@ void Validator::visitStatSeq(Statement* stat)
                 Type* lhsT = deref(stat->d->getType());
                 if( !assigCompat(lhsT,stat->args) )
                 {
-                    assigCompat(lhsT,stat->args); // TEST
+                    //assigCompat(lhsT,stat->args); // TEST
                     error(curProc, "module variable type not compatible with value on stack");
                 }
             }
@@ -417,7 +417,7 @@ void Validator::visitStatSeq(Statement* stat)
                     baseOs = refT;
                 if( !assigCompat(baseOs, stat->args->rhs) )
                 {
-                    assigCompat(baseOs, stat->args->rhs); // TEST
+                    //assigCompat(baseOs, stat->args->rhs); // TEST
                     error(curProc,"value on stack is not compatible with the pointer base type");
                 }
             }

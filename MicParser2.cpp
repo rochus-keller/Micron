@@ -3123,7 +3123,7 @@ void Parser2::assignmentOrProcedureCall() {
         Expression* rhs = expression(lhs->getType());
         if( rhs && !assigCompat( lhs->getType(), rhs, tok.toRowCol() ) )
         {
-            // assigCompat( lhs->getType(), rhs, tok.toRowCol() ); // TEST
+            //assigCompat( lhs->getType(), rhs, tok.toRowCol() ); // TEST
             error(tok, "right side is not assignment compatible with left side");
         }
         if( !lhs->isAssignable() )
@@ -3577,7 +3577,7 @@ Type* Parser2::ProcedureType() {
     typeStack.push_back(p);
     if( la.d_type == Tok_Lpar && (peek(2).d_type == Tok_POINTER || peek(2).d_type == Tok_Hat) ) {
         expect(Tok_Lpar, false, "ProcedureType");
-        if( langLevel < 3 )
+        if( langLevel < 1 )
             error(cur,"bound procedure types not available on current language level");
         if( la.d_type == Tok_POINTER ) {
             expect(Tok_POINTER, false, "ProcedureType");
@@ -4469,6 +4469,7 @@ void Parser2::InterfaceProc(Type* t) {
     Declaration* param = mdl->addDecl(self);
     param->kind = Declaration::ParamDecl;
     param->typebound = true;
+    d->typebound = true;
     param->setType(t);
 
     if( FIRST_FormalParameters(la.d_type) ) {

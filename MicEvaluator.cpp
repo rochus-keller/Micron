@@ -186,7 +186,7 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         }
         out->line_(pos);
         out->ldproc_(toQuali(proc));
-    }else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Method )
+    }else if( lhs && lhs->kind == Type::Proc && (rhs.mode == Value::Method || rhs.mode == Value::IntfMeth) )
     {
         Declaration* proc = rhs.val.value<Declaration*>();
         Q_ASSERT(proc);
@@ -195,12 +195,16 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
             err = "cannot take address of INLINE procedure";
             return false;
         }
+        if( !lhs->typebound )
+        {
+            err = "cannot assign method to procedure type";
+            return false;
+        }
         const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
         out->line_(pos);
         out->ldmeth_(trident);
     }else if( lhs && lhs->kind == Type::Interface && rhs.type && rhs.type->kind != Type::Interface )
     {
-        Type* t = rhs.type;
         if( rhs.type->kind != Type::Pointer || rhs.type->getType() == 0
                 || !(rhs.type->getType()->kind == Type::Object || rhs.type->getType()->kind == Type::Record) )
         {
@@ -211,9 +215,9 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         out->ldiface_(toQuali(lhs));
     }else
     {
-        Type* rhs = stack.back().type;
+        Type* t = rhs.type;
         assureTopOnMilStack(false, pos); // modifies stack.back() i.e. rhs
-        adjustNumType(rhs,lhs);
+        adjustNumType(t,lhs);
     }
 
     return true;
@@ -652,7 +656,7 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
                 out->callinst_(trident,nArgs, ret != 0);
         }
         break;
-    case Value::Intf:
+    case Value::IntfMeth:
         {
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
@@ -1832,7 +1836,7 @@ bool Evaluator::recursiveRun(Expression* e)
             if( !recursiveRun(e->lhs) )
                 return false;
             stack.pop_back();
-            stack.push_back(Value(e->getType(),e->val,Value::Intf));
+            stack.push_back(Value(e->getType(),e->val,Value::IntfMeth));
         } // else already reported
         break;
     case Expression::Builtin:

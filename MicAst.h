@@ -242,7 +242,7 @@ namespace Mic
     typedef QList<Expression*> ExpList;
 
     struct Value {
-        enum Mode { None, Val, Const, Builtin, Procedure, Method, Intf, Super, VarDecl, LocalDecl, ParamDecl, TypeDecl };
+        enum Mode { None, Val, Const, Builtin, Procedure, Method, IntfMeth, Super, VarDecl, LocalDecl, ParamDecl, TypeDecl };
         quint8 mode;
         quint8 visi;
         bool ref; // the value is a reference to the type

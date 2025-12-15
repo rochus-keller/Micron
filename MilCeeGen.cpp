@@ -270,7 +270,8 @@ void CeeGen::visitMetaDecl(Declaration* d)
         bout << ws(0) << "&" << typeRef(t->getType()) << "$class$," << endl;
     }else
     {
-        hout << ws(0) << "void* super$;" << endl;
+        if( t->kind == Type::Object )
+            hout << ws(0) << "void* super$;" << endl;
         bout << ws(0) << "0," << endl;
     }
 
@@ -481,7 +482,7 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
         case Type::Interface:
             out << "struct " << qualident(d) << " {" << endl;
             out << ws(0) << "void* self;" << endl;
-            out << ws(0) << "struct " << qualident(d) << "$Class$* iface;" << endl;
+            out << ws(0) << "struct " << qualident(d) << "$Class$* iface$;" << endl;
             out << "}";
             break;
         }
@@ -1231,9 +1232,13 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         out << qualident(e->d);
         break;
 
-    case IL_ldiface:
-        qWarning() << "CeeGen ldiface not yet supported";
-        break;
+    case IL_ldiface: {
+            if( hint )
+                out << "(" << typeRef(hint) << ")";
+            out << "{";
+            expression(out, e->lhs);
+            out << ", &" <<  qualident(e->d) << "$class$ }";
+        }break;
 
     case IL_ldmeth: {
             Type* cls = deref(e->lhs->getType());
@@ -1241,8 +1246,12 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
                 cls = deref(cls->getType());
             if( cls->kind == Type::Interface )
             {
-                qWarning() << "ceegen ldmeth interface";
-                out << "/* TODO */";
+                if( hint )
+                    out << "(" << typeRef(hint) << ")";
+                out << "{(_ptr$ = &";
+                expression(out, e->lhs);
+                out << ", ((" << typeRef(e->lhs->getType()) << "*)_ptr$)->self), ((" << typeRef(e->lhs->getType()) << "*)_ptr$)";
+                out << "->iface$->" << e->d->name << "}";
             }else if( cls->kind == Type::Struct )
             {
                 if( hint )
@@ -1329,7 +1338,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             out << "(_ptr$ = &";
             expression(out, e->lhs, e->lhs->getType() );
             out << ", ((" << typeRef(e->lhs->getType()) << "*)_ptr$)->proc(((";
-            out << typeRef(e->lhs->getType()) << "*)_ptr$)->self"; // TODO: interface support
+            out << typeRef(e->lhs->getType()) << "*)_ptr$)->self";
             QList<Expression*> args;
             collectArgs(e->rhs, args);
             Type* proc = deref(e->lhs->getType());

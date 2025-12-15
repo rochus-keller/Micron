@@ -3502,7 +3502,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.2.38");
+    a.setApplicationVersion("0.2.39");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 
