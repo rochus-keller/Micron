@@ -591,11 +591,21 @@ ProcedureData *Declaration::getPd()
         return 0;
 }
 
+Type *Declaration::getReceiver() const
+{
+    if( kind != Procedure || !typebound )
+        return 0;
+    if( subs && subs->kind == Declaration::ParamDecl && subs->typebound && subs->getType() )
+        return subs->getType();
+    else
+        return 0;
+}
+
 Expression::~Expression()
 {
     if( (kind == IL_ldc_obj || kind == IL_ldstr) && c != 0 )
         delete c;
-    else if( (kind == IL_iif || kind == IL_if || kind == IL_then || kind == IL_else ) && e != 0 )
+    else if( hasE() )
         delete e;
     if( next )
         delete next;
@@ -613,6 +623,11 @@ void Expression::append(Expression* e)
         l = l->next;
     Q_ASSERT( l && l->next == 0 );
     l->next = e;
+}
+
+bool Expression::hasE() const
+{
+    return (kind == IL_iif || kind == IL_if || kind == IL_then || kind == IL_else ) && e != 0;
 }
 
 Component::~Component()
@@ -994,8 +1009,7 @@ Statement::~Statement()
 {
     if( body )
         delete body;
-    if( (kind == ExprStat || kind == IL_if || kind == IL_switch || kind == IL_case ||
-         kind == IL_repeat || kind == IL_while) && e )
+    if( hasE() )
         delete e;
     if( next )
         delete next;
@@ -1013,6 +1027,12 @@ void Statement::append(Statement* s)
         l = l->next;
     Q_ASSERT( l && l->next == 0 );
     l->next = s;
+}
+
+bool Statement::hasE() const
+{
+    return (kind == ExprStat || kind == IL_if || kind == IL_switch || kind == IL_case ||
+                    kind == IL_repeat || kind == IL_while) && e;
 }
 
 ToDelete::~ToDelete()

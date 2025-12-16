@@ -233,6 +233,7 @@ namespace Mil
         Declaration* getModule() const;
         Declaration* findInitProc() const;
         ProcedureData* getPd();
+        Type* getReceiver() const;
     };
     typedef QList<Declaration*> DeclList;
 
@@ -309,6 +310,7 @@ namespace Mil
         Expression():Node(E), next(0), i(0), lhs(0), rhs(0) {}
         ~Expression();
         void append(Expression*);
+        bool hasE() const;
     };
 
     class Statement : public Node
@@ -335,6 +337,7 @@ namespace Mil
         Statement():Node(S),next(0), body(0), e(0), args(0) {}
         ~Statement();
         void append(Statement*);
+        bool hasE() const;
     };
 
     typedef QList<Expression*> MetaActualList;

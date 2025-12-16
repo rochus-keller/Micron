@@ -38,10 +38,29 @@ static QByteArray qualident(Declaration* d)
         return d->name;
 }
 
+static inline QByteArray paramName(Declaration* d)
+{
+    if( d->typebound )
+        return "$" + d->name;
+    else
+        return d->name;
+}
+
+static inline QByteArray itabName(Type* iface, Type* cls)
+{
+    return "$itab$" + iface->decl->name + "$" + cls->decl->name;
+}
+
+static inline QByteArray thunkName(Type* iface, Type* cls, Declaration* d)
+{
+    return "$thunk$" + iface->decl->name + "$" + cls->decl->name + "$" + d->name;
+}
+
 bool CeeGen::generate(Declaration* module, QIODevice* header, QIODevice* body)
 {
     Q_ASSERT( module && header );
     curMod = module;
+    itabs.clear();
     curLevel = 0;
     hout.setDevice(header);
     QString dummy;
@@ -216,8 +235,13 @@ void CeeGen::visitProcedure(Declaration* proc)
     procHeader(hout, proc);
     hout << ";" << endl;
     done.clear();
-    if( !proc->forward && !proc->extern_ && !proc->foreign_ )
+
+    const Type* receiver = proc->getReceiver();
+
+    if( !proc->forward && !proc->extern_ && !proc->foreign_ && (receiver == 0 || receiver->kind != Type::Interface) )
     {
+        generateItabs(proc->body);
+
         procHeader(bout, proc);
         bout << " {" << endl;
         if( proc->entryPoint && !curMod->nobody )
@@ -247,6 +271,10 @@ void CeeGen::visitProcedure(Declaration* proc)
                 parameter(bout, sub);
                 bout << ";" << endl;
                 emitSoapInit(bout, sub->name, sub->getType(), 0 );
+            }else if( sub->kind == Declaration::ParamDecl && sub->typebound )
+            {
+                bout << ws(0) << typeRef(sub->getType()) << " " << paramName(sub) <<
+                        " = (" << typeRef(sub->getType()) << ")" << sub->name << ";" << endl;
             }
             sub = sub->next;
         }
@@ -260,18 +288,19 @@ void CeeGen::visitProcedure(Declaration* proc)
 void CeeGen::visitMetaDecl(Declaration* d)
 {
     const QByteArray className = qualident(d);
-    hout << "struct " << className << "$Class$ {" << endl;
-    bout << "struct " << className << "$Class$ " << className << "$class$ = { " << endl;
-
     Type* t = deref(d->getType());
+    hout << "struct " << className << "$Vtab$ {" << endl;
+
+    if( t->kind != Type::Interface)
+        bout << "const struct " << className << "$Vtab$ " << className << "$vtab$ = { " << endl;
+
     if( t->getType() )
     {
-        hout << ws(0) << typeRef(t->getType()) << "$Class$* super$;" << endl;
-        bout << ws(0) << "&" << typeRef(t->getType()) << "$class$," << endl;
-    }else
+        hout << ws(0) << "struct " << typeRef(t->getType()) << "$Vtag$* super$;" << endl;
+        bout << ws(0) << "&" << typeRef(t->getType()) << "$vtab$," << endl;
+    }else if(t->kind == Type::Object)
     {
-        if( t->kind == Type::Object )
-            hout << ws(0) << "void* super$;" << endl;
+        hout << ws(0) << "void* super$;" << endl;
         bout << ws(0) << "0," << endl;
     }
 
@@ -279,7 +308,8 @@ void CeeGen::visitMetaDecl(Declaration* d)
     foreach( Declaration* p, methods )
     {
         Q_ASSERT( p->kind == Declaration::Procedure && !p->forward );
-        bout << ws(0) << qualident(p) << ", " << endl;
+        if( t->kind != Type::Interface)
+            bout << ws(0) << qualident(p) << ", " << endl;
 
         hout << ws(0) << typeRef(p->getType()) << " (*" << p->name << ")";
         hout << "(";
@@ -293,9 +323,12 @@ void CeeGen::visitMetaDecl(Declaration* d)
         hout << ");" << endl;
     }
 
-    bout << "};" << endl << endl;
+    if( t->kind != Type::Interface)
+        bout << "};" << endl << endl;
     hout << "};" << endl;
-    hout << "extern struct " << className << "$Class$ " << className << "$class$;" << endl;
+
+    if( t->kind != Type::Interface)
+        hout << "extern const struct " << className << "$Vtab$ " << className << "$vtab$;" << endl;
 
 }
 
@@ -380,7 +413,10 @@ void CeeGen::procHeader(QTextStream& out, Declaration* proc)
 
 void CeeGen::parameter(QTextStream& out, Declaration* param)
 {
-    out << typeRef(param->getType()) << " " << param->name;
+    if( param->typebound )
+        out << "void* " << param->name;
+    else
+        out << typeRef(param->getType()) << " " << param->name;
 }
 
 void CeeGen::variable(QTextStream& out, Declaration* var)
@@ -400,7 +436,7 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
     if( t->kind == Type::Object || (t->typebound && t->kind == Type::Struct) )
     {
         // forward declaration for class objects
-        out << "typedef struct " << qualident(d) << "$Class$ " << qualident(d) << "$Class$;" << endl;
+        out << "typedef struct " << qualident(d) << "$Vtab$ " << qualident(d) << "$Vtab$;" << endl;
     }
 
     if( t->kind == Type::Array && t->len == 0 )
@@ -468,7 +504,7 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
             break;
         case Type::Object: {
                 out << "struct " << qualident(d) << " {" << endl;
-                out << ws(0) << qualident(d) << "$Class$* class$;" << endl;
+                out << ws(0) << "const " << qualident(d) << "$Vtab$* vtab$;" << endl;
                 QList<Declaration*> fields = t->getFieldList(true);
                 foreach( Declaration* field, fields ) // TODO: was t->subs, but this cannot be correct
                 {
@@ -482,7 +518,7 @@ void CeeGen::typeDecl(QTextStream& out, Declaration* d)
         case Type::Interface:
             out << "struct " << qualident(d) << " {" << endl;
             out << ws(0) << "void* self;" << endl;
-            out << ws(0) << "struct " << qualident(d) << "$Class$* iface$;" << endl;
+            out << ws(0) << "const struct " << qualident(d) << "$Vtab$* vtab$;" << endl;
             out << "}";
             break;
         }
@@ -683,7 +719,9 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             {
                 DeclList params = curProc->getParams();
                 Q_ASSERT(s->id < params.size());
-                out << ws(level) << params[s->id]->name << " = ";
+                out << ws(level);
+                out << paramName(params[s->id]);
+                out  << " = ";
                 expression(out, s->args, params[s->id]->getType());
                 out << ";" << endl;
             }
@@ -907,7 +945,7 @@ void CeeGen::emitInitializer(Type* t)
     bout << ws(0) << "for( i = 0; i < n; i++ ) {" << endl; // this code is generalized to an array of this object of length n
 
     if( t->kind == Type::Object )
-        bout << ws(1) << "obj[i].class$ = &" << qualident(t->decl) << "$class$;" << endl; // set the vptr to its class object
+        bout << ws(1) << "obj[i].vtab$ = &" << qualident(t->decl) << "$vtab$;" << endl; // set the vptr to its class object
     else if( t->kind == Type::Array && t->len && t->objectInit )
     {
         Type* et = deref(t->getType());
@@ -939,8 +977,7 @@ void CeeGen::createLdindLocals(Statement * s)
     while( s )
     {
         // createLdindLocals(s->args);
-        if( (s->kind == Statement::ExprStat || s->kind == IL_if || s->kind == IL_switch || s->kind == IL_case ||
-             s->kind == IL_repeat || s->kind == IL_while) && s->e )
+        if( s->hasE() )
             createLdindLocals(s->e);
         s = s->next;
     }
@@ -978,6 +1015,107 @@ void CeeGen::postfix(QTextStream &out, Type * t)
     t = deref(t);
     if( !t->isPtrToOpenArray() )
         out << ")";
+}
+
+void CeeGen::generateItabs(Statement *body)
+{
+    if( body == 0 )
+        return;
+    while( body )
+    {
+        generateItabs(body->body);
+        // this is redundant to body->e:
+        //generateItabs(body->args);
+        if( body->hasE() )
+            generateItabs(body->e);
+        body = body->next;
+    }
+}
+
+void CeeGen::generateItabs(Expression *e)
+{
+    while( e )
+    {
+        // this is redundant to e->e and e->next:
+        // generateItabs(e->lhs);
+        // generateItabs(e->rhs);
+        if( e->hasE() )
+            generateItabs(e->e);
+
+        if( e->kind != IL_ldiface )
+        {
+            e = e->next;
+            continue;
+        }
+
+        Type* cls = deref(e->lhs->getType());
+        if( cls->kind == Type::Pointer )
+            cls = deref(cls->getType());
+
+        Type* iface = deref(e->d->getType());
+
+        if( itabs.contains(qMakePair(iface,cls)) )
+            return;
+        itabs.insert(qMakePair(iface,cls));
+
+        if( cls->kind == Type::Object )
+        {
+            // add one thunk per method which does the virtual dispatch on the object reference
+            foreach( Declaration* proc, iface->subs )
+            {
+                Q_ASSERT( proc && proc->kind == Declaration::Procedure );
+                proc = cls->findSubByName(proc->name);
+                Q_ASSERT( proc && proc->kind == Declaration::Procedure );
+
+                // TODO ifaceref or methref equality does not work with thunks and static itabs
+                bout << "static " << typeRef(proc->getType()) << " ";
+                bout << thunkName(iface,cls,proc);
+                bout << "(";
+                DeclList params = proc->getParams();
+                for( int i = 0; i < params.size(); i++ )
+                {
+                    if( i != 0 )
+                        bout << ", ";
+                    parameter(bout, params[i]);
+                }
+                bout << ") {" << endl;
+                bout << ws(0) << qualident(cls->decl) << "* $self = (" << qualident(cls->decl) << "*)self;" << endl;
+                bout << ws(0) << "$self->vtab$->" << proc->name << "(";
+                for( int i = 0; i < params.size(); i++ )
+                {
+                    if( i != 0 )
+                        bout << ", ";
+                    bout << params[i]->name;
+                }
+
+                bout << ");" << endl;
+                bout << "}" << endl << endl;
+            }
+            bout << "static const struct " << qualident(e->d) << "$Vtab$ " << itabName(iface,cls) << " = {" << endl;
+            foreach( Declaration* proc, iface->subs )
+            {
+                Q_ASSERT( proc && proc->kind == Declaration::Procedure );
+                bout << ws(0) << thunkName(iface,cls,proc) << "," << endl;
+            }
+            bout << "};" << endl;
+        }else if( cls->kind == Type::Struct )
+        {
+            bout << "static const struct " << qualident(e->d) << "$Vtab$ " << itabName(iface,cls) << " = {" << endl;
+            foreach( Declaration* proc, iface->subs )
+            {
+                Q_ASSERT( proc && proc->kind == Declaration::Procedure );
+                proc = cls->findSubByName(proc->name);
+                Q_ASSERT( proc && proc->kind == Declaration::Procedure );
+                bout << ws(0) << qualident(proc) << "," << endl;
+            }
+            bout << "};" << endl;
+        }else
+            Q_ASSERT(false);
+
+        bout << endl;
+
+        e = e->next;
+    }
 }
 
 void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
@@ -1114,7 +1252,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         {
             DeclList params = curProc->getParams();
             Q_ASSERT( e->id < params.size() );
-            out << params[e->id]->name;
+            out << paramName(params[e->id]);
         }
         break;
 
@@ -1124,7 +1262,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             DeclList params = curProc->getParams();
             Q_ASSERT( e->id < params.size() );
             prefix(out,e->getType());
-            out << params[e->id]->name;
+            out << paramName(params[e->id]);
             postfix(out,e->getType());;
         }
         break;
@@ -1233,11 +1371,15 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         break;
 
     case IL_ldiface: {
-            if( hint )
-                out << "(" << typeRef(hint) << ")";
+            Type* cls = deref(e->lhs->getType());
+            if( cls->kind == Type::Pointer )
+                cls = deref(cls->getType());
+
+            Type* iface = deref(e->d->getType());
+            out << "(" << typeRef(iface) << ")";
             out << "{";
             expression(out, e->lhs);
-            out << ", &" <<  qualident(e->d) << "$class$ }";
+            out << ", &" <<  itabName(iface,cls) << " }";
         }break;
 
     case IL_ldmeth: {
@@ -1251,7 +1393,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
                 out << "{(_ptr$ = &";
                 expression(out, e->lhs);
                 out << ", ((" << typeRef(e->lhs->getType()) << "*)_ptr$)->self), ((" << typeRef(e->lhs->getType()) << "*)_ptr$)";
-                out << "->iface$->" << e->d->name << "}";
+                out << "->vtab$->" << e->d->name << "}";
             }else if( cls->kind == Type::Struct )
             {
                 if( hint )
@@ -1266,7 +1408,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
                 out << "{(_ptr$ = ";
                 expression(out, e->lhs);
                 out << ", _ptr$), ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
-                out << "->class$->" << e->d->name << "}";
+                out << "->vtab$->" << e->d->name << "}";
             }
         } break;
 
@@ -1301,7 +1443,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             out << "(_ptr$ = ";
             expression(out, e->lhs);
             out << ", ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
-            out << "->class$->" << e->d->name << "(_ptr$";
+            out << "->vtab$->" << e->d->name << "(_ptr$";
             QList<Expression*> args;
             collectArgs(e->rhs, args);
             QList<Declaration*> formals = e->d->getParams(false);
@@ -1334,6 +1476,23 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         break;
 
     case IL_callmi:
+        if( e->lhs && e->lhs->kind == IL_ldmeth && e->d && deref(e->d->getReceiver())->kind == Type::Interface )
+        {
+            out << "(_ptr$ = &";
+            expression(out, e->lhs->lhs );
+            out << ", ((" << typeRef(e->lhs->lhs->getType()) << "*)_ptr$)->vtab$->" << e->d->name;
+            out << "(((" << typeRef(e->lhs->lhs->getType()) << "*)_ptr$)->self";
+            QList<Expression*> args;
+            collectArgs(e->rhs, args);
+            Type* proc = deref(e->lhs->lhs->getType());
+            Q_ASSERT( args.size() == proc->subs.size() );
+            for( int i = 0; i < args.size(); i++ )
+            {
+                out << ", ";
+                expression(out, args[i], proc->subs[i]->getType());
+            }
+            out << "))";
+        }else
         {
             out << "(_ptr$ = &";
             expression(out, e->lhs, e->lhs->getType() );
@@ -1441,7 +1600,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         } break;
 
     case IL_isinst: {
-            out << "$isinst(&" << typeRef(e->d->getType()) << "$class$, ";
+            out << "$isinst(&" << typeRef(e->d->getType()) << "$vtab$, ";
             expression(out, e->lhs );
             Q_ASSERT(deref(e->lhs->getType())->kind == Type::Pointer);
             // we pass the pointer to the instance, not the class pointer, because the former can be NULL

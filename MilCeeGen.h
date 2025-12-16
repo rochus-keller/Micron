@@ -59,6 +59,8 @@ namespace Mil
         void createLdindLocals(Expression*);
         void prefix(QTextStream& out,Type*);
         void postfix(QTextStream& out,Type*);
+        void generateItabs(Statement* body);
+        void generateItabs(Expression* e);
 
         inline QByteArray ws(int level)
         {
@@ -72,6 +74,7 @@ namespace Mil
         Declaration* curMod;
         Declaration* curProc;
         QSet<Declaration*> done;
+        QSet<QPair<Type*,Type*> > itabs;
         int curLevel;
     };
 }

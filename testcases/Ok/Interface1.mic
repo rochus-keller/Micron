@@ -19,7 +19,7 @@ type
   
   proc Test(d: Drawable; vp: Viewport): Drawable
   begin
-    //d.Draw(vp)
+    d.Draw(vp)
     return d
   end Test
   
@@ -35,13 +35,12 @@ var
   m: proc(^)(vp: Viewport)
   
 begin
-  //p.Move(12, 34)
+  p.Move(12, 34)
 
   d := @p
   m := d.Draw
   m(vp)
   
-  (*
   d.Draw(vp)
   
   d1 := Test(@p, vp)
@@ -51,5 +50,4 @@ begin
   d1.Draw(vp)
 
   println(p.y)
-  *)
 end Interface1

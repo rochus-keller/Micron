@@ -1,0 +1,66 @@
+module Interface2
+
+type
+  Root = object end
+  Point = object(Root) x,y: integer end
+  Drawable = interface
+              proc Draw(i: integer)
+             end
+            
+  proc Root.Draw(i: integer)
+  begin
+    print(i)
+    println(" drawing Root")
+  end Draw
+
+  proc Point.Draw(i: integer)
+  begin
+    print(i)
+    println(" drawing Point")
+  end Draw
+  
+  proc Point.Move(x,y: integer)
+  begin
+    self.x := x; self.y := y
+  end Move
+  
+  proc Test(d: Drawable; i: integer): Drawable
+  begin
+    d.Draw(i)
+    return d
+  end Test
+  
+  proc Test2(p: ^Point): Drawable
+  begin
+    return p
+  end Test2
+  
+var
+  d, d1: Drawable
+  p: Point
+  m: proc(^)(i: integer)
+  r: ^Root
+  
+begin
+  p.Move(12, 34)
+
+  d := @p
+  m := d.Draw
+  m(1)
+  
+  d.Draw(2)
+  
+  r := @p
+  r.Draw(3)
+  
+  d := r
+  d.Draw(4)
+  
+  d1 := Test(@p, 5)
+  d1.Draw(6)
+  
+  d1 := Test2(@p)
+  d1.Draw(7)
+
+  println(p.y)
+end Interface2
