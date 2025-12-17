@@ -35,6 +35,7 @@ namespace Mil {
 
 		TT_Keywords,
 		Tok_ABS,
+		Tok_ABSTRACT,
 		Tok_ADD,
 		Tok_AND,
 		Tok_ARRAY,
@@ -81,6 +82,7 @@ namespace Mil {
 		Tok_INIT,
 		Tok_INITOBJ,
 		Tok_INLINE,
+		Tok_INTERFACE,
 		Tok_INVAR,
 		Tok_ISINST,
 		Tok_LABEL,

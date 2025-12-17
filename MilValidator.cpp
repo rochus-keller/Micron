@@ -152,11 +152,12 @@ void Validator::visitProcedure(Declaration* proc)
     if( proc->typebound )
     {
         DeclList params = proc->getParams();
-        const bool firstIsSelf = !params.isEmpty() && params.first()->typebound && params.first()->getType() &&
-                ( params.first()->getType()->kind == Type::Interface ||
-                  (params.first()->getType()->kind == Type::Pointer && params.first()->getType()->getType() &&
-                    (deref(params.first()->getType()->getType())->kind == Type::Object ||
-                     deref(params.first()->getType()->getType())->kind == Type::Struct)) );
+        Type* firstType = params.isEmpty() ? 0 : deref(params.first()->getType());
+        const bool firstIsSelf = !params.isEmpty() && params.first()->typebound && firstType &&
+                ( firstType->kind == Type::Interface ||
+                  (firstType->kind == Type::Pointer && firstType->getType() &&
+                    (deref(firstType->getType())->kind == Type::Object ||
+                     deref(firstType->getType())->kind == Type::Struct)) );
         if( !firstIsSelf )
             error(proc, "the 'self' parameter must point to the receiver");
     }
@@ -1613,7 +1614,6 @@ bool Validator::assigCompat(Type* lhs, Expression* rhs)
 
 bool Validator::assigCompat(Type* lhs, Declaration* rhs)
 {
-    // TODO ldiface
     if( lhs->kind == Type::Proc && rhs->kind == Declaration::Procedure )
     {
         if( lhs->typebound != rhs->typebound )

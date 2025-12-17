@@ -42,6 +42,7 @@ namespace Mil {
 		void StructUnionType(SynTree*);
 		void FieldList(SynTree*);
 		void IdentList(SynTree*);
+		void InterfaceType(SynTree*);
 		void ObjectType(SynTree*);
 		void MemberList(SynTree*);
 		void PointerType(SynTree*);

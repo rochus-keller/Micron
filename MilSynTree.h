@@ -25,6 +25,7 @@ namespace Mil {
 			R_IfThenElse,
 			R_ImportList,
 			R_ImporterList,
+			R_InterfaceType,
 			R_Line,
 			R_LocalDeclaration,
 			R_Loop,

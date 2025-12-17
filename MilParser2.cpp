@@ -394,8 +394,10 @@ static inline bool FIRST_ExpInstr(int tt) {
 	case Tok_LDIND_I2:
 	case Tok_LDC_R8:
 	case Tok_SHR_UN:
+    case Tok_LDIFACE:
 		return true;
-	default: return false;
+    default:
+        return false;
 	}
 }
 
@@ -1035,6 +1037,12 @@ Type* Parser2::type() {
 	} else if( FIRST_ObjectType(la.d_type) || FIRST_ObjectType(la.d_code) ) {
         return ObjectType();
         // TODO: Interfaces
+    }else if( la.d_type == Tok_INTERFACE || la.d_code == Tok_INTERFACE )
+    {
+        expect(Tok_INTERFACE, true, "PointerType");
+        Type* res = new Type();
+        res->kind = Type::Interface;
+        return res;
 	} else if( FIRST_PointerType(la.d_type) || FIRST_PointerType(la.d_code) ) {
         return PointerType();
 	} else if( FIRST_ProcedureType(la.d_type) ) {
@@ -1323,7 +1331,8 @@ void Parser2::ProcedureDeclaration() {
             proc->typebound = true;
             scopeStack.pop_back();
             object = scopeStack.back()->findSubByName(receiver);
-            if( object && object->getType() && object->getType()->kind != Type::Object && object->getType()->kind != Type::Struct ) // TODO: interfaces
+            if( object && object->getType() && object->getType()->kind != Type::Object &&
+                    object->getType()->kind != Type::Struct && object->getType()->kind != Type::Interface )
                 error(tok, "binding doesn't reference an object type");
             else if( object && object->getType() )
             {
@@ -1368,7 +1377,11 @@ void Parser2::ProcedureDeclaration() {
 		if( la.d_type == Tok_Semi ) {
 			expect(Tok_Semi, false, "ProcedureDeclaration");
 		}
-        if( la.d_code == Tok_FORWARD ) {
+        if( la.d_code == Tok_ABSTRACT ) {
+            expect(Tok_ABSTRACT, true, "ProcedureDeclaration");
+            if( object == 0 || object->getType() == 0 || object->getType()->kind != Type::Interface )
+                error(cur, "ABSTRACT only supported for procedures bound to interface types");
+        }else if( la.d_code == Tok_FORWARD ) {
             if( la.d_type == Tok_Semi ) {
                 expect(Tok_Semi, false, "ProcedureDeclaration");
             }
@@ -1408,11 +1421,16 @@ void Parser2::ProcedureDeclaration() {
 			}
 			expect(Tok_EXTERN, true, "ProcedureDeclaration");
             p->extern_ = true;
+        } else if( la.d_code == Tok_ABSTRACT || ( la.d_type == Tok_Semi && peek(2).d_code == Tok_ABSTRACT ) ) {
+            if( la.d_type == Tok_Semi ) {
+                expect(Tok_Semi, false, "ProcedureDeclaration");
+            }
+            expect(Tok_ABSTRACT, true, "ProcedureDeclaration");
         } else if( la.d_code == Tok_FOREIGN || ( la.d_type == Tok_Semi && peek(2).d_code == Tok_FOREIGN ) ) {
             if( la.d_type == Tok_Semi ) {
                 expect(Tok_Semi, false, "ProcedureDeclaration");
             }
-            expect(Tok_EXTERN, true, "ProcedureDeclaration");
+            expect(Tok_FOREIGN, true, "ProcedureDeclaration");
             p->foreign_ = true;
             if( la.d_type == Tok_string ) {
                 expect(Tok_string, false, "ProcedureDeclaration");

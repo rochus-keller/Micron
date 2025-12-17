@@ -28,6 +28,7 @@ namespace Mil {
 			case Tok_Lbrace: return "{";
 			case Tok_Rbrace: return "}";
 			case Tok_ABS: return "ABS";
+			case Tok_ABSTRACT: return "ABSTRACT";
 			case Tok_ADD: return "ADD";
 			case Tok_AND: return "AND";
 			case Tok_ARRAY: return "ARRAY";
@@ -74,6 +75,7 @@ namespace Mil {
 			case Tok_INIT: return "INIT";
 			case Tok_INITOBJ: return "INITOBJ";
 			case Tok_INLINE: return "INLINE";
+			case Tok_INTERFACE: return "INTERFACE";
 			case Tok_INVAR: return "INVAR";
 			case Tok_ISINST: return "ISINST";
 			case Tok_LABEL: return "LABEL";
@@ -249,6 +251,7 @@ namespace Mil {
 			case Tok_Lbrace: return "Tok_Lbrace";
 			case Tok_Rbrace: return "Tok_Rbrace";
 			case Tok_ABS: return "Tok_ABS";
+			case Tok_ABSTRACT: return "Tok_ABSTRACT";
 			case Tok_ADD: return "Tok_ADD";
 			case Tok_AND: return "Tok_AND";
 			case Tok_ARRAY: return "Tok_ARRAY";
@@ -295,6 +298,7 @@ namespace Mil {
 			case Tok_INIT: return "Tok_INIT";
 			case Tok_INITOBJ: return "Tok_INITOBJ";
 			case Tok_INLINE: return "Tok_INLINE";
+			case Tok_INTERFACE: return "Tok_INTERFACE";
 			case Tok_INVAR: return "Tok_INVAR";
 			case Tok_ISINST: return "Tok_ISINST";
 			case Tok_LABEL: return "Tok_LABEL";
@@ -524,7 +528,19 @@ namespace Mil {
 			switch( at(str,len,i+1) ){
 			case 'B':
 				if( at(str,len,i+2) == 'S' ){
-					res = Tok_ABS; i += 3;
+					if( at(str,len,i+3) == 'T' ){
+						if( at(str,len,i+4) == 'R' ){
+							if( at(str,len,i+5) == 'A' ){
+								if( at(str,len,i+6) == 'C' ){
+									if( at(str,len,i+7) == 'T' ){
+										res = Tok_ABSTRACT; i += 8;
+									}
+								}
+							}
+						}
+					} else {
+						res = Tok_ABS; i += 3;
+					}
 				}
 				break;
 			case 'D':
@@ -857,6 +873,21 @@ namespace Mil {
 						if( at(str,len,i+4) == 'N' ){
 							if( at(str,len,i+5) == 'E' ){
 								res = Tok_INLINE; i += 6;
+							}
+						}
+					}
+					break;
+				case 'T':
+					if( at(str,len,i+3) == 'E' ){
+						if( at(str,len,i+4) == 'R' ){
+							if( at(str,len,i+5) == 'F' ){
+								if( at(str,len,i+6) == 'A' ){
+									if( at(str,len,i+7) == 'C' ){
+										if( at(str,len,i+8) == 'E' ){
+											res = Tok_INTERFACE; i += 9;
+										}
+									}
+								}
 							}
 						}
 					}
