@@ -501,6 +501,8 @@ bool Project2::generateC(const QString &outDir)
     QDir dir(outDir);
     // TODO: check if files can be created and written
     foreach( Mil::Declaration* module, loader.getModel().getModules() )
+        module->nobody = !Mil::CeeGen::requiresBody(module);
+    foreach( Mil::Declaration* module, loader.getModel().getModules() )
     {
         if( module->generic ) // skip not fully instantiated modules
             continue;
@@ -520,7 +522,6 @@ bool Project2::generateC(const QString &outDir)
         header.open(QFile::WriteOnly);
         QFile* body = 0;
         QFile b( dir.absoluteFilePath(escapeFilename(module->name) + ".c"));
-        module->nobody = !Mil::CeeGen::requiresBody(module);
         if( !module->nobody )
         {
             b.open(QFile::WriteOnly);

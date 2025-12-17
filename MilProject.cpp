@@ -155,19 +155,19 @@ bool Project::parse()
 void Project::generateC()
 {
     foreach( Declaration* module, mdl->getModules() )
+        module->nobody = !CeeGen::requiresBody(module);
+    foreach( Declaration* module, mdl->getModules() )
     {
         CeeGen cg(mdl);
         QFile header( escapeFilename(module->name) + ".h");
         header.open(QFile::WriteOnly);
         QFile* body = 0;
         QFile b( escapeFilename(module->name) + ".c");
-        module->nobody = !CeeGen::requiresBody(module);
         if( !module->nobody )
         {
             b.open(QFile::WriteOnly);
             body = &b;
         }
-
         cg.generate(module, &header, body);
     }
 }
