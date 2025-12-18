@@ -1,4 +1,4 @@
-module BoundProcs
+module BoundProcs [ level = 4 ]
 
 type
 	T0 = object end

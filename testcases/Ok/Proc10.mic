@@ -1,4 +1,4 @@
-module Procs10
+module Procs10 [ level = 4 ]
 
 	type
 		A = pointer to object a: integer end

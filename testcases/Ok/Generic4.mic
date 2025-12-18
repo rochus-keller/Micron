@@ -1,4 +1,4 @@
-module Generic4(T)
+module Generic4(T) [ level = 4 ]
 
 type
 	Element = object 

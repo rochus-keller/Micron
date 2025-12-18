@@ -1,4 +1,4 @@
-module Procs6
+module Procs6 [ level = 4 ]
 
 	type
 		Super = ^object end

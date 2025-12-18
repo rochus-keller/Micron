@@ -1480,7 +1480,7 @@ Type* Parser2::RecordType() {
 
 Type* Parser2::ObjectType() {
     expect(Tok_OBJECT, true, "ObjectType");
-    if( langLevel < 3 )
+    if( langLevel < 4 )
         error(cur,"object types not available on current language level");
     Type* rec = new Type();
     rec->pos = cur.toRowCol();
@@ -2322,9 +2322,9 @@ Expression* Parser2::designator(bool needsLvalue) {
             expect(Tok_Hat, false, "selector");
             if( res->kind == Expression::MethSelect )
             {
-                if( langLevel < 3 )
+                if( langLevel < 4 )
                 {
-                    error(cur,"object types not available on current language level");
+                    error(cur,"super calls not available on current language level");
                     return 0;
                 }
                 Expression* tmp = Expression::create(Expression::Super, tok.toRowCol() );
@@ -2341,7 +2341,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 res = tmp;
             }else
             {
-                if( langLevel >= 3 )
+                if( langLevel >= 4 )
                     error(tok,"operator only applicable to pointer types or method super calls");
                 else
                     error(tok,"only a pointer type can be dereferenced");
@@ -2397,7 +2397,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             {
                 Builtins bi(ev);
                 const quint8 id = proc->val.toInt();
-                if( (langLevel < 2 && (id == Builtin::NEW || id == Builtin::DISPOSE)) ||
+                if( (langLevel < 3 && (id == Builtin::NEW || id == Builtin::DISPOSE)) ||
                     ((langLevel < 2 || !haveExceptions) && (id == Builtin::PCALL || id == Builtin::RAISE)))
                     error(lpar, QString("operation not supported on language level %1").arg(langLevel));
 
@@ -2659,7 +2659,7 @@ quint8 Parser2::relation() {
 		expect(Tok_IN, true, "relation");
     } else if( la.d_type == Tok_IS ) {
         expect(Tok_IS, true, "relation");
-        if( langLevel < 3 )
+        if( langLevel < 4 )
             error(cur,"operator not available on current language level");
     } else
 		invalid("relation");
@@ -3878,8 +3878,8 @@ void Parser2::block() {
     beginFinallyEnd(false, cur.toRowCol());
     if( la.d_type == Tok_FINALLY ) {
         expect(Tok_FINALLY, false, "block");
-        if( langLevel < 1 )
-            error(cur,"FINALLY sections are not supported on language level 0");
+        if( langLevel < 2 )
+            error(cur,"FINALLY sections are only supported on language level 2 and above");
         beginFinallyEnd(true, cur.toRowCol());
     }
 }

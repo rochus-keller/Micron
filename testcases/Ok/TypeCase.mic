@@ -1,4 +1,4 @@
-MODULE TypeCase;
+MODULE TypeCase [ level = 4 ]; 
    TYPE
       T0 = POINTER TO OBJECT END;
       T1 = POINTER TO OBJECT(T0) i: INTEGER END;

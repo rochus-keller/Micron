@@ -1,4 +1,4 @@
-module Procs5b
+module Procs5b [ level = 4 ]
 	type 
 		Superclass = pointer to object end
 		Class = pointer to object (Superclass) end

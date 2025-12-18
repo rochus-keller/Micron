@@ -1,4 +1,4 @@
-module Procs5
+module Procs5 [ level = 4 ]
 
 	type 
 		Superclass = object end

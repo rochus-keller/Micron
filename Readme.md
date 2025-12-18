@@ -18,7 +18,10 @@ NOTE that this project is in an early stage and work-in-progress.
 - [x] Implement parser and IR generator
 - [x] Evaluate an existing compiler backend
 - [x] Implement the analyzer/validator 
-- [x] Implement a C99 generator (WIP)
+- [x] Implement a C99 generator
+- [x] Implement an IDE with source navigation and debugger
+- [x] Complete language and add explicit language levels
+- [x] Implement a MIL interpreter for the full language scope (WIP)
 - [ ] Implement a native backend
 - [ ] Migrate some notable C projects to Micron as a proof-of-concept and to optimize the language
 
@@ -34,6 +37,13 @@ Meanwhile I prepared a manual Micron parser and designed an intermediate languag
 #### Status on May 15, 2024
 
 The programming and intermediate language have matured in parallel with the parser and code generator implementation. The IR code generator is integrated with the parser and operates in the same pass. Though not all parts of the language are yet supported by the IR generator (e.g. imports, VLAs and generics). Instead I was on a long quest for a suitable compiler backend that I could re-use for Micron (and other of my projects). The journey brought me to all sorts of toolkits and re-targetable compilers and I spent a lot of time studying and experimenting. There would be enough material for a treatise of its own. I also invested a lot of time in TCC, trying to modularize the code (that spaghetti lovers would be delighted with) and work out a minimal backend interface; I even started to add another frontend and had to grit my teeth over the TCC functionality, which - despite the introduction of modularization - turned out to be still almost incomprehensible. During this phase, [user tarkonian drew my attention to the Eigen Compiler Suite](https://github.com/rochus-keller/Oberon/discussions/55), which looked very promising. After a thorough review of the large code base and excellent documentation, and an extensive exchange with the author, I came to the conclusion that Eigen is probably the best option currently available. It supports many more architectures than TCC (or e.g. QBE, Firm, , and the linker is also integrated (as with TCC), so you don't need any other dependencies, and the generated code [is significantly faster than that of TCC](https://software.openbrace.org/projects/ecs/activity?from=2024-03-28). I also managed to make the relevant parts [build with GCC 4.8 and MSVC 2015](https://github.com/rochus-keller/EiGen). The current focus is on implementing an Eigen IR generator for Micron; this will likely require more supporting activities (like e.g. an EBNF for the IR and translation examples with Oberon and C).
+
+#### Status on December 18, 2025
+
+The second year of the project is coming to an end, and a lot has happened. The language has matured in every aspect. We now have matured language levels, which optimize language 
+features for different use cases, from low-level kernel and driver development up to high-level programming with support of a garbage collector, and which can be set per module. Significant expansions went into the type system and object-oriented capabilities (with IS operator and type case), interface types (similar to Go) and bound procedures for both records and objects, comprehensive support for generic programming through WHERE clauses and improved type constraints. There are now also bit fields (including packed variants), finally sections for resource cleanup (as a simple alternative for C++ destructors). Constructors became more flexible, allowing non-const and index components, and the @ operator now works with constructors. External interoperability improved with extern C declarations. Several features were removed for simplification: varargs support, symbol enums, and proc aliases.
+Several large-scale refactorings improved code organization. And IDE was added, adopted from Oberon and Luon projects, integrating comprehensive cross-reference support covering all symbol uses. A MIL interpreter was integrated into the IDE with redirected output to IDE log and export capabilities for low-level bytecode. Most MIC/MIL features from the specification are implemented. The MIL interpreter underwent dramatic performance optimizations, so that it now achieves about 60% of Lua 5.4 (which of course is still too slow). Four distinct code generation backends for the MIL intermediate language have been implemented. The CeeGen (C generator) was fully completed and works with all testcases and AWFY. Experimental work began on EiGen, LLVM 4 IR, and CIL, though these remained work-in-progress.
+A lot of time has been invested in the analysis of the Oberon System 3 and AOS/Bluebottle native implementations to assure that this code can be represented in Micron without the SYSTEM module tricks, loss of type checking, or inline assembler.
 
 #### Precompiled versions
 

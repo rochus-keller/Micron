@@ -1,4 +1,4 @@
-module Interface2
+module Interface2 [ level = 4 ]
 
 type
   Root = object end

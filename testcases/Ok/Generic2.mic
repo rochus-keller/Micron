@@ -1,4 +1,4 @@
-module Generic2(T)
+module Generic2(T) [ level = 4 ]
 
 type
   List* = pointer to ListDesc
