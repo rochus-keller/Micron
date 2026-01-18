@@ -154,6 +154,11 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::CAST:
         expectingNArgs(args,2);
+        *ret = args.first()->getType();
+        break;
+    case Builtin::VAL:
+        expectingNArgs(args,2);
+        *ret = args.first()->getType();
         break;
     case Builtin::CHR:
         expectingNArgs(args,1);
@@ -181,9 +186,6 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,1);
         *ret = mdl->getType(Type::UINT32);
         break;
-    case Builtin::LONG:
-        expectingNArgs(args,1);
-        break;
     case Builtin::MAX:
         expectingNMArgs(args,1,2);
         break;
@@ -196,55 +198,12 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::ORD:
         expectingNArgs(args,1);
         break;
-    case Builtin::SHORT:
-        expectingNArgs(args,1);
-        break;
-    case Builtin::SIGNED:
-        expectingNArgs(args,1);
-        switch(args.first()->getType()->kind)
-        {
-        case Type::UINT8:
-            *ret = ev->mdl->getType(Type::INT8);
-            break;
-        case Type::UINT16:
-            *ret = ev->mdl->getType(Type::INT16);
-            break;
-        case Type::UINT32:
-            *ret = ev->mdl->getType(Type::INT32);
-            break;
-        case Type::UINT64:
-            *ret = ev->mdl->getType(Type::INT64);
-            break;
-        default:
-            throw "expecting unsigned integer";
-        }
-        break;
     case Builtin::SIZE:
         expectingNArgs(args,1);
         break;
     case Builtin::STRLEN:
         expectingNArgs(args,1);
         *ret = mdl->getType(Type::UINT32);
-        break;
-    case Builtin::UNSIGNED:
-        expectingNArgs(args,1);
-        switch(args.first()->getType()->kind)
-        {
-        case Type::INT8:
-            *ret = ev->mdl->getType(Type::UINT8);
-            break;
-        case Type::INT16:
-            *ret = ev->mdl->getType(Type::UINT16);
-            break;
-        case Type::INT32:
-            *ret = ev->mdl->getType(Type::UINT32);
-            break;
-        case Type::INT64:
-            *ret = ev->mdl->getType(Type::UINT64);
-            break;
-        default:
-            throw "expecting signed integer";
-        }
         break;
 
     // procedures:
@@ -434,7 +393,7 @@ void Builtins::doDefault()
     ev->stack.push_back(v);
 }
 
-void Builtins::doSigned()
+void Builtins::doCast()
 {
     Value v = ev->stack.takeLast();
     Type* t;
@@ -457,39 +416,6 @@ void Builtins::doSigned()
     case Type::UINT64:
         t = ev->mdl->getType(Type::INT64);
         tt = Mil::EmiTypes::I8;
-        break;
-    }
-    v.type = t;
-    if( !v.isConst() )
-    {
-        ev->out->conv_(tt);
-    }
-    ev->stack.push_back(v);
-}
-
-void Builtins::doUnsigned()
-{
-    Value v = ev->stack.takeLast();
-    Type* t;
-    Mil::EmiTypes::EmiTypes::Basic tt;
-    switch(v.type->kind)
-    {
-    case Type::INT8:
-        t = ev->mdl->getType(Type::UINT8);
-        tt = Mil::EmiTypes::U1;
-        break;
-    case Type::INT16:
-        t = ev->mdl->getType(Type::UINT16);
-        tt = Mil::EmiTypes::U2;
-        break;
-    case Type::INT32:
-    default:
-        t = ev->mdl->getType(Type::UINT32);
-        tt = Mil::EmiTypes::U4;
-        break;
-    case Type::INT64:
-        t = ev->mdl->getType(Type::UINT64);
-        tt = Mil::EmiTypes::U8;
         break;
     }
     v.type = t;
@@ -929,16 +855,6 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs)
         doShiftLeft();
         handleStack = false;
         break;
-    case Builtin::SIGNED:
-        checkNumOfActuals(nArgs, 1);
-        doSigned();
-        handleStack = false;
-        break;
-    case Builtin::UNSIGNED:
-        checkNumOfActuals(nArgs, 1);
-        doUnsigned();
-        handleStack = false;
-        break;
     case Builtin::ABS:
         checkNumOfActuals(nArgs, 1);
         doAbs();
@@ -952,6 +868,11 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs)
     case Builtin::DEFAULT:
         checkNumOfActuals(nArgs, 1);
         doDefault();
+        handleStack = false;
+        break;
+    case Builtin::CAST:
+        checkNumOfActuals(nArgs, 2);
+        doCast();
         handleStack = false;
         break;
     default:

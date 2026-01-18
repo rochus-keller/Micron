@@ -61,7 +61,7 @@ type
 
   IdleTaskDataRecord = record
     base: RBObject
-    control: integer
+    control: uint32
     count: integer
   end
 
@@ -478,12 +478,12 @@ begin
   return me
 end IdleTaskDataRecord_create
 
-procedure IdleTaskDataRecord_getControl(me: ^IdleTaskDataRecord): integer
+procedure IdleTaskDataRecord_getControl(me: ^IdleTaskDataRecord): uint32
 begin
   return me.control
 end IdleTaskDataRecord_getControl
 
-procedure IdleTaskDataRecord_setControl(me: ^IdleTaskDataRecord; aNumber: integer)
+procedure IdleTaskDataRecord_setControl(me: ^IdleTaskDataRecord; aNumber: uint32)
 begin
   me.control := aNumber
 end IdleTaskDataRecord_setControl
@@ -661,11 +661,11 @@ begin
   if IdleTaskDataRecord_getCount(dataRecord) = 0 then
     return Scheduler_holdSelf(fp.s)
   else
-    if bitand(unsigned(IdleTaskDataRecord_getControl(dataRecord)), 1) = 0 then
+    if bitand(IdleTaskDataRecord_getControl(dataRecord), 1) = 0 then
       IdleTaskDataRecord_setControl(dataRecord, IdleTaskDataRecord_getControl(dataRecord) div 2)
       return Scheduler_release(fp.s, DEVICE_A)
     else
-      IdleTaskDataRecord_setControl(dataRecord, signed(bitxor(unsigned(IdleTaskDataRecord_getControl(dataRecord)) div 2, 53256)))
+      IdleTaskDataRecord_setControl(dataRecord, bitxor(IdleTaskDataRecord_getControl(dataRecord) div 2, 53256))
       return Scheduler_release(fp.s, DEVICE_B)
     end
   end

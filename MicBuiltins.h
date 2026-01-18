@@ -46,8 +46,7 @@ protected:
     void ASSERT(int nArgs);
     void bitarith(int op);
     void bitnot();
-    void doSigned();
-    void doUnsigned();
+    void doCast();
     void doDefault();
     void doAbs();
     void doFlt();

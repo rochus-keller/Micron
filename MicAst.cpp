@@ -25,8 +25,8 @@ Type* AstModel::types[Type::MaxBasicType] = {0};
 
 const char* Builtin::name[] = {
     "ABS", "CAP", "BITAND", "BITASR", "BITNOT", "BITOR", "BITS", "BITSHL", "BITSHR",
-    "BITXOR", "CAST", "CHR", "DEFAULT", "FLOOR", "FLT", "GETENV", "LEN", "LONG", "MAX",
-    "MIN", "ODD", "ORD", "SHORT", "SIGNED", "SIZE", "STRLEN", "UNSIGNED",
+    "BITXOR", "CAST", "CHR", "DEFAULT", "FLOOR", "FLT", "GETENV", "LEN", "MAX",
+    "MIN", "ODD", "ORD", "SIZE", "STRLEN", "VAL",
     "ASSERT", "DEC", "DISPOSE", "EXCL", "HALT", "INC",
     "INCL", "NEW", "PCALL", "PRINT", "PRINTLN", "RAISE", "SETENV",
 };
@@ -115,16 +115,14 @@ AstModel::AstModel():helper(0),helperId(0)
         addBuiltin("FLT", Builtin::FLT);
         addBuiltin("GETENV", Builtin::GETENV);
         addBuiltin("LEN", Builtin::LEN);
-        addBuiltin("LONG", Builtin::LONG);
         addBuiltin("MAX", Builtin::MAX);
         addBuiltin("MIN", Builtin::MIN);
         addBuiltin("ODD", Builtin::ODD);
         addBuiltin("ORD", Builtin::ORD);
-        addBuiltin("SHORT", Builtin::SHORT);
-        addBuiltin("SIGNED", Builtin::SIGNED);
         addBuiltin("SIZE", Builtin::SIZE);
         addBuiltin("STRLEN", Builtin::STRLEN);
-        addBuiltin("UNSIGNED", Builtin::UNSIGNED);
+        addBuiltin("CAST", Builtin::CAST);
+        addBuiltin("VAL", Builtin::VAL);
         addBuiltin("ASSERT", Builtin::ASSERT);
         addBuiltin("DEC", Builtin::DEC);
         addBuiltin("DISPOSE", Builtin::DISPOSE);

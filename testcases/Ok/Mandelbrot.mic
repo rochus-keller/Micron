@@ -65,7 +65,7 @@ module Mandelbrot
 	end verifyResult2
 
     proc mandelbrot(size: integer): integer
-     var sum byteAcc bitNum y z x escape: integer
+     var sum byteAcc escape bitNum: uint32; y z x: integer
          ci zr zrzr zi zizi cr : longreal
          notDone : boolean
      begin
@@ -101,18 +101,18 @@ module Mandelbrot
            inc(z)
          end
 
-         byteAcc := signed(BITSHL(unsigned(byteAcc), 1)) + escape
+         byteAcc := BITSHL(byteAcc, 1) + escape
          inc(bitNum)
 
          // Code is very similar for these cases, but using separate blocks
          // ensures we skip the shifting when it's unnecessary, which is most cases.
          if bitNum = 8 then
-           sum := signed(bitxor(unsigned(sum),unsigned(byteAcc)))
+           sum := bitxor(sum,byteAcc)
            byteAcc := 0
            bitNum  := 0
          elsif x = (size - 1) then
-           byteAcc := signed(BITSHL(unsigned(byteAcc),unsigned(8 - bitNum)))
-           sum := signed(bitxor(unsigned(sum),unsigned(byteAcc)))
+           byteAcc := BITSHL(byteAcc,8 - bitNum)
+           sum := bitxor(sum,byteAcc)
            byteAcc := 0
            bitNum  := 0
          end
@@ -120,7 +120,7 @@ module Mandelbrot
        end
        inc(y)
      end
-     return sum
+     return cast(int32,sum)
    end mandelbrot
    
 

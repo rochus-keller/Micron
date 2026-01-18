@@ -1,11 +1,11 @@
 module Procs3
 
-	type 	D = array 3 of array 4 of integer	
+	type 	D = array 3 of array 4 of uint32	
 	var d : D
 		i,j: uint32
 
 	proc Q( d: pointer to D )
-		proc Inner( d: pointer to array of integer; m: uint32 )
+		proc Inner( d: pointer to array of uint32; m: uint32 )
 		begin
 			d[ 2 * m + 3 ] := 12
 			println(d[ 2 * m + 3 ])
@@ -19,12 +19,12 @@ begin
 	println("Procs3 start")
 	for i := 0 to len(d)-1 do
 		for j := 0 to len(d[0])-1 do
-			d[i][j] := signed(i + j + i * j)
+			d[i][j] := i + j + i * j
 		end
 	end
-    println(d[2][3])
-	Q(@d)
-    println(d[2][3])
+  println(d[2][3])
+  Q(@d)
+  println(d[2][3])
 	
 	println("Procs3 done")
 end Procs3
