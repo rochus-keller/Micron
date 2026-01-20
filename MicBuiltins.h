@@ -30,7 +30,7 @@ public:
     static bool requiresLvalue(quint8 builtin, quint8 argNr);
 
     Builtins(Evaluator*);
-    void callBuiltin(quint8 builtin, int nArgs);
+    void callBuiltin(quint8 builtin, int nArgs, const RowCol& pos);
 
 protected:
     int addIncDecTmp();
@@ -46,7 +46,8 @@ protected:
     void ASSERT(int nArgs);
     void bitarith(int op);
     void bitnot();
-    void doCast();
+    void doCast(const RowCol& pos);
+    void doVal(const RowCol& pos);
     void doDefault();
     void doAbs();
     void doFlt();

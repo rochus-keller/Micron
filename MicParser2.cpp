@@ -21,6 +21,8 @@
 #include <QtDebug>
 using namespace Mic;
 
+static inline void dummy() {}
+
 static inline bool FIRST_Micron(int tt) {
 	return tt == Tok_MODULE;
 }
@@ -921,7 +923,7 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
     return assigCompat(lhs, rhs->getType(), pos);
 }
 
-bool Parser2::assigCompat(Type* lhs, const Expression* rhs, const RowCol& pos)
+bool Parser2::assigCompat(Type* lhs, Expression* rhs, const RowCol& pos)
 {
     if( lhs == 0 || rhs == 0 )
         return false;
@@ -929,10 +931,10 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs, const RowCol& pos)
     if( rhs->kind == Expression::TypeDecl )
         return false;
 
-    // Tv is a signed integer and e is an unsigned integer constant, and Tv includes the
-    // smallest integer type necessary to represent e.
-    if( lhs->isInt() && rhs->isConst() && rhs->getType()->isUInt() )
-        return assigCompat(lhs, ev->smallestIntType(rhs->val), pos);
+    // T~v~ is a signed or unsigned integer and `e` is a
+    // _universal integer_, and T~v~ _includes_ the smallest integer type
+    // necessary to represent `e`
+    ev->bindUniInt(rhs, lhs->isInt());
 
     if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl ||
             rhs->kind == Expression::MethSelect || rhs->kind == Expression::IntfSelect )
@@ -940,8 +942,8 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs, const RowCol& pos)
 
     // Tv is a non-open array of CHAR, Te is a string literal
     if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
-            rhs->isLiteral() && rhs->getType()->kind == Type::String)
-        return strlen(rhs->getLiteralValue().toByteArray().constData()) < lhs->len;
+            rhs->hasConstValue() && rhs->getType()->kind == Type::String)
+        return strlen(rhs->getConstValue().toByteArray().constData()) < lhs->len;
 
     // A string of length 1 can be used wherever a character constant is allowed and vice versa.
     if( lhs->kind == Type::CHAR && rhs->getType()->kind == Type::String )
@@ -950,7 +952,7 @@ bool Parser2::assigCompat(Type* lhs, const Expression* rhs, const RowCol& pos)
     return assigCompat(lhs, rhs->getType(), pos);
 }
 
-bool Parser2::paramCompat(Declaration* lhs, const Expression* rhs)
+bool Parser2::paramCompat(Declaration* lhs, Expression* rhs)
 {
     Q_ASSERT(lhs->kind == Declaration::ParamDecl);
 
@@ -1090,76 +1092,57 @@ Expression*Parser2::integer()
     number.replace('_',"");
     Type* type = 0;
     bool signed_ = false;
+    bool unsigned_ = false;
+
     if( number.size() > 1 && number[number.size()-1] == 'u' )
-        number.chop(1);
-    else if( number.size() > 1 && number[number.size()-1] == 'i' )
+    {
+        unsigned_ = true;
+        number.chop(1); // suffix u
+    }else if( number.size() > 1 && number[number.size()-1] == 'i' )
     {
         signed_ = true;
-        number.chop(1);
+        number.chop(1); // suffix i
     }else if( number.size() > 2 && number[number.size()-2] == 'u' )
     {
+        // suffix u1, u2, u4 or u8
         switch(number[number.size()-1])
         {
-        case '8':
+        case '1':
             type = mdl->getType(Type::UINT8);
+            break;
+        case '2':
+            type = mdl->getType(Type::UINT16);
+            break;
+        case '4':
+            type = mdl->getType(Type::UINT32);
+            break;
+        case '8':
+            type = mdl->getType(Type::UINT64);
             break;
         default:
             error(cur,QString("invalid integer suffix 'u%1'").arg(number[number.size()-1]));
         }
         number.chop(2);
-    }else if( number.size() > 3 && number[number.size()-3] == 'u' )
-    {
-        switch(number[number.size()-2])
-        {
-        case '1':
-            type = mdl->getType(Type::UINT16);
-            if(number[number.size()-1] != '6')
-                error(cur,QString("invalid integer suffix 'u1%1'").arg(number[number.size()-1]));
-            break;
-        case '3':
-            type = mdl->getType(Type::UINT32);
-            if(number[number.size()-1] != '2')
-                error(cur,QString("invalid integer suffix 'u1%1'").arg(number[number.size()-1]));
-            break;
-        case '6':
-            type = mdl->getType(Type::UINT64);
-            if(number[number.size()-1] != '4')
-                error(cur,QString("invalid integer suffix 'u1%1'").arg(number[number.size()-1]));
-            break;
-        }
-        number.chop(3);
     }else if( number.size() > 2 && number[number.size()-2] == 'i' )
     {
+        // suffix i1, i2, i4 or i8
         switch(number[number.size()-1])
         {
-        case '8':
+        case '1':
             type = mdl->getType(Type::INT8);
             break;
+        case '2':
+            type = mdl->getType(Type::INT16);
+            break;
+        case '4':
+            type = mdl->getType(Type::INT32);
+            break;
+        case '8':
+            type = mdl->getType(Type::INT64);
         default:
             error(cur,QString("invalid integer suffix 'i%1'").arg(number[number.size()-1]));
         }
         number.chop(2);
-    }else if( number.size() > 3 && number[number.size()-3] == 'i' )
-    {
-        switch(number[number.size()-2])
-        {
-        case '1':
-            type = mdl->getType(Type::INT16);
-            if(number[number.size()-1] != '6')
-                error(cur,QString("invalid integer suffix 'i1%1'").arg(number[number.size()-1]));
-            break;
-        case '3':
-            type = mdl->getType(Type::INT32);
-            if(number[number.size()-1] != '2')
-                error(cur,QString("invalid integer suffix 'i1%1'").arg(number[number.size()-1]));
-            break;
-        case '6':
-            type = mdl->getType(Type::INT64);
-            if(number[number.size()-1] != '4')
-                error(cur,QString("invalid integer suffix 'i1%1'").arg(number[number.size()-1]));
-            break;
-        }
-        number.chop(3);
     }
     const char suffix = ( number.size() > 1 ? number[number.size()-1] : '0' );
     if( !::isdigit(suffix) )
@@ -1179,11 +1162,17 @@ Expression*Parser2::integer()
         res->val = signed_ ? number.toLongLong() : number.toULongLong();
         break;
     }
-    Type* derived = signed_ ? ev->smallestIntType(res->val) : ev->smallestUIntType(res->val);
-    if( type == 0 )
-        type = derived;
-    else if( derived->kind > type->kind )
-        error(cur,"the given constant value cannot be represented by the given type");
+    if( signed_ || unsigned_ )
+    {
+        Type* derived = signed_ ? ev->smallestIntType(res->val) : ev->smallestUIntType(res->val);
+
+        if( type == 0 )
+            type = derived;
+        else if( derived->kind > type->kind )
+            error(cur,"the given constant value cannot be represented by the given type");
+
+    }else if( type == 0 )
+        type = mdl->getType(Type::UniInt);
     res->setType(type);
     return res;
 }
@@ -1430,6 +1419,7 @@ void Parser2::length(quint32& len) {
 	if( FIRST_ConstExpression(la.d_type) ) {
         const Token tok = la;
         Expression* lenExpr = ConstExpression(0);
+        ev->bindUniInt(lenExpr, false);
         if( !ev->evaluate(lenExpr) )
             error(tok, ev->getErr());
         Value v = ev->pop();
@@ -1687,13 +1677,13 @@ Type* Parser2::PointerType() {
 Type* Parser2::enumeration() {
 	expect(Tok_Lpar, false, "enumeration");
     Type* res = new Type();
+    res->kind = Type::ConstEnum;
     res->pos = cur.toRowCol();
     typeStack.push_back(res);
     if( FIRST_constEnum(la.d_type) ) {
         res->subs = constEnum();
         foreach( Declaration* d, res->subs )
             d->setType(res);
-        res->kind = Type::ConstEnum;
     } else
 		invalid("enumeration");
 	expect(Tok_Rpar, false, "enumeration");
@@ -1918,6 +1908,7 @@ Type *Parser2::addHelperType(Type::Kind kind, int len, Type *base, const RowCol 
     {
         res = new Type();
         res->setType(base);
+        res->len = len;
         res->pos = pos;
         res->kind = kind;
         allTypes.append(res);
@@ -1981,6 +1972,7 @@ void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
         return; // error reported elsewhere
     Declaration* formal = formals[actuals.size()-1];
     Expression* actual = actuals.last();
+
     if( !paramCompat(formal,actual) ) {
         //paramCompat(formal,actual); // TEST
         error(actual->pos.d_row, actual->pos.d_col, "actual argument not compatible with formal parameter");
@@ -1995,32 +1987,31 @@ static inline Type* maxType(Type* lhs, Type* rhs)
         return rhs;
 }
 
-static Expression* createAutoCast(Expression* e, Type* t)
+static Expression* createAutoConv(Expression* e, Type* t)
 {
-    Expression* tmp = Expression::create(Expression::AutoCast,e->pos);
+    Expression* tmp = Expression::create(Expression::AutoConv,e->pos);
     tmp->setType(t);
     tmp->lhs = e;
     return tmp;
 }
 
-static void castArithOp(Expression* e)
+static void convArithOp(Expression* e)
 {
     e->setType(maxType(e->lhs->getType(),e->rhs->getType()));
     if( e->getType() != e->lhs->getType() )
-        e->lhs = createAutoCast(e->lhs,e->getType());
+        e->lhs = createAutoConv(e->lhs,e->getType());
     if( e->getType() != e->rhs->getType() )
-        e->rhs = createAutoCast(e->rhs,e->getType());
+        e->rhs = createAutoConv(e->rhs,e->getType());
 }
 
-static void castUintToInt(Expression* e, Expression* other, Evaluator* ev)
+static void bindUniInt(Expression* lhs, Expression* rhs, Evaluator* ev)
 {
-    // If one of the operands is an unsigned integer constant and the other operand is of type integer,
-    // the unsigned integer constant is converted to the smallest integer type which includes the constant value.
-    if( e->getType()->isUInt() && other->getType()->isInt() && e->isLiteral() )
-    {
-        QVariant val = e->getLiteralValue();
-        e->setType(ev->smallestIntType(val));
-    }
+    // TODO: currently UniInt is bound in any case, even if both lhs and rhs are UniInt
+    // actually it should be possible to pass UniInt along in the latter case
+    if( lhs )
+        ev->bindUniInt(lhs, rhs ? rhs->getType()->isInt() : false);
+    if( rhs )
+        ev->bindUniInt(rhs, lhs ? lhs->getType()->isInt() : false);
 }
 
 void Parser2::checkArithOp(Expression* e)
@@ -2029,8 +2020,7 @@ void Parser2::checkArithOp(Expression* e)
         return; // already reported?
     if( e->lhs->getType()->isNumber() && e->rhs->getType()->isNumber() )
     {
-        castUintToInt(e->lhs, e->rhs, ev);
-        castUintToInt(e->rhs, e->lhs, ev);
+        bindUniInt(e->lhs, e->rhs, ev);
         if( e->lhs->getType()->isInt() && e->rhs->getType()->isInt() ||
                 e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt() )
             switch(e->kind)
@@ -2040,7 +2030,7 @@ void Parser2::checkArithOp(Expression* e)
             case Expression::Mod:
             case Expression::Add:
             case Expression::Sub:
-                castArithOp(e);
+                convArithOp(e);
                 break;
             default:
                 error(e->pos.d_row, e->pos.d_col,"operator not supported for integer operands");
@@ -2053,7 +2043,7 @@ void Parser2::checkArithOp(Expression* e)
             case Expression::Fdiv:
             case Expression::Add:
             case Expression::Sub:
-                castArithOp(e);
+                convArithOp(e);
                 break;
             default:
                 error(e->pos.d_row, e->pos.d_col,"operator not supported for real operands");
@@ -2098,18 +2088,27 @@ void Parser2::checkUnaryOp(Expression* e)
 {
     if( e->kind == Expression::Plus || e->kind == Expression::Minus )
     {
-        if( e->lhs->getType()->isNumber() )
+        // If the unary '-' or '\+' is applied to
+        // an _universal integer_ type, it is treated as the smallest signed integer type that can represent its value;
+        // all other operands of unsigned integer type, the result is the next larger signed integer type, or an error if the operand is of type UIN64;
+        // all other operands, the type of the result is the same as the type of the operand.
+        if( e->lhs->getType()->kind == Type::UniInt )
+        {
+            Type* t = ev->smallestIntType(e->val);
+            e->lhs->setType(t);
+            e->setType(t);
+        }else if( e->lhs->getType()->isNumber() )
         {
             switch(e->getType()->kind)
             {
             case Type::UINT8:
-                e->lhs = createAutoCast(e->lhs, mdl->getType(Type::INT16));
+                e->lhs = createAutoConv(e->lhs, mdl->getType(Type::INT16));
                 break;
             case Type::UINT16:
-                e->lhs = createAutoCast(e->lhs, mdl->getType(Type::INT32));
+                e->lhs = createAutoConv(e->lhs, mdl->getType(Type::INT32));
                 break;
             case Type::UINT32:
-                e->lhs = createAutoCast(e->lhs, mdl->getType(Type::INT64));
+                e->lhs = createAutoConv(e->lhs, mdl->getType(Type::INT64));
                 break;
             case Type::UINT64:
                 error(e->pos.d_row, e->pos.d_col, "unary + operator is not applicable to operands of UINT64 type");
@@ -2136,17 +2135,16 @@ void Parser2::checkRelOp(Expression* e)
 
     if( e->lhs->getType()->isNumber() && e->rhs->getType()->isNumber() )
     {
-        castUintToInt(e->lhs, e->rhs, ev);
-        castUintToInt(e->rhs, e->lhs, ev);
+        bindUniInt(e->lhs, e->rhs, ev);
         if( e->lhs->getType()->isInt() && e->rhs->getType()->isInt() ||
                 e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt() ||
                 e->lhs->getType()->isReal() && e->rhs->getType()->isReal() )
         {
             Type* mt = maxType(e->lhs->getType(),e->rhs->getType());
             if( mt != e->lhs->getType() )
-                e->lhs = createAutoCast(e->lhs,mt);
+                e->lhs = createAutoConv(e->lhs,mt);
             if( mt != e->rhs->getType() )
-                e->rhs = createAutoCast(e->rhs,mt);
+                e->rhs = createAutoConv(e->rhs,mt);
         }else
             error(e->pos.d_row, e->pos.d_col, "operands are not of the same type");
     }else if( e->lhs->getType()->isText() && e->rhs->getType()->isText() ||
@@ -2311,6 +2309,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             res = tmp;
             tok = la;
             res->rhs = expression(0);
+            ev->bindUniInt(res->rhs, false);
             expect(Tok_Rbrack, false, "selector");
             if( res->rhs && res->rhs->getType() && !res->rhs->getType()->isInteger())
             {
@@ -3205,6 +3204,8 @@ void Parser2::IfStatement() {
     line(cur).if_();
     Token t = la;
     Expression* cond = expression(0);
+    if( cond )
+        bindUniInt(cond->lhs, cond->rhs, ev);
     if( cond != 0 && !ev->evaluate(cond, true) )
         error(t, ev->getErr());
     Expression::deleteAllExpressions();
@@ -3465,7 +3466,9 @@ void Parser2::ForStatement() {
     {
         // i := start
         Expression* lhs = toExpr(idxvar, tok.toRowCol());
-        ev->assign(lhs, expression(0), tok.toRowCol());
+        Expression* start = expression(0);
+        ev->bindUniInt(start,idxvar->getType()->isInt());
+        ev->assign(lhs, start, tok.toRowCol());
         Expression::deleteAllExpressions();
     }
 
@@ -3475,7 +3478,9 @@ void Parser2::ForStatement() {
     {
         // to := end
         Expression* lhs = toExpr(to, to->pos);
-        ev->assign(lhs, expression(0), to->pos);
+        Expression* end = expression(0);
+        ev->bindUniInt(end, idxvar->getType()->isInt());
+        ev->assign(lhs, end, to->pos);
         Expression::deleteAllExpressions();
     }
 
@@ -3484,6 +3489,7 @@ void Parser2::ForStatement() {
 		expect(Tok_BY, true, "ForStatement");
         tok = la;
         Expression* e = ConstExpression(0);
+        ev->bindUniInt(e, idxvar->getType()->isInt());
         if( !ev->evaluate(e) )
             error(tok, ev->getErr());
         Value v = ev->pop();
@@ -3931,13 +3937,15 @@ void Parser2::ReturnStatement() {
     if( FIRST_expression(la.d_type) ) {
         if( mdl->getTopScope()->getType() == 0 || mdl->getTopScope()->getType()->kind == Type::NoType )
                 error(cur,"this return statement doesn't expect an expression");
+        Type* retType = mdl->getTopScope()->getType();
         const Token tok = la;
-        Expression* e = expression(mdl->getTopScope()->getType());
+        Expression* e = expression(retType);
+        ev->bindUniInt(e, retType->isInt());
         if( e && !ev->evaluate(e) )
             error(tok, ev->getErr()); // value is pushed on stack by prepareRhs
-        if( !assigCompat( mdl->getTopScope()->getType(), e, e->pos ) )
+        if( !assigCompat( retType, e, e->pos ) )
             error(tok,"expression is not compatible with the return type");
-        if( !ev->prepareRhs(mdl->getTopScope()->getType(), false, e->pos) )
+        if( !ev->prepareRhs(retType, false, e->pos) )
             error(tok, ev->getErr());
         line(ret).ret_(true);
         Expression::deleteAllExpressions();
@@ -4600,6 +4608,7 @@ QByteArray Parser2::Attribute()
         expect(Tok_Eq, false, "Attribute");
         const Token t = la;
         Expression* e = ConstExpression(0);
+        ev->bindUniInt(e, true);
         if( e && !ev->evaluate(e) )
         {
             error(t, ev->getErr());
@@ -4609,7 +4618,7 @@ QByteArray Parser2::Attribute()
     }
     if( name == "standard" || name == "level" )
     {
-        if( v.type == 0 || !v.type->isUInt() || v.val.toInt() < 0 || v.val.toInt() > 4 )
+        if( v.type == 0 || !v.type->isInteger() || v.val.toInt() < 0 || v.val.toInt() > 4 )
         {
             error(t, "expecting a level number 0..4");
             return name;

@@ -104,6 +104,7 @@ namespace Mic
             Undefined,
             NoType,
             String,
+            UniInt, // universal integer literal
             Any,
             Nil,
             BOOL,
@@ -126,9 +127,9 @@ namespace Mic
 
         bool isUInt() const { return kind >= Type::UINT8 && kind <= Type::UINT64; }
         bool isInt() const { return kind >= Type::INT8 && kind <= Type::INT64; }
-        bool isNumber() const { return kind >= Type::UINT8 && kind <= Type::FLT64; }
+        bool isNumber() const { return (kind >= Type::UINT8 && kind <= Type::FLT64) || kind == Type::UniInt; }
         bool isReal() const { return kind == Type::FLT64 || kind == Type::FLT32; }
-        bool isInteger() const { return kind >= Type::UINT8 && kind <= Type::INT64; }
+        bool isInteger() const { return (kind >= Type::UINT8 && kind <= Type::INT64) || kind == Type::UniInt; }
         bool isSet() const { return kind == Type::SET; }
         bool isBoolean() const { return kind == Type::BOOL; }
         bool isSimple() const { return kind >= Type::String && kind < Type::MaxBasicType; }
@@ -141,6 +142,7 @@ namespace Mic
         Declaration* findSub(const QByteArray& name) const;
         Declaration* findMember(const QByteArray& name, bool recurseSuper = false) const;
         QPair<int,int> getFieldCount() const; // fixed, variant
+        int getByteSize() const;
 
         static QVariant getMax(Kind);
         static QVariant getMin(Kind);
@@ -199,7 +201,7 @@ namespace Mic
             MethSelect, // obj.proc, obj ist record/object, val is procedure declaration
             IntfSelect, // obj.proc, obj ist interface, val ist procdecl
             Index, // a[i]
-            Cast, AutoCast,
+            Cast, AutoConv,
             Call,
             Literal,
             Constructor, Range, NameValue, IndexValue,
@@ -215,14 +217,15 @@ namespace Mic
         Expression* next; // for args, set elems, and caselabellist
 
         bool isConst() const;
-        bool isLiteral() const;
-        QVariant getLiteralValue() const;
+        bool hasConstValue() const;
+        QVariant getConstValue() const;
         DeclList getFormals(bool includeReceiver = false) const;
         bool isLvalue() const; // true if result of expression is usually a ref to type; can be changed with byVal
         bool hasAddress() const;
         bool isAssignable() const;
         void setByVal();
         void appendRhs(Expression*);
+        void setType(Type*);
         static Expression* createFromToken(quint16,const RowCol&);
         static Expression* create(Kind k = Invalid, const RowCol& rc = RowCol());
         static void append(Expression* list, Expression* elem);
@@ -328,8 +331,8 @@ namespace Mic
 
         static void cleanupGlobals();
     protected:
-        Type* newType(Type::Kind form, int size);
-        Type* addType(const QByteArray& name, Type::Kind form, int size);
+        Type* newType(Type::Kind form);
+        Type* addType(const QByteArray& name, Type::Kind form);
         void addTypeAlias(const QByteArray& name, Type*);
         void addBuiltin(const QByteArray& name, Builtin::Type);
     private:

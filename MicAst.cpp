@@ -35,6 +35,7 @@ const char* Type::name[] = {
     "Undefined",
     "NoType",
     "String",
+    "universal integer",
     "Any",
     "Nil",
     "BOOL",
@@ -52,52 +53,53 @@ AstModel::AstModel():helper(0),helperId(0)
     if( globalScope.kind == Declaration::NoMode )
     {
         globalScope.kind = Declaration::Scope;
-        types[Type::Undefined] = newType(Type::Undefined,1);
-        types[Type::NoType] = newType(Type::NoType,1);
-        types[Type::String] = newType(Type::String,1);
-        types[Type::Nil] = newType(Type::Nil,1);
-        types[Type::Any] = addType("ANY", Type::Any,1);
+        types[Type::Undefined] = newType(Type::Undefined);
+        types[Type::NoType] = newType(Type::NoType);
+        types[Type::String] = newType(Type::String);
+        types[Type::UniInt] = newType(Type::UniInt);
+        types[Type::Nil] = newType(Type::Nil);
+        types[Type::Any] = addType("ANY", Type::Any);
 
-        types[Type::BOOL] = addType("BOOL", Type::BOOL, 1 );
+        types[Type::BOOL] = addType("BOOL", Type::BOOL);
         addTypeAlias("BOOLEAN", types[Type::BOOL] );
 
-        types[Type::CHAR] = addType("CHAR", Type::CHAR, 1 );
+        types[Type::CHAR] = addType("CHAR", Type::CHAR);
 
-        types[Type::UINT8] = addType("UINT8", Type::UINT8, 1 );
+        types[Type::UINT8] = addType("UINT8", Type::UINT8);
         addTypeAlias("BYTE", types[Type::UINT8] );
         addTypeAlias("U8", types[Type::UINT8] );
 
-        types[Type::INT8] = addType("INT8", Type::INT8, 1 );
+        types[Type::INT8] = addType("INT8", Type::INT8);
         addTypeAlias("I8", types[Type::INT8] );
 
-        types[Type::INT16] = addType("INT16", Type::INT16, 2 );
+        types[Type::INT16] = addType("INT16", Type::INT16);
         addTypeAlias("SHORTINT", types[Type::INT16] );
         addTypeAlias("I16", types[Type::INT16] );
 
-        types[Type::UINT16] = addType("UINT16", Type::UINT16, 2 );
+        types[Type::UINT16] = addType("UINT16", Type::UINT16);
         addTypeAlias("U16", types[Type::UINT16] );
 
-        types[Type::INT32] = addType("INT32", Type::INT32, 4 );
+        types[Type::INT32] = addType("INT32", Type::INT32);
         addTypeAlias("INTEGER", types[Type::INT32] );
         addTypeAlias("I32", types[Type::INT32] );
 
-        types[Type::UINT32] = addType("UINT32", Type::UINT32, 4 );
+        types[Type::UINT32] = addType("UINT32", Type::UINT32);
         addTypeAlias("U32", types[Type::UINT32] );
 
-        types[Type::INT64] = addType("INT64", Type::INT64, 8 );
+        types[Type::INT64] = addType("INT64", Type::INT64);
         addTypeAlias("LONGINT", types[Type::INT64] );
         addTypeAlias("I64", types[Type::INT64] );
 
-        types[Type::UINT64] = addType("UINT64", Type::UINT64, 8 );
+        types[Type::UINT64] = addType("UINT64", Type::UINT64);
         addTypeAlias("U64", types[Type::UINT64] );
 
-        types[Type::FLT32] = addType("FLT32", Type::FLT32, 4 );
+        types[Type::FLT32] = addType("FLT32", Type::FLT32);
         addTypeAlias("REAL", types[Type::FLT32] );
 
-        types[Type::FLT64] = addType("FLT64", Type::FLT64, 8 );
+        types[Type::FLT64] = addType("FLT64", Type::FLT64);
         addTypeAlias("LONGREAL", types[Type::FLT64] );
 
-        types[Type::SET] = addType("SET", Type::SET, 4 );
+        types[Type::SET] = addType("SET", Type::SET);
 
         addBuiltin("ABS", Builtin::ABS);
         addBuiltin("CAP", Builtin::CAP);
@@ -310,7 +312,7 @@ void AstModel::cleanupGlobals()
     }
 }
 
-Type*AstModel::newType(Type::Kind form, int size)
+Type*AstModel::newType(Type::Kind form)
 {
     Type* t = new Type();
     t->kind = form;
@@ -318,9 +320,9 @@ Type*AstModel::newType(Type::Kind form, int size)
     return t;
 }
 
-Type*AstModel::addType(const QByteArray& name, Type::Kind form, int size)
+Type*AstModel::addType(const QByteArray& name, Type::Kind form)
 {
-    Type* t = newType(form, size);
+    Type* t = newType(form);
     addTypeAlias(name, t);
     return t;
 }
@@ -379,6 +381,34 @@ QPair<int, int> Type::getFieldCount() const
         d = d->next;
     }
     return res;
+}
+
+int Type::getByteSize() const
+{
+    static const int sizes[] = {
+        -1, // Undefined,
+        -1, // NoType,
+        -1, // String,
+        -1, // UniInt, // universal integer literal
+        -1, // Any,
+        -1, // Nil,
+        1, // BOOL,
+        1, // CHAR,
+        1, // UINT8,
+        2, // UINT16,
+        4, // UINT32,
+        8, // UINT64,
+        1, // INT8,
+        2, // INT16,
+        4, // INT32,
+        8, // INT64,
+        4, // FLT32,
+        8, // FLT64,
+        4, // SET,
+    };
+    if( kind >= MaxBasicType )
+        return -1;
+    return sizes[kind];
 }
 
 Type::~Type()
@@ -616,12 +646,12 @@ bool Expression::isConst() const
     return true;
 }
 
-bool Expression::isLiteral() const
+bool Expression::hasConstValue() const
 {
     return kind == Literal || kind == ConstDecl;
 }
 
-QVariant Expression::getLiteralValue() const
+QVariant Expression::getConstValue() const
 {
     if( kind == Literal )
         return val;
@@ -689,6 +719,11 @@ void Expression::appendRhs(Expression* e)
         rhs = e;
     else
         append(rhs,e);
+}
+
+void Expression::setType(Type * t)
+{
+    Node::setType(t);
 }
 
 void Expression::append(Expression* list, Expression* elem)

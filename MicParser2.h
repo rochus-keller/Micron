@@ -162,8 +162,8 @@ namespace Mic {
         void error( const RowCol&, const QString& msg );
         Declaration* findDecl(const Token& id );
         bool assigCompat(Type* lhs, Declaration* rhs, const RowCol &pos);
-        bool assigCompat(Type* lhs, const Expression* rhs, const RowCol &pos);
-        bool paramCompat(Declaration* lhs, const Expression* rhs);
+        bool assigCompat(Type* lhs, Expression *rhs, const RowCol &pos);
+        bool paramCompat(Declaration* lhs, Expression *rhs);
         bool matchFormals(const QList<Declaration*>& a, const QList<Declaration*>& b) const;
         bool matchResultType(Type* lhs, Type* rhs) const;
         bool sameType(Type* lhs, Type* rhs) const;

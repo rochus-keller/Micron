@@ -1,0 +1,259 @@
+module casttest
+
+// ============================================================================
+// TEST MODULE FOR MICRON CAST() AND VAL() OPERATIONS
+// ============================================================================
+// This module verifies the behavior of the CAST (bitwise reinterpret)
+// and VAL (value conversion) operators for all 8, 16, 32, and 64-bit
+// signed and unsigned integer types and floating point types.
+//
+// Key Constraints Checked:
+// 1. CAST requires identical bit width (compile-time check assumed).
+// 2. CAST preserves bit patterns, not values (e.g. -1 int8 -> 255 uint8).
+// 3. VAL preserves values (e.g. -1 int8 -> -1 int32).
+// 4. VAL performs sign extension (signed expansion) or zero extension (unsigned).
+// 5. VAL truncates logic (int -> smaller int).
+// 6. VAL performs float <-> int conversion (truncate towards zero).
+// ============================================================================
+
+const
+  // Patterns for bitwise checks
+  pattern8_a  = 0aah       // 10101010
+  pattern8_b  = 055h       // 01010101
+  pattern16   = 0beefh
+  pattern32   = 0deadbeefh
+  pattern64   = 0cafebabedeadbeefh
+
+  // Float patterns (IEEE 754 representation of 1.0)
+  flt32_one_bits = 03f800000h
+  flt64_one_bits = 03ff0000000000000h
+
+// Helper to print test headers (Stub if not available)
+proc log(const msg: ^array of char)
+begin
+  println(msg)
+end log
+
+// ============================================================================
+// 1. CAST TESTS (Bitwise Reinterpretation)
+//    Rule: SIZE(Source) must equal SIZE(Target). Bits are preserved.
+// ============================================================================
+
+proc test_cast_8bit()
+  var u8: uint8
+      i8: int8
+begin
+  log("Testing CAST 8-bit...")
+  
+  // UINT8 -> INT8 (Pattern preservation)
+  u8 := 0ffh
+  i8 := cast(int8, u8)
+  assert(i8 = -1) // 255 -> -1
+  
+  u8 := 080h
+  i8 := cast(int8, u8)
+  assert(i8 = -128) // 128 -> -128 (Sign bit set)
+
+  // INT8 -> UINT8
+  i8 := -1
+  u8 := cast(uint8, i8)
+  assert(u8 = 0ffh)
+end test_cast_8bit
+
+proc test_cast_16bit()
+  var u16: uint16
+      i16: int16
+begin
+  log("Testing CAST 16-bit...")
+  
+  u16 := 0ffffh
+  i16 := cast(int16, u16)
+  assert(i16 = -1)
+  
+  u16 := 08000h
+  i16 := cast(int16, u16)
+  assert(i16 = -32768) // Min I16
+  
+  i16 := -1
+  u16 := cast(uint16, i16)
+  assert(u16 = 0ffffh)
+end test_cast_16bit
+
+proc test_cast_32bit()
+  var u32: uint32
+      i32: int32
+      f32: flt32
+begin
+  log("Testing CAST 32-bit...")
+  
+  // Int <-> Uint
+  u32 := 0ffffffffh
+  i32 := cast(int32, u32)
+  assert(i32 = -1)
+  
+  // Float <-> Int (Bit inspection)
+  // 1.0f is 0x3f800000
+  f32 := 1.0
+  i32 := cast(int32, f32) 
+  assert(i32 = flt32_one_bits) 
+  
+  // Int <-> Float (Bit construction)
+  // Construct -2.0f (0xc0000000)
+  u32 := 0c0000000h 
+  f32 := cast(flt32, u32)
+  assert(f32 = -2.0)
+end test_cast_32bit
+
+proc test_cast_64bit()
+  var u64: uint64
+      i64: int64
+      f64: flt64
+begin
+  log("Testing CAST 64-bit...")
+  
+  // Int <-> Uint
+  u64 := 0ffffffffffffffffh
+  i64 := cast(int64, u64)
+  assert(i64 = -1)
+  
+  // Float <-> Int (Double precision 1.0)
+  f64 := 1.0
+  u64 := cast(uint64, f64)
+  assert(u64 = flt64_one_bits)
+  
+  // NaN Tagging Test (Common in Lua VM)
+  // Create a QNaN: Exponent all 1s, Mantissa non-zero
+  u64 := 0fff8000000000001h // QNaN + payload 1
+  f64 := cast(flt64, u64)
+  // Note: strict equality on NaN usually fails, checking bits back
+  assert(cast(uint64, f64) = u64)
+end test_cast_64bit
+
+// ============================================================================
+// 2. VAL TESTS (Value Conversion)
+//    Rule: Semantic conversion. Bits may change.
+// ============================================================================
+
+proc test_val_extension()
+  var i8: int8
+      i16: int16
+      i32: int32
+      i64: int64
+      u8: uint8
+      u32: uint32
+begin
+  log("Testing VAL Extension (Sign/Zero)...")
+  
+  // Sign Extension (Negative)
+  i8 := -1
+  i16 := val(int16, i8)
+  i32 := val(int32, i8)
+  i64 := val(int64, i8)
+  assert(i16 = -1)
+  assert(i32 = -1)
+  assert(i64 = -1)
+  
+  // Zero Extension (Unsigned)
+  u8 := 0ffh // 255
+  i16 := val(int16, u8) // 255 fits in i16 positive range
+  assert(i16 = 255)
+  
+  // Mixed Sign Extension check
+  // Mapping signed -1 (0xFF) to unsigned larger type
+  // VAL(-1 i8) -> u32. This is arguably undefined or wrap-around in systems logic.
+  // Standard semantic: -1 converted to u32 is usually MAX_UINT32 (modular).
+  i8 := -1
+  u32 := val(uint32, i8) 
+  assert(u32 = 0ffffffffh)
+end test_val_extension
+
+proc test_val_truncation()
+  var i32: int32
+      i8: int8
+      u8: uint8
+begin
+  log("Testing VAL Truncation...")
+  
+  // Simple Truncation (Low bits preserved)
+  i32 := 0102h // 258 -> 0x0102. Low byte is 0x02.
+  i8 := val(int8, i32)
+  assert(i8 = 2)
+  
+  // Negative Truncation
+  i32 := -1 // 0xFFFFFFFF
+  u8 := val(uint8, i32)
+  assert(u8 = 0ffh)
+  
+  // Signed Truncation Overflow (Semantic check)
+  // 128 (0x80) fits in u8, but is -128 in i8.
+  i32 := 128
+  i8 := val(int8, i32)
+  assert(i8 = -128)
+end test_val_truncation
+
+proc test_val_float_int()
+  var f32: flt32
+      f64: flt64
+      i32: int32
+      i64: int64
+begin
+  log("Testing VAL Float <-> Int...")
+  
+  // Int -> Float
+  i32 := 12345
+  f32 := val(flt32, i32)
+  assert(f32 = 12345.0)
+  
+  // Float -> Int (Truncation)
+  f64 := 123.456
+  i32 := val(int32, f64)
+  assert(i32 = 123)
+  
+  f64 := -123.999
+  i32 := val(int32, f64)
+  assert(i32 = -123) // Truncate towards zero
+  
+  // Precision Loss check
+  // Large int to float32 (lossy)
+  i32 := 16777217 // 2^24 + 1. Float32 has 23+1 bits precision.
+  f32 := val(flt32, i32)
+  // Should round to nearest even (usually 16777216 or 18)
+  // assert(f32 != 16777217.0) // Not strictly testing IEEE mode, just conversion existence
+end test_val_float_int
+
+proc test_val_mixed()
+  var u8: uint8
+      f64: flt64
+begin
+  log("Testing VAL Mixed...")
+  
+  // Uint8 -> Double
+  u8 := 255
+  f64 := val(flt64, u8)
+  assert(f64 = 255.0)
+end test_val_mixed
+
+// ============================================================================
+// MAIN ENTRY
+// ============================================================================
+
+proc main()
+begin
+  
+  test_cast_8bit()
+  test_cast_16bit()
+  test_cast_32bit()
+  test_cast_64bit()
+  
+  test_val_extension()
+  test_val_truncation()
+  test_val_float_int()
+  test_val_mixed()
+  
+end main
+
+begin
+  log("--- Starting CAST/VAL Test Suite ---")
+  main()
+  log("--- All Tests Passed ---")
+end casttest

@@ -40,9 +40,9 @@ static inline void expectingNMArgs(const ExpList& args,int n, int m)
         throw QString("expecting %1 to %2 arguments").arg(n).arg(m);
 }
 
-static inline Expression* createAutoCast(Expression* e, Type* t)
+static inline Expression* createAutoConv(Expression* e, Type* t)
 {
-    Expression* tmp = Expression::create(Expression::AutoCast,e->pos);
+    Expression* tmp = Expression::create(Expression::AutoConv,e->pos);
     tmp->setType(t);
     tmp->lhs = e;
     return tmp;
@@ -66,9 +66,9 @@ static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* m
     else if( lhs->kind > rhs->kind )
         rhs = lhs;
     if( lhs != args[0]->getType() )
-        args[0] = createAutoCast(args[0], lhs);
+        args[0] = createAutoConv(args[0], lhs);
     if( rhs != args[1]->getType() )
-        args[1] = createAutoCast(args[1], rhs);
+        args[1] = createAutoConv(args[1], rhs);
     *ret = args[0]->getType();
 }
 
@@ -90,14 +90,14 @@ static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* m
     if( builtin == Builtin::BITASR )
     {
         if( args[0]->getType()->kind < Type::INT32 )
-            args[0] = createAutoCast(args[0], mdl->getType(Type::INT32) );
+            args[0] = createAutoConv(args[0], mdl->getType(Type::INT32) );
     }else
     {
         if( args[0]->getType()->kind < Type::UINT32 )
-            args[0] = createAutoCast(args[0], mdl->getType(Type::UINT32) );
+            args[0] = createAutoConv(args[0], mdl->getType(Type::UINT32) );
     }
     if( args[1]->getType()->kind < Type::UINT32 )
-        args[1] = createAutoCast(args[1], mdl->getType(Type::UINT32) );
+        args[1] = createAutoConv(args[1], mdl->getType(Type::UINT32) );
 
     *ret = args[0]->getType();
 }
@@ -134,7 +134,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         if( !args.first()->getType()->isUInt() )
             throw "expecting unsigned integer";
         if( args.first()->getType()->kind < Type::UINT32 )
-            args[0] = createAutoCast(args[0], mdl->getType(Type::UINT32) );
+            args[0] = createAutoConv(args[0], mdl->getType(Type::UINT32) );
         *ret = args[0]->getType();
         break;
     case Builtin::BITOR:
@@ -154,10 +154,22 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::CAST:
         expectingNArgs(args,2);
+        if( args.first()->kind != Expression::TypeDecl || !args.first()->getType()->isNumber() )
+            throw QString("expecting declaration of number type as first argument");
+        if( !args.last()->getType()->isNumber() )
+            throw QString("expecting a number type as second argument");
+        if( args.first()->getType()->getByteSize() != args.last()->getType()->getByteSize())
+            throw QString("can only cast between types of same byte width");
         *ret = args.first()->getType();
         break;
     case Builtin::VAL:
         expectingNArgs(args,2);
+        if( args.first()->kind != Expression::TypeDecl || !(args.first()->getType()->isNumber() || args.first()->getType()->kind == Type::ConstEnum) )
+            throw QString("expecting declaration of number or enumeration type as first argument");
+        if( !args.last()->getType()->isNumber() )
+            throw QString("expecting a number type as second argument");
+        if( args.first()->getType()->kind == Type::ConstEnum && !args.last()->getType()->isInteger())
+            throw QString("expecting an integer type as second argument");
         *ret = args.first()->getType();
         break;
     case Builtin::CHR:
@@ -393,37 +405,24 @@ void Builtins::doDefault()
     ev->stack.push_back(v);
 }
 
-void Builtins::doCast()
+void Builtins::doCast(const RowCol &pos)
 {
-    Value v = ev->stack.takeLast();
-    Type* t;
-    Mil::EmiTypes::Basic tt;
-    switch(v.type->kind)
-    {
-    case Type::UINT8:
-        t = ev->mdl->getType(Type::INT8);
-        tt = Mil::EmiTypes::I1;
-        break;
-    case Type::UINT16:
-        t = ev->mdl->getType(Type::INT16);
-        tt = Mil::EmiTypes::I2;
-        break;
-    case Type::UINT32:
-    default:
-        t = ev->mdl->getType(Type::INT32);
-        tt = Mil::EmiTypes::I4;
-        break;
-    case Type::UINT64:
-        t = ev->mdl->getType(Type::INT64);
-        tt = Mil::EmiTypes::I8;
-        break;
-    }
-    v.type = t;
-    if( !v.isConst() )
-    {
-        ev->out->conv_(tt);
-    }
-    ev->stack.push_back(v);
+    Value value = ev->stack.takeLast();
+    Value type = ev->stack.takeLast();
+    // TODO: true cast for INT/FLT
+    ev->stack.push_back(value);
+    ev->convNum(type.type, pos);
+    ev->stack.back().type = type.type;
+}
+
+void Builtins::doVal(const RowCol &pos)
+{
+    Value value = ev->stack.takeLast();
+    Value type = ev->stack.takeLast();
+    ev->stack.push_back(value);
+    ev->stack.push_back(value);
+    ev->convNum(type.type, pos);
+    ev->stack.back().type = type.type;
 }
 
 void Builtins::doAbs()
@@ -789,7 +788,7 @@ void Builtins::DISPOSE(int nArgs)
 
 }
 
-void Builtins::callBuiltin(quint8 builtin, int nArgs)
+void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
 {
     Value ret;
     ret.mode = Value::Val;
@@ -870,9 +869,14 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs)
         doDefault();
         handleStack = false;
         break;
+    case Builtin::VAL:
+        checkNumOfActuals(nArgs, 2);
+        doVal(pos);
+        handleStack = false;
+        break;
     case Builtin::CAST:
         checkNumOfActuals(nArgs, 2);
-        doCast();
+        doCast(pos);
         handleStack = false;
         break;
     default:

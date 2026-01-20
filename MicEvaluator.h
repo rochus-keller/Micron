@@ -45,6 +45,7 @@ public:
 
     Type* smallestUIntType(const QVariant& ) const;
     Type* smallestIntType(const QVariant& ) const;
+    bool bindUniInt(Expression*, bool isSigned) const;
 
     const QString& getErr() const { return err; }
 
@@ -77,7 +78,7 @@ protected:
     bool desigIndex(bool byVal, const RowCol &pos); // binary op
     bool call(int nArgs, const RowCol &pos); // n-ary op, callee top on stack
     bool castPtr(Type* to, const RowCol &pos); // unary op
-    bool castNum(Type* to, const RowCol &pos); // unary op
+    bool convNum(Type* to, const RowCol &pos); // unary op
     bool desigVar(bool byVal, const RowCol &pos); // unary op
     bool derefValue(); // unary op
     void assureTopIsValue();

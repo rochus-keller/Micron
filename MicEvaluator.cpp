@@ -88,6 +88,16 @@ Type*Evaluator::smallestIntType(const QVariant& v) const
         return mdl->getType(Type::INT64);
 }
 
+bool Evaluator::bindUniInt(Expression * e, bool isSigned) const
+{
+    if( e->hasConstValue() && e->getType()->kind == Type::UniInt )
+    {
+        e->setType(isSigned ? smallestIntType(e->val) : smallestUIntType(e->val));
+        return true;
+    }else
+        return false;
+}
+
 bool Evaluator::binaryOp(quint8 op, const RowCol& pos)
 {
     err.clear();
@@ -620,7 +630,7 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
     case Value::Builtin:
         {
             Builtins bi(this);
-            bi.callBuiltin(callee.val.toInt(),nArgs);
+            bi.callBuiltin(callee.val.toInt(),nArgs, pos);
             return err.isEmpty();
         }
 
@@ -720,7 +730,7 @@ bool Evaluator::castPtr(Type* to, const RowCol& pos)
     return err.isEmpty();
 }
 
-bool Evaluator::castNum(Type* to, const RowCol& pos)
+bool Evaluator::convNum(Type* to, const RowCol& pos)
 {
     Q_ASSERT( to && to->isNumber() );
     err.clear();
@@ -923,6 +933,13 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
                 break;
             case Type::FLT64:
                 out->ldc_r8(v.val.toDouble());
+                break;
+            case Type::UniInt: {
+                    qWarning() << "pushMilStack cannot handle universal integer" << pos.d_row; // TODO
+                    Value vv = v;
+                    vv.type = smallestUIntType(vv.val);
+                    pushMilStack(vv, pos);
+                }
                 break;
             default:
                 Q_ASSERT(false);
@@ -1781,10 +1798,10 @@ bool Evaluator::recursiveRun(Expression* e)
             return false;
         castPtr(e->getType(), e->pos);
         break;
-    case Expression::AutoCast:
+    case Expression::AutoConv:
         if( !recursiveRun(e->lhs) )
             return false;
-        castNum(e->getType(), e->pos);
+        convNum(e->getType(), e->pos);
         break;
     case Expression::Deref:
         if( !recursiveRun(e->lhs) )
@@ -1874,6 +1891,8 @@ bool Evaluator::recursiveRun(Expression* e)
                     : e->lhs->getFormals(); // no receiver here because args doesn't include it
             for(int i = 0; i < args.size(); i++ )
             {
+                bindUniInt(args[i], i < formals.size() ? formals[i]->getType()->isInt() : false);
+
                 if( !recursiveRun(args[i]) )
                     return false;
                 if( i < formals.size() )
