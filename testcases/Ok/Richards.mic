@@ -661,11 +661,11 @@ begin
   if IdleTaskDataRecord_getCount(dataRecord) = 0 then
     return Scheduler_holdSelf(fp.s)
   else
-    if bitand(IdleTaskDataRecord_getControl(dataRecord), 1) = 0 then
+    if bitand(IdleTaskDataRecord_getControl(dataRecord), 1u) = 0 then
       IdleTaskDataRecord_setControl(dataRecord, IdleTaskDataRecord_getControl(dataRecord) div 2)
       return Scheduler_release(fp.s, DEVICE_A)
     else
-      IdleTaskDataRecord_setControl(dataRecord, bitxor(IdleTaskDataRecord_getControl(dataRecord) div 2, 53256))
+      IdleTaskDataRecord_setControl(dataRecord, bitxor(IdleTaskDataRecord_getControl(dataRecord) div 2, 53256u))
       return Scheduler_release(fp.s, DEVICE_B)
     end
   end

@@ -55,6 +55,33 @@ public:
     Qualident toQuali(Declaration*);
     static QByteArray dequote(const QByteArray& str);
 
+    static inline Type* maxType(Type* lhs, Type* rhs)
+    {
+        if( lhs->kind >= rhs->kind )
+            return lhs;
+        else
+            return rhs;
+    }
+
+    Type* enumFoundationalType(Type*);
+
+    static Expression* createAutoConv(Expression* e, Type* t)
+    {
+        Expression* tmp = Expression::create(Expression::AutoConv,e->pos);
+        tmp->setType(t);
+        tmp->lhs = e;
+        return tmp;
+    }
+
+    static void convArithOp(Expression* e)
+    {
+        e->setType(Evaluator::maxType(e->lhs->getType(),e->rhs->getType()));
+        if( e->getType() != e->lhs->getType() )
+            e->lhs = Evaluator::createAutoConv(e->lhs,e->getType());
+        if( e->getType() != e->rhs->getType() )
+            e->rhs = Evaluator::createAutoConv(e->rhs,e->getType());
+    }
+
 protected:
     bool recursiveRun(Expression*);
     void constructor(Expression*);

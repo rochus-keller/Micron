@@ -40,19 +40,13 @@ static inline void expectingNMArgs(const ExpList& args,int n, int m)
         throw QString("expecting %1 to %2 arguments").arg(n).arg(m);
 }
 
-static inline Expression* createAutoConv(Expression* e, Type* t)
-{
-    Expression* tmp = Expression::create(Expression::AutoConv,e->pos);
-    tmp->setType(t);
-    tmp->lhs = e;
-    return tmp;
-}
-
-static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl)
+static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl, Evaluator* ev)
 {
     expectingNArgs(args,2);
+    ev->bindUniInt(args[0], false);
     if( !args[0]->getType()->isUInt() )
         throw QString("expecing unsigned first argument");
+    ev->bindUniInt(args[0], false);
     if( !args[1]->getType()->isUInt() )
         throw QString("expecing unsigned second argument");
     Type* lhs = args[0]->getType();
@@ -66,38 +60,41 @@ static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* m
     else if( lhs->kind > rhs->kind )
         rhs = lhs;
     if( lhs != args[0]->getType() )
-        args[0] = createAutoConv(args[0], lhs);
+        args[0] = Evaluator::createAutoConv(args[0], lhs);
     if( rhs != args[1]->getType() )
-        args[1] = createAutoConv(args[1], rhs);
+        args[1] = Evaluator::createAutoConv(args[1], rhs);
     *ret = args[0]->getType();
 }
 
-static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl)
+static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl, Evaluator* ev)
 {
     expectingNArgs(args,2);
     if( builtin == Builtin::BITASR )
     {
+        ev->bindUniInt(args[0], true);
         if( !args[0]->getType()->isInt() )
             throw QString("expecing unsigned first argument");
     }else
     {
+        ev->bindUniInt(args[0], false);
         if( !args[0]->getType()->isUInt() )
             throw QString("expecing unsigned first argument");
     }
+    ev->bindUniInt(args[1], false);
     if( !args[1]->getType()->isUInt() )
         throw QString("expecing unsigned second argument");
 
     if( builtin == Builtin::BITASR )
     {
         if( args[0]->getType()->kind < Type::INT32 )
-            args[0] = createAutoConv(args[0], mdl->getType(Type::INT32) );
+            args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::INT32) );
     }else
     {
         if( args[0]->getType()->kind < Type::UINT32 )
-            args[0] = createAutoConv(args[0], mdl->getType(Type::UINT32) );
+            args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::UINT32) );
     }
     if( args[1]->getType()->kind < Type::UINT32 )
-        args[1] = createAutoConv(args[1], mdl->getType(Type::UINT32) );
+        args[1] = Evaluator::createAutoConv(args[1], mdl->getType(Type::UINT32) );
 
     *ret = args[0]->getType();
 }
@@ -108,7 +105,6 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
 
     *ret = mdl->getType(Type::NoType);
 
-    // TODO:
     try
     {
     switch(builtin)
@@ -124,33 +120,40 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,1);
         break;
     case Builtin::BITAND:
-        checkBitArith(builtin, args, ret, mdl);
+        checkBitArith(builtin, args, ret, mdl, ev);
         break;
     case Builtin::BITASR:
-        checkBitShift(builtin, args, ret, mdl);
+        checkBitShift(builtin, args, ret, mdl, ev);
         break;
     case Builtin::BITNOT:
         expectingNArgs(args,1);
+        ev->bindUniInt(args.first(), false);
         if( !args.first()->getType()->isUInt() )
             throw "expecting unsigned integer";
         if( args.first()->getType()->kind < Type::UINT32 )
-            args[0] = createAutoConv(args[0], mdl->getType(Type::UINT32) );
+            args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::UINT32) );
         *ret = args[0]->getType();
         break;
     case Builtin::BITOR:
-        checkBitArith(builtin, args, ret, mdl);
+        checkBitArith(builtin, args, ret, mdl, ev);
         break;
     case Builtin::BITS:
         expectingNArgs(args,1);
+        ev->bindUniInt(args.first(), false);
+        if( !args.first()->getType()->isUInt() )
+            throw "expecting unsigned integer";
+        if( args.first()->getType()->kind < Type::UINT32 )
+            args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::UINT32) );
+        *ret =  mdl->getType(Type::SET);
         break;
     case Builtin::BITSHL:
-        checkBitShift(builtin, args, ret, mdl);
+        checkBitShift(builtin, args, ret, mdl, ev);
         break;
     case Builtin::BITSHR:
-        checkBitShift(builtin, args, ret, mdl);
+        checkBitShift(builtin, args, ret, mdl, ev);
         break;
     case Builtin::BITXOR:
-        checkBitArith(builtin, args, ret, mdl);
+        checkBitArith(builtin, args, ret, mdl, ev);
         break;
     case Builtin::CAST:
         expectingNArgs(args,2);
@@ -174,6 +177,12 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::CHR:
         expectingNArgs(args,1);
+        ev->bindUniInt(args.first(), false);
+        if( !args.first()->getType()->isInteger() )
+            throw "expecting integer";
+        if( args.first()->getType()->kind != Type::UINT8 )
+            args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::UINT8) );
+        *ret =  mdl->getType(Type::CHAR);
         break;
     case Builtin::DEFAULT:
         expectingNArgs(args,1);
@@ -181,9 +190,18 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
        break;
     case Builtin::FLOOR:
         expectingNArgs(args,1);
+        if( !args.first()->getType()->isReal() )
+            throw "expecting floating point type";
+        if( args.first()->getType()->kind != Type::UINT8 )
+            args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::UINT8) );
+        if( args[0]->getType()->kind == Type::FLT64 )
+            *ret = mdl->getType(Type::INT64);
+        else
+            *ret =  mdl->getType(Type::INT32);
         break;
     case Builtin::FLT:
         expectingNArgs(args,1);
+        ev->bindUniInt(args.first(), true);
         if( !args.first()->getType()->isInt() )
             throw "expecting signed integer argument";
         if( args.first()->getType()->kind == Type::INT64 )
@@ -193,6 +211,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::GETENV:
         expectingNArgs(args,2);
+        // TODO
         break;
     case Builtin::LEN:
         expectingNArgs(args,1);
@@ -200,25 +219,80 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::MAX:
         expectingNMArgs(args,1,2);
+        ev->bindUniInt(args.first(), false);
+        // TODO: check valid types
+        if( args.size() == 2 )
+        {
+            ev->bindUniInt(args.last(), false);
+            *ret = Evaluator::maxType(args.first()->getType(),args.last()->getType());
+            if( *ret != args.first()->getType() )
+                args[0] = Evaluator::createAutoConv(args.first(),*ret);
+            if( *ret != args.last()->getType() )
+                args[1] = Evaluator::createAutoConv(args.last(),*ret);
+        }else
+            *ret = args.first()->getType();
         break;
     case Builtin::MIN:
         expectingNMArgs(args,1,2);
+        ev->bindUniInt(args.first(), false);
+        // TODO: check valid types
+        if( args.size() == 2 )
+        {
+            ev->bindUniInt(args.last(), false);
+            *ret = Evaluator::maxType(args.first()->getType(),args.last()->getType());
+            if( *ret != args.first()->getType() )
+                args[0] = Evaluator::createAutoConv(args.first(),*ret);
+            if( *ret != args.last()->getType() )
+                args[1] = Evaluator::createAutoConv(args.last(),*ret);
+        }else
+            *ret = args.first()->getType();
         break;
     case Builtin::ODD:
         expectingNArgs(args,1);
+        ev->bindUniInt(args.first(), false);
+        if( !args.first()->getType()->isInteger() )
+            throw QString("expecting an integer type");
+        *ret = ev->mdl->getType(Type::BOOL);
         break;
     case Builtin::ORD:
         expectingNArgs(args,1);
+        switch(args.first()->getType()->kind)
+        {
+        case Type::CHAR:
+        case Type::BOOL:
+            *ret = ev->mdl->getType(Type::UINT8);
+            break;
+        case Type::SET:
+            *ret = ev->mdl->getType(Type::UINT32);
+            break;
+        case Type::ConstEnum:
+            *ret = ev->enumFoundationalType(args.first()->getType());
+            break;
+        case Type::Pointer:
+        case Type::Proc:
+            *ret = mdl->getType(Type::UINT64); // TODO: adjust to target?
+            break;
+        default:
+            throw "expecting CHAR, BOOLEAN, SET, enumeration or pointer/procedure type";
+        }
         break;
     case Builtin::SIZE:
         expectingNArgs(args,1);
+        *ret = ev->mdl->getType(Type::UINT32);
         break;
-    case Builtin::STRLEN:
-        expectingNArgs(args,1);
-        *ret = mdl->getType(Type::UINT32);
-        break;
+    case Builtin::STRLEN: {
+            expectingNArgs(args,1);
+            Type* t = args.first()->getType();
+            if( t->kind == Type::Pointer )
+                t = t->getType();
+            if( !t->isCharArray() && t->kind != Type::String )
+                throw "expecting array of char or string literal";
+            *ret = mdl->getType(Type::UINT32);
+        } break;
+
 
     // procedures:
+        // TODO: complete
     case Builtin::ASSERT:
         expectingNArgs(args,1);
         break;

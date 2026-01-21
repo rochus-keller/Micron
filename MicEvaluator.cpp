@@ -90,7 +90,7 @@ Type*Evaluator::smallestIntType(const QVariant& v) const
 
 bool Evaluator::bindUniInt(Expression * e, bool isSigned) const
 {
-    if( e->hasConstValue() && e->getType()->kind == Type::UniInt )
+    if( e && e->hasConstValue() && e->getType()->kind == Type::UniInt )
     {
         e->setType(isSigned ? smallestIntType(e->val) : smallestUIntType(e->val));
         return true;
@@ -1734,6 +1734,29 @@ QByteArray Evaluator::dequote(const QByteArray& str)
         res = str;
     res += '\0'; // make terminating zero explicit in value
     return res;
+}
+
+Type *Evaluator::enumFoundationalType(Type * t)
+{
+    Q_ASSERT( t && t->kind == Type::ConstEnum);
+    QList<qint64> vals;
+    foreach( Declaration* d, t->subs )
+    {
+        vals << d->data.toLongLong();
+    }
+    qSort(vals);
+    if( vals.isEmpty() )
+        return mdl->getType(Type::UINT8);
+    else if( vals.size() == 1 )
+        return vals.first() < 0 ? smallestIntType(vals.first()) : smallestUIntType(vals.first());
+    // else
+    if( vals.first() < 0 )
+    {
+        Type* low = smallestIntType(vals.first());
+        Type* high = smallestIntType(vals.last());
+        return maxType(low, high);
+    }else
+        return smallestUIntType(vals.last());
 }
 
 bool Evaluator::recursiveRun(Expression* e)

@@ -414,29 +414,34 @@ Token Lexer::number()
         if( c == 'U' || c == 'u' || c == 'I' || c == 'i' )
         {
             const char c2 = lookAhead(off+1);
-            if( c2 == '8' )
+            switch( c2 )
             {
+            case '1':
                 off += 2;
                 suffix += 2;
                 byteWidth = 1;
-            }else if( c2 == '1' || c2 == '3' || c2 == '6' )
-            {
-                const char c3 = lookAhead(off+2);
-                off += 3;
-                suffix += 3;
-                if( c2 == '1' && c3 == '6')
-                    byteWidth = 2;
-                else if( c2 == '3' && c3 == '2')
-                    byteWidth = 4;
-                else if( c2 == '6' && c3 == '4')
-                    byteWidth = 8;
-                else
-                    return token( Tok_Invalid, off, "invalid integer suffix" );
-            }else
-            {
+                break;
+            case '2':
+                off += 2;
+                suffix += 2;
+                byteWidth = 2;
+                break;
+            case '4':
+                off += 2;
+                suffix += 2;
+                byteWidth = 4;
+                break;
+            case '8':
+                off += 2;
+                suffix += 2;
+                byteWidth = 8;
+                break;
+            default:
                 off += 1;
                 suffix += 1;
+                break;
             }
+
             if( c == 'I' || c == 'i' )
                 isSigned = true;
        }

@@ -900,6 +900,12 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs, const RowCol& pos)
 
 bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
 {
+    if( rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == Type::UniInt )
+    {
+        Type* t = lhs && lhs->isInt() ? ev->smallestIntType(rhs->data) : ev->smallestUIntType(rhs->data);
+        rhs->setType(t);
+    }
+
     // Tv is a procedure type and e is the name of a procedure whose formal parameters match those of Tv.
     if( rhs->kind == Declaration::Procedure )
     {
@@ -1147,21 +1153,25 @@ Expression*Parser2::integer()
     const char suffix = ( number.size() > 1 ? number[number.size()-1] : '0' );
     if( !::isdigit(suffix) )
         number.chop(1);
+    bool ok = true;
     switch(suffix)
     {
     case 'o':
-        res->val = signed_ ? number.toLongLong(0,8) : number.toULongLong(0,8);
+        res->val = signed_ ? number.toLongLong(&ok,8) : number.toULongLong(&ok,8);
         break;
     case 'b':
-        res->val = signed_ ? number.toLongLong(0,2) : number.toULongLong(0,2);
+        res->val = signed_ ? number.toLongLong(&ok,2) : number.toULongLong(&ok,2);
         break;
     case 'h':
-        res->val = signed_ ? number.toLongLong(0,16) : number.toULongLong(0,16);
+        res->val = signed_ ? number.toLongLong(&ok,16) : number.toULongLong(&ok,16);
         break;
     default:
-        res->val = signed_ ? number.toLongLong() : number.toULongLong();
+        res->val = signed_ ? number.toLongLong(&ok) : number.toULongLong(&ok);
         break;
     }
+    if( !ok )
+        error(cur,"invalid number");
+
     if( signed_ || unsigned_ )
     {
         Type* derived = signed_ ? ev->smallestIntType(res->val) : ev->smallestUIntType(res->val);
@@ -1696,20 +1706,21 @@ DeclList Parser2::constEnum() {
 
     DeclList res;
 
-    qint32 index = 0;
+    qint64 index = 0;
 
     Declaration* d = addDecl(cur, 0, Declaration::ConstDecl);
 
 	if( la.d_type == Tok_Eq ) {
 		expect(Tok_Eq, false, "constEnum");
         const Token tok = la;
-        if( !ev->evaluate(ConstExpression(0)) )
+        Expression* e = ConstExpression(0);
+        if( !ev->evaluate(e) )
             error(tok, ev->getErr());
         Value v = ev->pop();
         if( !v.type->isInteger() )
             error(tok,"expecting an integer");
         else
-            index = v.val.toInt();
+            index = v.val.toLongLong();
 	}
 
     d->data = index;
@@ -1979,31 +1990,6 @@ void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
     }
 }
 
-static inline Type* maxType(Type* lhs, Type* rhs)
-{
-    if( lhs->kind >= rhs->kind )
-        return lhs;
-    else
-        return rhs;
-}
-
-static Expression* createAutoConv(Expression* e, Type* t)
-{
-    Expression* tmp = Expression::create(Expression::AutoConv,e->pos);
-    tmp->setType(t);
-    tmp->lhs = e;
-    return tmp;
-}
-
-static void convArithOp(Expression* e)
-{
-    e->setType(maxType(e->lhs->getType(),e->rhs->getType()));
-    if( e->getType() != e->lhs->getType() )
-        e->lhs = createAutoConv(e->lhs,e->getType());
-    if( e->getType() != e->rhs->getType() )
-        e->rhs = createAutoConv(e->rhs,e->getType());
-}
-
 static void bindUniInt(Expression* lhs, Expression* rhs, Evaluator* ev)
 {
     // TODO: currently UniInt is bound in any case, even if both lhs and rhs are UniInt
@@ -2030,7 +2016,7 @@ void Parser2::checkArithOp(Expression* e)
             case Expression::Mod:
             case Expression::Add:
             case Expression::Sub:
-                convArithOp(e);
+                Evaluator::convArithOp(e);
                 break;
             default:
                 error(e->pos.d_row, e->pos.d_col,"operator not supported for integer operands");
@@ -2043,7 +2029,7 @@ void Parser2::checkArithOp(Expression* e)
             case Expression::Fdiv:
             case Expression::Add:
             case Expression::Sub:
-                convArithOp(e);
+                Evaluator::convArithOp(e);
                 break;
             default:
                 error(e->pos.d_row, e->pos.d_col,"operator not supported for real operands");
@@ -2102,13 +2088,13 @@ void Parser2::checkUnaryOp(Expression* e)
             switch(e->getType()->kind)
             {
             case Type::UINT8:
-                e->lhs = createAutoConv(e->lhs, mdl->getType(Type::INT16));
+                e->lhs = Evaluator::createAutoConv(e->lhs, mdl->getType(Type::INT16));
                 break;
             case Type::UINT16:
-                e->lhs = createAutoConv(e->lhs, mdl->getType(Type::INT32));
+                e->lhs = Evaluator::createAutoConv(e->lhs, mdl->getType(Type::INT32));
                 break;
             case Type::UINT32:
-                e->lhs = createAutoConv(e->lhs, mdl->getType(Type::INT64));
+                e->lhs = Evaluator::createAutoConv(e->lhs, mdl->getType(Type::INT64));
                 break;
             case Type::UINT64:
                 error(e->pos.d_row, e->pos.d_col, "unary + operator is not applicable to operands of UINT64 type");
@@ -2140,11 +2126,11 @@ void Parser2::checkRelOp(Expression* e)
                 e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt() ||
                 e->lhs->getType()->isReal() && e->rhs->getType()->isReal() )
         {
-            Type* mt = maxType(e->lhs->getType(),e->rhs->getType());
+            Type* mt = Evaluator::maxType(e->lhs->getType(),e->rhs->getType());
             if( mt != e->lhs->getType() )
-                e->lhs = createAutoConv(e->lhs,mt);
+                e->lhs = Evaluator::createAutoConv(e->lhs,mt);
             if( mt != e->rhs->getType() )
-                e->rhs = createAutoConv(e->rhs,mt);
+                e->rhs = Evaluator::createAutoConv(e->rhs,mt);
         }else
             error(e->pos.d_row, e->pos.d_col, "operands are not of the same type");
     }else if( e->lhs->getType()->isText() && e->rhs->getType()->isText() ||
