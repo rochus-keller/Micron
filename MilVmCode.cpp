@@ -1571,6 +1571,10 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
         case IL_sizeof:
         case IL_ptroff:
         case IL_newvla:
+        case IL_cast_i4:
+        case IL_cast_i8:
+        case IL_cast_r4:
+        case IL_cast_r8:
 
             qCritical() << "ERROR: not yet implemented in interpreter:" << s_opName[e->kind];
             return false;

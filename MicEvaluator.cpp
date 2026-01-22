@@ -790,6 +790,147 @@ bool Evaluator::convNum(Type* to, const RowCol& pos)
     return err.isEmpty();
 }
 
+template <typename Out, typename In>
+bool bitCast(QVariant &v) {
+    Out result; In tmp;
+    // Determine the internal storage format to avoid value-altering conversions
+    if (v.type() == QVariant::Double) {
+        tmp = v.toDouble();
+    } else if (v.type() == QVariant::LongLong) {
+        tmp = v.toLongLong();
+    } else if (v.type() == QVariant::ULongLong) {
+        tmp = v.toULongLong();
+    } else {
+        Q_ASSERT(false);
+    }
+    memcpy(&result, &tmp, sizeof(In));
+    v = result;
+}
+
+static inline bool bitCast(QVariant &v, Type* out, Type* in)
+{
+    Q_ASSERT(out && in && out->getByteSize() == in->getByteSize());
+    if( in->kind == out->kind )
+        return true;
+    switch(out->kind)
+    {
+    case Type::UINT8:
+        return bitCast<quint8,qint8>(v);
+    case Type::INT8:
+        return bitCast<qint8,quint8>(v);
+    case Type::UINT16:
+        return bitCast<quint16,qint16>(v);
+    case Type::INT16:
+        return bitCast<qint16,quint16>(v);
+    case Type::UINT32:
+        if(in->kind == Type::INT32)
+            return bitCast<quint32,qint32>(v);
+        else if( in->kind == Type::FLT32 )
+            return bitCast<quint32,float>(v);
+        else
+            Q_ASSERT(false);
+    case Type::INT32:
+        if(in->kind == Type::UINT32)
+            return bitCast<qint32,quint32>(v);
+        else if( in->kind == Type::FLT32 )
+            return bitCast<qint32,float>(v);
+        else
+            Q_ASSERT(false);
+    case Type::FLT32:
+        if(in->kind == Type::UINT32)
+            return bitCast<float,quint32>(v);
+        else if( in->kind == Type::INT32 )
+            return bitCast<float,qint32>(v);
+        else
+            Q_ASSERT(false);
+    case Type::UINT64:
+        if(in->kind == Type::INT64)
+            return bitCast<quint64,qint64>(v);
+        else if( in->kind == Type::FLT64 )
+            return bitCast<quint64,double>(v);
+        else
+            Q_ASSERT(false);
+    case Type::INT64:
+        if(in->kind == Type::UINT64)
+            return bitCast<qint64,quint64>(v);
+        else if( in->kind == Type::FLT64 )
+            return bitCast<qint64,double>(v);
+        else
+            Q_ASSERT(false);
+    case Type::FLT64:
+        if(in->kind == Type::UINT64)
+            return bitCast<double,quint64>(v);
+        else if( in->kind == Type::INT64 )
+            return bitCast<double,qint64>(v);
+        else
+            Q_ASSERT(false);
+    default:
+        break;
+    }
+    return false;
+}
+
+bool Evaluator::castNum(Type* to, const RowCol& pos)
+{
+    Q_ASSERT( to && to->isNumber() );
+    err.clear();
+    if( stack.size() < 1 )
+    {
+        err = "expecting a value on the stack";
+        return false;
+    }
+    if( stack.back().isConst() )
+    {
+        bitCast(stack.back().val, to, stack.back().type);
+        stack.back().type = to;
+    }else
+    {
+        Mil::EmiTypes::Basic tt;
+        switch(to->kind)
+        {
+        case Type::BOOL:
+        case Type::CHAR:
+        case Type::UINT8:
+            tt = Mil::EmiTypes::U1;
+            break;
+        case Type::UINT16:
+            tt = Mil::EmiTypes::U2;
+            break;
+        case Type::UINT32:
+        case Type::SET:
+            tt = Mil::EmiTypes::U4;
+            break;
+        case Type::UINT64:
+            tt = Mil::EmiTypes::U8;
+            break;
+        case Type::INT8:
+            tt = Mil::EmiTypes::I1;
+            break;
+        case Type::INT16:
+            tt = Mil::EmiTypes::I2;
+            break;
+        case Type::INT32:
+            tt = Mil::EmiTypes::I4;
+            break;
+        case Type::INT64:
+            tt = Mil::EmiTypes::I8;
+            break;
+        case Type::FLT32:
+            tt = Mil::EmiTypes::R4;
+            break;
+        case Type::FLT64:
+            tt = Mil::EmiTypes::R8;
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+
+        out->line_(pos);
+        out->cast_(tt);
+    }
+    return err.isEmpty();
+}
+
 Value Evaluator::pop()
 {
     Value res;

@@ -27,6 +27,7 @@ const char* s_opName[] =
     "",
     "add", "abs", "and", "call", "calli", "callinst", "callmi", "callvirt", "castptr",
     "ceq", "cgt", "cgt_un", "clt", "clt_un",
+    "cast_u4", "cast_u8", "cast_r4", "cast_r8",
     "conv_i1", "conv_i2", "conv_i4", "conv_i8", "conv_r4", "conv_r8",
     "conv_u1", "conv_u2", "conv_u4", "conv_u8",
     "div", "div_un", "dup", "iif", "initobj", "isinst", "ldarg", "ldarg_s",

@@ -106,6 +106,7 @@ protected:
     bool call(int nArgs, const RowCol &pos); // n-ary op, callee top on stack
     bool castPtr(Type* to, const RowCol &pos); // unary op
     bool convNum(Type* to, const RowCol &pos); // unary op
+    bool castNum(Type* to, const RowCol &pos); // unary op
     bool desigVar(bool byVal, const RowCol &pos); // unary op
     bool derefValue(); // unary op
     void assureTopIsValue();

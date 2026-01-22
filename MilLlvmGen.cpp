@@ -1420,6 +1420,13 @@ QByteArray LlvmGen::expression(Expression* e, int level)
         }
         break;
 
+    case IL_cast_r4:
+    case IL_cast_r8:
+    case IL_cast_i8:
+    case IL_cast_i4:
+        qWarning() << "LlvmGen WARNING not implemented" << s_opName[e->kind];
+        break;
+
     case IL_ceq:
         {
             QByteArray lhs = expression(e->lhs, level+1);

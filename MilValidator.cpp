@@ -808,6 +808,7 @@ Expression* Validator::visitExpr(Expression* e)
         case IL_conv_u1:
         case IL_conv_u2:
         case IL_conv_u4:
+        case IL_cast_i4:
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
@@ -816,6 +817,7 @@ Expression* Validator::visitExpr(Expression* e)
             break;
         case IL_conv_i8:
         case IL_conv_u8:
+        case IL_cast_i8:
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
@@ -823,6 +825,7 @@ Expression* Validator::visitExpr(Expression* e)
             stack.back() = e;
             break;
         case IL_conv_r4:
+        case IL_cast_r4:
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
@@ -830,6 +833,7 @@ Expression* Validator::visitExpr(Expression* e)
             stack.back() = e;
             break;
         case IL_conv_r8:
+        case IL_cast_r8:
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
@@ -1399,6 +1403,7 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
     case IL_ldc_i4_m1:
     case IL_ldc_i4_s:
     case IL_ldc_i4:
+    case IL_cast_i4:
         return mdl->getBasicType(Type::INT32);
     case IL_ldelem_i8:
     case IL_stelem_i8:
@@ -1406,6 +1411,7 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
     case IL_stind_i8:
     case IL_conv_i8:
     case IL_ldc_i8:
+    case IL_cast_i8:
         return mdl->getBasicType(Type::INT64);
     case IL_ldelem_ip:
     case IL_stelem_ip:
@@ -1421,6 +1427,7 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
     case IL_stind_r4:
     case IL_conv_r4:
     case IL_ldc_r4:
+    case IL_cast_r4:
         return mdl->getBasicType(Type::FLOAT32);
     case IL_ldelem_r8:
     case IL_stelem_r8:
@@ -1428,6 +1435,7 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
     case IL_stind_r8:
     case IL_conv_r8:
     case IL_ldc_r8:
+    case IL_cast_r8:
         return mdl->getBasicType(Type::FLOAT64);
     case IL_ldelem_u1:
     case IL_ldind_u1:

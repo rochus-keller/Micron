@@ -163,7 +163,11 @@ static inline bool FIRST_DeclarationSequence(int tt) {
 static inline bool FIRST_Expression(int tt) {
 	switch(tt){
     case Tok_LINE:
-	case Tok_LDELEM_U1:
+    case Tok_CAST_I8:
+    case Tok_CAST_R8:
+    case Tok_CAST_R4:
+    case Tok_CAST_I4:
+    case Tok_LDELEM_U1:
 	case Tok_LDC_I8:
 	case Tok_SHL:
     case Tok_LDIND:
@@ -282,7 +286,11 @@ static inline bool FIRST_Expression(int tt) {
 
 static inline bool FIRST_ExpInstr(int tt) {
 	switch(tt){
-	case Tok_LDELEM_U1:
+    case Tok_CAST_I8:
+    case Tok_CAST_R8:
+    case Tok_CAST_R4:
+    case Tok_CAST_I4:
+    case Tok_LDELEM_U1:
 	case Tok_LDC_I8:
 	case Tok_SHL:
     case Tok_LDIND:
@@ -408,7 +416,11 @@ static inline bool FIRST_CondOp(int tt) {
 static inline bool FIRST_StatementSequence(int tt) {
 	switch(tt){
     case Tok_LINE:
-	case Tok_ISINST:
+    case Tok_CAST_I8:
+    case Tok_CAST_R8:
+    case Tok_CAST_R4:
+    case Tok_CAST_I4:
+    case Tok_ISINST:
 	case Tok_STIND_I4:
 	case Tok_STELEM_I2:
 	case Tok_LDARG:
@@ -1821,6 +1833,18 @@ Expression* Parser2::ExpInstr() {
     } else if( la.d_code == Tok_CLT_UN ) {
         expect(Tok_CLT_UN, true, "ExpInstr");
         res->kind = IL_clt_un;
+    } else if( la.d_code == Tok_CAST_I4 ) {
+        expect(Tok_CAST_I4, true, "ExpInstr");
+        res->kind = IL_cast_i4;
+    } else if( la.d_code == Tok_CAST_I8 ) {
+        expect(Tok_CAST_I8, true, "ExpInstr");
+        res->kind = IL_cast_i8;
+    } else if( la.d_code == Tok_CAST_R4 ) {
+        expect(Tok_CAST_R4, true, "ExpInstr");
+        res->kind = IL_cast_r4;
+    } else if( la.d_code == Tok_CAST_R8 ) {
+        expect(Tok_CAST_R8, true, "ExpInstr");
+        res->kind = IL_cast_r8;
     } else if( la.d_code == Tok_CONV_I1 ) {
         expect(Tok_CONV_I1, true, "ExpInstr");
         res->kind = IL_conv_i1;

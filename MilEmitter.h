@@ -82,6 +82,7 @@ namespace Mil
         void callinst_( const Trident& methodRef, int argCount, bool hasRet = false );
         void callvirt_( const Trident& methodRef, int argCount, bool hasRet = false );
         void case_(const CaseLabelList&);
+        void cast_(EmiTypes::Basic);
         void castptr_(const Quali& typeRef);
         void ceq_();
         void cgt_(bool withUnsigned = false);

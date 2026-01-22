@@ -40,6 +40,10 @@ namespace Mil {
 			case Tok_CALLVIRT: return "CALLVIRT";
 			case Tok_CASE: return "CASE";
 			case Tok_CASTPTR: return "CASTPTR";
+			case Tok_CAST_I4: return "CAST_I4";
+			case Tok_CAST_I8: return "CAST_I8";
+			case Tok_CAST_R4: return "CAST_R4";
+			case Tok_CAST_R8: return "CAST_R8";
 			case Tok_CEQ: return "CEQ";
 			case Tok_CGT: return "CGT";
 			case Tok_CGT_UN: return "CGT_UN";
@@ -263,6 +267,10 @@ namespace Mil {
 			case Tok_CALLVIRT: return "Tok_CALLVIRT";
 			case Tok_CASE: return "Tok_CASE";
 			case Tok_CASTPTR: return "Tok_CASTPTR";
+			case Tok_CAST_I4: return "Tok_CAST_I4";
+			case Tok_CAST_I8: return "Tok_CAST_I8";
+			case Tok_CAST_R4: return "Tok_CAST_R4";
+			case Tok_CAST_R8: return "Tok_CAST_R8";
 			case Tok_CEQ: return "Tok_CEQ";
 			case Tok_CGT: return "Tok_CGT";
 			case Tok_CGT_UN: return "Tok_CGT_UN";
@@ -619,12 +627,38 @@ namespace Mil {
 						res = Tok_CASE; i += 4;
 						break;
 					case 'T':
-						if( at(str,len,i+4) == 'P' ){
+						switch( at(str,len,i+4) ){
+						case 'P':
 							if( at(str,len,i+5) == 'T' ){
 								if( at(str,len,i+6) == 'R' ){
 									res = Tok_CASTPTR; i += 7;
 								}
 							}
+							break;
+						case '_':
+							switch( at(str,len,i+5) ){
+							case 'I':
+								switch( at(str,len,i+6) ){
+								case '4':
+									res = Tok_CAST_I4; i += 7;
+									break;
+								case '8':
+									res = Tok_CAST_I8; i += 7;
+									break;
+								}
+								break;
+							case 'R':
+								switch( at(str,len,i+6) ){
+								case '4':
+									res = Tok_CAST_R4; i += 7;
+									break;
+								case '8':
+									res = Tok_CAST_R8; i += 7;
+									break;
+								}
+								break;
+							}
+							break;
 						}
 						break;
 					}

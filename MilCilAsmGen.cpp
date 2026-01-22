@@ -1528,6 +1528,13 @@ void CilAsmGen::expression(Expression* e)
             out << indent(1) << "call float64 [mscorlib]System.Math::Abs(float64)" << endl;
         break;
         
+    case IL_cast_r4:
+    case IL_cast_r8:
+    case IL_cast_i8:
+    case IL_cast_i4:
+        qWarning() << "CilAsmGen WARNING not implemented" << s_opName[e->kind];
+        break;
+
     default:
         Q_ASSERT(false);
     }

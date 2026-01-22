@@ -336,6 +336,49 @@ void Emitter::case_(const CaseLabelList& l)
     delta(0);
 }
 
+void Emitter::cast_(EmiTypes::Basic t)
+{
+    // NOTE that the value on the stack is at least int32 or uint32
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    switch( t )
+    {
+    case EmiTypes::I1:
+        ops->append(ProcData::Op(IL_conv_i1));
+        break;
+    case EmiTypes::I2:
+        ops->append(ProcData::Op(IL_conv_i2));
+        break;
+    case EmiTypes::I4:
+        ops->append(ProcData::Op(IL_cast_i4));
+        break;
+    case EmiTypes::I8:
+        ops->append(ProcData::Op(IL_cast_i8));
+        break;
+    case EmiTypes::R4:
+        ops->append(ProcData::Op(IL_cast_r4));
+        break;
+    case EmiTypes::R8:
+        ops->append(ProcData::Op(IL_cast_r8));
+        break;
+    case EmiTypes::U1:
+        ops->append(ProcData::Op(IL_conv_u1));
+        break;
+    case EmiTypes::U2:
+        ops->append(ProcData::Op(IL_conv_u2));
+        break;
+    case EmiTypes::U4:
+        ops->append(ProcData::Op(IL_cast_i4));
+        break;
+    case EmiTypes::U8:
+        ops->append(ProcData::Op(IL_cast_i8));
+        break;
+    default:
+        Q_ASSERT(false);
+        break;
+    }
+    delta(-1+1);
+}
+
 void Emitter::castptr_(const Quali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );

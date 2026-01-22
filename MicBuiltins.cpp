@@ -483,9 +483,8 @@ void Builtins::doCast(const RowCol &pos)
 {
     Value value = ev->stack.takeLast();
     Value type = ev->stack.takeLast();
-    // TODO: true cast for INT/FLT
     ev->stack.push_back(value);
-    ev->convNum(type.type, pos);
+    ev->castNum(type.type, pos);
     ev->stack.back().type = type.type;
 }
 

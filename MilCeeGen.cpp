@@ -1222,6 +1222,16 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         out << ")";
         break;
 
+    case IL_cast_r4:
+    case IL_cast_r8:
+    case IL_cast_i8:
+    case IL_cast_i4:
+        out << "(*(" << typeRef(Validator::tokToBasicType(mdl, e->kind)) << "*)&";
+        expression(out, e->lhs);
+        out << ")";
+        break;
+
+
     case IL_ceq:
         emitRelOP(out, e, "==");
         break;
