@@ -178,7 +178,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::CHR:
         expectingNArgs(args,1);
         ev->bindUniInt(args.first(), false);
-        if( !args.first()->getType()->isInteger() )
+        if( args.first()->getType() == 0 || !args.first()->getType()->isInteger() )
             throw "expecting integer";
         if( args.first()->getType()->kind != Type::UINT8 )
             args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::UINT8) );
@@ -261,6 +261,12 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         case Type::CHAR:
         case Type::BOOL:
             *ret = ev->mdl->getType(Type::UINT8);
+            break;
+        case Type::String:
+            if( args.first()->strLitLen() == 1 )
+                *ret = ev->mdl->getType(Type::UINT8);
+            else
+                throw "this string literal cannot be interpreted as CHAR";
             break;
         case Type::SET:
             *ret = ev->mdl->getType(Type::UINT32);
@@ -493,7 +499,6 @@ void Builtins::doVal(const RowCol &pos)
     Value value = ev->stack.takeLast();
     Value type = ev->stack.takeLast();
     ev->stack.push_back(value);
-    ev->stack.push_back(value);
     ev->convNum(type.type, pos);
     ev->stack.back().type = type.type;
 }
@@ -567,6 +572,68 @@ void Builtins::doShiftLeft()
     ev->stack.push_back(lhs);
 }
 
+void Builtins::doOrd()
+{
+    Value v = ev->stack.takeLast();
+    if( v.isConst() )
+    {
+        switch( v.type->kind )
+        {
+        case Type::String:
+            v.val = (quint8)v.val.toByteArray()[0];
+            v.type = ev->mdl->getType(Type::UINT8);
+            break;
+        case Type::CHAR:
+            v.val = (quint8)v.val.toUInt();
+            v.type = ev->mdl->getType(Type::UINT8);
+            break;
+        case Type::ConstEnum:
+            v.type = ev->enumFoundationalType(v.type);
+            break;
+        case Type::BOOL:
+            v.val = quint8(v.val.toBool());
+            v.type = ev->mdl->getType(Type::UINT8);
+            break;
+        case Type::SET:
+            v.type = ev->mdl->getType(Type::UINT32);
+            break;
+        case Type::Pointer:
+        case Type::Proc:
+            v.type = ev->mdl->getType(Type::UINT64); // TODO: target byte width
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+    }else
+    {
+        switch( v.type->kind )
+        {
+        case Type::String:
+            v.type = ev->mdl->getType(Type::UINT8);
+            break;
+        case Type::CHAR:
+            v.type = ev->mdl->getType(Type::UINT8);
+            break;
+        case Type::ConstEnum:
+            v.type = ev->enumFoundationalType(v.type);
+            break;
+        case Type::BOOL:
+            v.type = ev->mdl->getType(Type::UINT8);
+            break;
+        case Type::SET:
+            break;
+        case Type::Pointer:
+        case Type::Proc:
+            v.type = ev->mdl->getType(Type::UINT64); // TODO: target byte width
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+    }
+    ev->stack.push_back(v);
+
+}
+
 void Builtins::checkNumOfActuals(int nArgs, int min, int max)
 {
     Q_ASSERT( max == 0 || min <= max );
@@ -581,7 +648,7 @@ void Builtins::checkNumOfActuals(int nArgs, int min, int max)
     }
 }
 
-void Builtins::ASSERT(int nArgs)
+void Builtins::ASSERT(int nArgs,const RowCol& pos)
 {
     Value file = ev->stack.takeLast();
     Value line = ev->stack.takeLast();
@@ -599,17 +666,17 @@ void Builtins::ASSERT(int nArgs)
 
     if( cond.type->kind != Type::BOOL )
     {
-        ev->err = "expecting boolean first argument";
+        ev->error("expecting boolean first argument",pos);
         return;
     }
     if( !line.type->isInteger() )
     {
-        ev->err = "expecting integer second argument";
+        ev->error("expecting integer second argument",pos);
         return;
     }
     if( !file.type->isText() )
     {
-        ev->err = "expecting string third argument";
+        ev->error("expecting string third argument",pos);
         return;
     }
 
@@ -621,7 +688,7 @@ void Builtins::ASSERT(int nArgs)
     ev->stack.push_back(res);
 }
 
-void Builtins::incdec(int nArgs, bool inc)
+void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
 {
     Value step;
     int tmp = -1;
@@ -638,7 +705,7 @@ void Builtins::incdec(int nArgs, bool inc)
 
     if( !what.isLvalue() && !what.ref )
     {
-        ev->err = "cannot write to first argument";
+        ev->error("cannot write to first argument",pos);
         return;
     }
 
@@ -686,7 +753,7 @@ void Builtins::incdec(int nArgs, bool inc)
     {
         if( nArgs == 2 )
         {
-            ev->err = "second argument not supported for const enumerations";
+            ev->error("second argument not supported for const enumerations",pos);
             return;
         }
         ev->out->dup_();
@@ -713,20 +780,20 @@ void Builtins::incdec(int nArgs, bool inc)
         ev->out->ptroff_(ev->toQuali(what.type->getType()));
         ev->out->stind_(Mil::EmiTypes::IntPtr);
     }else
-        ev->err = "invalid argument types";
+        ev->error("invalid argument types",pos);
 }
 
-void Builtins::INC(int nArgs)
+void Builtins::INC(int nArgs,const RowCol& pos)
 {
-    incdec(nArgs,true);
+    incdec(nArgs,true,pos);
 }
 
-void Builtins::DEC(int nArgs)
+void Builtins::DEC(int nArgs,const RowCol& pos)
 {
-    incdec(nArgs,false);
+    incdec(nArgs,false,pos);
 }
 
-void Builtins::LEN(int nArgs)
+void Builtins::LEN(int nArgs,const RowCol& pos)
 {
     Value what = ev->stack.takeLast();
     if( !what.isConst() )
@@ -736,7 +803,7 @@ void Builtins::LEN(int nArgs)
         arr = arr->getType();
     if( arr->kind != Type::Array || arr->len == 0 )
     {
-        ev->err = "function only applicable to non-open arrays";
+        ev->error("function only applicable to non-open arrays",pos);
         return;
     }
     //ev->out->ldc_i4(arr->len);
@@ -747,7 +814,7 @@ void Builtins::LEN(int nArgs)
     ev->stack.push_back(res);
 }
 
-void Builtins::PRINT(int nArgs, bool ln)
+void Builtins::PRINT(int nArgs, bool ln, const RowCol& pos)
 {
     if( nArgs < 1 || ev->stack.back().type == 0 ||
             !(ev->stack.back().type->isSimple() ||
@@ -755,7 +822,7 @@ void Builtins::PRINT(int nArgs, bool ln)
               ev->stack.back().type->kind == Type::ConstEnum ||
               ev->stack.back().type->kind == Type::Generic ))
     {
-        ev->err = "expecting one argument of basic, enum or char array type";
+        ev->error("expecting one argument of basic, enum or char array type",pos);
         return;
     }
     if( ev->stack.back().type->kind == Type::ConstEnum )
@@ -791,7 +858,7 @@ void Builtins::PRINT(int nArgs, bool ln)
     else if( ev->stack.back().type->kind == Type::Generic )
         ev->out->pop_(); // we don't have a generic print operation, just remove the argument from stack
     else
-        ev->err = "given type not supported with PRINT or PRINTLN";
+        ev->error("given type not supported with PRINT or PRINTLN", pos);
     if( ln )
     {
         ev->out->ldc_i4(0xa); // LF
@@ -799,7 +866,7 @@ void Builtins::PRINT(int nArgs, bool ln)
     }
 }
 
-void Builtins::NEW(int nArgs)
+void Builtins::NEW(int nArgs,const RowCol& pos)
 {
     Value len;
     if( nArgs == 2 )
@@ -813,12 +880,12 @@ void Builtins::NEW(int nArgs)
             !(what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Object ||
               what.type->getType()->kind == Type::Array) )
     {
-        ev->err = "first argument must be a pointer to record or array";
+        ev->error("first argument must be a pointer to record or array",pos);
         return;
     }
     if( !what.ref )
     {
-        ev->err = "cannot write to first argument";
+        ev->error("cannot write to first argument",pos);
         return;
     }
     if( what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Object )
@@ -829,7 +896,7 @@ void Builtins::NEW(int nArgs)
     {
         if( nArgs > 1 )
         {
-            ev->err = "cannot dynamically set array length for non-open array";
+            ev->error("cannot dynamically set array length for non-open array",pos);
             return;
         }
         ev->out->newobj_(ev->toQuali(what.type->getType())); // don't use newarr for fixed size arrays
@@ -838,7 +905,7 @@ void Builtins::NEW(int nArgs)
     {
         if( nArgs != 2 )
         {
-            ev->err = "expecting two arguments, the second as the explicit length";
+            ev->error("expecting two arguments, the second as the explicit length",pos);
             return;
         }
         ev->out->newarr_(ev->toQuali(what.type->getType()->getType()));
@@ -846,14 +913,14 @@ void Builtins::NEW(int nArgs)
     }
 }
 
-void Builtins::DISPOSE(int nArgs)
+void Builtins::DISPOSE(int nArgs,const RowCol& pos)
 {
     Value what = ev->stack.takeLast();
     if( what.type->kind != Type::Pointer &&
             !(what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Object ||
               what.type->getType()->kind == Type::Array) )
     {
-        ev->err = "argument must be a pointer to record or array";
+        ev->error("argument must be a pointer to record or array",pos);
         return;
     }
 
@@ -874,36 +941,36 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
     case Builtin::PRINT:
     case Builtin::PRINTLN:
         checkNumOfActuals(nArgs, 1);
-        PRINT(nArgs,builtin == Builtin::PRINTLN);
+        PRINT(nArgs,builtin == Builtin::PRINTLN,pos);
         break;
     case Builtin::NEW:
         checkNumOfActuals(nArgs, 1, 2);
-        NEW(nArgs);
+        NEW(nArgs,pos);
         handleStack = false;
         break;
     case Builtin::DISPOSE:
         checkNumOfActuals(nArgs, 1);
-        DISPOSE(nArgs);
+        DISPOSE(nArgs,pos);
         handleStack = false;
         break;
     case Builtin::INC:
         checkNumOfActuals(nArgs, 1, 2);
-        INC(nArgs);
+        INC(nArgs,pos);
         handleStack = false;
         break;
     case Builtin::DEC:
         checkNumOfActuals(nArgs, 1, 2);
-        DEC(nArgs);
+        DEC(nArgs,pos);
         handleStack = false;
         break;
     case Builtin::LEN:
         checkNumOfActuals(nArgs, 1);
-        LEN(nArgs);
+        LEN(nArgs,pos);
         handleStack = false;
         break;
     case Builtin::ASSERT:
         checkNumOfActuals(nArgs, 3);
-        ASSERT(nArgs);
+        ASSERT(nArgs,pos);
         handleStack = false;
         break;
     case Builtin::BITAND:
@@ -937,6 +1004,11 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         doFlt();
         handleStack = false;
         break;
+    case Builtin::ORD:
+        checkNumOfActuals(nArgs, 1);
+        doOrd();
+        handleStack = false;
+        break;
     case Builtin::DEFAULT:
         checkNumOfActuals(nArgs, 1);
         doDefault();
@@ -958,7 +1030,7 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
     }
     }catch(const QString& str)
     {
-        ev->err = str;
+        ev->error(str,pos);
     }
 
     if( handleStack )

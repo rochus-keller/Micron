@@ -628,7 +628,7 @@ static bool isPtrToOpenCharArray(Type* t)
 
 Parser2::Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* i, bool xref):
     mdl(m),scanner(s),out(out),imp(i),thisMod(0),thisDecl(0),inFinally(false),
-    langLevel(3),haveExceptions(false),first(0),last(0)
+    langLevel(3), defaultVisi(Node::Private),haveExceptions(false),first(0),last(0)
 {
     ev = new Evaluator(m,out);
     self = Token::getSymbol("self");
@@ -785,6 +785,11 @@ bool Parser2::expect(int tt, bool pkw, const char* where) {
     }
 }
 
+void Parser2::errorEv()
+{
+    error(ev->getErrPos(), ev->getErr());
+}
+
 void Parser2::error(const Token& t, const QString& msg)
 {
     if(msg.isEmpty())
@@ -802,7 +807,10 @@ void Parser2::error(int row, int col, const QString& msg)
 void Parser2::error(const RowCol& pos, const QString& msg)
 {
     Q_ASSERT(!msg.isEmpty());
-    errors << Error(msg, pos.d_row, pos.d_col, scanner->source());
+    if(msg.isEmpty())
+        errors << Error("<no message>", pos.d_row, pos.d_col, scanner->source());
+    else
+        errors << Error(msg, pos.d_row, pos.d_col, scanner->source());
 }
 
 Declaration* Parser2::findDecl(const Token& id)
@@ -949,11 +957,11 @@ bool Parser2::assigCompat(Type* lhs, Expression* rhs, const RowCol& pos)
     // Tv is a non-open array of CHAR, Te is a string literal
     if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
             rhs->hasConstValue() && rhs->getType()->kind == Type::String)
-        return strlen(rhs->getConstValue().toByteArray().constData()) < lhs->len;
+        return rhs->strLitLen() < lhs->len;
 
     // A string of length 1 can be used wherever a character constant is allowed and vice versa.
     if( lhs->kind == Type::CHAR && rhs->getType()->kind == Type::String )
-        return strlen(rhs->val.toByteArray().constData()) == 1;
+        return rhs->strLitLen() == 1;
 
     return assigCompat(lhs, rhs->getType(), pos);
 }
@@ -963,7 +971,7 @@ bool Parser2::paramCompat(Declaration* lhs, Expression* rhs)
     Q_ASSERT(lhs->kind == Declaration::ParamDecl);
 
     // Tf is a pointer to an open array of CHAR, f is CONST, and a is string literal
-    if( lhs->visi == Declaration::ReadOnly && lhs->getType()->kind == Type::Pointer &&
+    if( lhs->visi == Node::ReadOnly && lhs->getType()->kind == Type::Pointer &&
             lhs->getType()->getType()->kind == Type::Array && lhs->getType()->getType()->getType()->kind == Type::CHAR &&
             lhs->getType()->getType()->len == 0 && rhs->getType()->kind == Type::String )
         return true;
@@ -1201,16 +1209,19 @@ Parser2::Quali Parser2::qualident() {
 
 Parser2::IdentDef Parser2::identdef() {
     IdentDef res;
-    res.visi = IdentDef::Private;
+    res.visi = defaultVisi;
 	expect(Tok_ident, false, "identdef");
     res.name = cur;
-	if( la.d_type == Tok_Star || la.d_type == Tok_Minus ) {
+    if( la.d_type == Tok_Star || la.d_type == Tok_Minus || la.d_type == Tok_Tilde ) {
 		if( la.d_type == Tok_Star ) {
 			expect(Tok_Star, false, "identdef");
-            res.visi = IdentDef::Public;
+            res.visi = Node::ReadWrite;
 		} else if( la.d_type == Tok_Minus ) {
 			expect(Tok_Minus, false, "identdef");
-            res.visi = IdentDef::ReadOnly;
+            res.visi = Node::ReadOnly;
+        } else if( la.d_type == Tok_Tilde ) {
+            expect(Tok_Minus, false, "identdef");
+            res.visi = Node::Private;
 		} else
 			invalid("identdef");
 	}
@@ -1224,7 +1235,7 @@ void Parser2::ConstDeclaration() {
     Token t = la;
     Expression* e = ConstExpression(0);
     if( e && !ev->evaluate(e) )
-        error(t, ev->getErr());
+        errorEv();
     Value v = ev->pop();
     d->data = v.val;
     d->setType(v.type);
@@ -1431,7 +1442,7 @@ void Parser2::length(quint32& len) {
         Expression* lenExpr = ConstExpression(0);
         ev->bindUniInt(lenExpr, false);
         if( !ev->evaluate(lenExpr) )
-            error(tok, ev->getErr());
+            errorEv();
         Value v = ev->pop();
         if( !v.type->isUInt() )
         {
@@ -1450,7 +1461,7 @@ void Parser2::length(quint32& len) {
 		expect(Tok_VAR, true, "length");
         Token t = la;
         if( !ev->evaluate(expression(0)) )
-            error(t, ev->getErr());
+            errorEv();
         Value v = ev->pop();
         // TODO
         len = 0;
@@ -1715,7 +1726,7 @@ DeclList Parser2::constEnum() {
         const Token tok = la;
         Expression* e = ConstExpression(0);
         if( !ev->evaluate(e) )
-            error(tok, ev->getErr());
+            errorEv();
         Value v = ev->pop();
         if( !v.type->isInteger() )
             error(tok,"expecting an integer");
@@ -1750,8 +1761,12 @@ void Parser2::VariableDeclaration() {
     Declaration* outer = mdl->getTopScope();
     foreach( const IdentDef& id, ids )
     {
+        bool doublette = false;
         Declaration* d = addDecl(id,outer->kind == Declaration::Module ?
-                                     Declaration::VarDecl : Declaration::LocalDecl);
+                                     Declaration::VarDecl : Declaration::LocalDecl,
+                                 &doublette);
+        if( doublette )
+            continue;
         d->outer = outer;
         d->setType(t);
         if( d->kind == Declaration::VarDecl )
@@ -2036,7 +2051,8 @@ void Parser2::checkArithOp(Expression* e)
                 break;
             }
         else
-            error(e->pos.d_row, e->pos.d_col,"operands are not of the same type");
+            error(e->pos.d_row, e->pos.d_col,QString("operands are not of the same type (%1, %2)")
+                  .arg(e->lhs->getType()->getName()).arg(e->rhs->getType()->getName()));
     }else if( e->lhs->getType()->isSet() && e->rhs->getType()->isSet() )
     {
         switch(e->kind)
@@ -2132,7 +2148,8 @@ void Parser2::checkRelOp(Expression* e)
             if( mt != e->rhs->getType() )
                 e->rhs = Evaluator::createAutoConv(e->rhs,mt);
         }else
-            error(e->pos.d_row, e->pos.d_col, "operands are not of the same type");
+            error(e->pos.d_row, e->pos.d_col,QString("operands are not of the same type (%1, %2)")
+                  .arg(e->lhs->getType()->getName()).arg(e->rhs->getType()->getName()));
     }else if( e->lhs->getType()->isText() && e->rhs->getType()->isText() ||
               e->lhs->getType()->kind == Type::Pointer && e->rhs->getType()->kind == Type::Pointer ||
               e->lhs->getType()->kind == Type::Pointer && e->rhs->getType()->kind == Type::Nil ||
@@ -2478,7 +2495,7 @@ Expression* Parser2::maybeQualident(Symbol** s)
                       arg(cur.d_val.constData()).arg(d->name.constData()) );
             else
             {
-                if( d2->visi == Declaration::Private )
+                if( d2->visi == Node::Private )
                     error(cur,QString("cannot access private declaration '%1' from module '%2'").
                           arg(cur.d_val.constData()).arg(d->name.constData()) );
                 d = d2;
@@ -2521,7 +2538,7 @@ Declaration* Parser2::resolveQualident(Parser2::Quali* qq, bool allowUnresovedLo
                   arg(q.second.d_val.constData()).arg(q.first.d_val.constData()) );
             return 0;
         }
-        if( decl->visi == Declaration::Private )
+        if( decl->visi == Node::Private )
         {
             error(cur,QString("cannot access private declaration '%1' from module '%2'").
                   arg(q.second.d_val.constData()).arg(q.first.d_val.constData()) );
@@ -2923,7 +2940,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
             return 0;
         res = Expression::create(Expression::IndexValue, colon.toRowCol());
         if( !ev->evaluate(lhs) )
-            error(lhs->pos, ev->getErr());
+            errorEv();
         res->val = ev->pop().val;
         index = res->val.toLongLong();
         res->rhs = rhs;
@@ -2936,7 +2953,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
             if( res )
             {
                 if( !ev->evaluate(res) )
-                    error(res->pos, ev->getErr() );
+                    errorEv();
                 else
                     res->val = ev->pop().val;
             }
@@ -3118,7 +3135,7 @@ void Parser2::assignmentOrProcedureCall() {
             // now both lhs and rhs expression ASTs are ready; do analysis to recognize
             // array element and field assignments
             if( rhs && !ev->assign(lhs,rhs, tok.toRowCol()) )
-                error(tok, ev->getErr() );
+                errorEv();
         }
         Expression::deleteAllExpressions();
     }else
@@ -3144,7 +3161,7 @@ void Parser2::assignmentOrProcedureCall() {
             lhs = tmp;
         }
         if( !ev->evaluate(lhs) )
-            error(t, ev->getErr());
+            errorEv();
         if( lhs->getType() && lhs->getType()->kind != Type::NoType )
             line(lhs->pos).pop_(); // remove unused result
     }
@@ -3193,7 +3210,7 @@ void Parser2::IfStatement() {
     if( cond )
         bindUniInt(cond->lhs, cond->rhs, ev);
     if( cond != 0 && !ev->evaluate(cond, true) )
-        error(t, ev->getErr());
+        errorEv();
     Expression::deleteAllExpressions();
     if( ev->top().type == 0 || ev->top().type->kind != Type::BOOL )
         error(t, "expecting a boolean expression");
@@ -3209,7 +3226,7 @@ void Parser2::IfStatement() {
         line(cur).if_();
         Token t = la;
         if( !ev->evaluate(expression(0), true) )
-            error(t, ev->getErr());
+            errorEv();
         Expression::deleteAllExpressions();
         if( ev->top().type == 0 || ev->top().type->kind != Type::BOOL )
             error(t, "expecting a boolean expression");
@@ -3270,7 +3287,7 @@ void Parser2::CaseStatement() {
     {
         line(tok1).switch_();
         if( !ev->evaluate(e, true) )
-            error(tok2, ev->getErr());
+            errorEv();
         Type* t = ev->top().type;
         Expression::deleteAllExpressions();
         ev->pop();
@@ -3352,13 +3369,13 @@ void Parser2::LabelRange(Type* t, CaseLabels& l) {
 void Parser2::TypeCase(Expression* e)
 {
     if( !ev->evaluate(e, true) )
-        error(e->pos, ev->getErr());
+        errorEv();
 
     Expression* tyname = ConstExpression(0);
     if( tyname == 0 )
         return;
     if( !ev->evaluate(tyname) )
-        error(tyname->pos, ev->getErr());
+        errorEv();
     if( tyname->getType()->kind == Type::Nil )
         line(e->pos).ldnull_();
     else
@@ -3385,7 +3402,7 @@ Value Parser2::label(Type* t) {
     Token tok = la;
     Expression* e = ConstExpression(0);
     if( !ev->evaluate(e) )
-        error(tok, ev->getErr());
+        errorEv();
     Value res = ev->pop();
     if( !assigCompat(t, e, e->pos) )
         error(tok,"label has incompatible type");
@@ -3399,7 +3416,7 @@ void Parser2::WhileStatement() {
     const Token t = la;
     Expression* res = expression(0);
     if( res && !ev->evaluate(res, true) )
-        error(t, ev->getErr());
+        errorEv();
     if( ev->top().type == 0 || ev->top().type->kind != Type::BOOL )
         error(t,"expecting boolean expression");
     Expression::deleteAllExpressions();
@@ -3419,7 +3436,7 @@ void Parser2::RepeatStatement() {
     line(cur).until_();
     const Token t = la;
     if( !ev->evaluate(expression(0), true) )
-        error(t, ev->getErr());
+        errorEv();
     if( ev->top().type == 0 || ev->top().type->kind != Type::BOOL )
         error(t,"expecting boolean expression");
     Expression::deleteAllExpressions();
@@ -3477,7 +3494,7 @@ void Parser2::ForStatement() {
         Expression* e = ConstExpression(0);
         ev->bindUniInt(e, idxvar->getType()->isInt());
         if( !ev->evaluate(e) )
-            error(tok, ev->getErr());
+            errorEv();
         Value v = ev->pop();
         if( idxvar && !assigCompat(idxvar->getType(), e, e->pos) )
             error(tok,"constant expression is not compatible with control variable");
@@ -3502,7 +3519,7 @@ void Parser2::ForStatement() {
         op->rhs = rhs;
         op->setType(lhs->getType());
         if( !ev->evaluate(op) )
-            error(tok, ev->getErr());
+            errorEv();
         ev->pop();
         Expression::deleteAllExpressions();
     }
@@ -3928,11 +3945,11 @@ void Parser2::ReturnStatement() {
         Expression* e = expression(retType);
         ev->bindUniInt(e, retType->isInt());
         if( e && !ev->evaluate(e) )
-            error(tok, ev->getErr()); // value is pushed on stack by prepareRhs
+            errorEv(); // value is pushed on stack by prepareRhs
         if( !assigCompat( retType, e, e->pos ) )
             error(tok,"expression is not compatible with the return type");
         if( !ev->prepareRhs(retType, false, e->pos) )
-            error(tok, ev->getErr());
+            errorEv();
         line(ret).ret_(true);
         Expression::deleteAllExpressions();
     }else if( mdl->getTopScope()->getType() != 0 && mdl->getTopScope()->getType()->kind != Type::NoType )
@@ -4034,7 +4051,7 @@ void Parser2::FPSection() {
         else
         {
             if( isConst )
-                d->visi = Declaration::ReadOnly;
+                d->visi = Node::ReadOnly;
             d->setType(t);
         }
     }
@@ -4200,7 +4217,7 @@ void Parser2::module(const Import & import) {
         IdentDef id;
         id.name= la;
         id.name.d_val = "begin$"; // keep $ postfix, because "begin" is a MIL keyword
-        id.visi = IdentDef::Private;
+        id.visi = Node::Private;
         Declaration* procDecl = addDecl(id, Declaration::Procedure);
         mdl->openScope(procDecl);
         out->beginProc("begin$", la.toRowCol(),0, Mil::ProcData::ModuleInit);
@@ -4292,7 +4309,7 @@ void Parser2::import() {
         expect(Tok_Lpar, false, "MetaActuals");
         Expression* e = ConstExpression(0);
         if( e && !ev->evaluate(e) )
-            error(cur, ev->getErr());
+            errorEv();
         Value v = ev->pop();
         import.metaActuals << v;
         Expression::deleteAllExpressions();
@@ -4301,7 +4318,7 @@ void Parser2::import() {
                 expect(Tok_Comma, false, "MetaActuals");
             }
             if( !ev->evaluate(ConstExpression(0)) )
-                error(cur, ev->getErr());
+                errorEv();
             v = ev->pop();
             import.metaActuals << v;
             Expression::deleteAllExpressions();
@@ -4597,7 +4614,7 @@ QByteArray Parser2::Attribute()
         ev->bindUniInt(e, true);
         if( e && !ev->evaluate(e) )
         {
-            error(t, ev->getErr());
+            errorEv();
             return name;
         }
         v = ev->pop();
@@ -4610,6 +4627,27 @@ QByteArray Parser2::Attribute()
             return name;
         }else
             langLevel = v.val.toInt();
+    } else if( name == "visibility" )
+    {
+        if( v.type == 0 || v.type->kind != Type::String )
+        {
+            error(t, "expecting a string literal");
+            return name;
+        }else
+        {
+            const QByteArray str = v.val.toByteArray().left(1);
+            if( str == "*" )
+                defaultVisi = Node::ReadWrite;
+            else if( str == "-" )
+                defaultVisi = Node::ReadOnly;
+            else if( str == "~" )
+                defaultVisi = Node::Private;
+            else
+            {
+                error(t, "expecting '*', '-' or '~'");
+                return name;
+            }
+        }
     }else
         error(t, "unknown attribute");
     return name;

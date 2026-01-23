@@ -36,14 +36,14 @@ protected:
     int addIncDecTmp();
 
     // builtin implementations
-    void PRINT(int nArgs, bool ln);
-    void NEW(int nArgs);
-    void DISPOSE(int nArgs);
-    void INC(int nArgs);
-    void DEC(int nArgs);
-    void LEN(int nArgs);
-    void incdec(int nArgs, bool inc);
-    void ASSERT(int nArgs);
+    void PRINT(int nArgs, bool ln, const RowCol &pos);
+    void NEW(int nArgs, const RowCol &pos);
+    void DISPOSE(int nArgs, const RowCol &pos);
+    void INC(int nArgs, const RowCol &pos);
+    void DEC(int nArgs, const RowCol &pos);
+    void LEN(int nArgs, const RowCol &pos);
+    void incdec(int nArgs, bool inc, const RowCol &pos);
+    void ASSERT(int nArgs, const RowCol &pos);
     void bitarith(int op);
     void bitnot();
     void doCast(const RowCol& pos);
@@ -53,6 +53,7 @@ protected:
     void doFlt();
     void doShiftRight();
     void doShiftLeft();
+    void doOrd();
 
     void checkNumOfActuals(int nArgs, int min, int max = 0);
 private:

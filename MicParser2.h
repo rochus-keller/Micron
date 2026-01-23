@@ -65,7 +65,7 @@ namespace Mic {
         Quali qualident();
         struct IdentDef {
             Token name;
-            enum Visi { Private, ReadOnly, Public } visi;
+            quint8 visi; // Ast::Node::Visibility
             bool isValid() const { return name.d_type == Tok_ident; }
         };
         IdentDef identdef();
@@ -157,6 +157,7 @@ namespace Mic {
         Token peek(int off);
         void invalid(const char* what);
         bool expect(int tt, bool pkw, const char* where);
+        void errorEv();
         void error( const Token&, const QString& msg);
         void error( int row, int col, const QString& msg );
         void error( const RowCol&, const QString& msg );
@@ -216,6 +217,7 @@ namespace Mic {
 
         bool inFinally;
         quint8 langLevel;
+        quint8 defaultVisi;
         bool haveExceptions;
 
         struct Label {

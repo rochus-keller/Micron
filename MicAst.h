@@ -143,6 +143,7 @@ namespace Mic
         Declaration* findMember(const QByteArray& name, bool recurseSuper = false) const;
         QPair<int,int> getFieldCount() const; // fixed, variant
         int getByteSize() const;
+        const char *getName() const;
 
         static QVariant getMax(Kind);
         static QVariant getMin(Kind);
@@ -223,9 +224,12 @@ namespace Mic
         bool isLvalue() const; // true if result of expression is usually a ref to type; can be changed with byVal
         bool hasAddress() const;
         bool isAssignable() const;
+        int strLitLen() const; // -1: no strlit; >=0 strlit
         void setByVal();
         void appendRhs(Expression*);
         void setType(Type*);
+        const char *getName() const;
+        static const char *getName(quint8);
         static Expression* createFromToken(quint16,const RowCol&);
         static Expression* create(Kind k = Invalid, const RowCol& rc = RowCol());
         static void append(Expression* list, Expression* elem);

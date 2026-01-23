@@ -38,10 +38,8 @@ bool Evaluator::unaryOp(quint8 op, const RowCol& pos)
 {
     err.clear();
     if( stack.isEmpty() )
-    {
-        err = "nothing on the stack";
-        return false;
-    }
+        return error("nothing on the stack",pos);
+
     Value& v = stack.back();
     switch( op )
     {
@@ -151,16 +149,14 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
     err.clear();
     if( stack.size() < 1 )
     {
-        err = "expecting a value on the stack";
-        return false;
+        return error("expecting a value on the stack",pos);
     }
 
     const Value& rhs = stack.back();
 
     if( rhs.mode == Value::TypeDecl )
     {
-        err = "a type declaration cannot be used as a value";
-        return false;
+        return error("a type declaration cannot be used as a value",pos);
     }
 
     // make sure also a string literal is put on the stack by value
@@ -191,8 +187,7 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         Q_ASSERT(proc);
         if( proc->inline_ )
         {
-            err = "cannot take address of INLINE procedure";
-            return false;
+            return error("cannot take address of INLINE procedure", pos);
         }
         out->line_(pos);
         out->ldproc_(toQuali(proc));
@@ -202,13 +197,11 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         Q_ASSERT(proc);
         if( proc->inline_ )
         {
-            err = "cannot take address of INLINE procedure";
-            return false;
+            return error("cannot take address of INLINE procedure", pos);
         }
         if( !lhs->typebound )
         {
-            err = "cannot assign method to procedure type";
-            return false;
+            return error( "cannot assign method to procedure type", pos);
         }
         const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
         out->line_(pos);
@@ -218,8 +211,7 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         if( rhs.type->kind != Type::Pointer || rhs.type->getType() == 0
                 || !(rhs.type->getType()->kind == Type::Object || rhs.type->getType()->kind == Type::Record) )
         {
-            err = "expecting pointer to object or record";
-            return false;
+            return error("expecting pointer to object or record",pos);
         }
         out->line_(pos);
         out->ldiface_(toQuali(lhs));
@@ -377,13 +369,12 @@ bool Evaluator::assign(Expression* lhs, Expression* rhs, const RowCol& pos)
     return true;
 }
 
-bool Evaluator::derefPointer(bool byVal)
+bool Evaluator::derefPointer(bool byVal, const RowCol& pos)
 {
     err.clear();
     if( stack.isEmpty() )
     {
-        err = "expecting a value on the stack";
-        return false;
+        return error("expecting a value on the stack",pos);
     }
 
     Value v = stack.takeLast();
@@ -399,24 +390,22 @@ bool Evaluator::derefPointer(bool byVal)
     stack.push_back(v);
 
     if( byVal )
-        derefValue(); // actually do it, because we need a value, not an lvalue
+        derefValue(pos); // actually do it, because we need a value, not an lvalue
 
     return err.isEmpty();
 }
 
-bool Evaluator::derefValue()
+bool Evaluator::derefValue(const RowCol& pos)
 {
     err.clear();
     if( stack.isEmpty() )
     {
-        err = "expecting a value on the stack";
-        return false;
+        return error("expecting a value on the stack", pos);
     }
     Value v = stack.takeLast();
     if( v.isConst() || !v.ref || v.type == 0 )
     {
-        err = "expecting a non const reference on the stack";
-        return false;
+        return error("expecting a non const reference on the stack",pos);
     }
     Q_ASSERT(!v.isConst());
     Q_ASSERT(v.ref && v.type);
@@ -483,13 +472,13 @@ bool Evaluator::derefValue()
     return err.isEmpty();
 }
 
-void Evaluator::assureTopIsValue()
+void Evaluator::assureTopIsValue(const RowCol& pos)
 {
     if( stack.isEmpty() )
         return;
     Value& v = stack.back();
     if( v.ref )
-        derefValue();
+        derefValue(pos);
 }
 
 bool Evaluator::desigField(Declaration* field, bool byVal, const RowCol& pos)
@@ -497,8 +486,7 @@ bool Evaluator::desigField(Declaration* field, bool byVal, const RowCol& pos)
     err.clear();
     if( stack.size() < 1 )
     {
-        err = "expecting a value on the stack";
-        return false;
+        return error("expecting a value on the stack",pos);
     }
     Value lhs = stack.takeLast(); // record reference
 
@@ -529,8 +517,7 @@ bool Evaluator::desigVar(bool byVal, const RowCol& pos)
     err.clear();
     if( stack.isEmpty() )
     {
-        err = "expecting a value on the stack";
-        return false;
+        return error("expecting a value on the stack",pos);
     }
     Value v = stack.takeLast();
 
@@ -588,8 +575,7 @@ bool Evaluator::desigIndex(bool byVal, const RowCol& pos)
         const qint64 idx = rhs.val.toLongLong();
         if( idx < 0  || lhs.type->len && lhs.type->len <= idx )
         {
-            err = "index out of range";
-            return false;
+            return error("index out of range",pos);
         }
         pushMilStack(rhs, pos);
     }
@@ -616,8 +602,7 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
     err.clear();
     if( stack.size() < nArgs + 1 )
     {
-        err = QString("expecting %1 values on the stack").arg(nArgs+1);
-        return false;
+        return error(QString("expecting %1 values on the stack").arg(nArgs+1), pos);
     }
 
     Value callee = stack.takeLast();
@@ -693,8 +678,7 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
         }
         // else fall through
     default:
-        err = "this expression cannot be called";
-        break;
+        return error("this expression cannot be called",pos);
     }
 
     for( int i = 0; i < nArgs; i++ )
@@ -716,8 +700,7 @@ bool Evaluator::castPtr(Type* to, const RowCol& pos)
     err.clear();
     if( stack.size() < 1 )
     {
-        err = "expecting a value on the stack";
-        return false;
+        return error("expecting a value on the stack", pos);
     }
     Value lhs = stack.takeLast(); // object
     // TODO
@@ -736,8 +719,7 @@ bool Evaluator::convNum(Type* to, const RowCol& pos)
     err.clear();
     if( stack.size() < 1 )
     {
-        err = "expecting a value on the stack";
-        return false;
+        return error("expecting a value on the stack", pos);
     }
     if( stack.back().isConst() )
     {
@@ -876,8 +858,7 @@ bool Evaluator::castNum(Type* to, const RowCol& pos)
     err.clear();
     if( stack.size() < 1 )
     {
-        err = "expecting a value on the stack";
-        return false;
+        return error("expecting a value on the stack",pos);
     }
     if( stack.back().isConst() )
     {
@@ -1102,8 +1083,7 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
         }
         break;
     default:
-        err = "not supported for this kind of declaration";
-        return false;
+        return error("not supported for this kind of declaration",pos);
     }
     return true;
 }
@@ -1195,6 +1175,13 @@ void Evaluator::adjustNumType(Type* me, Type* other)
                  other->kind == Type::FLT64 && me->kind < Type::FLT64 )
             out->conv_(Mil::EmiTypes::R8);
     }
+}
+
+bool Evaluator::error(const QString &msg, const RowCol &pos)
+{
+    err = msg;
+    errPos = pos;
+    return false;
 }
 
 Qualident Evaluator::toQuali(Type * t)
@@ -1355,7 +1342,8 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs, const Ro
                 emitArithOp(op, false, false, pos );
             }
         }else
-            err = "operation not supported";
+            error(QString("operation '%1' not supported for these operands: %2, %3").arg(Expression::getName(op))
+                    .arg(lhs.type->getName()).arg(rhs.type->getName()), pos);
     }else if( lhs.type->isSet() && rhs.type->isSet() )
     {
         // + - * /
@@ -1412,7 +1400,8 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs, const Ro
         Q_ASSERT( lhs.isConst() && rhs.isConst() );
         res.val = lhs.val.toByteArray() + rhs.val.toByteArray();
     }else
-        err = "operation not supported";
+        error(QString("operation '%1' not supported for these operands: %2, %3").arg(Expression::getName(op))
+                .arg(lhs.type->getName()).arg(rhs.type->getName()), pos);
 
     return res;
 }
@@ -1455,7 +1444,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                     res.val = lhs.val.toLongLong() < rhs.val.toLongLong();
                     break;
                 default:
-                    err = msg;
+                    error(msg, pos);
                     return res;
                 }
             }else
@@ -1488,7 +1477,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                     res.val = lhs.val.toULongLong() < rhs.val.toULongLong();
                     break;
                 default:
-                    err = msg;
+                    error(msg, pos);
                     return res;
                 }
             }else
@@ -1521,7 +1510,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                     res.val = lhs.val.toDouble() < rhs.val.toDouble();
                     break;
                 default:
-                    err = msg;
+                    error(msg, pos);
                     return res;
                 }
             }else
@@ -1530,7 +1519,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
             }
         }else
         {
-            err = QString("INTERNAL ERROR: operands not compatible: %1 op %2").arg(Type::name[lhs.type->kind]).arg(Type::name[rhs.type->kind]);
+            error(QString("INTERNAL ERROR: operands not compatible: %1 op %2").arg(Type::name[lhs.type->kind]).arg(Type::name[rhs.type->kind]),pos);
             return res;
         }
     }else if( lhs.type->isText() && rhs.type->isText() )
@@ -1562,7 +1551,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
             out->ldc_i4(3);
             break;
         default:
-            err = msg;
+            error(msg, pos);
             return res;
         }
         if( lhs.type->kind == Type::CHAR && rhs.type->kind == Type::CHAR )
@@ -1603,7 +1592,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                 res.val = lhs.val.toULongLong() < rhs.val.toULongLong();
                 break;
             default:
-                err = msg;
+                error(msg, pos);
                 return res;
             }
         }else
@@ -1637,7 +1626,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                 res.val = lhs.val.toLongLong() < rhs.val.toLongLong();
                 break;
             default:
-                err = msg;
+                error(msg,pos);
                 return res;
             }
         }else
@@ -1659,7 +1648,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                 res.val = lhs.val.toUInt() != rhs.val.toUInt();
                 break;
             default:
-                err = msg;
+                error(msg, pos);
                 return res;
             }
         }else
@@ -1679,8 +1668,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
         }
     }else
     {
-        err = QString("INTERNAL ERROR: operands not compatible: %1 op %2").arg(Type::name[lhs.type->kind]).arg(Type::name[rhs.type->kind]);
-        return res;
+        error(QString("INTERNAL ERROR: operands not compatible: %1 op %2").arg(Type::name[lhs.type->kind]).arg(Type::name[rhs.type->kind]), pos);
     }
 
     return res;
@@ -1698,7 +1686,7 @@ Value Evaluator::inOp(const Value& lhs, const Value& rhs, const RowCol& pos)
         {
             const int index = lhs.val.toInt();
             if( index < 0 || index > 31 )
-                err = "left side must be between 0 and 31";
+                error("left side must be between 0 and 31", pos);
             else
             {
                 const quint32 set = rhs.val.toUInt();
@@ -1712,7 +1700,7 @@ Value Evaluator::inOp(const Value& lhs, const Value& rhs, const RowCol& pos)
         }
 
     }else
-        err = "operation not compatible with given operands";
+        error("operation not compatible with given operands", pos);
     return res;
 }
 
@@ -1734,7 +1722,7 @@ Value Evaluator::isOp(const Value& lhs, const Value& rhs, const RowCol& pos)
         out->line_(pos);
         out->isinst_(type);
     }else
-        err = "operation not compatible with given operands";
+        error("operation not compatible with given operands", pos);
     return res;
 }
 
@@ -1970,7 +1958,7 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Deref:
         if( !recursiveRun(e->lhs) )
             return false;
-        derefPointer(e->byVal);
+        derefPointer(e->byVal, e->pos);
         break;
     case Expression::Addr:
         if( !recursiveRun(e->lhs) )
@@ -2085,14 +2073,12 @@ bool Evaluator::recursiveRun(Expression* e)
 
             if( curProcs.isEmpty() || curProcs.back() != method )
             {
-                err = "invalid super call (wrong method)";
-                return false;
+                return error("invalid super call (wrong method)", e->pos);
             }
             method = method->data.value<Declaration*>(); // super
             if( method == 0 )
             {
-                err = "there is no overridden method";
-                return false;
+                return error("there is no overridden method", e->pos);
             }
             stack.push_back(Value(e->getType(),QVariant::fromValue(method),Value::Super));
         } break;
@@ -2114,10 +2100,10 @@ void Evaluator::constructor(Expression* e)
         return;
     }
     // else TODO
-    err = "dynamic constructors not yet supported by code generator";
+    error("dynamic constructors not yet supported by code generator", e->pos);
 }
 
-void Evaluator::recurseConstConstructor(Expression* e)
+bool Evaluator::recurseConstConstructor(Expression* e)
 {
     switch( e->getType()->kind )
     {
@@ -2129,7 +2115,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             {
                 Q_ASSERT( c->kind == Expression::NameValue );
                 if( !evaluate(c->rhs) )
-                    return;
+                    return false;
                 Value v = stack.takeLast();
                 Q_ASSERT( v.isConst() );
                 rec.append(qMakePair(c->val.value<Declaration*>()->name, v.val));
@@ -2150,7 +2136,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             {
                 Q_ASSERT( c->kind == Expression::IndexValue );
                 if( !evaluate(c->rhs) )
-                    return;
+                    return false;
                 Value v = stack.takeLast();
                 Q_ASSERT( v.isConst() );
                 arr[c->val.toLongLong()] = v.val;
@@ -2180,19 +2166,17 @@ void Evaluator::recurseConstConstructor(Expression* e)
                 if( c->kind == Expression::Range )
                 {
                     if( !evaluate(c->lhs) )
-                        return;
+                        return false;
                     const qint64 lhs = stack.takeLast().val.toLongLong();
                     if( !evaluate(c->rhs) )
-                        return;
+                        return false;
                     const qint64 rhs = stack.takeLast().val.toLongLong();
                     if( lhs < 0 || lhs >= set.size() )
                     {
-                        err = QString("element %1 out of range").arg(lhs);
-                        return;
+                        return error(QString("element %1 out of range").arg(lhs), e->pos);
                     }else if( rhs < 0 || rhs >= set.size() )
                     {
-                        err = QString("element %1 out of range").arg(rhs);
-                        return;
+                        return error(QString("element %1 out of range").arg(rhs), e->pos);
                     }else
                     {
                         if( lhs <= rhs )
@@ -2200,8 +2184,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
                             {
                                 if( set.test(i) )
                                 {
-                                    err = QString("element %1 already included").arg(i);
-                                    return;
+                                    return error(QString("element %1 already included").arg(i), e->pos);
                                 }else
                                     set.set(i);
                             }
@@ -2210,8 +2193,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
                             {
                                 if( set.test(i) )
                                 {
-                                    err = QString("element %1 already included").arg(i);
-                                    return;
+                                    return error(QString("element %1 already included").arg(i), e->pos);
                                 }else
                                     set.set(i);
                             }
@@ -2219,16 +2201,14 @@ void Evaluator::recurseConstConstructor(Expression* e)
                 }else
                 {
                     if( !evaluate(c) )
-                        return;
+                        return false;
                     const qint64 i = stack.takeLast().val.toLongLong();
                     if( i < 0 || i >= set.size() )
                     {
-                        err = QString("element %1 out of range").arg(i);
-                        return;
+                        return error(QString("element %1 out of range").arg(i), e->pos);
                     }else if(set.test(i))
                     {
-                        err = QString("element %1 already included").arg(i);
-                        return;
+                        return error(QString("element %1 already included").arg(i), e->pos);
                     }else
                         set.set(i);
                 }
@@ -2242,6 +2222,7 @@ void Evaluator::recurseConstConstructor(Expression* e)
             break;
         }
     }
+    return true;
 }
 
 bool Evaluator::stind(Expression* lhs, Expression* rhs, const RowCol& pos)
@@ -2275,10 +2256,8 @@ bool Evaluator::stelem(Expression* lhs, Expression* rhs, const RowCol& pos)
     {
         const qint64 idx = index.val.toLongLong();
         if( idx < 0  || array.type->len && array.type->len <= idx )
-        {
-            err = "index out of range";
-            return false;
-        }
+            return error("index out of range",pos);
+
         pushMilStack(index, pos);
     }
 

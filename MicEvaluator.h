@@ -48,6 +48,7 @@ public:
     bool bindUniInt(Expression*, bool isSigned) const;
 
     const QString& getErr() const { return err; }
+    const RowCol getErrPos() const { return errPos; }
 
     static Qualident toQuali(Declaration*, Declaration* module);
     static Qualident toQuali(Type*, Declaration* module);
@@ -85,7 +86,7 @@ public:
 protected:
     bool recursiveRun(Expression*);
     void constructor(Expression*);
-    void recurseConstConstructor(Expression*);
+    bool recurseConstConstructor(Expression*);
 
     // assign
     bool stind(Expression* lhs, Expression* rhs, const RowCol &pos);
@@ -100,7 +101,7 @@ protected:
     void shortCircuitOr(Expression*);
 
     // designator:
-    bool derefPointer(bool byVal); // unary op
+    bool derefPointer(bool byVal, const RowCol &pos); // unary op
     bool desigField(Declaration* field, bool byVal, const RowCol &pos); // binary op
     bool desigIndex(bool byVal, const RowCol &pos); // binary op
     bool call(int nArgs, const RowCol &pos); // n-ary op, callee top on stack
@@ -108,8 +109,8 @@ protected:
     bool convNum(Type* to, const RowCol &pos); // unary op
     bool castNum(Type* to, const RowCol &pos); // unary op
     bool desigVar(bool byVal, const RowCol &pos); // unary op
-    bool derefValue(); // unary op
-    void assureTopIsValue();
+    bool derefValue(const RowCol &pos); // unary op
+    void assureTopIsValue(const RowCol &pos);
 
     void notOp(Value&, const RowCol &pos);
     Value logicOp(quint8 op, const Value& lhs, const Value& rhs, const RowCol &pos);
@@ -124,10 +125,12 @@ protected:
     void emitArithOp(quint8 op, bool unsig, bool i64, const RowCol& pos);
     void adjustNumType(Type* me, Type* other);
 
+    bool error(const QString& msg, const RowCol& pos );
 private:
     AstModel* mdl;
     Mil::Emitter* out;
     QString err;
+    RowCol errPos;
     QList<Value> stack;
     friend class Builtins;
     QList<Declaration*> curProcs;

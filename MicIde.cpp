@@ -2720,7 +2720,7 @@ static void walkModItems(T* parent, Declaration* p, Type* r, bool sort,
 static void fillModItems( QTreeWidgetItem* item, Declaration* n, Declaration* p, Type* r,
                           bool sort, QHash<Declaration*,QTreeWidgetItem*>& idx, Project2* pro )
 {
-    const bool pub = n->visi > Declaration::Private;
+    const bool pub = n->visi > Node::Private;
     item->setText(0,n->name);
     item->setData(0, Qt::UserRole, QVariant::fromValue(n) );
     idx.insert(n,item);
@@ -2761,7 +2761,7 @@ static QTreeWidgetItem* fillHierProc( T* parent, Declaration* p, Declaration* re
     // TODO Qualident record = p->link->type->decl->data.value<Qualident>();
     // item->setText(0, record.second);
     item->setData(0, Qt::UserRole, QVariant::fromValue(p) );
-    item->setIcon(0, QPixmap( p->visi >= Declaration::ReadWrite ? ":/images/func.png" : ":/images/func_priv.png" ) );
+    item->setIcon(0, QPixmap( p->visi > Node::Private ? ":/images/func.png" : ":/images/func_priv.png" ) );
     item->setToolTip(0,item->text(0));
 
     QTreeWidgetItem* ret = 0;
@@ -2790,7 +2790,7 @@ static QTreeWidgetItem* fillHierClass( T* parent, Declaration* n, Type* p, Type*
 #endif
         item->setText(0, name->name);
     item->setData(0, Qt::UserRole, QVariant::fromValue( name ) );
-    item->setIcon(0, QPixmap( name->visi >= Declaration::ReadWrite ? ":/images/class.png" : ":/images/class_priv.png" ) );
+    item->setIcon(0, QPixmap( name->visi > Node::Private ? ":/images/class.png" : ":/images/class_priv.png" ) );
     item->setToolTip(0,item->text(0));
     QTreeWidgetItem* ret = 0;
     DeclList subs = pro->getSubs(n);
@@ -3502,7 +3502,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.3.5");
+    a.setApplicationVersion("0.3.6");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

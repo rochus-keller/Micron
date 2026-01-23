@@ -44,6 +44,8 @@ const char* Type::name[] = {
     "INT8", "INT16", "INT32", "INT64",
     "FLT32", "FLT64",
     "SET",
+    "?",
+    "Pointer", "ProcType", "Array", "Record", "Object", "Interface", "ConstEnum", "Generic"
 };
 
 AstModel::AstModel():helper(0),helperId(0)
@@ -411,6 +413,11 @@ int Type::getByteSize() const
     return sizes[kind];
 }
 
+const char *Type::getName() const
+{
+    return name[kind];
+}
+
 Type::~Type()
 {
     // all anonymous types are resolved, therefore base is no longer owned by a type
@@ -703,6 +710,14 @@ bool Expression::isAssignable() const
     return false;
 }
 
+int Expression::strLitLen() const
+{
+    if( getType() == 0 || getType()->kind != Type::String )
+        return -1;
+    const QByteArray str = val.toByteArray();
+    return strlen(str.constData());
+}
+
 void Expression::setByVal()
 {
     // go back the desig which leaves a ref to type on the stack and mark it to leave a value instead
@@ -724,6 +739,43 @@ void Expression::appendRhs(Expression* e)
 void Expression::setType(Type * t)
 {
     Node::setType(t);
+}
+
+const char *Expression::getName() const
+{
+    return getName(kind);
+}
+
+const char *Expression::getName(quint8 kind)
+{
+    const char* names[] {
+        0,
+        "+", // Plus,
+        "-", // Minus,
+        "~", // Not, // Unary
+        "=", // Eq,
+        "#", // Neq,
+        "<", // Lt,
+        "<=", // Leq,
+        ">", // Gt,
+        ">=", // Geq,
+        "IN", // In,
+        "IS", // Is, // Relation
+        "+", // Add,
+        "-", // Sub,
+        "OR", // Or, // AddOp
+        "*", // Mul,
+        "/", // Fdiv,
+        "DIV", // Div,
+        "MOD", // Mod,
+        "AND", // And, // MulOp
+        "@", // Addr, // @, requires a ref to type and converts it to a pointer value to type
+        "^", // Deref, // ^, requires a pointer value (not ref) and converts it to a ref of type.base
+    };
+    if( kind <= Deref )
+        return names[kind];
+    else
+        return "?";
 }
 
 void Expression::append(Expression* list, Expression* elem)
