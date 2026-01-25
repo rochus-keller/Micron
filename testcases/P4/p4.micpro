@@ -8,8 +8,8 @@ Suffixes=@Invalid()
 WorkingDir=
 
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/casttest.mic
-1\RelPath=casttest.mic
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/P4/pcom.mic
+1\RelPath=pcom.mic
 size=1
 
 [Packages]

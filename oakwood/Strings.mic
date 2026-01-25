@@ -1,5 +1,5 @@
 (* Source: The Oakwood Guidelines for Oberon-2 Compiler Developers, Revision: 1A First Issue, Oct. 1995 *)
-MODULE Strings;
+MODULE Strings [visibility="*"];
 PROCEDURE Length (s: POINTER TO ARRAY OF CHAR): INT32 EXTERN;
 PROCEDURE Insert (source: POINTER TO ARRAY OF CHAR; pos: INT32; dest: POINTER TO ARRAY OF CHAR) EXTERN;
 PROCEDURE Append (extra: POINTER TO ARRAY OF CHAR; dest: POINTER TO ARRAY OF CHAR) EXTERN;

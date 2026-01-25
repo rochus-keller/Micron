@@ -1,5 +1,5 @@
 (* Source: The Oakwood Guidelines for Oberon-2 Compiler Developers, Revision: 1A First Issue, Oct. 1995 *)
-MODULE In;
+MODULE In [visibility="*"];
 VAR Done: BOOLEAN;
 PROCEDURE Open EXTERN;
 PROCEDURE Char (ch: POINTER TO CHAR) EXTERN;

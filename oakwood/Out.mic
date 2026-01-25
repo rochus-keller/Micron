@@ -1,5 +1,5 @@
 (* Source: The Oakwood Guidelines for Oberon-2 Compiler Developers, Revision: 1A First Issue, Oct. 1995 *)
-MODULE Out;
+MODULE Out [visibility="*"];
 PROCEDURE Open EXTERN;
 PROCEDURE Char (ch: CHAR) EXTERN;
 PROCEDURE String (const str: POINTER TO ARRAY OF CHAR) EXTERN;

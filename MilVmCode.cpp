@@ -1568,13 +1568,16 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
                 emitOp(proc, LL_ldiface, id); // id is the interface vtable index
             } break;
 
-        case IL_sizeof:
-        case IL_ptroff:
-        case IL_newvla:
         case IL_cast_i4:
         case IL_cast_i8:
         case IL_cast_r4:
         case IL_cast_r8:
+            // this is a nop here; it is unnecessary to convert the stack slot
+            break;
+
+        case IL_sizeof:
+        case IL_ptroff:
+        case IL_newvla:
 
             qCritical() << "ERROR: not yet implemented in interpreter:" << s_opName[e->kind];
             return false;

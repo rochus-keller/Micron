@@ -1,6 +1,6 @@
 (* Source: The Oakwood Guidelines for Oberon-2 Compiler Developers, Revision: 1A First Issue, Oct. 1995 *)
 (* replaced all LONGINT by INT32, TimeUnit is CONST *)
-MODULE Input;
+MODULE Input [visibility="*"];
 	CONST TimeUnit = 1000000;
 	PROCEDURE Available (): INT32 EXTERN;
 	PROCEDURE Read (ch: POINTER TO CHAR) EXTERN;

@@ -1,0 +1,9 @@
+
+MODULE Args [visibility="*"];
+
+TYPE String = POINTER TO ARRAY OF CHAR;
+
+PROCEDURE Count():UINT32 EXTERN; // number of arguments; argument 0 is the process name or path
+PROCEDURE Arg(i: UINT32):String EXTERN; // returns String (managed by runtime) or NIL
+
+END Args.
