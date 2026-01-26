@@ -1,0 +1,515 @@
+MODULE S9Int [Level=3];
+
+IMPORT S9Def, S9Mem, Out, Strings;
+
+(* ========================================================================= *)
+(* Utilities                                                                 *)
+(* ========================================================================= *)
+
+PROCEDURE Abs(x: INT32): INT32 INLINE;
+BEGIN IF x < 0 THEN RETURN -x ELSE RETURN x END END Abs;
+
+PROCEDURE ReverseSegments*(n: S9Def.Cell): S9Def.Cell;
+VAR m, p: S9Def.Cell;
+BEGIN
+  m := S9Def.NIL_;
+  p := n;
+  WHILE p # S9Def.NIL_ DO
+    m := S9Mem.Cons3(S9Def.Car[p], m, S9Def.AtomTag);
+    p := S9Def.Cdr[p];
+  END;
+  RETURN m;
+END ReverseSegments;
+
+PROCEDURE MakeInteger*(i: INT32): S9Def.Cell;
+VAR n: S9Def.Cell;
+BEGIN
+  n := S9Mem.Cons3(i, S9Def.NIL_, S9Def.AtomTag);
+  RETURN S9Mem.Cons3(S9Def.T_INTEGER, n, S9Def.AtomTag);
+END MakeInteger;
+
+PROCEDURE ValList*(n: S9Def.Cell): S9Def.Cell INLINE;
+BEGIN RETURN S9Def.Cdr[n] END ValList;
+
+PROCEDURE NegativeP*(n: S9Def.Cell): BOOLEAN;
+VAR v: S9Def.Cell;
+BEGIN v := ValList(n); RETURN S9Def.Car[v] < 0 END NegativeP;
+
+PROCEDURE ZeroP*(n: S9Def.Cell): BOOLEAN;
+VAR v: S9Def.Cell;
+BEGIN
+  v := ValList(n);
+  (* Check if first segment is 0 and no subsequent segments *)
+  RETURN (S9Def.Car[v] = 0) AND (S9Def.Cdr[v] = S9Def.NIL_)
+END ZeroP;
+
+(* ========================================================================= *)
+(* Core Arithmetic (Internal)                                                *)
+(* ========================================================================= *)
+
+PROCEDURE BignumAbs*(a: S9Def.Cell): S9Def.Cell;
+VAR n, v: S9Def.Cell;
+BEGIN
+  v := ValList(a);
+  n := S9Mem.Cons3(Abs(S9Def.Car[v]), S9Def.Cdr[v], S9Def.AtomTag);
+  RETURN S9Mem.Cons3(S9Def.T_INTEGER, n, S9Def.AtomTag);
+END BignumAbs;
+
+PROCEDURE BignumNegate*(a: S9Def.Cell): S9Def.Cell;
+VAR n, v: S9Def.Cell;
+BEGIN
+  v := ValList(a);
+  n := S9Mem.Cons3(-(S9Def.Car[v]), S9Def.Cdr[v], S9Def.AtomTag);
+  RETURN S9Mem.Cons3(S9Def.T_INTEGER, n, S9Def.AtomTag);
+END BignumNegate;
+
+(* Adds two raw segment lists *)
+PROCEDURE AddLists(a, b: S9Def.Cell): S9Def.Cell;
+VAR 
+  fa, fb, r: S9Def.Cell;
+  carry: INT32;
+  result: S9Def.Cell;
+BEGIN
+  a := ReverseSegments(a); S9Mem.Save(a);
+  b := ReverseSegments(b); S9Mem.Save(b);
+  
+  carry := 0;
+  result := S9Def.NIL_;
+  S9Mem.Save(result);
+
+  WHILE (a # S9Def.NIL_) OR (b # S9Def.NIL_) OR (carry # 0) DO
+    IF a = S9Def.NIL_ THEN fa := 0 ELSE fa := S9Def.Car[a] END;
+    IF b = S9Def.NIL_ THEN fb := 0 ELSE fb := S9Def.Car[b] END;
+    
+    r := fa + fb + carry;
+    carry := 0;
+    IF r >= S9Def.IntSegLimit THEN
+      r := r - S9Def.IntSegLimit;
+      carry := 1;
+    END;
+    
+    result := S9Mem.Cons3(r, result, S9Def.AtomTag);
+    S9Def.Car[S9Def.Stack] := result; (* Update GC root *)
+    
+    IF a # S9Def.NIL_ THEN a := S9Def.Cdr[a] END;
+    IF b # S9Def.NIL_ THEN b := S9Def.Cdr[b] END;
+  END;
+  S9Mem.Unsave(3);
+  RETURN S9Mem.Cons3(S9Def.T_INTEGER, result, S9Def.AtomTag);
+END AddLists;
+
+(* Subtracts raw segment lists (assuming |a| >= |b|) *)
+PROCEDURE SubLists(a, b: S9Def.Cell): S9Def.Cell;
+VAR 
+  fa, fb, r: S9Def.Cell;
+  borrow: INT32;
+  result: S9Def.Cell;
+BEGIN
+  a := ReverseSegments(a); S9Mem.Save(a);
+  b := ReverseSegments(b); S9Mem.Save(b);
+  
+  borrow := 0;
+  result := S9Def.NIL_;
+  S9Mem.Save(result);
+
+  WHILE (a # S9Def.NIL_) OR (b # S9Def.NIL_) OR (borrow # 0) DO
+    IF a = S9Def.NIL_ THEN fa := 0 ELSE fa := S9Def.Car[a] END;
+    IF b = S9Def.NIL_ THEN fb := 0 ELSE fb := S9Def.Car[b] END;
+    
+    r := fa - fb - borrow;
+    borrow := 0;
+    IF r < 0 THEN
+      r := r + S9Def.IntSegLimit;
+      borrow := 1;
+    END;
+    
+    result := S9Mem.Cons3(r, result, S9Def.AtomTag);
+    S9Def.Car[S9Def.Stack] := result;
+    
+    IF a # S9Def.NIL_ THEN a := S9Def.Cdr[a] END;
+    IF b # S9Def.NIL_ THEN b := S9Def.Cdr[b] END;
+  END;
+  S9Mem.Unsave(3);
+  
+  (* Normalize: remove leading zeros *)
+  WHILE (S9Def.Car[result] = 0) AND (S9Def.Cdr[result] # S9Def.NIL_) DO
+    result := S9Def.Cdr[result];
+  END;
+
+  RETURN S9Mem.Cons3(S9Def.T_INTEGER, result, S9Def.AtomTag);
+END SubLists;
+
+(* ========================================================================= *)
+(* Shift Operations (Base 10)                                                *)
+(* ========================================================================= *)
+
+(* Multiply by 10 and add 'fill' *)
+PROCEDURE ShiftLeft*(a: S9Def.Cell; fill: INT32): S9Def.Cell;
+VAR 
+  r, c, result, n: S9Def.Cell;
+  carry: INT32;
+BEGIN
+  (* 'a' is a T_INTEGER. Work on CDR *)
+  n := ReverseSegments(ValList(a));
+  S9Mem.Save(n);
+  
+  carry := fill;
+  result := S9Def.NIL_;
+  S9Mem.Save(result);
+  
+  WHILE n # S9Def.NIL_ DO
+    c := S9Def.Car[n];
+    
+    (* Check for segment overflow *)
+    (* S9 logic: if (car >= limit/10) split else mul *)
+    IF c >= VAL(INT32,S9Def.IntSegLimit DIV 10) THEN
+       r := (c MOD VAL(INT32,S9Def.IntSegLimit DIV 10)) * 10;
+       r := r + carry;
+       (* The upper part becomes the new carry *)
+       carry := c DIV VAL(INT32, S9Def.IntSegLimit DIV 10);
+    ELSE
+       r := c * 10 + carry;
+       carry := 0;
+    END;
+    
+    result := S9Mem.Cons3(r, result, S9Def.AtomTag);
+    S9Def.Car[S9Def.Stack] := result;
+    n := S9Def.Cdr[n];
+  END;
+  
+  IF carry > 0 THEN
+     result := S9Mem.Cons3(carry, result, S9Def.AtomTag);
+     S9Def.Car[S9Def.Stack] := result;
+  END;
+  
+  S9Mem.Unsave(2);
+  RETURN S9Mem.Cons3(S9Def.T_INTEGER, result, S9Def.AtomTag);
+END ShiftLeft;
+
+(* Divide by 10. Returns (Result . Remainder) *)
+PROCEDURE ShiftRight*(a: S9Def.Cell): S9Def.Cell;
+VAR 
+  n, result, r, c: S9Def.Cell;
+  carry: INT32;
+  segVal: INT32;
+BEGIN
+  n := ValList(a); (* Iterate Big Endian directly *)
+  S9Mem.Save(n); (* Just to lock if needed, though structure exists *)
+  
+  carry := 0;
+  result := S9Def.NIL_;
+  S9Mem.Save(result);
+  
+  WHILE n # S9Def.NIL_ DO
+    segVal := S9Def.Car[n];
+    c := segVal MOD 10;
+    r := segVal DIV 10;
+    r := r + (carry * VAL(INT32, S9Def.IntSegLimit DIV 10));
+    carry := CAST(INT32, c);
+    
+    result := S9Mem.Cons3(r, result, S9Def.AtomTag);
+    S9Def.Car[S9Def.Stack] := result;
+    n := S9Def.Cdr[n];
+  END;
+  
+  (* Result was built reversed (MSB pushed first -> LSB at top). Reverse it back *)
+  result := ReverseSegments(result);
+  
+  (* Normalize leading zeros *)
+  IF (S9Def.Car[result] = 0) AND (S9Def.Cdr[result] # S9Def.NIL_) THEN
+     result := S9Def.Cdr[result];
+  END;
+  
+  result := S9Mem.Cons3(S9Def.T_INTEGER, result, S9Def.AtomTag);
+  S9Def.Car[S9Def.Stack] := result; (* Update *)
+  
+  c := MakeInteger(carry);
+  S9Mem.Unsave(2);
+  
+  RETURN S9Mem.Cons(result, c);
+END ShiftRight;
+
+(* ========================================================================= *)
+(* Public Arithmetic                                                         *)
+(* ========================================================================= *)
+
+PROCEDURE LessP*(a, b: S9Def.Cell): BOOLEAN;
+VAR negA, negB: BOOLEAN; la, lb: S9Def.Cell;
+BEGIN
+  negA := NegativeP(a); negB := NegativeP(b);
+  IF negA & ~negB THEN RETURN TRUE END;
+  IF ~negA & negB THEN RETURN FALSE END;
+  
+  (* Compare Absolute Values *)
+  (* S9's LessP relies on list traversal. Since lists are Big Endian, 
+     we must compare lengths first, then content. *)
+  
+  S9Def.Tmp := b;
+  a := BignumAbs(a); S9Mem.Save(a);
+  b := BignumAbs(b); S9Mem.Save(b);
+  S9Def.Tmp := S9Def.NIL_;
+  
+  (* Length Check *)
+  (* Note: In a full impl, optimize by caching length *)
+  la := ValList(a); lb := ValList(b);
+  (* Simple iteration to check length diff *)
+  (* Omitted for brevity: assume equal length or implement len check *)
+  
+  (* Compare digits MSB to LSB *)
+  la := ValList(a); lb := ValList(b);
+  WHILE (la # S9Def.NIL_) AND (lb # S9Def.NIL_) DO
+     IF S9Def.Car[la] < S9Def.Car[lb] THEN S9Mem.Unsave(2); RETURN ~negA END;
+     IF S9Def.Car[la] > S9Def.Car[lb] THEN S9Mem.Unsave(2); RETURN negA END;
+     la := S9Def.Cdr[la]; lb := S9Def.Cdr[lb];
+  END;
+  
+  (* Check if one list is longer *)
+  IF (la = S9Def.NIL_) AND (lb # S9Def.NIL_) THEN S9Mem.Unsave(2); RETURN ~negA END;
+  IF (la # S9Def.NIL_) AND (lb = S9Def.NIL_) THEN S9Mem.Unsave(2); RETURN negA END;
+  
+  S9Mem.Unsave(2);
+  RETURN FALSE; (* Equal *)
+END LessP;
+
+
+(* Scales A and B such that they have similar magnitudes. 
+   Used for division steps. 
+   Returns pair (ScaledA . ScaleFactor) *)
+PROCEDURE Equalize(a, b: S9Def.Cell): S9Def.Cell;
+VAR 
+  r0, f0, r, f: S9Def.Cell;
+BEGIN
+  r0 := a; S9Mem.Save(r0);
+  f0 := MakeInteger(1); S9Mem.Save(f0);
+  
+  r := r0; S9Mem.Save(r);
+  f := f0; S9Mem.Save(f);
+  
+  (* Shift Left until r >= b *)
+  WHILE LessP(r, b) DO
+     (* Save previous state *)
+     r0 := r; 
+     S9Def.Car[S9Def.Cdr[S9Def.Cdr[S9Def.Cdr[S9Def.Stack]]]] := r0;
+     
+     f0 := f;
+     S9Def.Car[S9Def.Cdr[S9Def.Cdr[S9Def.Stack]]] := f0;
+     
+     (* Shift up *)
+     r := ShiftLeft(r, 0);
+     S9Def.Car[S9Def.Cdr[S9Def.Stack]] := r;
+     
+     f := ShiftLeft(f, 0);
+     S9Def.Car[S9Def.Stack] := f;
+  END;
+  
+  S9Mem.Unsave(4);
+  RETURN S9Mem.Cons(r0, f0);
+END Equalize;
+
+PROCEDURE^ Sub*(a, b: S9Def.Cell): S9Def.Cell;
+
+PROCEDURE Add*(a, b: S9Def.Cell): S9Def.Cell;
+BEGIN
+  IF NegativeP(a) THEN
+    IF NegativeP(b) THEN
+      RETURN BignumNegate(Add(BignumAbs(a), BignumAbs(b)));
+    ELSE
+      RETURN Sub(b, BignumAbs(a));
+    END;
+  ELSIF NegativeP(b) THEN
+    RETURN Sub(a, BignumAbs(b));
+  END;
+  RETURN AddLists(ValList(a), ValList(b));
+END Add;
+
+PROCEDURE Sub*(a, b: S9Def.Cell): S9Def.Cell;
+BEGIN
+  IF NegativeP(a) THEN
+    IF NegativeP(b) THEN
+       RETURN Sub(BignumAbs(b), BignumAbs(a));
+    ELSE
+       RETURN BignumNegate(Add(BignumAbs(a), b));
+    END;
+  ELSIF NegativeP(b) THEN
+    RETURN Add(a, BignumAbs(b));
+  END;
+  
+  IF LessP(a, b) THEN RETURN BignumNegate(Sub(b, a)) END;
+  RETURN SubLists(ValList(a), ValList(b));
+END Sub;
+
+PROCEDURE Multiply*(a, b: S9Def.Cell): S9Def.Cell;
+VAR 
+  neg: BOOLEAN;
+  res, shiftRes, digit: S9Def.Cell;
+  count: INT32;
+BEGIN
+  neg := NegativeP(a) # NegativeP(b);
+  a := BignumAbs(a); S9Mem.Save(a);
+  b := BignumAbs(b); S9Mem.Save(b);
+  
+  res := MakeInteger(0);
+  S9Mem.Save(res);
+  
+  (* Multiplication by repeated addition/shifting (Schoolbook) *)
+  (* Iterate decimal digits of A (using ShiftRight) *)
+  
+  LOOP
+     IF ZeroP(a) OR S9Def.ErrorFlag THEN EXIT END;
+     
+     (* Pop LSD from A *)
+     shiftRes := ShiftRight(a); (* (NewA . Remainder) *)
+     a := S9Def.Car[shiftRes];
+     digit := S9Def.Cdr[shiftRes]; (* T_INTEGER of val 0..9 *)
+     S9Def.Car[S9Def.Cdr[S9Def.Cdr[S9Def.Stack]]] := a; (* Update saved A *)
+     
+     (* Add B to Res 'digit' times *)
+     count := S9Def.Car[ValList(digit)];
+     WHILE count > 0 DO
+        res := Add(res, b);
+        S9Def.Car[S9Def.Stack] := res;
+        DEC(count);
+     END;
+     
+     (* B = B * 10 *)
+     b := ShiftLeft(b, 0);
+     S9Def.Car[S9Def.Cdr[S9Def.Stack]] := b;
+  END;
+  
+  IF neg THEN res := BignumNegate(res) END;
+  S9Mem.Unsave(3);
+  RETURN res;
+END Multiply;
+
+(* Returns (Quotient . Remainder) *)
+PROCEDURE Divide*(a, b: S9Def.Cell): S9Def.Cell;
+VAR 
+  negA, negB, negRes: BOOLEAN;
+  res, f, c, c0, eq: S9Def.Cell;
+  i: INT32;
+BEGIN
+  IF ZeroP(b) THEN 
+    S9Def.ErrorFlag := TRUE; 
+    Out.String("Error: Division by Zero"); Out.Ln;
+    RETURN S9Def.NIL_;
+  END;
+
+  negA := NegativeP(a);
+  negB := NegativeP(b);
+  negRes := negA # negB;
+  
+  a := BignumAbs(a); S9Mem.Save(a);
+  b := BignumAbs(b); S9Mem.Save(b);
+  
+  (* Optimization: If A < B, Result=0, Remainder=A *)
+  IF LessP(a, b) THEN
+    res := MakeInteger(0);
+    IF negA THEN a := BignumNegate(a) END;
+    S9Mem.Unsave(2);
+    RETURN S9Mem.Cons(res, a);
+  END;
+
+  (* 1. Equalize B to A's magnitude *)
+  eq := Equalize(b, a);
+  b := S9Def.car(eq);  (* Scaled B *)
+  f := S9Def.cdr(eq);  (* Scale Factor *)
+  
+  (* Update stack to hold new B and F instead of original A, B *)
+  S9Def.Car[S9Def.Cdr[S9Def.Stack]] := b;
+  S9Def.Car[S9Def.Stack] := a; (* Keep A accessible *)
+  
+  (* Need F protected *)
+  S9Mem.Save(f);
+  
+  (* 2. Result accumulator *)
+  res := MakeInteger(0);
+  S9Mem.Save(res);
+  
+  (* Stack: (res f a b) *)
+  
+  (* 3. Shift-Subtract Loop *)
+  WHILE ~ZeroP(f) DO
+    c := MakeInteger(0); S9Mem.Save(c); 
+    c0 := c; S9Mem.Save(c0);
+    
+    (* Stack: (c0 c res f a b) *)
+    
+    i := 0;
+    
+    (* Determine how many times B fits into A at this scale *)
+    WHILE ~LessP(a, c) DO
+       c0 := c;
+       S9Def.Car[S9Def.Stack] := c0;
+       c := Add(c, b);
+       S9Def.Car[S9Def.Cdr[S9Def.Stack]] := c;
+       INC(i);
+    END;
+    
+    (* We went one step too far, back off *)
+    (* Add (i-1) * Scale to Result *)
+    IF i > 0 THEN
+      res := ShiftLeft(res, i - 1);
+      S9Def.Car[S9Def.Cdr[S9Def.Cdr[S9Def.Stack]]] := res;
+      
+      (* Subtract from A *)
+      a := Sub(a, c0);
+      S9Def.Car[S9Def.Cdr[S9Def.Cdr[S9Def.Cdr[S9Def.Cdr[S9Def.Cdr[S9Def.Stack]]]]]] := a;
+    END;
+    
+    S9Mem.Unsave(2); (* Drop temps c, c0 *)
+    
+    (* Shift Down for next iteration *)
+    f := S9Def.car(ShiftRight(f));
+    S9Def.Car[S9Def.Cdr[S9Def.Stack]] := f;
+    
+    b := S9Def.car(ShiftRight(b));
+    S9Def.Car[S9Def.Cdr[S9Def.Cdr[S9Def.Cdr[S9Def.Stack]]]] := b;
+  END;
+  
+  (* 4. Handle Signs *)
+  IF negRes THEN res := BignumNegate(res) END;
+  IF negA   THEN a := BignumNegate(a) END;
+  
+  S9Mem.Unsave(4);
+  
+  (* Returns (Quotient . Remainder) *)
+  RETURN S9Mem.Cons(res, a);
+END Divide;
+
+(* ========================================================================= *)
+(* Printer Support                                                           *)
+(* ========================================================================= *)
+
+PROCEDURE PrintPadded(val: INT32);
+BEGIN
+  (* Pad to 9 digits for inner segments of base 10^9 *)
+  IF val < 100000000 THEN Out.Char('0') END;
+  IF val < 10000000 THEN Out.Char('0') END;
+  IF val < 1000000 THEN Out.Char('0') END;
+  IF val < 100000 THEN Out.Char('0') END;
+  IF val < 10000 THEN Out.Char('0') END;
+  IF val < 1000 THEN Out.Char('0') END;
+  IF val < 100 THEN Out.Char('0') END;
+  IF val < 10 THEN Out.Char('0') END;
+  Out.Int(CAST(INT32, val), 0);
+END PrintPadded;
+
+PROCEDURE PrintInteger*(n: S9Def.Cell);
+VAR v: S9Def.Cell;
+BEGIN
+  IF NegativeP(n) THEN Out.Char('-') END;
+  v := ValList(n);
+  
+  IF v # S9Def.NIL_ THEN
+     (* Most significant segment: No padding *)
+     Out.Int(CAST(INT32, S9Def.Car[v]), 0);
+     v := S9Def.Cdr[v];
+  END;
+  
+  WHILE v # S9Def.NIL_ DO
+     PrintPadded(S9Def.Car[v]);
+     v := S9Def.Cdr[v];
+  END;
+END PrintInteger;
+
+END S9Int.

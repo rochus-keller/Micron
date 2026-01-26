@@ -127,6 +127,7 @@ namespace Mic
 
         bool isUInt() const { return kind >= Type::UINT8 && kind <= Type::UINT64; }
         bool isInt() const { return kind >= Type::INT8 && kind <= Type::INT64; }
+        bool is64() const { return kind == Type::INT64 || kind == Type::UINT64 || kind == Type::FLT64; }
         bool isNumber() const { return (kind >= Type::UINT8 && kind <= Type::FLT64) || kind == Type::UniInt; }
         bool isReal() const { return kind == Type::FLT64 || kind == Type::FLT32; }
         bool isInteger() const { return (kind >= Type::UINT8 && kind <= Type::INT64) || kind == Type::UniInt; }

@@ -43,27 +43,46 @@ static inline void expectingNMArgs(const ExpList& args,int n, int m)
 static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl, Evaluator* ev)
 {
     expectingNArgs(args,2);
-    ev->bindUniInt(args[0], false);
-    if( !args[0]->getType()->isUInt() )
-        throw QString("expecing unsigned first argument");
-    ev->bindUniInt(args[0], false);
-    if( !args[1]->getType()->isUInt() )
-        throw QString("expecing unsigned second argument");
+
     Type* lhs = args[0]->getType();
     Type* rhs = args[1]->getType();
-    if( lhs->kind < Type::UINT32 )
+
+    if( lhs == 0 || rhs == 0 )
+        return;
+
+    bool signed_ = false;
+    if( lhs->kind == Type::UniInt && rhs->kind == Type::UniInt )
+        ;
+    else if( lhs->kind == Type::UniInt )
+        signed_ = rhs->isInt();
+    else if( rhs->kind == Type::UniInt )
+        signed_ = lhs->isInt();
+
+    ev->bindUniInt(args[0], signed_);
+    ev->bindUniInt(args[1], signed_);
+
+    lhs = args[0]->getType();
+    rhs = args[1]->getType();
+
+    if( lhs->isInt() && rhs->isInt() )
+        *ret = lhs->is64() || rhs->is64() ? mdl->getType(Type::INT64) : mdl->getType(Type::INT32);
+    else
+        *ret = lhs->is64() || rhs->is64() ? mdl->getType(Type::UINT64) : mdl->getType(Type::UINT32);
+
+    if( lhs->kind >= Type::UINT8 && lhs->kind < Type::UINT32 )
         lhs = mdl->getType(Type::UINT32);
-    if( rhs->kind < Type::UINT32 )
+    if( lhs->kind >= Type::INT8 && lhs->kind < Type::INT32 )
+        lhs = mdl->getType(Type::INT32);
+
+    if( rhs->kind >= Type::UINT8 && rhs->kind < Type::UINT32 )
         rhs = mdl->getType(Type::UINT32);
-    if( lhs->kind < rhs->kind )
-        lhs = rhs;
-    else if( lhs->kind > rhs->kind )
-        rhs = lhs;
-    if( lhs != args[0]->getType() )
-        args[0] = Evaluator::createAutoConv(args[0], lhs);
-    if( rhs != args[1]->getType() )
-        args[1] = Evaluator::createAutoConv(args[1], rhs);
-    *ret = args[0]->getType();
+    if( rhs->kind >= Type::INT8 && rhs->kind < Type::INT32 )
+        rhs = mdl->getType(Type::INT32);
+
+    if( *ret != args[0]->getType() )
+        args[0] = Evaluator::createAutoConv(args[0], *ret);
+    if( *ret != args[1]->getType() )
+        args[1] = Evaluator::createAutoConv(args[1], *ret);
 }
 
 static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl, Evaluator* ev)
@@ -77,8 +96,7 @@ static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* m
     }else
     {
         ev->bindUniInt(args[0], false);
-        if( !args[0]->getType()->isUInt() )
-            throw QString("expecing unsigned first argument");
+        // accept both signed and unsigned
     }
     ev->bindUniInt(args[1], false);
     if( !args[1]->getType()->isUInt() )
@@ -125,14 +143,18 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::BITASR:
         checkBitShift(builtin, args, ret, mdl, ev);
         break;
-    case Builtin::BITNOT:
+    case Builtin::BITNOT: {
         expectingNArgs(args,1);
         ev->bindUniInt(args.first(), false);
-        if( !args.first()->getType()->isUInt() )
-            throw "expecting unsigned integer";
-        if( args.first()->getType()->kind < Type::UINT32 )
-            args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::UINT32) );
-        *ret = args[0]->getType();
+        Type* t = args.first()->getType();
+        if( t->kind >= Type::UINT8 && t->kind < Type::UINT32 )
+            *ret = mdl->getType(Type::UINT32);
+        else if( t->kind >= Type::INT8 && t->kind < Type::INT32 )
+            *ret = mdl->getType(Type::INT32);
+        else
+            *ret = t;
+        if( t != *ret )
+            args[0] = Evaluator::createAutoConv(args[0], *ret );
         break;
     case Builtin::BITOR:
         checkBitArith(builtin, args, ret, mdl, ev);
@@ -1024,6 +1046,11 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         doCast(pos);
         handleStack = false;
         break;
+    case Builtin::HALT:
+        checkNumOfActuals(nArgs, 1);
+        ev->out->call_(coreName("exit"),1,false);
+        break;
+
     default:
         throw QString("built-in not yet implemented");
         break;

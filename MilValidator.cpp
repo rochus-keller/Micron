@@ -249,6 +249,7 @@ void Validator::visitStatSeq(Statement* stat)
             }
             break;
         case IL_starg:
+        case IL_starg_s:
             if( expectN(1, stat) )
             {
                 DeclList params = curProc->getParams();
@@ -529,7 +530,7 @@ void Validator::visitWhile(Statement* stat)
     Q_ASSERT( stat && stat->kind == IL_while );
     visitExpr(stat->e);
     expectN(1, stat);
-    if( !isInt32(deref(stat->args->getType())) )
+    if( stat->args && !isInt32(deref(stat->args->getType())) )
         error(curProc,"expecting a 32 bit result of boolean expression");
     pc++; // DO
     visitStatSeq(stat->body);

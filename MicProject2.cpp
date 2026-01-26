@@ -450,6 +450,7 @@ bool Project2::parse()
 
     if( useBuiltInOakwood() )
     {
+        parseLib("Args");
         parseLib("In");
         parseLib("Out");
         parseLib("Files");
@@ -488,6 +489,7 @@ bool Project2::generateC(const QString &outDir)
 
     if( useBuiltInOakwood() )
     {
+        writeC("oakwood", "Args", outDir);
         writeC("oakwood", "In", outDir);
         writeC("oakwood", "Out", outDir);
         writeC("oakwood", "Files", outDir);
@@ -569,6 +571,7 @@ bool Project2::generateCil(const QString &outDir)
 
     if( useBuiltInOakwood() )
     {
+        writeC("oakwood", "Args", outDir);
         writeC("oakwood", "In", outDir);
         writeC("oakwood", "Out", outDir);
         writeC("oakwood", "Files", outDir);
@@ -629,6 +632,7 @@ bool Project2::generateLlvm(const QString &outDir)
 
     if( useBuiltInOakwood() )
     {
+        writeC("oakwood", "Args", outDir);
         writeC("oakwood", "In", outDir);
         writeC("oakwood", "Out", outDir);
         writeC("oakwood", "Files", outDir);

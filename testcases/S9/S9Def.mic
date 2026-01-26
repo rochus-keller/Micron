@@ -1,0 +1,192 @@
+MODULE S9Def [Level=3];
+
+(* ========================================================================= *)
+(* Configuration & Constants                                                 *)
+(* ========================================================================= *)
+
+CONST
+  (* 32-bit Architecture Definitions *)
+  WordSize*        = 4;
+  DigitsPerWord*   = 9;
+  IntSegLimit*     = 1000000000; (* 10^9 *)
+  MantissaSegments* = 2;
+  MantissaSize*    = 18; (* MantissaSegments * DigitsPerWord *)
+
+  (* Node Tags *)
+  AtomTag*         = 1;
+  MarkTag*         = 2;
+  StateTag*        = 4;
+  VectorTag*       = 8;
+  PortTag*         = 16;
+  UsedTag*         = 32;
+  LockTag*         = 64;
+  ConstTag*        = 128;
+
+  (* Special Objects (Negative values) *)
+  NIL_*             = -1;
+  TRUE_*            = -2;
+  FALSE_*           = -3;
+  END_OF_FILE*     = -4;
+  UNDEFINED*       = -5;
+  UNSPECIFIC*      = -6;
+  NAN*             = -7;
+  DOT*             = -8;
+  RPAREN*          = -9;
+  RBRACK*          = -10;
+  NOEXPR*          = -11;
+
+  (* Types (Car field values) *)
+  T_NONE*          = -20;
+  T_BOOLEAN*       = -21;
+  T_CHAR*          = -22;
+  T_INPUT_PORT*    = -23;
+  T_INTEGER*       = -24;
+  T_OUTPUT_PORT*   = -25;
+  T_PAIR*          = -26;
+  T_PAIR_OR_NIL*   = -27;
+  T_PRIMITIVE*     = -28;
+  T_PROCEDURE*     = -29;
+  T_REAL*          = -30;
+  T_STRING*        = -31;
+  T_SYMBOL*        = -32;
+  T_SYNTAX*        = -33;
+  T_VECTOR*        = -34;
+  T_CONTINUATION*  = -35;
+
+  (* Vector Internal Offsets *)
+  RawVectorLink*   = 0;
+  RawVectorIndex*  = 1;
+  RawVectorSize*   = 2;
+  RawVectorData*   = 3;
+
+  (* Limits *)
+  TokenLength*     = 1024;
+  MaxPorts*        = 32;
+  MaxCallTrace*    = 100;
+
+(* ========================================================================= *)
+(* Types                                                                     *)
+(* ========================================================================= *)
+
+TYPE
+  Cell* = INT32;
+  
+  (* Arrays representing the Heap. 
+     Note: In S9 C, these are pointers to dynamically resized arrays. *)
+  CellArray* = POINTER TO ARRAY OF Cell;
+  ByteArray* = POINTER TO ARRAY OF BYTE;
+  
+  (* Primitive Procedure Signature *)
+  PrimHandler* = PROCEDURE(expr: Cell): Cell;
+  
+  Primitive* = RECORD
+    name*:      POINTER TO ARRAY OF CHAR;
+    handler*:   PrimHandler;
+    minArgs*:   INT16;
+    maxArgs*:   INT16;
+    argTypes*:  ARRAY 3 OF INT16; 
+  END;
+  
+  PrimitiveArray* = POINTER TO ARRAY OF Primitive;
+
+(* ========================================================================= *)
+(* Global State (Exported)                                                   *)
+(* ========================================================================= *)
+
+VAR
+  (* Memory Pools *)
+  Car*:             CellArray;
+  Cdr*:             CellArray;
+  Tag*:             ByteArray;
+  Vectors*:         CellArray;
+  
+  ConsPoolSize*:    INT32;
+  VecPoolSize*:     INT32;
+  
+  FreeList*:        Cell;
+  FreeVecs*:        Cell;
+
+  (* Registers & Roots *)
+  Stack*:           Cell;
+  StackBottom*:     Cell;
+  StateStack*:      Cell;
+  
+  Acc*:             Cell; (* Accumulator *)
+  Env*:             Cell; (* Environment *)
+  
+  (* Temporary registers for GC protection *)
+  Tmp*:             Cell;
+  TmpCar*:          Cell;
+  TmpCDR*:          Cell;
+
+  (* Symbol Table *)
+  Symbols*:         Cell;
+  Program*:         Cell;
+  
+  (* Flags *)
+  ErrorFlag*:       BOOLEAN;
+  PrinterLimit*:    INT32;
+  PrinterCount*:    INT32;
+
+(* ========================================================================= *)
+(* Inline Accessors (Macros in C)                                            *)
+(* ========================================================================= *)
+
+(* Basic List Access *)
+PROCEDURE car*(x: Cell): Cell INLINE;
+BEGIN RETURN Car[x] END car;
+
+PROCEDURE cdr*(x: Cell): Cell INLINE;
+BEGIN RETURN Cdr[x] END cdr;
+
+PROCEDURE set_car*(x, val: Cell) INLINE;
+BEGIN Car[x] := val END set_car;
+
+PROCEDURE set_cdr*(x, val: Cell) INLINE;
+BEGIN Cdr[x] := val END set_cdr;
+
+(* Nested Access Shortcuts *)
+PROCEDURE caar*(x: Cell): Cell INLINE; BEGIN RETURN Car[Car[x]] END caar;
+PROCEDURE cadr*(x: Cell): Cell INLINE; BEGIN RETURN Car[Cdr[x]] END cadr;
+PROCEDURE cdar*(x: Cell): Cell INLINE; BEGIN RETURN Cdr[Car[x]] END cdar;
+PROCEDURE cddr*(x: Cell): Cell INLINE; BEGIN RETURN Cdr[Cdr[x]] END cddr;
+PROCEDURE cadar*(x: Cell): Cell INLINE; BEGIN RETURN Car[Cdr[Car[x]]] END cadar;
+PROCEDURE caddr*(x: Cell): Cell INLINE; BEGIN RETURN Car[Cdr[Cdr[x]]] END caddr;
+PROCEDURE cdddr*(x: Cell): Cell INLINE; BEGIN RETURN Cdr[Cdr[Cdr[x]]] END cdddr;
+
+(* Type Predicates *)
+PROCEDURE special_value_p*(x: Cell): BOOLEAN INLINE;
+BEGIN RETURN x < 0 END special_value_p;
+
+PROCEDURE atom_p*(x: Cell): BOOLEAN INLINE;
+BEGIN 
+  RETURN (x < 0) OR (Tag[x] # 0) (* Checks for any tag bit *)
+END atom_p;
+
+PROCEDURE pair_p*(x: Cell): BOOLEAN INLINE;
+BEGIN 
+  (* In S9, Pair is 0 tag and positive index *)
+  RETURN (x >= 0) AND (Tag[x] = 0)
+END pair_p;
+
+PROCEDURE integer_p*(n: Cell): BOOLEAN INLINE;
+BEGIN
+  RETURN (n >= 0) AND (Tag[n] = AtomTag) AND (Car[n] = T_INTEGER)
+END integer_p;
+
+(* Vector Access *)
+(* Note: C uses pointer arithmetic &Vectors[Cdr[n]].
+   In Micron, we access the array by index. *)
+
+PROCEDURE vector_index*(n: Cell): Cell INLINE;
+BEGIN RETURN Vectors[Cdr[n] - 2] END vector_index;
+
+PROCEDURE vector_len*(n: Cell): Cell INLINE;
+VAR k: Cell;
+BEGIN
+  (* Logic: vector_size(string_len(n)) - 3 *)
+  (* For simplicity in phase 2, we assume Cdr[n]-1 holds raw length as per S9 *)
+  RETURN Vectors[Cdr[n] - 1]
+END vector_len;
+
+END S9Def.

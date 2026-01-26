@@ -1527,7 +1527,7 @@ void Ide::onErrors()
 {
     d_errs->clear();
     QList<Project2::Error> errs = d_pro->errors;
-    std::sort(errs.begin(), errs.end(), errorEntryLessThan );
+    // TODO: std::sort(errs.begin(), errs.end(), errorEntryLessThan );
 
     for( int i = 0; i < errs.size(); i++ )
     {
@@ -3502,7 +3502,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.3.7");
+    a.setApplicationVersion("0.3.8");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

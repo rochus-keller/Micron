@@ -45,5 +45,6 @@
         <file>oakwood/Strings+.c</file>
         <file>runtime/MIC+.h</file>
         <file>runtime/MIC++.c</file>
+        <file>oakwood/Args.mic</file>
     </qresource>
 </RCC>

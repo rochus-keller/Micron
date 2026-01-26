@@ -1,0 +1,275 @@
+MODULE S9Mem [Level=3];
+
+IMPORT S9Def, Out;
+
+CONST
+  InitialSegmentSize = 32768;
+
+VAR
+  VerboseGC*: INT32;
+  RunStats*:  BOOLEAN;
+  ConsStats*: BOOLEAN;
+  
+  Nodes*, Collections*: INT32;
+  ConsSegmentSize, VecSegmentSize: INT32;
+
+(* ========================================================================= *)
+(* Helper: Reallocate                                                        *)
+(* ========================================================================= *)
+
+PROCEDURE ReallocCellArray(old: S9Def.CellArray; oldSize, newSize: INT32): S9Def.CellArray;
+VAR newArr: S9Def.CellArray; i: INT32;
+BEGIN
+  NEW(newArr, newSize);
+  IF old # NIL THEN
+    FOR i := 0 TO oldSize - 1 DO newArr[i] := old[i] END;
+    DISPOSE(old);
+  END;
+  RETURN newArr;
+END ReallocCellArray;
+
+PROCEDURE ReallocByteArray(old: S9Def.ByteArray; oldSize, newSize: INT32): S9Def.ByteArray;
+VAR newArr: S9Def.ByteArray; i: INT32;
+BEGIN
+  NEW(newArr, newSize);
+  IF old # NIL THEN
+    FOR i := 0 TO oldSize - 1 DO newArr[i] := old[i] END;
+    DISPOSE(old);
+  END;
+  RETURN newArr;
+END ReallocByteArray;
+
+(* ========================================================================= *)
+(* Segment Management                                                        *)
+(* ========================================================================= *)
+
+PROCEDURE NewConsSegment*();
+VAR newSize, i: INT32;
+BEGIN
+  newSize := S9Def.ConsPoolSize + ConsSegmentSize;
+  S9Def.Car := ReallocCellArray(S9Def.Car, S9Def.ConsPoolSize, newSize);
+  S9Def.Cdr := ReallocCellArray(S9Def.Cdr, S9Def.ConsPoolSize, newSize);
+  S9Def.Tag := ReallocByteArray(S9Def.Tag, S9Def.ConsPoolSize, newSize);
+  
+  FOR i := S9Def.ConsPoolSize TO newSize - 1 DO
+    S9Def.Car[i] := 0; S9Def.Cdr[i] := 0; S9Def.Tag[i] := 0;
+  END;
+  S9Def.ConsPoolSize := newSize;
+  ConsSegmentSize := (ConsSegmentSize * 3) DIV 2;
+END NewConsSegment;
+
+PROCEDURE NewVecSegment*(); // TODO: if defined as "NewVecSegment*;" leads to errors
+VAR newSize, i: INT32;
+BEGIN
+  newSize := S9Def.VecPoolSize + VecSegmentSize;
+  S9Def.Vectors := ReallocCellArray(S9Def.Vectors, S9Def.VecPoolSize, newSize);
+  FOR i := S9Def.VecPoolSize TO newSize - 1 DO S9Def.Vectors[i] := 0 END;
+  S9Def.VecPoolSize := newSize;
+  VecSegmentSize := (VecSegmentSize * 3) DIV 2;
+END NewVecSegment;
+
+(* ========================================================================= *)
+(* Full Garbage Collection Logic                                             *)
+(* ========================================================================= *)
+
+PROCEDURE Mark(root: S9Def.Cell);
+VAR
+  n, p, parent, tmp: S9Def.Cell;
+  i: INT32;
+  tag: BYTE;
+  vecIdx, vecLen: S9Def.Cell;
+BEGIN
+  n := root;
+  parent := S9Def.NIL_;
+  
+  LOOP
+    tag := S9Def.Tag[n];
+
+    (* IF n is marked OR special value *)
+    IF (n < 0) OR ((tag MOD 4) >= S9Def.MarkTag) THEN
+      
+      IF parent = S9Def.NIL_ THEN EXIT END; (* Done *)
+
+      tag := S9Def.Tag[parent];
+
+      (* CASE 1: Processing a Vector *)
+      IF (tag MOD 16) >= S9Def.VectorTag THEN
+         i := S9Def.vector_index(parent);
+         vecLen := S9Def.vector_len(parent);
+         
+         (* S1 -> S1: Move to next slot in vector *)
+         IF ((tag MOD 8) >= S9Def.StateTag) AND (i + 1 < vecLen) THEN
+            p := S9Def.Vectors[S9Def.Cdr[parent] + S9Def.RawVectorData + i + 1]; (* Next item *)
+            S9Def.Vectors[S9Def.Cdr[parent] + S9Def.RawVectorData + i + 1] := S9Def.Vectors[S9Def.Cdr[parent] + S9Def.RawVectorData + i];
+            S9Def.Vectors[S9Def.Cdr[parent] + S9Def.RawVectorData + i] := n;
+            n := p;
+            S9Def.Vectors[S9Def.Cdr[parent] - 2] := i + 1; (* Update Index *)
+         ELSE
+            (* S1 -> Done: Finished vector *)
+            p := parent;
+            parent := S9Def.Vectors[S9Def.Cdr[p] + S9Def.RawVectorData + i];
+            S9Def.Vectors[S9Def.Cdr[p] + S9Def.RawVectorData + i] := n;
+            n := p;
+            (* Clear State Tag, keep Mark *)
+            (* In S9 C: Tag[p] &= ~STATE_TAG; already implies MARK_TAG is set *)
+         END;
+
+      (* CASE 2: Processing a Pair (List) *)
+      ELSIF (tag MOD 8) >= S9Def.StateTag THEN 
+         (* S1 -> S2: CAR done, process CDR *)
+         p := S9Def.Cdr[parent];
+         S9Def.Cdr[parent] := S9Def.Car[parent];
+         S9Def.Car[parent] := n;
+         
+         (* Tag: Remove STATE, Keep MARK *)
+         S9Def.Tag[parent] := tag - S9Def.StateTag; 
+         n := p;
+      ELSE 
+         (* S2 -> Done: CDR done, retreat *)
+         p := parent;
+         parent := S9Def.Cdr[p];
+         S9Def.Cdr[p] := n;
+         n := p;
+      END;
+
+    (* Forward Marking (Descent) *)
+    ELSE
+      IF (tag MOD 16) >= S9Def.VectorTag THEN
+         (* S0 -> S1/S2: Enter Vector *)
+         S9Def.Tag[n] := CAST(BYTE, tag + S9Def.MarkTag);
+         S9Def.Vectors[S9Def.Cdr[n] - 3] := n; (* Link *)
+         
+         (* Check if Vector contains pointers (simplification: assume yes for generic vectors) *)
+         (* In S9 C: if (car(n) == T_VECTOR && len != 0) *)
+         vecLen := S9Def.vector_len(n);
+         
+         (* For Phase 3/4 we treat all vectors as potentially containing pointers for safety,
+            or strictly check T_VECTOR type. Assuming generic vector: *)
+         IF (S9Def.Car[n] = S9Def.T_VECTOR) AND (vecLen > 0) THEN
+            S9Def.Tag[n] := CAST(BYTE, tag + S9Def.MarkTag + S9Def.StateTag);
+            S9Def.Vectors[S9Def.Cdr[n] - 2] := 0; (* Index = 0 *)
+            
+            p := S9Def.Vectors[S9Def.Cdr[n] + S9Def.RawVectorData]; (* v[0] *)
+            S9Def.Vectors[S9Def.Cdr[n] + S9Def.RawVectorData] := parent;
+            parent := n;
+            n := p;
+         END;
+         
+      ELSIF (tag MOD 2) >= S9Def.AtomTag THEN
+         (* Atom (String, Port, Integer): Mark Only *)
+         (* S0 -> S2 logic (Store parent in CDR) *)
+         p := S9Def.Cdr[n];
+         S9Def.Cdr[n] := parent;
+         parent := n;
+         n := p;
+         S9Def.Tag[parent] := CAST(BYTE, tag + S9Def.MarkTag);
+         
+      ELSE
+         (* Pair: S0 -> S1 (Process CAR) *)
+         p := S9Def.Car[n];
+         S9Def.Car[n] := parent;
+         S9Def.Tag[n] := CAST(BYTE, tag + S9Def.MarkTag + S9Def.StateTag);
+         parent := n;
+         n := p;
+      END;
+    END;
+  END;
+END Mark;
+
+PROCEDURE GC*(): INT32;
+VAR i, reclaimed: INT32; tag: BYTE;
+BEGIN
+  IF RunStats THEN Collections := Collections + 1 END;
+  
+  (* Mark Roots *)
+  Mark(S9Def.Program); Mark(S9Def.Symbols); Mark(S9Def.Env);
+  Mark(S9Def.Stack);   Mark(S9Def.Acc);     Mark(S9Def.Tmp);
+  Mark(S9Def.TmpCar);  Mark(S9Def.TmpCDR);
+  (* Mark(S9Def.StackBottom); Mark(S9Def.StateStack); *) (* If implemented *)
+
+  (* Sweep *)
+  reclaimed := 0;
+  S9Def.FreeList := S9Def.NIL_;
+  FOR i := 0 TO S9Def.ConsPoolSize - 1 DO
+    tag := S9Def.Tag[i];
+    IF (tag MOD 4) >= S9Def.MarkTag THEN
+      S9Def.Tag[i] := CAST(BYTE, tag - S9Def.MarkTag); (* Unmark *)
+    ELSE
+      S9Def.Cdr[i] := S9Def.FreeList;
+      S9Def.FreeList := i;
+      INC(reclaimed);
+    END;
+  END;
+  RETURN reclaimed;
+END GC;
+
+PROCEDURE Cons3*(pcar, pcdr: S9Def.Cell; ptag: BYTE): S9Def.Cell;
+VAR n, k: S9Def.Cell;
+BEGIN
+  IF RunStats THEN Nodes := Nodes + 1 END;
+  IF S9Def.FreeList = S9Def.NIL_ THEN
+    IF ptag = 0 THEN S9Def.TmpCar := pcar END;
+    IF (ptag # S9Def.VectorTag) AND (ptag # S9Def.PortTag) THEN S9Def.TmpCDR := pcdr END;
+    
+    k := GC();
+    IF k < (S9Def.ConsPoolSize DIV 2) THEN
+       NewConsSegment();
+       k := GC();
+    END;
+    S9Def.TmpCar := S9Def.NIL_; S9Def.TmpCDR := S9Def.NIL_;
+    IF S9Def.FreeList = S9Def.NIL_ THEN
+      Out.String("Fatal: Out of Memory"); Out.Ln; HALT(1);
+    END;
+  END;
+  n := S9Def.FreeList;
+  S9Def.FreeList := S9Def.Cdr[n];
+  S9Def.Car[n] := pcar; S9Def.Cdr[n] := pcdr; S9Def.Tag[n] := CAST(BYTE, ptag);
+  RETURN n;
+END Cons3;
+
+PROCEDURE Cons*(car, cdr: S9Def.Cell): S9Def.Cell;
+BEGIN RETURN Cons3(car, cdr, 0) END Cons;
+
+(* ========================================================================= *)
+(* Stack Protection (GC Roots)                                               *)
+(* ========================================================================= *)
+
+PROCEDURE Save*(n: S9Def.Cell);
+BEGIN
+  (* Push n onto the global Stack. 
+     We use Cons (defined locally in S9Mem) to allocate the node. *)
+  S9Def.Stack := Cons(n, S9Def.Stack);
+END Save;
+
+PROCEDURE Unsave*(k: INT32): S9Def.Cell;
+VAR 
+  n: S9Def.Cell;
+  i: INT32;
+BEGIN
+  n := S9Def.NIL_;
+  FOR i := 1 TO k DO
+    IF S9Def.Stack = S9Def.NIL_ THEN
+      Out.String("Fatal: Stack Underflow in Unsave"); Out.Ln; 
+      HALT(1);
+    END;
+    
+    (* n = car(Stack) *)
+    n := S9Def.Car[S9Def.Stack];
+    
+    (* Stack = cdr(Stack) *)
+    S9Def.Stack := S9Def.Cdr[S9Def.Stack];
+  END;
+  
+  (* Return the last popped item, as per S9 behavior *)
+  RETURN n;
+END Unsave;
+
+PROCEDURE Init*;
+BEGIN
+  ConsSegmentSize := InitialSegmentSize; VecSegmentSize := InitialSegmentSize;
+  S9Def.ConsPoolSize := 0; S9Def.VecPoolSize := 0;
+  S9Def.FreeList := S9Def.NIL_;
+  NewConsSegment(); NewVecSegment();
+END Init;
+
+END S9Mem.
