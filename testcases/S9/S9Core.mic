@@ -1,0 +1,238 @@
+MODULE S9Core [Level=3];
+
+IMPORT S9Def, S9Mem, S9Int, S9Real, Files, Out, In, Strings;
+
+CONST
+  EOFChar = 0X;
+  Space = 32; Tab = 9; CR = 13; LF = 10; Quote = 34;
+  MaxTokenLen = 1024;
+
+VAR
+  PortPushback: ARRAY S9Def.MaxPorts OF CHAR;
+  PortHasChar:  ARRAY S9Def.MaxPorts OF BOOLEAN;
+  FilePorts:    ARRAY S9Def.MaxPorts OF Files.File;
+
+(* ========================================================================= *)
+(* Primitives (Handlers)                                                     *)
+(* ========================================================================= *)
+
+(* Primitive: car *)
+PROCEDURE PrimCar(x: S9Def.Cell): S9Def.Cell;
+VAR arg: S9Def.Cell;
+BEGIN
+  (* x is a list of args. car(x) is the first arg. *)
+  arg := S9Def.car(x);
+  (* Check type logic omitted for brevity, assume pair *)
+  RETURN S9Def.car(arg);
+END PrimCar;
+
+(* Primitive: cdr *)
+PROCEDURE PrimCdr(x: S9Def.Cell): S9Def.Cell;
+VAR arg: S9Def.Cell;
+BEGIN
+  arg := S9Def.car(x);
+  RETURN S9Def.cdr(arg);
+END PrimCdr;
+
+(* Primitive: cons *)
+PROCEDURE PrimCons(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  RETURN S9Mem.Cons(S9Def.car(x), S9Def.cadr(x));
+END PrimCons;
+
+(* Primitive: + *)
+PROCEDURE PrimAdd(x: S9Def.Cell): S9Def.Cell;
+VAR sum, n: S9Def.Cell;
+BEGIN
+  sum := S9Int.MakeInteger(0);
+  S9Mem.Save(sum);
+  n := x;
+  WHILE n # S9Def.NIL_ DO
+    (* Dispatch to S9Int or S9Real based on type *)
+    (* Simplification: Assume Integer for now *)
+    sum := S9Int.Add(sum, S9Def.car(n));
+    S9Def.Car[S9Def.Stack] := sum;
+    n := S9Def.cdr(n);
+  END;
+  S9Mem.Unsave(1);
+  RETURN sum;
+END PrimAdd;
+
+(* ========================================================================= *)
+(* Evaluator                                                                 *)
+(* ========================================================================= *)
+
+PROCEDURE ApplyPrimitive(primIdx: INT32; args: S9Def.Cell): S9Def.Cell;
+BEGIN
+  (* In a full implementation, we switch on primIdx or use function pointers *)
+  (* Since Micron Level 3 supports procedure variables, we use the handler in the record *)
+  
+  RETURN S9Def.Primitives[primIdx].handler(args);
+END ApplyPrimitive;
+
+PROCEDURE Eval*(expr: S9Def.Cell): S9Def.Cell;
+VAR 
+  state: INT32; 
+  x, rib, args, fn, append, result: S9Def.Cell;
+BEGIN
+  S9Mem.Save(expr);
+  S9Mem.Save(S9Def.StateStack);
+  S9Mem.Save(S9Def.StackBottom);
+  S9Def.StackBottom := S9Def.Stack;
+  
+  state := S9Def.EV_ATOM;
+  S9Def.Acc := expr;
+  x := expr;
+  
+  LOOP
+    IF S9Def.ErrorFlag THEN EXIT END;
+
+    CASE state OF
+    | S9Def.EV_ATOM:
+        IF S9Def.symbol_p(x) THEN
+          (* Lookup variable (Stub: assume self-eval for symbols not found) *)
+          (* In real impl: S9Def.Acc := Lookup(x) *)
+          state := S9Def.EV_BETA; 
+        ELSIF S9Def.pair_p(x) THEN
+          (* Setup Argument Evaluation: RIB *)
+          S9Def.Acc := x;
+          x := S9Def.car(x); (* Function *)
+          
+          (* Rib: (args append result source) *)
+          result := S9Mem.Cons(S9Def.NIL_, S9Def.NIL_); (* Tmp list *)
+          rib := S9Mem.Cons(result, S9Def.Acc);       (* (result . source) *)
+          rib := S9Mem.Cons(result, rib);             (* (append . ...) *)
+          rib := S9Mem.Cons(S9Def.cdr(S9Def.Acc), rib); (* (args . ...) *)
+          
+          S9Mem.Save(rib);
+          (* Push state to return to *)
+          (* StateStack = Cons3(EV_ARGS, StateStack, ATOM_TAG) *)
+          (* We assume helper SaveState exists in S9Mem or direct: *)
+          S9Def.StateStack := S9Mem.Cons3(S9Def.EV_ARGS, S9Def.StateStack, S9Def.AtomTag);
+          
+          state := S9Def.EV_ATOM; (* Evaluate function (x) first *)
+        ELSE
+          (* Self-evaluating *)
+          S9Def.Acc := x;
+          
+          (* Return Logic *)
+          (* If StateStack empty, we are done *)
+          (* Else Pop State *)
+          IF S9Def.StateStack = S9Def.NIL_ THEN EXIT END;
+          
+          state := S9Def.Car[S9Def.StateStack];
+          S9Def.StateStack := S9Def.Cdr[S9Def.StateStack];
+        END;
+
+    | S9Def.EV_ARGS:
+        (* Rib is on Stack *)
+        rib := S9Def.Car[S9Def.Stack];
+        args := S9Def.car(rib);
+        append := S9Def.cadr(rib);
+        
+        (* Append previous result (Acc) to list *)
+        (* Note: The first time we enter, Acc is the evaluated function *)
+        (* Logic mimics s9.c lines 1700+ *)
+        
+        IF append # S9Def.NIL_ THEN
+           S9Def.Car[append] := S9Def.Acc; (* Store result *)
+        END;
+        
+        IF args = S9Def.NIL_ THEN
+           (* All args evaluated. List is in rib_result(rib) *)
+           result := S9Def.caddr(rib); (* The list head *)
+           
+           fn := S9Def.car(result);    (* The function *)
+           args := S9Def.cdr(result);  (* The arguments *)
+           
+           (* Check Primitive *)
+           IF (S9Def.atom_p(fn)) AND (S9Def.Car[fn] = S9Def.T_PRIMITIVE) THEN
+              S9Def.Acc := ApplyPrimitive(S9Def.Cdr[fn], args);
+              
+              S9Mem.Unsave(1); (* Drop Rib *)
+              (* Return logic same as EV_ATOM *)
+              IF S9Def.StateStack = S9Def.NIL_ THEN EXIT END;
+              state := S9Def.Car[S9Def.StateStack];
+              S9Def.StateStack := S9Def.Cdr[S9Def.StateStack];
+           ELSE
+              (* Handle Closure/Lambda Application *)
+              (* Stub: Error *)
+              Out.String("Error: Apply non-primitive"); Out.Ln;
+              S9Def.ErrorFlag := TRUE;
+           END;
+        ELSE
+           (* More args to evaluate *)
+           (* Create new slot in append list *)
+           result := S9Mem.Cons(S9Def.NIL_, S9Def.NIL_);
+           S9Def.Cdr[append] := result;
+           
+           (* Update Rib *)
+           (* set_cadr(rib, result) -> Update append ptr *)
+           S9Def.Car[S9Def.Cdr[rib]] := result; 
+           
+           (* set_car(rib, cdr(args)) -> Advance arg list *)
+           S9Def.Car[rib] := S9Def.cdr(args);
+           
+           x := S9Def.car(args); (* Next expr to eval *)
+           state := S9Def.EV_ATOM;
+        END;
+    END;
+  END;
+  
+  S9Def.Stack := S9Def.StackBottom;
+  S9Def.StackBottom := S9Mem.Unsave(1);
+  S9Def.StateStack := S9Mem.Unsave(1);
+  S9Mem.Unsave(1); (* Original Expr *)
+  
+  RETURN S9Def.Acc;
+END Eval;
+
+(* ========================================================================= *)
+(* Initialization                                                            *)
+(* ========================================================================= *)
+
+PROCEDURE RegisterPrim(CONST name: POINTER TO ARRAY OF CHAR; handler: S9Def.PrimHandler; min, max: INT16);
+VAR 
+  pIdx: INT32;
+  sym, prim: S9Def.Cell;
+BEGIN
+  (* In Phase 2 we declared Primitives as POINTER TO ARRAY *)
+  (* We need to initialize the array first. Assume done in Init. *)
+  pIdx := S9Def.LastPrim;
+  
+  (* Setup Primitive Record (Micron side) *)
+  (* S9Def.Primitives[pIdx].name := ... *)
+  S9Def.Primitives[pIdx].handler := handler;
+  S9Def.Primitives[pIdx].minArgs := min;
+  S9Def.Primitives[pIdx].maxArgs := max;
+  
+  (* Setup Primitive Atom (Scheme side) *)
+  prim := S9Mem.Cons3(S9Def.T_PRIMITIVE, S9Mem.Cons(pIdx, S9Def.NIL_), S9Def.AtomTag);
+  
+  (* Bind in Global Environment *)
+  (* sym := Intern(name); *)
+  (* Extend Env... *)
+  
+  INC(S9Def.LastPrim);
+END RegisterPrim;
+
+PROCEDURE InitPrimitives;
+BEGIN
+  (* Allocate Table *)
+  NEW(S9Def.Primitives, 100); (* MaxPrims *)
+  S9Def.LastPrim := 0;
+  
+  RegisterPrim("car", PrimCar, 1, 1);
+  RegisterPrim("cdr", PrimCdr, 1, 1);
+  RegisterPrim("cons", PrimCons, 2, 2);
+  RegisterPrim("+", PrimAdd, 0, -1);
+  // TODO
+END InitPrimitives;
+
+BEGIN
+  S9Mem.Init;
+  InitPrimitives;
+  S9Def.InputPort := 0; S9Def.OutputPort := 1;
+  S9Def.Env := S9Mem.Cons(S9Def.NIL_, S9Def.NIL_); (* Global Env *)
+  S9Def.StateStack := S9Def.NIL_;
+END S9Core.

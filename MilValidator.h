@@ -53,7 +53,8 @@ namespace Mil
         void visitWhile(Statement* stat);
         Statement* nextStat(Statement* stat);
         Expression* visitExpr(Expression*);
-        void error(Declaration *d, const QString&);
+        void error(Node *s, const QString&);
+        int calcPc(Node* s);
         bool expectN(quint32 n, Expression*);
         bool expectN(quint32 n, Statement*);
         Expression* stackAt(int) const;
@@ -84,7 +85,6 @@ namespace Mil
         };
         QList<NamePos> gotos, labels;
 
-        quint32 pc;
         bool needsPointerInit;
     };
 }

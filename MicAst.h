@@ -142,6 +142,7 @@ namespace Mic
 
         Declaration* findSub(const QByteArray& name) const;
         Declaration* findMember(const QByteArray& name, bool recurseSuper = false) const;
+        QList<Declaration*> findInlined(const QByteArray& name, bool recurseSuper = false) const;
         QPair<int,int> getFieldCount() const; // fixed, variant
         int getByteSize() const;
         const char *getName() const;

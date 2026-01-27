@@ -1,0 +1,30 @@
+module CaseRec1
+
+type
+  K = (A,B,C)
+  R = record
+    kind: K
+    case
+     a: array 30 of char;
+     b: integer
+     inline c: record x, y: int32; end;
+    end;
+    
+  R2 = record
+    kind: K
+    case
+    | a: array 30 of char;
+    | b: integer
+    | inline c: record x, y: int32; end;
+    end;
+
+var
+  r: R
+begin
+  r.kind := C
+  r.x := 3 // via inline shortcut
+  r.b := 4
+  
+  println(r.c.x) // not using inline
+  println(r.b)
+end CaseRec1

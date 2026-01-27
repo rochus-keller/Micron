@@ -80,6 +80,7 @@ namespace Mic {
         Type* ObjectType();
         bool inline_();
         void VariantPart();
+        void Variant();
         void FixedPart();
         void FieldList();
         typedef QList<IdentDef> IdentDefList;
@@ -199,6 +200,7 @@ namespace Mic {
         void checkPointerResolved(Type*);
         void replaceAll(Type* what, Type* by);
         void replaceAll(Declaration*,Type* what, Type* by);
+        Expression* createSelector(Declaration* field, Expression* prev, bool needsLvalue, const RowCol& pos);
 
     private:
         AstModel* mdl;

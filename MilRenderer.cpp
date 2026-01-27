@@ -662,7 +662,7 @@ void IlAstRenderer::endModule()
 
     resolveAll(true);
 
-    //dump("before validation");
+    // dump("before validation");
 
     if( toDelete )
     {

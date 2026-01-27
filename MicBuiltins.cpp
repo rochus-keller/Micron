@@ -155,7 +155,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
             *ret = t;
         if( t != *ret )
             args[0] = Evaluator::createAutoConv(args[0], *ret );
-        break;
+        } break;
     case Builtin::BITOR:
         checkBitArith(builtin, args, ret, mdl, ev);
         break;

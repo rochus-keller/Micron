@@ -371,6 +371,26 @@ Declaration*Type::findMember(const QByteArray& name, bool recurseSuper) const
     return res;
 }
 
+QList<Declaration*> Type::findInlined(const QByteArray &name, bool recurseSuper) const
+{
+    foreach( Declaration* d, subs)
+    {
+        if(d->inline_ && (d->kind == Declaration::Field || d->kind == Declaration::Variant))
+        {
+            Declaration* dd = d->getType()->findMember(name, recurseSuper);
+            if( dd && (dd->kind == Declaration::Field || dd->kind == Declaration::Variant))
+                return QList<Declaration*>() << d << dd;
+            QList<Declaration *> res = d->getType()->findInlined(name, recurseSuper);
+            if( !res.isEmpty() )
+            {
+                res.prepend(d);
+                return res;
+            }
+        }
+    }
+    return QList<Declaration*>();
+}
+
 QPair<int, int> Type::getFieldCount() const
 {
     QPair<int, int> res;

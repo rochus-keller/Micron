@@ -64,6 +64,18 @@ CONST
   MaxPorts*        = 32;
   MaxCallTrace*    = 100;
 
+(* Evaluator States *)
+  EV_ATOM*         = 0;
+  EV_ARGS*         = 1;
+  EV_BETA*         = 2;
+  EV_IF_PRED*      = 3;
+  EV_SET_VAL*      = 4;
+  EV_MACRO*        = 5;
+  EV_BEGIN*        = 6;
+  EV_AND*          = 7;
+  EV_OR*           = 8;
+  EV_COND*         = 9;
+  
 (* ========================================================================= *)
 (* Types                                                                     *)
 (* ========================================================================= *)
@@ -123,10 +135,19 @@ VAR
   Symbols*:         Cell;
   Program*:         Cell;
   
+  (* Primitives Table *)
+  Primitives*:      PrimitiveArray;
+  LastPrim*:        INT32;
+  
   (* Flags *)
   ErrorFlag*:       BOOLEAN;
   PrinterLimit*:    INT32;
   PrinterCount*:    INT32;
+  
+  (* I/O State *)
+  InputPort*:       INT32;
+  OutputPort*:      INT32;
+  ErrorPort*:       INT32;
 
 (* ========================================================================= *)
 (* Inline Accessors (Macros in C)                                            *)
@@ -173,6 +194,28 @@ PROCEDURE integer_p*(n: Cell): BOOLEAN INLINE;
 BEGIN
   RETURN (n >= 0) AND (Tag[n] = AtomTag) AND (Car[n] = T_INTEGER)
 END integer_p;
+
+PROCEDURE symbol_p*(n: Cell): BOOLEAN INLINE;
+BEGIN
+  (* Check: Not special AND Has Vector Tag AND Type is T_SYMBOL *)
+  RETURN (n >= 0) AND 
+         (BITAND(Tag[n], VectorTag) # 0) AND 
+         (Car[n] = T_SYMBOL)
+END symbol_p;
+
+PROCEDURE string_p*(n: Cell): BOOLEAN INLINE;
+BEGIN
+  RETURN (n >= 0) AND 
+         (BITAND(Tag[n], VectorTag) # 0) AND 
+         (Car[n] = T_STRING)
+END string_p;
+
+PROCEDURE vector_p*(n: Cell): BOOLEAN INLINE;
+BEGIN
+  RETURN (n >= 0) AND 
+         (BITAND(Tag[n], VectorTag) # 0) AND 
+         (Car[n] = T_VECTOR)
+END vector_p;
 
 (* Vector Access *)
 (* Note: C uses pointer arithmetic &Vectors[Cdr[n]].

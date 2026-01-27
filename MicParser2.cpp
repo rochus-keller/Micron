@@ -754,6 +754,27 @@ void Parser2::replaceAll(Declaration * d, Type *what, Type *by)
         d->setType(by);
 }
 
+Expression *Parser2::createSelector(Declaration *field, Expression *prev, bool needsLvalue, const RowCol &pos)
+{
+    markRef(field, cur.toRowCol(), needsLvalue ? Symbol::Lval : 0);
+    Expression::Kind k = Expression::FieldSelect;
+
+    if( field->kind == Declaration::Procedure )
+    {
+        if( prev->getType()->kind == Type::Interface )
+            k = Expression::IntfSelect;
+        else
+            k = Expression::MethSelect;
+    }else if( field->kind != Declaration::Field && field->kind != Declaration::Variant )
+        error(cur, "expecting a field, variant or method");
+
+    Expression* tmp = Expression::create(k, pos );
+    tmp->val = QVariant::fromValue(field);
+    tmp->lhs = prev;
+    tmp->setType(field->getType());
+    return tmp;
+}
+
 void Parser2::next() {
 	cur = la;
 	la = scanner->next();
@@ -1444,7 +1465,7 @@ void Parser2::length(quint32& len) {
         if( !ev->evaluate(lenExpr) )
             errorEv();
         Value v = ev->pop();
-        if( !v.type->isUInt() )
+        if( v.type == 0 || !v.type->isUInt() )
         {
             error(tok,QString("an array length must be empty or a positive integer"));
             len = 1;
@@ -1553,27 +1574,49 @@ bool Parser2::inline_() {
 
 void Parser2::VariantPart() {
 	expect(Tok_CASE, true, "VariantPart");
-	while( la.d_type == Tok_Bar || FIRST_inline_(la.d_type) || FIRST_identdef(la.d_type) ) {
-		if( la.d_type == Tok_Bar ) {
-			expect(Tok_Bar, false, "VariantPart");
-		}
-        bool isInl = false;
-		if( FIRST_inline_(la.d_type) ) {
-			inline_();
-            isInl = true;
-		}
-        const IdentDef id = identdef();
-		expect(Tok_Colon, false, "VariantPart");
-        const Token tok = la;
-        Type* t = type();
-        openArrayError(tok,t);
-        if( t->kind == Type::Object )
-            error(tok, "record variant parts cannot be of object type");
-        invalidTypeError(tok,t);
-        Declaration* d = addDecl(id,Declaration::Variant);
-        d->inline_ = isInl;
-        d->setType(t);
-	}
+    if( la.d_type == Tok_Bar ) {
+        expect(Tok_Bar, false, "VariantPart");
+    }
+    Variant();
+    if( la.d_type == Tok_Bar )
+    {
+        while( la.d_type == Tok_Bar ) {
+            if( la.d_type == Tok_Bar ) {
+                expect(Tok_Bar, false, "VariantPart");
+            }
+            Variant();
+        }
+    }else
+    {
+        while( FIRST_inline_(la.d_type) || FIRST_identdef(la.d_type) ) {
+            Variant();
+        }
+    }
+}
+
+void Parser2::Variant()
+{
+    bool isInl = false;
+    if( FIRST_inline_(la.d_type) ) {
+        inline_();
+        isInl = true;
+    }
+    const IdentDef id = identdef();
+    expect(Tok_Colon, false, "VariantPart");
+    const Token tok = la;
+    Type* t = type();
+    if( la.d_type == Tok_Semi ) {
+        expect(Tok_Semi, false, "VariantPart");
+    }
+    openArrayError(tok,t);
+    if( t && t->kind == Type::Object )
+        error(tok, "record variant parts cannot be of object type");
+    if( t && isInl && t->kind != Type::Record )
+        error(tok, "only record types can be inlined");
+    invalidTypeError(tok,t);
+    Declaration* d = addDecl(id,Declaration::Variant);
+    d->inline_ = isInl;
+    d->setType(t);
 }
 
 void Parser2::FixedPart() {
@@ -1632,13 +1675,15 @@ void Parser2::FieldList() {
                 d->id = i;
         }
     } else if( FIRST_inline_(la.d_type) ) {
-		inline_();
+        const bool isInl = inline_();
         const IdentDef id = identdef();
 		expect(Tok_Colon, false, "FieldList");
         const Token tok = la;
         Type* t = type();
         openArrayError(tok,t);
         invalidTypeError(tok,t);
+        if( t && isInl && t->kind != Type::Record && t->kind != Type::Object )
+            error(tok, "only record and object types can be inlined");
         Declaration* d = addDecl(id,Declaration::Field);
         d->inline_ = true;
         d->setType(t);
@@ -2263,29 +2308,18 @@ Expression* Parser2::designator(bool needsLvalue) {
             {
                 Declaration* field = res->getType()->findMember(cur.d_val,res->getType()->kind == Type::Object);
                 if( field == 0 ) {
-                    error(cur,QString("the record doesn't have a field named '%1'").
-                          arg(cur.d_val.constData()) );
-                    return 0;
-                }else
-                {    
-                    markRef(field, cur.toRowCol(), needsLvalue ? Symbol::Lval : 0);
-                    Expression::Kind k = Expression::FieldSelect;
-
-                    if( field->kind == Declaration::Procedure )
+                    // field not found, so try each inlined record field/variant depth first
+                    QList<Declaration*> path = res->getType()->findInlined(cur.d_val,res->getType()->kind == Type::Object);
+                    if( path.isEmpty() )
                     {
-                        if( res->getType()->kind == Type::Interface )
-                            k = Expression::IntfSelect;
-                        else
-                            k = Expression::MethSelect;
-                    }else if( field->kind != Declaration::Field )
-                        error(cur, "expecting a field or method");
-
-                    Expression* tmp = Expression::create(k, tok.toRowCol() );
-                    tmp->val = QVariant::fromValue(field);
-                    tmp->lhs = res;
-                    tmp->setType(field->getType());
-                    res = tmp;
-                }
+                        error(cur,QString("the record doesn't have a field named '%1'").
+                              arg(cur.d_val.constData()) );
+                        return 0;
+                    } // else
+                    for(int i = 0; i < path.size(); i++ )
+                        res = createSelector(path[i], res, needsLvalue, tok.toRowCol());
+                }else
+                    res = createSelector(field, res, needsLvalue, tok.toRowCol());
             }else
             {
                 error(cur,QString("cannot select a field in given type") );
@@ -3401,7 +3435,7 @@ void Parser2::TypeCase(Expression* e)
 Value Parser2::label(Type* t) {
     Token tok = la;
     Expression* e = ConstExpression(0);
-    if( !ev->evaluate(e) )
+    if( e && !ev->evaluate(e) )
         errorEv();
     Value res = ev->pop();
     if( !assigCompat(t, e, e->pos) )
@@ -3946,9 +3980,9 @@ void Parser2::ReturnStatement() {
         ev->bindUniInt(e, retType->isInt());
         if( e && !ev->evaluate(e) )
             errorEv(); // value is pushed on stack by prepareRhs
-        if( !assigCompat( retType, e, e->pos ) )
+        if( e && !assigCompat( retType, e, e->pos ) )
             error(tok,"expression is not compatible with the return type");
-        if( !ev->prepareRhs(retType, false, e->pos) )
+        if( e && !ev->prepareRhs(retType, false, e->pos) )
             errorEv();
         line(ret).ret_(true);
         Expression::deleteAllExpressions();

@@ -7,21 +7,19 @@ Options=@ByteArray()
 Suffixes=@Invalid()
 WorkingDir=
 
-[.]
-size=0
-
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicron/S9Def.mic
-1\RelPath=S9Def.mic
-2\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicron/S9Mem.mic
-2\RelPath=S9Mem.mic
-3\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicron/S9Int.mic
-3\RelPath=S9Int.mic
-4\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicron/S9Real.mic
-4\RelPath=S9Real.mic
-size=4
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Real.mic
+1\RelPath=S9Real.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Int.mic
+2\RelPath=S9Int.mic
+3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Mem.mic
+3\RelPath=S9Mem.mic
+4\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Def.mic
+4\RelPath=S9Def.mic
+5\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Core.mic
+5\RelPath=S9Core.mic
+size=5
 
 [Packages]
 1\Name=@ByteArray()
-2\Name=@ByteArray()
-size=2
+size=1

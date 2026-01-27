@@ -26,7 +26,7 @@ bool Evaluator::evaluate(Expression* e, bool assureOnMilStack)
 {
     err.clear();
     if( e == 0 )
-        return false;
+        return true; // ok, error reported earlier
     if( !recursiveRun(e) )
         return false;
     if(assureOnMilStack)
@@ -2047,6 +2047,13 @@ bool Evaluator::recursiveRun(Expression* e)
 
                 if( !recursiveRun(args[i]) )
                     return false;
+
+                if( i == 0 && e->lhs->kind == Expression::Builtin && e->lhs->val.toInt() == Builtin::ORD && args[i]->getType()->kind == Type::String )
+                {
+                    // this is a fix because we need the first char of the string literal here, not a string
+                    stack.back().val = (char)stack.back().val.toByteArray()[0];
+                    stack.back().type = mdl->getType(Type::CHAR);
+                }
                 if( i < formals.size() )
                     prepareRhs(formals[i]->getType(), false, args[i]->pos);
                 else

@@ -146,7 +146,6 @@ void Validator::visitProcedure(Declaration* proc)
     {
         return; // TODO: check param compat
     }
-    pc = 0;
     curProc = proc;
     stack.clear();
     if( proc->typebound )
@@ -171,9 +170,9 @@ void Validator::visitProcedure(Declaration* proc)
     {
         const int label = findLabel(np.name->name);
         if( label == -1 )
-            error(curProc, QString("cannot find label: '%1'").arg(np.name->name));
+            error(proc, QString("cannot find label: '%1'").arg(np.name->name));
         else if( !np.pos.contains( labels[label].pos.last() ) )
-            error(curProc, QString("cannot cannot jump to this label: '%1'").arg(np.name->name));
+            error(proc, QString("cannot cannot jump to this label: '%1'").arg(np.name->name));
     }
 
     curProc = 0;
@@ -217,7 +216,7 @@ void Validator::visitStatSeq(Statement* stat)
                 }else if( lastExprInSeq != 0 && lastExprInSeq->next != 0 )
                 {
                     // visitExpr returned after non-function call and we would expect the stack to be empty
-                    error(curProc,QString("stack is not empty (%1 elements on stack)").arg(stack.size()));
+                    error(stat,QString("stack is not empty (%1 elements on stack)").arg(stack.size()));
                 }
             }
             break;
@@ -232,7 +231,7 @@ void Validator::visitStatSeq(Statement* stat)
             break;
         case IL_exit:
             if( loopStack.isEmpty() )
-                error(curProc, "exit requires enclosing loop");
+                error(stat, "exit requires enclosing loop");
             break;
         case IL_pop:
             expectN(1, stat); // we have no reference type information to check here
@@ -243,7 +242,7 @@ void Validator::visitStatSeq(Statement* stat)
                 Type* t = deref(stat->args->getType());
                 if( t->kind != Type::Pointer )
                 {
-                    error(curProc, "expecting a pointer argument");
+                    error(stat, "expecting a pointer argument");
                     break;
                 }
             }
@@ -255,12 +254,12 @@ void Validator::visitStatSeq(Statement* stat)
                 DeclList params = curProc->getParams();
                 if( stat->id >= params.size() )
                 {
-                    error(curProc, "the referenced parameter does not exist");
+                    error(stat, "the referenced parameter does not exist");
                     break;
                 }
                 Type* lhsT = deref(params[stat->id]->getType());
                 if( !assigCompat(lhsT,stat->args) )
-                    error(curProc, "argument type not compatible with value on stack");
+                    error(stat, "argument type not compatible with value on stack");
             }
             break;
         case IL_stloc:
@@ -274,12 +273,12 @@ void Validator::visitStatSeq(Statement* stat)
                 DeclList locals = curProc->getLocals();
                 if( stat->id >= locals.size() )
                 {
-                    error(curProc, "the referenced local does not exist");
+                    error(stat, "the referenced local does not exist");
                     break;
                 }
                 Type* lhsT = deref(locals[stat->id]->getType());
                 if( !assigCompat(lhsT,stat->args) )
-                    error(curProc, "local variable type not compatible with value on stack");
+                    error(stat, "local variable type not compatible with value on stack");
             }
             break;
         case IL_stvar:
@@ -289,7 +288,7 @@ void Validator::visitStatSeq(Statement* stat)
                 if( !assigCompat(lhsT,stat->args) )
                 {
                     //assigCompat(lhsT,stat->args); // TEST
-                    error(curProc, "module variable type not compatible with value on stack");
+                    error(stat, "module variable type not compatible with value on stack");
                 }
             }
             break;
@@ -309,12 +308,12 @@ void Validator::visitStatSeq(Statement* stat)
             if( curProc && curProc->getType() )
             {
                 if( expectN(1, stat) && !assigCompat(deref(curProc->getType()), stat->args) )
-                    error(curProc,"return type incompatible with function type");
+                    error(stat,"return type incompatible with function type");
             }else
             {
                 expectN(0, stat);
                 if( curProc && curProc->getType() )
-                    error(curProc,"return requires a value");
+                    error(stat,"return requires a value");
             }
             break;
         case IL_stelem:
@@ -330,14 +329,14 @@ void Validator::visitStatSeq(Statement* stat)
             {
                 Type* aptr = deref(stat->args->next->rhs->getType());
                 if( aptr->kind != Type::Pointer )
-                    error(curProc,"first argument must be a pointer");
+                    error(stat,"first argument must be a pointer");
                 Type* aos = deref(aptr->getType()); // array actually on stack
                 if( aos->kind != Type::Array  )
-                    error(curProc,"first argument must be a pointer to array");
+                    error(stat,"first argument must be a pointer to array");
 
                 Type* index = deref(stat->args->lhs->getType());
                 if( !isInt32(index) )
-                    error(curProc,"second argument must be a 32 bit integer");
+                    error(stat,"second argument must be a 32 bit integer");
 
                 Type* etOs = deref(aos->getType()); // element type on stack
                 Type* refT = tokToBasicType(mdl, stat->kind);
@@ -345,12 +344,12 @@ void Validator::visitStatSeq(Statement* stat)
                     refT = deref(stat->d);
 
                 if( etOs && !equal(etOs,refT) )
-                    error(curProc,"the element type on stack is not compatible with the required type");
+                    error(stat,"the element type on stack is not compatible with the required type");
 
                 if( etOs == 0 )
                     etOs = refT;
                 if( !assigCompat(etOs, stat->args->rhs) )
-                    error(curProc,"value on stack is not compatible with the element type");
+                    error(stat,"value on stack is not compatible with the element type");
             }
             break;
         case IL_stfld:
@@ -358,19 +357,19 @@ void Validator::visitStatSeq(Statement* stat)
             {
                 Type* objptr = deref(stat->args->lhs->getType());
                 if( objptr->kind != Type::Pointer )
-                    error(curProc,"first argument must be a pointer");
+                    error(stat,"first argument must be a pointer");
 
                 Type* objOs = deref(objptr->getType()); // object actually on stack
                 if( objOs->kind != Type::Struct && objOs->kind != Type::Union && objOs->kind != Type::Object )
-                    error(curProc,"first argument must be a pointer to struct, union or object");
+                    error(stat,"first argument must be a pointer to struct, union or object");
 
                 Type* refObj = deref(stat->d->outer->getType());
                 if( objOs && !equal(objOs, refObj) && !Type::isA(objOs,refObj) )
-                    error(curProc,"the pointer base type on stack is not compatible with the required type");
+                    error(stat,"the pointer base type on stack is not compatible with the required type");
 
                 Type* refFld = deref(stat->d->getType());
                 if( !assigCompat(refFld, stat->args->rhs) )
-                    error(curProc,"value on stack is not compatible with the pointer base type");
+                    error(stat,"value on stack is not compatible with the pointer base type");
             }
             break;
         case IL_strcpy:
@@ -378,18 +377,18 @@ void Validator::visitStatSeq(Statement* stat)
             {
                 Type* lhsT = deref(stat->args->lhs->getType());
                 if( lhsT->kind != Type::Pointer )
-                    error(curProc,"first argument must be a pointer");
+                    error(stat,"first argument must be a pointer");
                 Type* a = deref(lhsT->getType());
                 if( a->kind != Type::Array || a->len == 0 || deref(a->getType())->kind != Type::CHAR )
-                    error(curProc,"first argument must be a pointer to an non-open char array");
+                    error(stat,"first argument must be a pointer to an non-open char array");
                 Type* rhsT = deref(stat->args->rhs->getType());
                 if( rhsT->kind == Type::Pointer )
                 {
                     a = deref(rhsT->getType());
                     if( a->kind != Type::Array || a->len != 0 || deref(a->getType())->kind != Type::CHAR )
-                        error(curProc,"second argument must be a pointer to an open char array or string literal");
+                        error(stat,"second argument must be a pointer to an open char array or string literal");
                 }else if( rhsT->kind != Type::StringLit )
-                    error(curProc,"second argument must be a pointer to an open char array or string literal");
+                    error(stat,"second argument must be a pointer to an open char array or string literal");
             }
             break;
         case IL_stind:
@@ -405,7 +404,7 @@ void Validator::visitStatSeq(Statement* stat)
             {
                 Type* ptrT = deref(stat->args->lhs->getType());
                 if( ptrT->kind != Type::Pointer )
-                    error(curProc,"first argument must be a pointer");
+                    error(stat,"first argument must be a pointer");
 
                 Type* baseOs = deref(ptrT->getType()); // pointer basetype on stack
 
@@ -414,13 +413,13 @@ void Validator::visitStatSeq(Statement* stat)
                     refT = deref(stat->d->getType());
 
                 if( baseOs && !equal(baseOs,refT) )
-                    error(curProc,"the pointer base type on stack is not compatible with the required type");
+                    error(stat,"the pointer base type on stack is not compatible with the required type");
                 if( baseOs == 0 )
                     baseOs = refT;
                 if( !assigCompat(baseOs, stat->args->rhs) )
                 {
                     //assigCompat(baseOs, stat->args->rhs); // TEST
-                    error(curProc,"value on stack is not compatible with the pointer base type");
+                    error(stat,"value on stack is not compatible with the pointer base type");
                 }
             }
             break;
@@ -433,7 +432,7 @@ void Validator::visitStatSeq(Statement* stat)
             visitWhile(stat);
             break;
         default:
-            error(curProc, QString("unexpected statement operator '%1'").arg(s_opName[stat->kind]));
+            error(stat, QString("unexpected statement operator '%1'").arg(s_opName[stat->kind]));
             break;
         }
 #if 0
@@ -441,7 +440,7 @@ void Validator::visitStatSeq(Statement* stat)
         // ldvara i, ldvar off, stloc_0; after stloc_0 the stack is not expected to be empty!
         if( stat->kind != IL_pop // pop is a special statement after which the stack might not be empty
                 && stat->kind != Statement::ExprStat && stack.size() != 0 )
-            error(curProc,QString("evaluation stack not empty after statement"));
+            error(stat,QString("evaluation stack not empty after statement"));
 #endif
 
         stat = nextStat(stat);
@@ -454,17 +453,15 @@ Statement* Validator::visitIfThenElse(Statement* stat)
 {
     Q_ASSERT( stat && stat->kind == IL_if );
     visitExpr(stat->e);
-    pc++; // THEN
     expectN(1, stat); // IF args points to the boolean expression,
     if( stat->args == 0 || !isInt32(deref(stat->args->getType())) )
-        error(curProc,"expecting a 32 bit result of boolean expression");
+        error(stat,"expecting a 32 bit result of boolean expression");
     visitStatSeq(stat->body);
     if( stat->next && stat->next->kind == IL_else )
     {
         stat = nextStat(stat);
         visitStatSeq(stat->body);
     }
-    pc++; // END
     return stat;
 }
 
@@ -474,19 +471,16 @@ void Validator::visitLoop(Statement* stat)
     loopStack.push_back(stat);
     visitStatSeq(stat->body);
     loopStack.pop_back();
-    pc++; // END
 }
 
 void Validator::visitRepeat(Statement* stat)
 {
     Q_ASSERT( stat && stat->kind == IL_repeat );
     visitStatSeq(stat->body);
-    pc++; // UNTIL
     visitExpr(stat->e);
     expectN(1, stat);
     if( !isInt32(deref(stat->args->getType())) )
-        error(curProc,"expecting a 32 bit result of boolean expression");
-    pc++; // END
+        error(stat,"expecting a 32 bit result of boolean expression");
 }
 
 Statement*Validator::visitSwitch(Statement* stat)
@@ -496,7 +490,7 @@ Statement*Validator::visitSwitch(Statement* stat)
     expectN(1, stat);
     Type* t = deref(stat->args->getType());
     if( !isInt32(t) && !t->isInt64() )
-        error(curProc,"expecting a 32 or 64 bit integer expression");
+        error(stat,"expecting a 32 or 64 bit integer expression");
     while( stat->next && stat->next->kind == IL_case )
     {
         stat = nextStat(stat);
@@ -509,11 +503,10 @@ Statement*Validator::visitSwitch(Statement* stat)
             // there is no type information
             Type* tt = deref(e->getType());
             if( !isInt32(tt) && !tt->isInt64() )
-                error(curProc,"expecting a 32 or 64 bit integer expression");
+                error(s,"expecting a 32 or 64 bit integer expression");
 #endif
             e = e->next;
         }
-        pc++; // THEN
         visitStatSeq(stat->body);
     }
     if( stat->next && stat->next->kind == IL_else )
@@ -521,7 +514,6 @@ Statement*Validator::visitSwitch(Statement* stat)
         stat = nextStat(stat);
         visitStatSeq(stat->body);
     }
-    pc++; // END
     return stat;
 }
 
@@ -531,16 +523,12 @@ void Validator::visitWhile(Statement* stat)
     visitExpr(stat->e);
     expectN(1, stat);
     if( stat->args && !isInt32(deref(stat->args->getType())) )
-        error(curProc,"expecting a 32 bit result of boolean expression");
-    pc++; // DO
+        error(stat,"expecting a 32 bit result of boolean expression");
     visitStatSeq(stat->body);
-    pc++; // END
 }
 
 Statement*Validator::nextStat(Statement* stat)
 {
-    if( stat->kind != Statement::ExprStat )
-        pc++;
     return stat->next;
 }
 
@@ -597,7 +585,7 @@ Expression* Validator::visitExpr(Expression* e)
                 else if( lhs->isFloat() && rhs->isFloat() )
                     t = mdl->getBasicType(Type::FLOAT64);
                 else
-                    error(curProc, "the values on the stack are not compatible with the operation");
+                    error(e, QString("the values on the stack are not compatible with the operation '%1'").arg(s_opName[e->kind]));
                 e->setType(t);
                 stack.pop_back();
                 stack.last() = e;
@@ -620,7 +608,7 @@ Expression* Validator::visitExpr(Expression* e)
                 else if( isInt32(lhs) && isInt32(rhs) )
                     t = mdl->getBasicType(Type::INT32);
                 else
-                    error(curProc, "the values on the stack are not compatible with the operation");
+                    error(e, QString("the values on the stack are not compatible with the operation '%1'").arg(s_opName[e->kind]));
                 e->setType(t);
                 stack.pop_back();
                 stack.last() = e;
@@ -641,7 +629,7 @@ Expression* Validator::visitExpr(Expression* e)
                 else if( isInt32(lhs) && isInt32(rhs) )
                     t = mdl->getBasicType(Type::INT32);
                 else
-                    error(curProc, "the values on the stack are not compatible with the operation");
+                    error(e, QString("the values on the stack are not compatible with the operation '%1'").arg(s_opName[e->kind]));
                 e->setType(t);
                 stack.pop_back();
                 stack.last() = e;
@@ -658,7 +646,7 @@ Expression* Validator::visitExpr(Expression* e)
                 else if( isInt32(lhs) )
                     t = mdl->getBasicType(Type::INT32);
                 else
-                    error(curProc, "the values on the stack are not compatible with the operation");
+                    error(e, QString("the values on the stack are not compatible with the operation '%1'").arg(s_opName[e->kind]));
                 e->setType(t);
                 stack.last() = e;
             }
@@ -679,7 +667,7 @@ Expression* Validator::visitExpr(Expression* e)
                 else if( lhs->kind == Type::FLOAT64 )
                     t = mdl->getBasicType(Type::FLOAT64);
                 else
-                    error(curProc, "the values on the stack are not compatible with the operation");
+                    error(e, QString("the values on the stack are not compatible with the operation '%1'").arg(s_opName[e->kind]));
                 e->setType(t);
                 stack.last() = e;
             }
@@ -726,9 +714,9 @@ Expression* Validator::visitExpr(Expression* e)
             break;
         case IL_ldproc:
             if( e->d && (e->d->kind != Declaration::Procedure || e->d->typebound) )
-                error(curProc, "expecting an unbound procedure");
+                error(e, "expecting an unbound procedure");
             if( e->d && e->d->inline_ )
-                error(curProc, "cannot take address of inline procedure");
+                error(e, "cannot take address of inline procedure");
             else if(e->d)
             {
                 Type* pt = new Type();
@@ -756,11 +744,11 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* ot1 = deref(lhsT->getType());
                 if( !((lhsT->kind == Type::Pointer && (ot1->kind == Type::Object || ot1->kind == Type::Struct)) || lhsT->kind == Type::Interface) )
                 {
-                    error(curProc, "expecting a pointer to object or interface on the stack");
+                    error(e, "expecting a pointer to object or interface on the stack");
                     break;
                 }
                 if( e->d && (e->d->kind != Declaration::Procedure || !e->d->typebound) )
-                    error(curProc, "expecting a bound procedure");
+                    error(e, "expecting a bound procedure");
 
                 // TODO: check whether object on stack is compat with e->d
 
@@ -789,11 +777,11 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* ot1 = deref(lhsT->getType());
                 if( !(lhsT->kind == Type::Pointer && (ot1->kind == Type::Object || ot1->kind == Type::Struct)) )
                 {
-                    error(curProc, "expecting a pointer to object or record on the stack");
+                    error(e, "expecting a pointer to object or record on the stack");
                     break;
                 }
                 if( e->d && (e->d->kind != Declaration::TypeDecl || deref(e->d->getType())->kind != Type::Interface) )
-                    error(curProc, "expecting an interface");
+                    error(e, "expecting an interface");
 
                 e->setType(e->d->getType());
                 stack.back() = e; // replace the stack top with ldiface
@@ -848,7 +836,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* lhsT = deref(e->lhs->getType());
                 if( lhsT->kind != Type::Pointer )
                 {
-                    error(curProc, "expecting a pointer on the stack");
+                    error(e, "expecting a pointer on the stack");
                     break;
                 }
                 Type* ptr = new Type();
@@ -870,13 +858,13 @@ Expression* Validator::visitExpr(Expression* e)
                             t1->kind != Type::Object || t1->kind != Type::Array) ||
                          (t1->kind == Type::Array && t1->len == 0) )
                 {
-                    error(curProc, "expecting a pointer to struct, union, object or fixed size array on the stack");
+                    error(e, "expecting a pointer to struct, union, object or fixed size array on the stack");
                     break;
                 }
                 Type* t2 = deref(e->d);
                 if( !equal(t2, t1) )
                 {
-                    error(curProc, "initobj type not compatible with type on the stack");
+                    error(e, "initobj type not compatible with type on the stack");
                     break;
                 }
                 stack.pop_back();
@@ -905,7 +893,7 @@ Expression* Validator::visitExpr(Expression* e)
                         (isMeth(lhs) && isMeth(rhs)))
                     t = mdl->getBasicType(Type::INT32);
                 else
-                    error(curProc, "the values on the stack are not compatible with the operation");
+                    error(e, QString("the values on the stack are not compatible with the operation '%1'").arg(s_opName[e->kind]));
                 e->setType(t);
                 stack.pop_back();
                 stack.last() = e;
@@ -923,7 +911,7 @@ Expression* Validator::visitExpr(Expression* e)
                 DeclList params = curProc->getParams();
                 if( e->id >= params.size() )
                 {
-                    error(curProc, "the referenced parameter does not exist");
+                    error(e, "the referenced parameter does not exist");
                     break;
                 }
                 Type* paramType = params[e->id]->getType();
@@ -950,7 +938,7 @@ Expression* Validator::visitExpr(Expression* e)
                 DeclList locals = curProc->getLocals();
                 if( e->id >= locals.size() )
                 {
-                    error(curProc, "the referenced local variable does not exist");
+                    error(e, "the referenced local variable does not exist");
                     break;
                 }
                 if( e->kind == IL_ldloca_s || e->kind == IL_ldloca )
@@ -987,7 +975,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* array = deref(lhsT->getType());
                 if( lhsT->kind != Type::Pointer || array->kind != Type::Array || !rhsT->isInteger() )
                 {
-                    error(curProc, "expecting a pointer to array and an integer index on the stack");
+                    error(e, "expecting a pointer to array and an integer index on the stack");
                     break;
                 }
                 Type* et1 = tokToBasicType(mdl, e->kind);
@@ -996,7 +984,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* et2 = deref(array->getType());
                 if( et1 && !equal(et1,et2) )
                 {
-                    error(curProc, "ldelem type not compatible with array element type on the stack");
+                    error(e, "ldelem type not compatible with array element type on the stack");
                     break;
                 }
                 if( e->kind == IL_ldelema )
@@ -1021,7 +1009,7 @@ Expression* Validator::visitExpr(Expression* e)
                 if( lhsT->kind != Type::Pointer ||
                         !(ot1->kind == Type::Struct || ot1->kind == Type::Union || ot1->kind == Type::Object) )
                 {
-                    error(curProc, "expecting a pointer to struct, union or object on the stack");
+                    error(e, "expecting a pointer to struct, union or object on the stack");
                     break;
                 }
                 Type* ft = deref(e->d);
@@ -1029,7 +1017,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* ot2 = deref(e->d ? e->d->outer : 0);
                 if( !equal(ot2, ot1) && !Type::isA(ot1, ot2) )
                 {
-                    error(curProc, "ldfld type not compatible with type on the stack");
+                    error(e, "ldfld type not compatible with type on the stack");
                     break;
                 }
 
@@ -1068,7 +1056,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* rhsT = deref(e->rhs->getType());
                 if( lhsT->kind != Type::Pointer || !(rhsT->isInteger() || isInt32(rhsT) || rhsT->kind == Type::INTPTR) )
                 {
-                    error(curProc, "expecting a pointer and an integer offset on the stack");
+                    error(e, "expecting a pointer and an integer offset on the stack");
                     break;
                 }
                 e->setType(lhsT);
@@ -1094,7 +1082,7 @@ Expression* Validator::visitExpr(Expression* e)
                 e->lhs = stackAt(-1); // ptr
                 Type* ptrT = deref(e->lhs->getType());
                 if( ptrT->kind != Type::Pointer && ptrT->kind != Type::StringLit ) {
-                    error(curProc, "expecting a pointer on the stack"); break;
+                    error(e, "expecting a pointer on the stack"); break;
                 }
                 Type* baseOnStack = deref(ptrT->getType());
                 Type* baseInOp = tokToBasicType(mdl, e->kind);
@@ -1111,7 +1099,7 @@ Expression* Validator::visitExpr(Expression* e)
                     ; // ok to store an open char array or strlit in a non-open char array on stack.
                 }else if( !equal(baseInOp, baseOnStack) )
                 {
-                    error(curProc, "ldind type not compatible with type on the stack");
+                    error(e, "ldind type not compatible with type on the stack");
                     break;
                 }
                 if( e->kind == IL_ldind )
@@ -1129,7 +1117,7 @@ Expression* Validator::visitExpr(Expression* e)
                 ptr->setType(t);
                 if( t->kind != Type::Struct && t->kind != Type::Union && t->kind != Type::Object &&
                         t->kind == Type::Array && t->len == 0)
-                    error(curProc, "expecting a structured type of fixed size");
+                    error(e, "expecting a structured type of fixed size");
                 ptr->objectInit = t->objectInit;
                 ptr->pointerInit = t->pointerInit;
                 e->setType(ptr);
@@ -1143,7 +1131,7 @@ Expression* Validator::visitExpr(Expression* e)
                 e->lhs = stackAt(-1); // numElems
                 Type* lhsT = deref(e->lhs->getType());
                 if( !isInt32(lhsT) )
-                    error(curProc, "expecing an 32 bit integer on stack");
+                    error(e, "expecing an 32 bit integer on stack");
                 Type* t = deref(e->d);
                 Type* array = new Type();
                 array->kind = Type::Array;
@@ -1167,7 +1155,7 @@ Expression* Validator::visitExpr(Expression* e)
                 Type* obj = deref(lhsT->getType());
                 if( lhsT->kind != Type::Pointer || !(obj->kind == Type::Object || obj->kind == Type::Struct) )
                 {
-                    error(curProc, "expecting a pointer to object on the stack");
+                    error(e, "expecting a pointer to object on the stack");
                     break;
                 }
                 e->setType(mdl->getBasicType(Type::INT32));
@@ -1194,11 +1182,11 @@ Expression* Validator::visitExpr(Expression* e)
                 if( e->kind == IL_callmi && !proc->typebound )
                 {
                     // callmi got a synthetic bound proc type by ldmeth
-                    error(curProc, "expecting a methref on the stack");
+                    error(e, "expecting a methref on the stack");
                     break;
                 }else if(e->kind == IL_calli && proc->typebound)
                 {
-                    error(curProc, "expecting a function pointer on the stack");
+                    error(e, "expecting a function pointer on the stack");
                     break;
                 }
                 const int numOfParams = proc->subs.size();
@@ -1264,7 +1252,7 @@ Expression* Validator::visitExpr(Expression* e)
                     break;
                 if_->lhs = eatStack(1);
                 if( !isInt32(deref(if_->lhs->getType())) )
-                    error(curProc,"expecting a 32 bit result of boolean expression");
+                    error(e,"expecting a 32 bit result of boolean expression");
 
                 visitExpr(then_->e);
                 if( !expectN(1, then_) )
@@ -1281,32 +1269,145 @@ Expression* Validator::visitExpr(Expression* e)
             }
             break;
         default:
-            error(curProc, QString("unexpected expression operator '%1'").arg(s_opName[e->kind]));
+            error(e, QString("unexpected expression operator '%1'").arg(s_opName[e->kind]));
             break;
         }
 
-        pc++;
         if( e->next == 0 )
             return e;
         e = e->next;
     }
 }
 
-void Validator::error(Declaration* d, const QString& str)
+void Validator::error(Node *n, const QString & str)
 {
     Error e;
     e.msg = str;
-    if( curProc )
-        e.pc = pc;
-    e.where = d->toPath();
+    switch(n->meta)
+    {
+    case Node::D:
+        e.where = static_cast<Declaration*>(n)->toPath();
+        break;
+    case Node::S:
+    case Node::E:
+        Q_ASSERT(curProc);
+        e.where = curProc->toPath();
+        e.pc = calcPc(n);
+        break;
+    }
     errors << e;
+}
+
+static bool count(Expression* e, Node * n, int& pc)
+{
+    while(e)
+    {
+        pc++;
+        if( e == n ) return true;
+        if( e->kind == IL_iif )
+        {
+            Expression* if_ = e->e;
+            if( count(if_->e, n, pc) ) return true;
+            pc++; // then
+            Expression* then_ = if_->next;
+            if( then_ == n ) return true;
+            if( count(then_->e, n, pc) ) return true;
+            pc++; // elxe
+            Expression* else_ = if_->next->next;
+            if( else_ == n ) return true;
+            if( count(else_->e, n, pc) ) return true;
+            pc++; // end
+        }
+
+        e = e->next;
+    }
+    return false;
+}
+
+static bool count(Statement* s, Node * n, int& pc)
+{
+    while(s)
+    {
+        if( s->kind == Statement::ExprStat )
+        {
+            if( count(s->e, n, pc) ) return true;
+        }else
+        {
+            pc++;
+            if( s == n ) return true;
+            switch( s->kind )
+            {
+            case IL_while:
+                if( count(s->e, n, pc) ) return true;
+                pc++; // do
+                if( count(s->body, n, pc) ) return true;
+                pc++; // end
+                break;
+            case IL_repeat:
+                if( count(s->body, n, pc) ) return true;
+                pc++; // until
+                if( count(s->e, n, pc) ) return true;
+                pc++; // end
+                break;
+            case IL_loop:
+                if( count(s->body, n, pc) ) return true;
+                pc++; // end
+                break;
+            case IL_if:
+                if( count(s->e, n, pc) ) return true;
+                pc++; // then
+                if( count(s->body, n, pc) ) return true;
+                if( s->next && s->next->kind == IL_else )
+                {
+                    s = s->next;
+                    pc++; // else
+                    if( s == n ) return true;
+                    if( count(s->body, n, pc) ) return true;
+                }
+                pc++; // end
+                break;
+            case IL_switch:
+                if( count(s->e, n, pc) ) return true;
+                while( s->next && s->next->kind == IL_case )
+                {
+                    s = s->next;
+                    pc++; // case
+                    if( s == n ) return true;
+                    if( count(s->body, n, pc) ) return true;
+                }
+                if( s->next && s->next->kind == IL_else )
+                {
+                    s = s->next;
+                    pc++; // else
+                    if( s == n ) return true;
+                    if( count(s->body, n, pc) ) return true;
+                }
+                pc++; // end
+                break;
+            default:
+                break;
+            }
+        }
+        s = s->next;
+    }
+    return false;
+}
+
+int Validator::calcPc(Node * n)
+{
+    Q_ASSERT(curProc);
+    int pc = 0;
+    // first operation has pc 1!
+    if( !count(curProc->body, n, pc) )
+        pc = 0;
+    return pc;
 }
 
 bool Validator::expectN(quint32 n, Expression* e)
 {
     if( stack.size() < n )
     {
-        error(curProc,QString("expecting %1 values on expression stack").arg(n));
+        error(e,QString("expecting %1 values on expression stack").arg(n));
         return false;
     }else
         return true;
@@ -1316,7 +1417,7 @@ bool Validator::expectN(quint32 n, Statement* stat)
 {
     if( stack.size() < n )
     {
-        error(curProc,QString("expecting %1 values on expression stack").arg(n));
+        error(stat,QString("expecting %1 values on expression stack").arg(n));
         return false;
     }else
     {
