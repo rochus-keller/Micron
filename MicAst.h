@@ -103,7 +103,8 @@ namespace Mic
         enum Kind {
             Undefined,
             NoType,
-            String,
+            StrLit,
+            ByteArrayLit,
             UniInt, // universal integer literal
             Any,
             Nil,
@@ -133,12 +134,13 @@ namespace Mic
         bool isInteger() const { return (kind >= Type::UINT8 && kind <= Type::INT64) || kind == Type::UniInt; }
         bool isSet() const { return kind == Type::SET; }
         bool isBoolean() const { return kind == Type::BOOL; }
-        bool isSimple() const { return kind >= Type::String && kind < Type::MaxBasicType; }
-        bool isText() const { return kind == Type::String || kind == Type::CHAR ||
+        bool isSimple() const { return kind >= Type::StrLit && kind < Type::MaxBasicType; }
+        bool isText() const { return kind == Type::StrLit || kind == Type::CHAR ||
                     ( kind == Array && type && type->kind == Type::CHAR ) ||
                     ( kind == Pointer && type && type->kind == Array && type->type && type->type->kind == Type::CHAR ); }
         bool isStructured() const { return kind == Array || kind == Record || kind == Object; }
         bool isCharArray() const { return kind == Array && getType() && getType()->kind == CHAR; }
+        bool isByteArray() const { return kind == Array && getType() && getType()->kind == UINT8; }
 
         Declaration* findSub(const QByteArray& name) const;
         Declaration* findMember(const QByteArray& name, bool recurseSuper = false) const;

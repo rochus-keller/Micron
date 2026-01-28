@@ -161,7 +161,7 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
 
     // make sure also a string literal is put on the stack by value
     if( !assig && lhs && lhs->kind == Type::Array && lhs->len && lhs->getType()->kind == Type::CHAR &&
-            (rhs.type->kind == Type::String ||
+            (rhs.type->kind == Type::StrLit ||
              rhs.ref && rhs.type->kind == Type::Array && rhs.type->len == 0 &&
                 rhs.type->getType()->kind == Type::CHAR))
     {
@@ -177,7 +177,7 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         assureTopOnMilStack(false, pos);
         out->line_(pos);
         out->ldind_(toQuali(lhs));
-    }else if( lhs && lhs->kind == Type::CHAR && rhs.type->kind == Type::String )
+    }else if( lhs && lhs->kind == Type::CHAR && rhs.type->kind == Type::StrLit )
     {
         out->line_(pos);
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
@@ -263,7 +263,7 @@ bool Evaluator::assign(const RowCol& pos)
                 Q_ASSERT(rhs.ref);
                 out->strcpy_();
                 return err.isEmpty();
-            }else if( rhs.type->kind == Type::String )
+            }else if( rhs.type->kind == Type::StrLit )
             {
                 out->strcpy_();
                 return err.isEmpty();
@@ -300,7 +300,7 @@ bool Evaluator::assign(const RowCol& pos)
         out->stind_(Mil::EmiTypes::R8);
         break;
     case Type::Nil:
-    case Type::String:
+    case Type::StrLit:
     case Type::Pointer:
         out->stind_(Mil::EmiTypes::IntPtr);
         break;
@@ -327,7 +327,7 @@ bool Evaluator::assign(Expression* lhs, Expression* rhs, const RowCol& pos)
 {
     if( lhs->getType() && lhs->getType()->isCharArray() && lhs->getType()->len != 0  &&
             ( (rhs->getType() && rhs->getType()->isCharArray() && rhs->getType()->len == 0) ||
-               rhs->getType()->kind == Type::String ) )
+               rhs->getType()->kind == Type::StrLit ) )
         return stind(lhs, rhs, pos);
 
     switch( lhs->kind )
@@ -854,12 +854,11 @@ static inline bool bitCast(QVariant &v, Type* out, Type* in)
 
 bool Evaluator::castNum(Type* to, const RowCol& pos)
 {
-    Q_ASSERT( to && to->isNumber() );
     err.clear();
+    if( to == 0 || !to->isNumber() )
+        return error("cannot cast to this type",pos);
     if( stack.size() < 1 )
-    {
         return error("expecting a value on the stack",pos);
-    }
     if( stack.back().isConst() )
     {
         bitCast(stack.back().val, to, stack.back().type);
@@ -1022,7 +1021,7 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
             out->line_(pos);
             switch( v.type->kind )
             {
-            case Type::String:
+            case Type::StrLit:
                 out->ldstr_( v.val.toByteArray() );
                 break;
             case Type::Nil:
@@ -1063,6 +1062,14 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
                     pushMilStack(vv, pos);
                 }
                 break;
+            case Type::ByteArrayLit: {
+                qWarning() << "WARNING: load byte array literals not yet implemented";
+                //out->ldstr_( v.val.toByteArray().toHex() );
+                Mil::ConstrLiteral obj;
+                obj.data = v.val;
+                out->ldc_obj(obj);
+            } break;
+
             default:
                 Q_ASSERT(false);
             }
@@ -1391,11 +1398,11 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs, const Ro
                 break;
             }
         }
-    }else if( (lhs.type->kind == Type::String || lhs.type->kind == Type::CHAR) &&
-              (rhs.type->kind == Type::String || rhs.type->kind == Type::CHAR) )
+    }else if( (lhs.type->kind == Type::StrLit || lhs.type->kind == Type::CHAR) &&
+              (rhs.type->kind == Type::StrLit || rhs.type->kind == Type::CHAR) )
     {
         // + only
-        res.type = mdl->getType(Type::String);
+        res.type = mdl->getType(Type::StrLit);
         Q_ASSERT( op == Expression::Add );
         Q_ASSERT( lhs.isConst() && rhs.isConst() );
         res.val = lhs.val.toByteArray() + rhs.val.toByteArray();
@@ -1519,7 +1526,8 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
             }
         }else
         {
-            error(QString("INTERNAL ERROR: operands not compatible: %1 op %2").arg(Type::name[lhs.type->kind]).arg(Type::name[rhs.type->kind]),pos);
+            error(QString("operands not compatible: %1 %3 %2").arg(Type::name[lhs.type->kind]).
+                    arg(Type::name[rhs.type->kind]).arg(Expression::getName(op)),pos);
             return res;
         }
     }else if( lhs.type->isText() && rhs.type->isText() )
@@ -1668,7 +1676,8 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
         }
     }else
     {
-        error(QString("INTERNAL ERROR: operands not compatible: %1 op %2").arg(Type::name[lhs.type->kind]).arg(Type::name[rhs.type->kind]), pos);
+        error(QString("operands not compatible: %1 %3 %2").arg(Type::name[lhs.type->kind]).
+                arg(Type::name[rhs.type->kind]).arg(Expression::getName(op)),pos);
     }
 
     return res;
@@ -2048,7 +2057,7 @@ bool Evaluator::recursiveRun(Expression* e)
                 if( !recursiveRun(args[i]) )
                     return false;
 
-                if( i == 0 && e->lhs->kind == Expression::Builtin && e->lhs->val.toInt() == Builtin::ORD && args[i]->getType()->kind == Type::String )
+                if( i == 0 && e->lhs->kind == Expression::Builtin && e->lhs->val.toInt() == Builtin::ORD && args[i]->getType()->kind == Type::StrLit )
                 {
                     // this is a fix because we need the first char of the string literal here, not a string
                     stack.back().val = (char)stack.back().val.toByteArray()[0];
@@ -2139,16 +2148,24 @@ bool Evaluator::recurseConstConstructor(Expression* e)
             Q_ASSERT( e->getType()->len > 0 );
             QVector<QVariant> arr(e->getType()->len);
             Expression* c = e->rhs;
-            while( c )
+            if( (e->getType()->isCharArray() && c->getType()->kind == Type::StrLit) ||
+                    (e->getType()->isByteArray() && c->getType() && c->getType()->kind == Type::ByteArrayLit))
             {
-                Q_ASSERT( c->kind == Expression::IndexValue );
-                if( !evaluate(c->rhs) )
-                    return false;
-                Value v = stack.takeLast();
-                Q_ASSERT( v.isConst() );
-                arr[c->val.toLongLong()] = v.val;
-                c = c->next;
-            }
+                // special case: char array constructor initialized with string literal
+                const QByteArray str = c->val.toByteArray();
+                for( int i = 0; i < str.size(); i++ )
+                    arr[i] = QVariant::fromValue((char)str[i]);
+            }else
+                while( c )
+                {
+                    Q_ASSERT( c->kind == Expression::IndexValue );
+                    if( !evaluate(c->rhs) )
+                        return false;
+                    Value v = stack.takeLast();
+                    Q_ASSERT( v.isConst() );
+                    arr[c->val.toLongLong()] = v.val;
+                    c = c->next;
+                }
             Value v;
             v.mode = Value::Const;
             v.val = QVariant::fromValue(arr.toList()); // v.val = QVariantList

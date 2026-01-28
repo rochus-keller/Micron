@@ -284,7 +284,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         case Type::BOOL:
             *ret = ev->mdl->getType(Type::UINT8);
             break;
-        case Type::String:
+        case Type::StrLit:
             if( args.first()->strLitLen() == 1 )
                 *ret = ev->mdl->getType(Type::UINT8);
             else
@@ -313,7 +313,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
             Type* t = args.first()->getType();
             if( t->kind == Type::Pointer )
                 t = t->getType();
-            if( !t->isCharArray() && t->kind != Type::String )
+            if( !t->isCharArray() && t->kind != Type::StrLit )
                 throw "expecting array of char or string literal";
             *ret = mdl->getType(Type::UINT32);
         } break;
@@ -601,7 +601,7 @@ void Builtins::doOrd()
     {
         switch( v.type->kind )
         {
-        case Type::String:
+        case Type::StrLit:
             v.val = (quint8)v.val.toByteArray()[0];
             v.type = ev->mdl->getType(Type::UINT8);
             break;
@@ -630,7 +630,7 @@ void Builtins::doOrd()
     {
         switch( v.type->kind )
         {
-        case Type::String:
+        case Type::StrLit:
             v.type = ev->mdl->getType(Type::UINT8);
             break;
         case Type::CHAR:
@@ -654,6 +654,27 @@ void Builtins::doOrd()
     }
     ev->stack.push_back(v);
 
+}
+
+void Builtins::doSize(const RowCol& pos)
+{
+    Value v = ev->stack.takeLast();
+    if( (v.type->kind == Type::Array && v.type->len == 0) || v.type->kind == Type::StrLit )
+    {
+        ev->error("function not applicable to open arrays or string literals",pos);
+        return;
+    }
+
+    if( v.isConst() || v.type->kind < Type::MaxBasicType )
+    {
+        v.val = v.type->getByteSize();
+        v.mode = Value::Const;
+    }else
+    {
+        ev->out->sizeof_(ev->toQuali(v.type));
+    }
+    v.type = ev->mdl->getType(Type::UINT32);
+    ev->stack.push_back(v);
 }
 
 void Builtins::checkNumOfActuals(int nArgs, int min, int max)
@@ -828,7 +849,7 @@ void Builtins::LEN(int nArgs,const RowCol& pos)
         ev->error("function only applicable to non-open arrays",pos);
         return;
     }
-    //ev->out->ldc_i4(arr->len);
+
     Value res;
     res.mode = Value::Const;
     res.type = ev->mdl->getType(Type::UINT32);
@@ -1049,6 +1070,15 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
     case Builtin::HALT:
         checkNumOfActuals(nArgs, 1);
         ev->out->call_(coreName("exit"),1,false);
+        break;
+    case Builtin::SIZE:
+        checkNumOfActuals(nArgs, 1);
+        doSize(pos);
+        handleStack = false;
+        break;
+    case Builtin::CHR:
+        checkNumOfActuals(nArgs, 1);
+        ev->stack.back().type = ev->mdl->getType(Type::CHAR);
         break;
 
     default:

@@ -819,15 +819,15 @@ void Parser2::error(const Token& t, const QString& msg)
         errors << Error(msg,t.d_lineNr, t.d_colNr, t.d_sourcePath);
 }
 
-void Parser2::error(int row, int col, const QString& msg)
+bool Parser2::error(int row, int col, const QString& msg)
 {
     Q_ASSERT(!msg.isEmpty());
     errors << Error(msg, row, col, scanner->source());
+    return false;
 }
 
 void Parser2::error(const RowCol& pos, const QString& msg)
 {
-    Q_ASSERT(!msg.isEmpty());
     if(msg.isEmpty())
         errors << Error("<no message>", pos.d_row, pos.d_col, scanner->source());
     else
@@ -952,7 +952,7 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
         return lhs->subs.contains(rhs);
 
     if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
-            rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == Type::String )
+            rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == Type::StrLit )
         return strlen(rhs->data.toByteArray().constData()) < lhs->len;
 
     return assigCompat(lhs, rhs->getType(), pos);
@@ -977,11 +977,11 @@ bool Parser2::assigCompat(Type* lhs, Expression* rhs, const RowCol& pos)
 
     // Tv is a non-open array of CHAR, Te is a string literal
     if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
-            rhs->hasConstValue() && rhs->getType()->kind == Type::String)
+            rhs->hasConstValue() && rhs->getType()->kind == Type::StrLit)
         return rhs->strLitLen() < lhs->len;
 
     // A string of length 1 can be used wherever a character constant is allowed and vice versa.
-    if( lhs->kind == Type::CHAR && rhs->getType()->kind == Type::String )
+    if( lhs->kind == Type::CHAR && rhs->getType()->kind == Type::StrLit )
         return rhs->strLitLen() == 1;
 
     return assigCompat(lhs, rhs->getType(), pos);
@@ -994,7 +994,7 @@ bool Parser2::paramCompat(Declaration* lhs, Expression* rhs)
     // Tf is a pointer to an open array of CHAR, f is CONST, and a is string literal
     if( lhs->visi == Node::ReadOnly && lhs->getType()->kind == Type::Pointer &&
             lhs->getType()->getType()->kind == Type::Array && lhs->getType()->getType()->getType()->kind == Type::CHAR &&
-            lhs->getType()->getType()->len == 0 && rhs->getType()->kind == Type::String )
+            lhs->getType()->getType()->len == 0 && rhs->getType()->kind == Type::StrLit )
         return true;
 
     if( rhs->kind == Expression::TypeDecl )
@@ -1257,6 +1257,8 @@ void Parser2::ConstDeclaration() {
     Expression* e = ConstExpression(0);
     if( e && !ev->evaluate(e) )
         errorEv();
+    if( e && e->getType() && !e->getType()->isSimple() && e->getType()->kind != Type::StrLit )
+        error(e->pos, "constant declarations only support basic types and string literals");
     Value v = ev->pop();
     d->data = v.val;
     d->setType(v.type);
@@ -2060,10 +2062,10 @@ static void bindUniInt(Expression* lhs, Expression* rhs, Evaluator* ev)
         ev->bindUniInt(rhs, lhs && lhs->getType() ? lhs->getType()->isInt() : false);
 }
 
-void Parser2::checkArithOp(Expression* e)
+bool Parser2::checkArithOp(Expression* e)
 {
     if( e->lhs == 0 || e->lhs->getType() == 0 || e->rhs == 0 || e->rhs->getType() == 0 )
-        return; // already reported?
+        return false; // already reported?
     if( e->lhs->getType()->isNumber() && e->rhs->getType()->isNumber() )
     {
         bindUniInt(e->lhs, e->rhs, ev);
@@ -2079,8 +2081,7 @@ void Parser2::checkArithOp(Expression* e)
                 Evaluator::convArithOp(e);
                 break;
             default:
-                error(e->pos.d_row, e->pos.d_col,"operator not supported for integer operands");
-                break;
+                return error(e->pos.d_row, e->pos.d_col,"operator not supported for integer operands");
             }
         else if( e->lhs->getType()->isReal() && e->rhs->getType()->isReal() )
             switch(e->kind)
@@ -2092,11 +2093,10 @@ void Parser2::checkArithOp(Expression* e)
                 Evaluator::convArithOp(e);
                 break;
             default:
-                error(e->pos.d_row, e->pos.d_col,"operator not supported for real operands");
-                break;
+                return error(e->pos.d_row, e->pos.d_col,"operator not supported for real operands");
             }
         else
-            error(e->pos.d_row, e->pos.d_col,QString("operands are not of the same type (%1, %2)")
+            return error(e->pos.d_row, e->pos.d_col,QString("operands are not of the same type (%1, %2)")
                   .arg(e->lhs->getType()->getName()).arg(e->rhs->getType()->getName()));
     }else if( e->lhs->getType()->isSet() && e->rhs->getType()->isSet() )
     {
@@ -2109,29 +2109,29 @@ void Parser2::checkArithOp(Expression* e)
             e->setType(e->lhs->getType());
             break;
         default:
-            error(e->pos.d_row, e->pos.d_col,"operator not supported for set operands");
-            break;
+            return error(e->pos.d_row, e->pos.d_col,"operator not supported for set operands");
         }
     }else if(e->lhs->getType()->isBoolean() && e->rhs->getType()->isBoolean())
     {
         if( e->kind == Expression::And || e->kind == Expression::Or )
             e->setType(e->lhs->getType());
         else
-            error(e->pos.d_row, e->pos.d_col,"operator not supported for boolean operands");
-    }else if((e->lhs->getType()->kind == Type::String || e->lhs->getType()->kind == Type::CHAR) &&
-             (e->rhs->getType()->kind == Type::String || e->rhs->getType()->kind == Type::CHAR))
+            return error(e->pos.d_row, e->pos.d_col,"operator not supported for boolean operands");
+    }else if((e->lhs->getType()->kind == Type::StrLit || e->lhs->getType()->kind == Type::CHAR) &&
+             (e->rhs->getType()->kind == Type::StrLit || e->rhs->getType()->kind == Type::CHAR))
     {
         if( e->kind != Expression::Add )
-            error(e->pos.d_row, e->pos.d_col,"only the '+' operator can be applied to string and char literals");
+            return error(e->pos.d_row, e->pos.d_col,"only the '+' operator can be applied to string and char literals");
         else if( !e->isConst() )
-            error(e->pos.d_row, e->pos.d_col,"operation is only available for string and char literals");
+            return error(e->pos.d_row, e->pos.d_col,"operation is only available for string and char literals");
         else
-            e->setType(mdl->getType(Type::String));
+            e->setType(mdl->getType(Type::StrLit));
     }else
-        error(e->pos.d_row, e->pos.d_col,"operands not compatible with operator");
+        return error(e->pos.d_row, e->pos.d_col,"operands not compatible with operator");
+    return true;
 }
 
-void Parser2::checkUnaryOp(Expression* e)
+bool Parser2::checkUnaryOp(Expression* e)
 {
     if( e->kind == Expression::Plus || e->kind == Expression::Minus )
     {
@@ -2158,27 +2158,27 @@ void Parser2::checkUnaryOp(Expression* e)
                 e->lhs = Evaluator::createAutoConv(e->lhs, mdl->getType(Type::INT64));
                 break;
             case Type::UINT64:
-                error(e->pos.d_row, e->pos.d_col, "unary + operator is not applicable to operands of UINT64 type");
-                break;
+                return error(e->pos.d_row, e->pos.d_col, "unary + operator is not applicable to operands of UINT64 type");
             }
             e->setType(e->lhs->getType());
         }else if ( e->kind == Expression::Minus && e->getType()->isSet() )
         {
             // NOP
         }else
-            error(e->pos.d_row, e->pos.d_col, "unary operator not applicable to this type");
+            return error(e->pos.d_row, e->pos.d_col, "unary operator not applicable to this type");
 
     }else if( e->kind == Expression::Not )
     {
         if( !e->getType()->isBoolean() )
-            error(e->pos.d_row, e->pos.d_col, "unary '~' or 'NOT' not applicable to this type");
+            return error(e->pos.d_row, e->pos.d_col, "unary '~' or 'NOT' not applicable to this type");
     }
+    return true;
 }
 
-void Parser2::checkRelOp(Expression* e)
+bool Parser2::checkRelOp(Expression* e)
 {
     if( e->lhs == 0 || e->lhs->getType() == 0 || e->rhs == 0 || e->rhs->getType() == 0 )
-        return; // already reported
+        return false; // already reported
 
     if( e->lhs->getType()->isNumber() && e->rhs->getType()->isNumber() )
     {
@@ -2193,7 +2193,7 @@ void Parser2::checkRelOp(Expression* e)
             if( mt != e->rhs->getType() )
                 e->rhs = Evaluator::createAutoConv(e->rhs,mt);
         }else
-            error(e->pos.d_row, e->pos.d_col,QString("operands are not of the same type (%1, %2)")
+            return error(e->pos.d_row, e->pos.d_col,QString("operands are not of the same type (%1, %2)")
                   .arg(e->lhs->getType()->getName()).arg(e->rhs->getType()->getName()));
     }else if( e->lhs->getType()->isText() && e->rhs->getType()->isText() ||
               e->lhs->getType()->kind == Type::Pointer && e->rhs->getType()->kind == Type::Pointer ||
@@ -2204,24 +2204,25 @@ void Parser2::checkRelOp(Expression* e)
     {
         if( e->lhs->getType()->kind == Type::ConstEnum  && e->rhs->getType()->kind == Type::ConstEnum &&
                 e->lhs->getType() != e->rhs->getType() )
-            error(e->pos.d_row, e->pos.d_col, "cannot compare the elements of different enumeration types");
+            return error(e->pos.d_row, e->pos.d_col, "cannot compare the elements of different enumeration types");
     }else if(e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Proc && e->lhs->getType()->typebound == e->rhs->getType()->typebound ||
              e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Nil ||
              e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Proc )
     {
         if( (e->lhs->getType()->typebound || e->rhs->getType()->typebound) && e->kind != Expression::Eq && e->kind != Expression::Neq )
-            error(e->pos.d_row, e->pos.d_col, "operation not supported for type-bound procedure types");
+            return error(e->pos.d_row, e->pos.d_col, "operation not supported for type-bound procedure types");
     }else if( ( e->lhs->getType()->isSet() && e->rhs->getType()->isSet() ) ||
               (e->lhs->getType()->isBoolean() && e->rhs->getType()->isBoolean()) )
     {
         if( e->kind != Expression::Eq && e->kind != Expression::Neq )
-            error(e->pos.d_row, e->pos.d_col, "operation not supported for given operands");
+            return error(e->pos.d_row, e->pos.d_col, "operation not supported for given operands");
     }else if( e->lhs->getType()->isInteger() && e->rhs->getType()->isSet() )
     {
         if( e->kind != Expression::In )
-            error(e->pos.d_row, e->pos.d_col, "operation not supported for given operands");
+            return error(e->pos.d_row, e->pos.d_col, "operation not supported for given operands");
     }else
-        error(e->pos.d_row, e->pos.d_col, "operands not compatible with operator");
+        return error(e->pos.d_row, e->pos.d_col, "operands not compatible with operator");
+    return true;
 }
 
 void Parser2::beginFinallyEnd(bool finally, const RowCol& pos)
@@ -2352,7 +2353,8 @@ Expression* Parser2::designator(bool needsLvalue) {
             {
                 error(cur,QString("expecting an index of integer type") );
                 return 0;
-            }
+            }else if( res->rhs && res->rhs->getType() && res->rhs->getType()->kind != Type::UINT32 )
+                res->rhs = ev->createAutoConv(res->rhs, mdl->getType(Type::UINT32) );
         } else if( la.d_type == Tok_Hat ) {
             tok = la;
             expect(Tok_Hat, false, "selector");
@@ -2451,7 +2453,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 e->val = lpar.d_lineNr;
                 args << e;
                 e = Expression::create(Expression::Literal,lpar.toRowCol());
-                e->setType(mdl->getType(Type::String));
+                e->setType(mdl->getType(Type::StrLit));
                 e->val = lpar.d_sourcePath.toUtf8();
                 args << e;
             }
@@ -2671,7 +2673,8 @@ Expression* Parser2::expression(Type* hint, bool lvalue) {
         res->rhs = SimpleExpression(0);
         if( res->rhs == 0 )
             return 0;
-        checkRelOp(res);
+        if( !checkRelOp(res) )
+            return 0;
     }
     return res;
 }
@@ -2723,7 +2726,8 @@ Expression* Parser2::SimpleExpression(Type* hint, bool lvalue) {
         tmp->lhs = res;
         tmp->setType(res->getType());
         res = tmp;
-        checkUnaryOp(res);
+        if( !checkUnaryOp(res) )
+            return 0;
     }
 	while( FIRST_AddOperator(la.d_type) ) {
         Token tok = la;
@@ -2733,7 +2737,8 @@ Expression* Parser2::SimpleExpression(Type* hint, bool lvalue) {
         res->rhs = term(0);
         if( res->rhs == 0 )
             return 0;
-        checkArithOp(res);
+        if(!checkArithOp(res))
+            return 0;
     }
     return res;
 }
@@ -2762,7 +2767,8 @@ Expression* Parser2::term(Type* hint, bool lvalue) {
         res->rhs = factor(0);
         if( res->rhs == 0 )
             return 0;
-        checkArithOp(res);
+        if(!checkArithOp(res))
+            return 0;
 	}
     return res;
 }
@@ -2792,7 +2798,7 @@ Expression* Parser2::literal() {
 	} else if( la.d_type == Tok_string ) {
 		expect(Tok_string, false, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
-        res->setType(mdl->getType(Type::String));
+        res->setType(mdl->getType(Type::StrLit));
         res->val = ev->dequote(cur.d_val);
         // string literal: byte array latin-1
     }else if( la.d_type == Tok_hexstring ) {
@@ -2800,10 +2806,15 @@ Expression* Parser2::literal() {
         // alternative syntax for A{ x x x } with A = array of byte
         res = Expression::create(Expression::Literal,cur.toRowCol());
         const QByteArray bytes = QByteArray::fromHex(cur.d_val); // already comes without quotes
+#if 0
         Type* arr = addHelperType(Type::Array, bytes.size(), mdl->getType(Type::UINT8), res->pos);
         res->setType(arr);
         res->val = bytes;
         // byte array literal: byte array with type array of uint8
+#else
+        res->setType(mdl->getType(Type::ByteArrayLit));
+        res->val = bytes;
+#endif
     } else if( la.d_type == Tok_hexchar ) {
 		expect(Tok_hexchar, false, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
@@ -2864,6 +2875,12 @@ Expression* Parser2::constructor(Type* hint) {
             if( la.d_type == Tok_Comma ) {
                 expect(Tok_Comma, false, "constructor");
             }
+            if( (res->getType()->isCharArray() && e->getType()->kind == Type::StrLit) ||
+                    (res->getType()->isByteArray() && e->getType() && e->getType()->kind == Type::ByteArrayLit) )
+            {
+                error(e->pos,"a string or hex string constructor can only have one element");
+                break;
+            }
             Expression* e = component(res->getType(), index);
             if( e == 0 )
                 return 0;
@@ -2889,36 +2906,37 @@ Expression* Parser2::constructor(Type* hint) {
         // only one option of the variant part can be initialized in the constructor.
     }else if( res->getType()->kind == Type::Array && res->getType()->len == 0 )
     {
-        QSet<qint64> test; qint64 maxIndex = 0;
-        Expression* c = res->rhs;
-        while(c)
+        qint64 maxIndex = 0;
+        if( res->getType()->isCharArray() && res->rhs && res->rhs->getType() && res->rhs->getType()->kind == Type::StrLit )
         {
-            Q_ASSERT( c->kind == Expression::IndexValue);
-            const qint64 index = c->val.toLongLong();
-            if( test.contains(index) )
-                error(c->pos, "value at array index was already defined");
-            test.insert(index);
-            if( index > maxIndex )
-                maxIndex = index;
-            c = c->next;
-        }
-        if( test.isEmpty() )
+            maxIndex = strlen(res->rhs->val.toByteArray().constData());
+        }else if( res->getType()->isByteArray() && res->rhs && res->rhs->getType() && res->rhs->getType()->kind == Type::ByteArrayLit )
         {
-            error(res->pos, "cannot determine length of array");
-            return 0;
-        }
-#if 0
-        // no longer required because we reuse types with addHelperType
-        if( hint && hint->kind == Type::Array && hint->len == maxIndex + 1 && hint->getType() == res->getType()->getType() )
-        {
-            // There is a compatible type already available; we do this so also the generated C types are compatible
-            res->setType(hint);
+            maxIndex = res->rhs->val.toByteArray().size();
+            maxIndex--; // because below it add + 1
         }else
-#endif
         {
-            Type* a = addHelperType(Type::Array, maxIndex + 1, res->getType()->getType(), res->pos);
-            res->setType(a);
+            QSet<qint64> test;
+            Expression* c = res->rhs;
+            while(c)
+            {
+                Q_ASSERT( c->kind == Expression::IndexValue);
+                const qint64 index = c->val.toLongLong();
+                if( test.contains(index) )
+                    error(c->pos, "value at array index was already defined");
+                test.insert(index);
+                if( index > maxIndex )
+                    maxIndex = index;
+                c = c->next;
+            }
+            if( test.isEmpty() )
+            {
+                error(res->pos, "cannot determine length of array");
+                return 0;
+            }
         }
+        Type* a = addHelperType(Type::Array, maxIndex + 1, res->getType()->getType(), res->pos);
+        res->setType(a);
     }else if( res->getType()->kind == Type::Pointer )
     {
         if( res->rhs == 0 || res->rhs->next != 0 )
@@ -3031,6 +3049,29 @@ Expression* Parser2::component(Type* constrType, int& index) {
             res = res2;
         }else if( constrType->kind == Type::Array)
         {
+            if( constrType->getType()->kind == Type::CHAR && res->getType()->kind == Type::StrLit )
+            {
+                // exception: initialize a char array with a single literal or constref component
+                if( res->kind == Expression::ConstDecl )
+                {
+                    res->kind = Expression::Literal;
+                    res->val = res->val.value<Declaration*>()->data;
+                }
+                if( constrType->len && constrType->len < res->val.toByteArray().size() )
+                    error(res->pos, "literal is too large for the given array type");
+                return res;
+            }else if( constrType->getType()->kind == Type::UINT8 && res->getType()->kind == Type::ByteArrayLit )
+            {
+                // exception: initialize a char array with a single literal or constref component
+                if( res->kind == Expression::ConstDecl )
+                {
+                    res->kind = Expression::Literal;
+                    res->val = res->val.value<Declaration*>()->data;
+                }
+                if( constrType->len && constrType->len < res->val.toByteArray().size() )
+                    error(res->pos, "literal is too large for the given array type");
+                return res;
+            }
             if( constrType->len && index >= constrType->len || index < 0 )
                 error(res->pos, "component is out of range of the array");
             Expression* res2 = Expression::create(Expression::IndexValue, res->pos);
@@ -3084,7 +3125,8 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
         res->lhs = tmp;
         res->setType(res->lhs->getType());
 
-        checkUnaryOp(res);
+        if( !checkUnaryOp(res) )
+            return 0;
 
     } else if( la.d_type == Tok_At ) {
         const Token tok = la;
@@ -4663,7 +4705,7 @@ QByteArray Parser2::Attribute()
             langLevel = v.val.toInt();
     } else if( name == "visibility" )
     {
-        if( v.type == 0 || v.type->kind != Type::String )
+        if( v.type == 0 || v.type->kind != Type::StrLit )
         {
             error(t, "expecting a string literal");
             return name;

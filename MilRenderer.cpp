@@ -1658,7 +1658,9 @@ Constant * ConstrLiteral::toConst(const QVariant & data)
         }
         return c;
     }
-    switch( data.type() )
+    const QVariant::Type t = data.type();
+    // const char * tn = data.typeName();
+    switch( t )
     {
     case QVariant::List:
         c->kind = Constant::C;
@@ -1692,6 +1694,7 @@ Constant * ConstrLiteral::toConst(const QVariant & data)
     case QVariant::Bool:
     case QVariant::ULongLong:
     case QVariant::UInt:
+    case 34: // char
         c->kind = Constant::I;
         c->i = data.toLongLong();
         break;

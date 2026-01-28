@@ -1,10 +1,12 @@
 module Arrays
 
+  const data = $20 61 62 63$
+  
 	type 
 	   A = array of byte
 	var a : array 20 of shortint
 		c : array 10 of char
-		e : array 4 of byte
+		e, f : array 4 of byte
 		i : byte
 		
 	proc sub
@@ -14,6 +16,7 @@ module Arrays
 		println(b[1])
 		a[4] := 50
 	end sub
+	
 begin
 	println("Arrays start")
 	a[3] := 42
@@ -25,7 +28,9 @@ begin
 	println(c)
 	println(c[2])
 
-	// e := $20 61 62 63$ 
+	// ok: e := {$20 61 62 63$}
+	// ok: e := {data}
+	//e := data // TODO this is now a byte array literal, not a constructor
 	// equal to 
 	e := A{ 20h 61h 62h 63h } // TODO: not yet implemented i }
 	i := 64h

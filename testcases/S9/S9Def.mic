@@ -224,6 +224,13 @@ END vector_p;
 PROCEDURE vector_index*(n: Cell): Cell INLINE;
 BEGIN RETURN Vectors[Cdr[n] - 2] END vector_index;
 
+(* Calculates total cells needed for a vector of k items *)
+PROCEDURE vector_size*(k: INT32): INT32 INLINE;
+BEGIN
+  (* Payload (k) + Header (3: Link, Index, Size) *)
+  RETURN k + 3
+END vector_size;
+
 PROCEDURE vector_len*(n: Cell): Cell INLINE;
 VAR k: Cell;
 BEGIN

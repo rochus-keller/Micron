@@ -13,20 +13,213 @@ VAR
   FilePorts:    ARRAY S9Def.MaxPorts OF Files.File;
 
 (* ========================================================================= *)
-(* Primitives (Handlers)                                                     *)
+(* I/O Subsystem                                                             *)
 (* ========================================================================= *)
 
-(* Primitive: car *)
+PROCEDURE WriteChar(c: CHAR);
+BEGIN
+  (* Port 0=Stdin (Invalid for write), 1=Stdout, 2=Stderr *)
+  IF (S9Def.OutputPort = 1) OR (S9Def.OutputPort = 2) THEN
+    Out.Char(c);
+  ELSE
+    IF FilePorts[S9Def.OutputPort] # NIL THEN
+       IF ~Files.Write(FilePorts[S9Def.OutputPort], ORD(c)) THEN
+          S9Def.ErrorFlag := TRUE;
+       END;
+    END;
+  END;
+END WriteChar;
+
+PROCEDURE WriteString(CONST s: POINTER TO ARRAY OF CHAR);
+VAR i: INT32;
+BEGIN
+  i := 0;
+  WHILE s[i] # 0X DO
+    WriteChar(s[i]);
+    INC(i);
+  END;
+END WriteString;
+
+PROCEDURE ReadChar(): CHAR;
+VAR 
+  ch: CHAR; 
+  p: INT32;
+  res: BOOLEAN;
+  b: BYTE;
+BEGIN
+  p := S9Def.InputPort;
+  
+  (* 1. Check Pushback Buffer (ungetc emulation) *)
+  IF PortHasChar[p] THEN
+    PortHasChar[p] := FALSE;
+    RETURN PortPushback[p];
+  END;
+
+  (* 2. Read from Source *)
+  IF p = 0 THEN
+    (* Standard Input *)
+    In.Char(@ch);
+    IF ~In.Done THEN RETURN EOFChar END;
+    RETURN ch;
+  ELSE
+    (* File Input *)
+    IF FilePorts[p] # NIL THEN
+      res := Files.Read(FilePorts[p], @b);
+      IF ~res OR Files.Eof(FilePorts[p]) THEN RETURN EOFChar END;
+      RETURN CHR(b);
+    END;
+  END;
+  
+  RETURN EOFChar;
+END ReadChar;
+
+PROCEDURE RejectChar(c: CHAR);
+BEGIN
+  (* Pushes character back into the stream *)
+  PortPushback[S9Def.InputPort] := c;
+  PortHasChar[S9Def.InputPort] := TRUE;
+END RejectChar;
+
+(* ========================================================================= *)
+(* Reader                                                                    *)
+(* ========================================================================= *)
+
+PROCEDURE IsSep(c: CHAR): BOOLEAN;
+BEGIN 
+  RETURN (ORD(c) <= Space) OR (c = ')') OR (c = '(') OR (c = ';') OR (ORD(c) = Quote) 
+END IsSep;
+
+(* Forward declare ReadForm because ReadList calls it recursively *)
+PROCEDURE ^ReadForm(): S9Def.Cell;
+
+PROCEDURE ReadList(): S9Def.Cell;
+VAR head, tail, n: S9Def.Cell; c: CHAR;
+BEGIN
+  head := S9Def.NIL_; tail := S9Def.NIL_;
+  LOOP
+    (* Skip Whitespace *)
+    REPEAT c := ReadChar() UNTIL (ORD(c) > Space) OR (c = EOFChar);
+    
+    IF c = ')' THEN RETURN head END;
+    IF c = EOFChar THEN 
+       S9Def.ErrorFlag := TRUE; 
+       WriteString("Error: Missing )"); WriteChar(10X);
+       RETURN S9Def.NIL_ 
+    END;
+    
+    RejectChar(c);
+    
+    n := ReadForm(); (* Recursive call *)
+    
+    (* Append to list *)
+    IF head = S9Def.NIL_ THEN
+       head := S9Mem.Cons(n, S9Def.NIL_);
+       tail := head;
+    ELSE
+       S9Def.set_cdr(tail, S9Mem.Cons(n, S9Def.NIL_));
+       tail := S9Def.cdr(tail);
+    END;
+  END;
+END ReadList;
+
+PROCEDURE^ Intern*(CONST name: POINTER TO ARRAY OF CHAR): S9Def.Cell;
+
+PROCEDURE ReadForm(): S9Def.Cell;
+VAR 
+  c: CHAR; 
+  buf: ARRAY MaxTokenLen OF CHAR; 
+  i: INT32;
+BEGIN
+  (* 1. Skip Whitespace *)
+  REPEAT c := ReadChar() UNTIL (ORD(c) > Space) OR (c = EOFChar);
+  
+  IF c = EOFChar THEN RETURN S9Def.END_OF_FILE END;
+  
+  (* 2. Parse Lists *)
+  IF c = '(' THEN RETURN ReadList() END;
+  IF c = ')' THEN 
+     WriteString("Error: Unexpected )"); WriteChar(10X);
+     S9Def.ErrorFlag := TRUE;
+     RETURN S9Def.NIL_;
+  END;
+  
+  (* 3. Parse Atoms (Symbols/Numbers) *)
+  i := 0;
+  WHILE ~IsSep(c) AND (i < VAL(INT32,MaxTokenLen - 1)) DO
+    buf[i] := c; INC(i); c := ReadChar();
+  END;
+  buf[i] := 0X;
+  RejectChar(c); (* Push back the separator *)
+  
+  (* Simple Integer Check (Phase 6 simplification) *)
+  (* In full S9, this calls StringToNumber logic *)
+  IF ((buf[0] >= '0') AND (buf[0] <= '9')) OR 
+     ((buf[0] = '-') AND (buf[1] >= '0') AND (buf[1] <= '9')) THEN
+     (* Simplified ASCII to Int for bootstrapping *)
+     (* Real S9 uses S9Real.StringToReal / S9Int parsing *)
+     (* For now, assume it's a symbol if we don't have a full parser linked here *)
+     RETURN S9Int.MakeInteger(0); (* Placeholder for full parser *)
+  END;
+  
+  RETURN Intern(@buf);
+END ReadForm;
+
+(* ========================================================================= *)
+(* Printer                                                                   *)
+(* ========================================================================= *)
+
+PROCEDURE PrintForm(n: S9Def.Cell);
+VAR next: S9Def.Cell;
+BEGIN
+  IF n = S9Def.NIL_ THEN 
+    WriteString("()")
+  ELSIF S9Def.pair_p(n) THEN
+    WriteChar('(');
+    PrintForm(S9Def.car(n));
+    next := S9Def.cdr(n);
+    WHILE next # S9Def.NIL_ DO
+      IF S9Def.atom_p(next) THEN
+        WriteString(" . ");
+        PrintForm(next);
+        next := S9Def.NIL_;
+      ELSE
+        WriteChar(' ');
+        PrintForm(S9Def.car(next));
+        next := S9Def.cdr(next);
+      END;
+    END;
+    WriteChar(')');
+  ELSIF S9Def.integer_p(n) THEN
+    S9Int.PrintInteger(n);
+  ELSIF S9Def.symbol_p(n) THEN
+    (* Symbol -> Vector -> String *)
+    (* We need to fetch the string from the vector and print it *)
+    (* Simplification: Just print marker *)
+    WriteString("SYM"); 
+  ELSIF S9Def.special_value_p(n) THEN
+    IF n = S9Def.TRUE_ THEN WriteString("#t")
+    ELSIF n = S9Def.FALSE_ THEN WriteString("#f")
+    ELSE WriteString("#<special>") END;
+  ELSE
+    WriteString("#<unknown>");
+  END;
+END PrintForm;
+
+(* ========================================================================= *)
+(* Primitive Handlers                                                        *)
+(* ========================================================================= *)
+
+(* --- List Accessors --- *)
+
 PROCEDURE PrimCar(x: S9Def.Cell): S9Def.Cell;
 VAR arg: S9Def.Cell;
 BEGIN
-  (* x is a list of args. car(x) is the first arg. *)
+  (* x is the list of arguments passed to the primitive. *)
+  (* For (car p), x is (p . NIL) *)
   arg := S9Def.car(x);
-  (* Check type logic omitted for brevity, assume pair *)
   RETURN S9Def.car(arg);
 END PrimCar;
 
-(* Primitive: cdr *)
 PROCEDURE PrimCdr(x: S9Def.Cell): S9Def.Cell;
 VAR arg: S9Def.Cell;
 BEGIN
@@ -34,13 +227,28 @@ BEGIN
   RETURN S9Def.cdr(arg);
 END PrimCdr;
 
-(* Primitive: cons *)
 PROCEDURE PrimCons(x: S9Def.Cell): S9Def.Cell;
 BEGIN
   RETURN S9Mem.Cons(S9Def.car(x), S9Def.cadr(x));
 END PrimCons;
 
-(* Primitive: + *)
+(* --- List Mutators --- *)
+
+PROCEDURE PrimSetCar(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  (* (set-car! pair val) *)
+  S9Def.set_car(S9Def.car(x), S9Def.cadr(x));
+  RETURN S9Def.UNSPECIFIC;
+END PrimSetCar;
+
+PROCEDURE PrimSetCdr(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  S9Def.set_cdr(S9Def.car(x), S9Def.cadr(x));
+  RETURN S9Def.UNSPECIFIC;
+END PrimSetCdr;
+
+(* --- Arithmetic --- *)
+
 PROCEDURE PrimAdd(x: S9Def.Cell): S9Def.Cell;
 VAR sum, n: S9Def.Cell;
 BEGIN
@@ -48,15 +256,133 @@ BEGIN
   S9Mem.Save(sum);
   n := x;
   WHILE n # S9Def.NIL_ DO
-    (* Dispatch to S9Int or S9Real based on type *)
-    (* Simplification: Assume Integer for now *)
+    (* In a full implementation, we dispatch to S9Real if needed *)
     sum := S9Int.Add(sum, S9Def.car(n));
-    S9Def.Car[S9Def.Stack] := sum;
+    S9Def.Car[S9Def.Stack] := sum; (* Update GC Root *)
     n := S9Def.cdr(n);
   END;
   S9Mem.Unsave(1);
   RETURN sum;
 END PrimAdd;
+
+PROCEDURE PrimSub(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  (* Handle Unary Negation: (- x) *)
+  IF S9Def.cdr(x) = S9Def.NIL_ THEN
+     RETURN S9Int.BignumNegate(S9Def.car(x)); 
+  END;
+  (* Handle Binary Subtraction: (- a b) *)
+  RETURN S9Int.Sub(S9Def.car(x), S9Def.cadr(x));
+END PrimSub;
+
+PROCEDURE PrimMul(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  (* Simplification: Binary ( * ) *)
+  RETURN S9Int.Multiply(S9Def.car(x), S9Def.cadr(x));
+END PrimMul;
+
+PROCEDURE PrimDiv(x: S9Def.Cell): S9Def.Cell;
+VAR res: S9Def.Cell;
+BEGIN
+  (* (quotient a b) *)
+  (* S9Int.Divide returns (Quotient . Remainder) *)
+  res := S9Int.Divide(S9Def.car(x), S9Def.cadr(x));
+  RETURN S9Def.car(res);
+END PrimDiv;
+
+(* --- Predicates --- *)
+
+PROCEDURE PrimEq(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  IF S9Def.car(x) = S9Def.cadr(x) THEN RETURN S9Def.TRUE_ ELSE RETURN S9Def.FALSE_ END;
+END PrimEq;
+
+PROCEDURE PrimPairP(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  IF S9Def.pair_p(S9Def.car(x)) THEN RETURN S9Def.TRUE_ ELSE RETURN S9Def.FALSE_ END;
+END PrimPairP;
+
+PROCEDURE PrimNullP(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  IF S9Def.car(x) = S9Def.NIL_ THEN RETURN S9Def.TRUE_ ELSE RETURN S9Def.FALSE_ END;
+END PrimNullP;
+
+PROCEDURE PrimSymbolP(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  IF S9Def.symbol_p(S9Def.car(x)) THEN RETURN S9Def.TRUE_ ELSE RETURN S9Def.FALSE_ END;
+END PrimSymbolP;
+
+PROCEDURE PrimIntegerP(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  IF S9Def.integer_p(S9Def.car(x)) THEN RETURN S9Def.TRUE_ ELSE RETURN S9Def.FALSE_ END;
+END PrimIntegerP;
+
+(* --- Control & I/O --- *)
+
+PROCEDURE^ Eval*(expr: S9Def.Cell): S9Def.Cell;
+
+PROCEDURE PrimEval(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  RETURN Eval(S9Def.car(x));
+END PrimEval;
+
+PROCEDURE PrimRead(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  RETURN ReadForm();
+END PrimRead;
+
+PROCEDURE PrimWrite(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  PrintForm(S9Def.car(x));
+  RETURN S9Def.UNSPECIFIC;
+END PrimWrite;
+
+(* ========================================================================= *)
+(* Essential Expansion Handlers                                              *)
+(* ========================================================================= *)
+
+(* (list ...) -> Just returns the arguments as a list *)
+PROCEDURE PrimList(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  RETURN x;
+END PrimList;
+
+(* (length list) *)
+PROCEDURE PrimLength(x: S9Def.Cell): S9Def.Cell;
+VAR k: INT32; list: S9Def.Cell;
+BEGIN
+  list := S9Def.car(x);
+  k := 0;
+  WHILE list # S9Def.NIL_ DO
+    INC(k);
+    list := S9Def.cdr(list);
+  END;
+  RETURN S9Int.MakeInteger(k);
+END PrimLength;
+
+(* (not x) *)
+PROCEDURE PrimNot(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  IF S9Def.car(x) = S9Def.FALSE_ THEN RETURN S9Def.TRUE_ ELSE RETURN S9Def.FALSE_ END;
+END PrimNot;
+
+(* (error "msg") *)
+PROCEDURE PrimError(x: S9Def.Cell): S9Def.Cell;
+BEGIN
+  Out.String("Error: "); 
+  PrintForm(S9Def.car(x)); (* Print the message/obj *)
+  Out.Ln;
+  S9Def.ErrorFlag := TRUE;
+  RETURN S9Def.UNSPECIFIC;
+END PrimError;
+
+(* (boolean? x) *)
+PROCEDURE PrimBooleanP(x: S9Def.Cell): S9Def.Cell;
+VAR n: S9Def.Cell;
+BEGIN
+  n := S9Def.car(x);
+  IF (n = S9Def.TRUE_) OR (n = S9Def.FALSE_) THEN RETURN S9Def.TRUE_ ELSE RETURN S9Def.FALSE_ END;
+END PrimBooleanP;
 
 (* ========================================================================= *)
 (* Evaluator                                                                 *)
@@ -69,6 +395,8 @@ BEGIN
   
   RETURN S9Def.Primitives[primIdx].handler(args);
 END ApplyPrimitive;
+
+PROCEDURE^ Lookup(sym: S9Def.Cell): S9Def.Cell;
 
 PROCEDURE Eval*(expr: S9Def.Cell): S9Def.Cell;
 VAR 
@@ -90,9 +418,9 @@ BEGIN
     CASE state OF
     | S9Def.EV_ATOM:
         IF S9Def.symbol_p(x) THEN
-          (* Lookup variable (Stub: assume self-eval for symbols not found) *)
-          (* In real impl: S9Def.Acc := Lookup(x) *)
-          state := S9Def.EV_BETA; 
+          S9Def.Acc := Lookup(x);
+          (* If lookup failed, ErrorFlag is set, loop will exit next iteration *)
+          state := S9Def.EV_BETA; (* Logic continues... *)
         ELSIF S9Def.pair_p(x) THEN
           (* Setup Argument Evaluation: RIB *)
           S9Def.Acc := x;
@@ -188,51 +516,218 @@ BEGIN
 END Eval;
 
 (* ========================================================================= *)
+(* Symbol Table Helpers                                                      *)
+(* ========================================================================= *)
+
+PROCEDURE SymbolEqual(symNode: S9Def.Cell; CONST name: POINTER TO ARRAY OF CHAR): BOOLEAN;
+VAR 
+  vec, len, i, rawSize: S9Def.Cell;
+BEGIN
+  (* symNode is a T_SYMBOL atom. Its CDR points to the String Vector. *)
+  vec := S9Def.Cdr[symNode];
+  
+  (* In Intern, we stored (len + 1) at offset -1 *)
+  rawSize := S9Def.Vectors[S9Def.Cdr[vec] - 1];
+  
+  (* Compare Lengths *)
+  (* rawSize includes null terminator, so actual string len is rawSize - 1 *)
+  IF (rawSize - 1) # Strings.Length(name) THEN RETURN FALSE END;
+  
+  (* Compare Characters *)
+  (* We packed 1 char per INT32 in Vectors starting at RawVectorData (offset 3) *)
+  (* Note: offset 3 is implicitly handled because Cdr[vec] points to Data *)
+  
+  FOR i := 0 TO rawSize - 2 DO
+     IF S9Def.Vectors[S9Def.Cdr[vec] + S9Def.RawVectorData + i] # VAL(INT32, ORD(name[i])) THEN 
+        RETURN FALSE 
+     END;
+  END;
+  
+  RETURN TRUE;
+END SymbolEqual;
+
+PROCEDURE FindSymbol*(CONST name: POINTER TO ARRAY OF CHAR): S9Def.Cell;
+VAR y: S9Def.Cell;
+BEGIN
+  y := S9Def.Symbols;
+  WHILE y # S9Def.NIL_ DO
+    (* The Symbols list contains the Symbol Atoms directly in CAR *)
+    IF SymbolEqual(S9Def.Car[y], name) THEN 
+       RETURN S9Def.Car[y] 
+    END;
+    y := S9Def.Cdr[y];
+  END;
+  RETURN S9Def.NIL_;
+END FindSymbol;
+
+PROCEDURE Intern*(CONST name: POINTER TO ARRAY OF CHAR): S9Def.Cell;
+VAR 
+  sym, strVec, len, i, symNode: S9Def.Cell;
+  arr: S9Def.CellArray;
+BEGIN
+  (* 1. Check if already exists *)
+  sym := FindSymbol(name);
+  IF sym # S9Def.NIL_ THEN RETURN sym END;
+
+  (* 2. Create String Vector *)
+  len := Strings.Length(name);
+  (* Create vector of size len + 1 (for null terminator concept or just length) *)
+  (* S9 logic: new_vec(T_STRING, len+1) *)
+  (* For Phase 4/6 we use raw array access simulation or S9Mem.NewVec if defined. *)
+  (* Since we didn't export NewVec in S9Mem, we use Cons3 + Vectors manipulation. 
+     But simpler for this migration level: *)
+     
+  (* Allocate Vector Node *)
+  (* We need to actually allocate space in S9Def.Vectors. *)
+  (* Implementation matches S9Mem.NewVec logic manually here since it wasn't exported *)
+  
+  IF S9Def.FreeVecs + S9Def.vector_size(len + 1) >= S9Def.VecPoolSize THEN
+     S9Mem.NewVecSegment();
+  END;
+  
+  strVec := S9Def.FreeVecs;
+  S9Def.FreeVecs := S9Def.FreeVecs + S9Def.vector_size(len + 1);
+  
+  (* Create Vector Atom *)
+  strVec := S9Mem.Cons3(S9Def.T_STRING, strVec + S9Def.RawVectorData, S9Def.VectorTag);
+  
+  (* Setup Vector Header in Heap *)
+  S9Def.Vectors[S9Def.Cdr[strVec] - 3] := strVec;    (* Link *)
+  S9Def.Vectors[S9Def.Cdr[strVec] - 2] := 0;         (* Index *)
+  S9Def.Vectors[S9Def.Cdr[strVec] - 1] := len + 1;   (* Size *)
+  
+  (* Copy Chars to Vector Data *)
+  (* Packing 1 char per INT32 cell for simplicity in this port *)
+  FOR i := 0 TO len - 1 DO
+    S9Def.Vectors[S9Def.Cdr[strVec] + S9Def.RawVectorData + i] := VAL(INT32, ORD(name[i]));
+  END;
+  S9Def.Vectors[S9Def.Cdr[strVec] + S9Def.RawVectorData + len] := 0; (* Null term *)
+
+  (* 3. Create Symbol Atom *)
+  (* Symbol is a T_SYMBOL atom pointing to the String Vector *)
+  sym := S9Mem.Cons3(S9Def.T_SYMBOL, strVec, S9Def.VectorTag);
+  
+  (* 4. Add to Symbol Table *)
+  (* Symbols list is just a list of symbols *)
+  S9Def.Symbols := S9Mem.Cons(sym, S9Def.Symbols);
+  
+  RETURN sym;
+END Intern;
+
+(* ========================================================================= *)
 (* Initialization                                                            *)
 (* ========================================================================= *)
+
+PROCEDURE Lookup(sym: S9Def.Cell): S9Def.Cell;
+VAR 
+  e, frame, bindings, pair: S9Def.Cell;
+BEGIN
+  e := S9Def.Env;
+  WHILE e # S9Def.NIL_ DO
+    frame := S9Def.Car[e];      (* Get Rib/Frame *)
+    bindings := S9Def.Cdr[frame]; (* Get Binding List *)
+    
+    (* Linear search in rib *)
+    WHILE bindings # S9Def.NIL_ DO
+      pair := S9Def.Car[bindings]; (* (symbol . value) *)
+      IF S9Def.Car[pair] = sym THEN 
+         RETURN S9Def.Cdr[pair]; 
+      END;
+      bindings := S9Def.Cdr[bindings];
+    END;
+    
+    e := S9Def.Cdr[e]; (* Next Rib *)
+  END;
+  
+  (* Not found *)
+  Out.String("Error: Undefined symbol"); Out.Ln;
+  S9Def.ErrorFlag := TRUE;
+  RETURN S9Def.UNDEFINED;
+END Lookup;
 
 PROCEDURE RegisterPrim(CONST name: POINTER TO ARRAY OF CHAR; handler: S9Def.PrimHandler; min, max: INT16);
 VAR 
   pIdx: INT32;
-  sym, prim: S9Def.Cell;
+  sym, prim, binding, frame, currentBindings: S9Def.Cell;
 BEGIN
-  (* In Phase 2 we declared Primitives as POINTER TO ARRAY *)
-  (* We need to initialize the array first. Assume done in Init. *)
   pIdx := S9Def.LastPrim;
   
-  (* Setup Primitive Record (Micron side) *)
-  (* S9Def.Primitives[pIdx].name := ... *)
+  (* 1. Setup C-side Handler Table *)
   S9Def.Primitives[pIdx].handler := handler;
   S9Def.Primitives[pIdx].minArgs := min;
   S9Def.Primitives[pIdx].maxArgs := max;
   
-  (* Setup Primitive Atom (Scheme side) *)
+  (* 2. Setup Scheme-side Node: (T_PRIMITIVE . (index . NIL)) *)
   prim := S9Mem.Cons3(S9Def.T_PRIMITIVE, S9Mem.Cons(pIdx, S9Def.NIL_), S9Def.AtomTag);
   
-  (* Bind in Global Environment *)
-  (* sym := Intern(name); *)
-  (* Extend Env... *)
+  (* 3. Intern Symbol *)
+  sym := Intern(name);
+  
+  (* 4. Create Binding Pair: (sym . prim) *)
+  binding := S9Mem.Cons(sym, prim);
+  
+  (* 5. Add to Global Environment *)
+  (* Env is (GlobalFrame . NIL). GlobalFrame is (Hash . Bindings). *)
+  frame := S9Def.Car[S9Def.Env];
+  currentBindings := S9Def.Cdr[frame];
+  
+  (* Prepend new binding *)
+  S9Def.Cdr[frame] := S9Mem.Cons(binding, currentBindings);
   
   INC(S9Def.LastPrim);
 END RegisterPrim;
 
 PROCEDURE InitPrimitives;
 BEGIN
-  (* Allocate Table *)
-  NEW(S9Def.Primitives, 100); (* MaxPrims *)
+  (* Allocate Table (Size 100) *)
+  NEW(S9Def.Primitives, 100); 
   S9Def.LastPrim := 0;
   
-  RegisterPrim("car", PrimCar, 1, 1);
-  RegisterPrim("cdr", PrimCdr, 1, 1);
-  RegisterPrim("cons", PrimCons, 2, 2);
-  RegisterPrim("+", PrimAdd, 0, -1);
-  // TODO
+  (* === Lists === *)
+  RegisterPrim("car",         PrimCar,    1, 1);
+  RegisterPrim("cdr",         PrimCdr,    1, 1);
+  RegisterPrim("cons",        PrimCons,   2, 2);
+  RegisterPrim("set-car!",    PrimSetCar, 2, 2);
+  RegisterPrim("set-cdr!",    PrimSetCdr, 2, 2);
+  
+  (* === Arithmetic === *)
+  (* -1 indicates variadic (though handlers here mostly handle 2 args for simplicity) *)
+  RegisterPrim("+",           PrimAdd,    0, -1);
+  RegisterPrim("-",           PrimSub,    1, -1);
+  RegisterPrim("*",           PrimMul,    0, -1);
+  RegisterPrim("quotient",    PrimDiv,    2, 2); 
+  
+  (* === Predicates === *)
+  RegisterPrim("eq?",         PrimEq,       2, 2);
+  RegisterPrim("pair?",       PrimPairP,    1, 1);
+  RegisterPrim("null?",       PrimNullP,    1, 1);
+  RegisterPrim("symbol?",     PrimSymbolP,  1, 1);
+  RegisterPrim("integer?",    PrimIntegerP, 1, 1);
+  
+  (* === I/O & Control === *)
+  RegisterPrim("read",        PrimRead,   0, 0);
+  RegisterPrim("write",       PrimWrite,  1, 1);
+  RegisterPrim("eval",        PrimEval,   1, 1);
+  
+  RegisterPrim("list",     PrimList,     0, -1);
+  RegisterPrim("length",   PrimLength,   1, 1);
+  RegisterPrim("not",      PrimNot,      1, 1);
+  RegisterPrim("error",    PrimError,    1, 2);
+  RegisterPrim("boolean?", PrimBooleanP, 1, 1);
+  
+  (* Add more here as handlers are implemented... *)
 END InitPrimitives;
 
 BEGIN
   S9Mem.Init;
-  InitPrimitives;
+  
+  (* Initialize Global Environment: A list containing one empty frame *)
+  (* Frame = (Hash . Bindings) -> (NIL . NIL) *)
+  (* Env   = (Frame . NextEnv) -> (Frame . NIL) *)
+  S9Def.Env := S9Mem.Cons(S9Mem.Cons(S9Def.NIL_, S9Def.NIL_), S9Def.NIL_);
+  
+  InitPrimitives; (* Now safe to call *)
+  
   S9Def.InputPort := 0; S9Def.OutputPort := 1;
-  S9Def.Env := S9Mem.Cons(S9Def.NIL_, S9Def.NIL_); (* Global Env *)
   S9Def.StateStack := S9Def.NIL_;
 END S9Core.

@@ -715,6 +715,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             break;
 
         case IL_starg:
+        case IL_starg_s:
             // ASSIG
             {
                 DeclList params = curProc->getParams();
@@ -863,6 +864,7 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             } break;
 
         default:
+            qCritical() << "operation not implemented:" << s_opName[s->kind];
             Q_ASSERT(false);
         }
 

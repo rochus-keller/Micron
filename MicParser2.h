@@ -160,7 +160,7 @@ namespace Mic {
         bool expect(int tt, bool pkw, const char* where);
         void errorEv();
         void error( const Token&, const QString& msg);
-        void error( int row, int col, const QString& msg );
+        bool error( int row, int col, const QString& msg );
         void error( const RowCol&, const QString& msg );
         Declaration* findDecl(const Token& id );
         bool assigCompat(Type* lhs, Declaration* rhs, const RowCol &pos);
@@ -188,9 +188,9 @@ namespace Mic {
         void openArrayError(const Token&, Type*);
         void invalidTypeError(const Token&, Type*);
         void prepareParam(const DeclList& formals, const ExpList& actuals);
-        void checkArithOp(Expression*);
-        void checkUnaryOp(Expression*);
-        void checkRelOp(Expression*);
+        bool checkArithOp(Expression*);
+        bool checkUnaryOp(Expression*);
+        bool checkRelOp(Expression*);
         void beginFinallyEnd(bool finally, const RowCol &pos);
         Declaration* ProcedureHeader(bool inForward);
         Mil::Emitter& line(const RowCol&);

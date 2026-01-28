@@ -35,6 +35,7 @@ const char* Type::name[] = {
     "Undefined",
     "NoType",
     "String",
+    "ByteArray",
     "universal integer",
     "Any",
     "Nil",
@@ -48,6 +49,29 @@ const char* Type::name[] = {
     "Pointer", "ProcType", "Array", "Record", "Object", "Interface", "ConstEnum", "Generic"
 };
 
+static const int byte_sizes[] = {
+    -1, // Undefined,
+    -1, // NoType,
+    -1, // String,
+    -1, // ByteArray
+    -1, // UniInt, // universal integer literal
+    -1, // Any,
+    -1, // Nil,
+    1, // BOOL,
+    1, // CHAR,
+    1, // UINT8,
+    2, // UINT16,
+    4, // UINT32,
+    8, // UINT64,
+    1, // INT8,
+    2, // INT16,
+    4, // INT32,
+    8, // INT64,
+    4, // FLT32,
+    8, // FLT64,
+    4, // SET,
+};
+
 AstModel::AstModel():helper(0),helperId(0)
 {
     openScope(&globalScope);
@@ -57,7 +81,8 @@ AstModel::AstModel():helper(0),helperId(0)
         globalScope.kind = Declaration::Scope;
         types[Type::Undefined] = newType(Type::Undefined);
         types[Type::NoType] = newType(Type::NoType);
-        types[Type::String] = newType(Type::String);
+        types[Type::StrLit] = newType(Type::StrLit);
+        types[Type::ByteArrayLit] = newType(Type::ByteArrayLit);
         types[Type::UniInt] = newType(Type::UniInt);
         types[Type::Nil] = newType(Type::Nil);
         types[Type::Any] = addType("ANY", Type::Any);
@@ -407,30 +432,9 @@ QPair<int, int> Type::getFieldCount() const
 
 int Type::getByteSize() const
 {
-    static const int sizes[] = {
-        -1, // Undefined,
-        -1, // NoType,
-        -1, // String,
-        -1, // UniInt, // universal integer literal
-        -1, // Any,
-        -1, // Nil,
-        1, // BOOL,
-        1, // CHAR,
-        1, // UINT8,
-        2, // UINT16,
-        4, // UINT32,
-        8, // UINT64,
-        1, // INT8,
-        2, // INT16,
-        4, // INT32,
-        8, // INT64,
-        4, // FLT32,
-        8, // FLT64,
-        4, // SET,
-    };
-    if( kind >= MaxBasicType )
+    if( kind < BOOL || kind >= MaxBasicType )
         return -1;
-    return sizes[kind];
+    return byte_sizes[kind];
 }
 
 const char *Type::getName() const
@@ -732,7 +736,7 @@ bool Expression::isAssignable() const
 
 int Expression::strLitLen() const
 {
-    if( getType() == 0 || getType()->kind != Type::String )
+    if( getType() == 0 || getType()->kind != Type::StrLit )
         return -1;
     const QByteArray str = val.toByteArray();
     return strlen(str.constData());

@@ -548,7 +548,7 @@ Quali Declaration::toQuali() const
 
 Declaration*Declaration::forwardToProc() const
 {
-    if( kind == Procedure && forward )
+    if( kind == Procedure && forward && forwardTo)
         return forwardTo->forwardToProc();
     else
         return const_cast<Declaration*>(this);

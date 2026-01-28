@@ -128,8 +128,12 @@ bool Validator::validate(Declaration* module)
 Type*Validator::deref(Type* t)
 {
     if( t && t->kind == Type::NameRef )
-        return deref(t->getType());
-    else if( t )
+    {
+        Type* t2 = t->getType();
+        if( t == t2 )
+            return t;
+        return deref(t2);
+    }else if( t )
         return t;
     else
         return mdl->getBasicType(Type::Undefined);
@@ -479,7 +483,7 @@ void Validator::visitRepeat(Statement* stat)
     visitStatSeq(stat->body);
     visitExpr(stat->e);
     expectN(1, stat);
-    if( !isInt32(deref(stat->args->getType())) )
+    if( stat->args && !isInt32(deref(stat->args->getType())) )
         error(stat,"expecting a 32 bit result of boolean expression");
 }
 
@@ -1760,8 +1764,12 @@ bool Validator::checkIfObjectInit(Type* t)
         return false;
     case Type::Object:
         return true;
-    case Type::NameRef:
-        return checkIfObjectInit(deref(t));
+    case Type::NameRef: {
+        Type* t2 = deref(t);
+        if( t == t2 )
+            return false;
+        return checkIfObjectInit(t2);
+    }
     default:
         return false;
     }
