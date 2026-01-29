@@ -951,9 +951,13 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
     if( lhs->kind == Type::ConstEnum )
         return lhs->subs.contains(rhs);
 
-    if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
+    if( lhs->isCharArray() && lhs->len > 0 &&
             rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == Type::StrLit )
         return strlen(rhs->data.toByteArray().constData()) < lhs->len;
+
+    if( lhs->isByteArray() && lhs->len > 0 &&
+            rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == Type::ByteArrayLit )
+        return rhs->data.toByteArray().size() == lhs->len;
 
     return assigCompat(lhs, rhs->getType(), pos);
 }
@@ -976,9 +980,12 @@ bool Parser2::assigCompat(Type* lhs, Expression* rhs, const RowCol& pos)
         return assigCompat(lhs, rhs->val.value<Declaration*>(), pos );
 
     // Tv is a non-open array of CHAR, Te is a string literal
-    if( lhs->kind == Type::Array && lhs->getType()->kind == Type::CHAR && lhs->len > 0 &&
-            rhs->hasConstValue() && rhs->getType()->kind == Type::StrLit)
+    if( lhs->isCharArray() && lhs->len > 0 && rhs->getType()->kind == Type::StrLit)
         return rhs->strLitLen() < lhs->len;
+
+    if( lhs->isByteArray() && lhs->len > 0 && rhs->getType()->kind == Type::ByteArrayLit )
+        return rhs->val.toByteArray().size() == lhs->len;
+
 
     // A string of length 1 can be used wherever a character constant is allowed and vice versa.
     if( lhs->kind == Type::CHAR && rhs->getType()->kind == Type::StrLit )

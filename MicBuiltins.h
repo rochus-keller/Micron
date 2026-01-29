@@ -55,6 +55,9 @@ protected:
     void doShiftLeft();
     void doOrd();
     void doSize(const RowCol &pos);
+    void doStrlen(const RowCol& pos);
+    void doSig(const RowCol &pos);
+    void doUsig(const RowCol &pos);
 
     void checkNumOfActuals(int nArgs, int min, int max = 0);
 private:

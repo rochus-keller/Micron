@@ -88,7 +88,7 @@ static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* m
 static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl, Evaluator* ev)
 {
     expectingNArgs(args,2);
-    if( builtin == Builtin::BITASR )
+    if( builtin == Builtin::ASR )
     {
         ev->bindUniInt(args[0], true);
         if( !args[0]->getType()->isInt() )
@@ -102,7 +102,7 @@ static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* m
     if( !args[1]->getType()->isUInt() )
         throw QString("expecing unsigned second argument");
 
-    if( builtin == Builtin::BITASR )
+    if( builtin == Builtin::ASR )
     {
         if( args[0]->getType()->kind < Type::INT32 )
             args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::INT32) );
@@ -137,13 +137,13 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::CAP:
         expectingNArgs(args,1);
         break;
-    case Builtin::BITAND:
+    case Builtin::BAND:
         checkBitArith(builtin, args, ret, mdl, ev);
         break;
-    case Builtin::BITASR:
+    case Builtin::ASR:
         checkBitShift(builtin, args, ret, mdl, ev);
         break;
-    case Builtin::BITNOT: {
+    case Builtin::BNOT: {
         expectingNArgs(args,1);
         ev->bindUniInt(args.first(), false);
         Type* t = args.first()->getType();
@@ -156,10 +156,10 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         if( t != *ret )
             args[0] = Evaluator::createAutoConv(args[0], *ret );
         } break;
-    case Builtin::BITOR:
+    case Builtin::BOR:
         checkBitArith(builtin, args, ret, mdl, ev);
         break;
-    case Builtin::BITS:
+    case Builtin::BSET:
         expectingNArgs(args,1);
         ev->bindUniInt(args.first(), false);
         if( !args.first()->getType()->isUInt() )
@@ -168,13 +168,13 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
             args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::UINT32) );
         *ret =  mdl->getType(Type::SET);
         break;
-    case Builtin::BITSHL:
+    case Builtin::SHL:
         checkBitShift(builtin, args, ret, mdl, ev);
         break;
-    case Builtin::BITSHR:
+    case Builtin::SHR:
         checkBitShift(builtin, args, ret, mdl, ev);
         break;
-    case Builtin::BITXOR:
+    case Builtin::BXOR:
         checkBitArith(builtin, args, ret, mdl, ev);
         break;
     case Builtin::CAST:
@@ -304,6 +304,26 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
             throw "expecting CHAR, BOOLEAN, SET, enumeration or pointer/procedure type";
         }
         break;
+    case Builtin::SIG:
+        expectingNArgs(args,1);
+        switch(args.first()->getType()->kind)
+        {
+        case Type::UINT8:
+            *ret = ev->mdl->getType(Type::INT8);
+            break;
+        case Type::UINT16:
+            *ret = ev->mdl->getType(Type::INT16);
+            break;
+        case Type::UINT32:
+            *ret = ev->mdl->getType(Type::INT32);
+            break;
+        case Type::UINT64:
+            *ret = ev->mdl->getType(Type::INT64);
+            break;
+        default:
+            throw "expecting unsigned integer";
+        }
+        break;
     case Builtin::SIZE:
         expectingNArgs(args,1);
         *ret = ev->mdl->getType(Type::UINT32);
@@ -311,13 +331,35 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::STRLEN: {
             expectingNArgs(args,1);
             Type* t = args.first()->getType();
+            bool wasPtr = false;
             if( t->kind == Type::Pointer )
+            {
                 t = t->getType();
-            if( !t->isCharArray() && t->kind != Type::StrLit )
+                wasPtr = true;
+            }
+            if( !t->isCharArray() && t->kind != Type::StrLit && wasPtr && t->kind != Type::CHAR )
                 throw "expecting array of char or string literal";
             *ret = mdl->getType(Type::UINT32);
         } break;
-
+    case Builtin::USIG:
+        expectingNArgs(args,1);
+        switch(args.first()->getType()->kind)
+        {
+        case Type::INT8:
+            *ret = ev->mdl->getType(Type::UINT8);
+            break;
+        case Type::INT16:
+            *ret = ev->mdl->getType(Type::UINT16);
+            break;
+        case Type::INT32:
+            *ret = ev->mdl->getType(Type::UINT32);
+            break;
+        case Type::INT64:
+            *ret = ev->mdl->getType(Type::UINT64);
+            break;
+        default:
+            throw "expecting signed integer";
+        }
 
     // procedures:
         // TODO: complete
@@ -414,13 +456,13 @@ void Builtins::bitarith(int op)
     {
         switch(op)
         {
-        case Builtin::BITAND:
+        case Builtin::BAND:
             res.val = lhs.val.toULongLong() & rhs.val.toULongLong();
             break;
-        case Builtin::BITOR:
+        case Builtin::BOR:
             res.val = lhs.val.toULongLong() | rhs.val.toULongLong();
             break;
-        case Builtin::BITXOR:
+        case Builtin::BXOR:
             if( lhs.type->kind = Type::UINT32 )
                 res.val = lhs.val.toUInt() ^ rhs.val.toUInt();
             else
@@ -441,13 +483,13 @@ void Builtins::bitarith(int op)
 
         switch(op)
         {
-        case Builtin::BITAND:
+        case Builtin::BAND:
             ev->out->and_();
             break;
-        case Builtin::BITOR:
+        case Builtin::BOR:
             ev->out->or_();
             break;
-        case Builtin::BITXOR:
+        case Builtin::BXOR:
             ev->out->xor_();
             break;
         default:
@@ -675,6 +717,76 @@ void Builtins::doSize(const RowCol& pos)
     }
     v.type = ev->mdl->getType(Type::UINT32);
     ev->stack.push_back(v);
+}
+
+void Builtins::doStrlen(const RowCol &pos)
+{
+    Value v = ev->stack.takeLast();
+
+    if( v.isConst() )
+    {
+        Q_ASSERT( v.type->kind == Type::StrLit );
+        v.val = (quint32)strlen(v.val.toByteArray().constData() );
+    }else
+    {
+        ev->out->call_(coreName("strlen"),1,true);
+    }
+
+    v.type = ev->mdl->getType(Type::UINT32);
+    ev->stack.push_back(v);
+}
+
+void Builtins::doSig(const RowCol &pos)
+{
+    Value value = ev->stack.takeLast();
+    Type* to;
+    switch(value.type->kind)
+    {
+    case Type::UINT8:
+        to = ev->mdl->getType(Type::INT8);
+        break;
+    case Type::UINT16:
+        to = ev->mdl->getType(Type::INT16);
+        break;
+    case Type::UINT32:
+        to = ev->mdl->getType(Type::INT32);
+        break;
+    case Type::UINT64:
+        to = ev->mdl->getType(Type::INT64);
+        break;
+    default:
+        //Q_ASSERT(false);
+        break;
+    }
+    ev->stack.push_back(value);
+    ev->castNum(to, pos);
+    ev->stack.back().type = to;
+}
+
+void Builtins::doUsig(const RowCol &pos)
+{
+    Value value = ev->stack.takeLast();
+    Type* to;
+    switch(value.type->kind)
+    {
+    case Type::INT8:
+        to = ev->mdl->getType(Type::UINT8);
+        break;
+    case Type::INT16:
+        to = ev->mdl->getType(Type::UINT16);
+        break;
+    case Type::INT32:
+        to = ev->mdl->getType(Type::UINT32);
+        break;
+    case Type::INT64:
+        to = ev->mdl->getType(Type::UINT64);
+        break;
+    default:
+        Q_ASSERT(false);
+    }
+    ev->stack.push_back(value);
+    ev->castNum(to, pos);
+    ev->stack.back().type = to;
 }
 
 void Builtins::checkNumOfActuals(int nArgs, int min, int max)
@@ -1016,24 +1128,24 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         ASSERT(nArgs,pos);
         handleStack = false;
         break;
-    case Builtin::BITAND:
-    case Builtin::BITOR:
-    case Builtin::BITXOR:
+    case Builtin::BAND:
+    case Builtin::BOR:
+    case Builtin::BXOR:
         checkNumOfActuals(nArgs, 2);
         bitarith(builtin);
         handleStack = false;
         break;
-    case Builtin::BITNOT:
+    case Builtin::BNOT:
         checkNumOfActuals(nArgs, 1);
         bitnot();
         handleStack = false;
         break;
-    case Builtin::BITASR:
-    case Builtin::BITSHR:
+    case Builtin::ASR:
+    case Builtin::SHR:
         doShiftRight();
         handleStack = false;
         break;
-    case Builtin::BITSHL:
+    case Builtin::SHL:
         doShiftLeft();
         handleStack = false;
         break;
@@ -1080,6 +1192,22 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         checkNumOfActuals(nArgs, 1);
         ev->stack.back().type = ev->mdl->getType(Type::CHAR);
         break;
+    case Builtin::STRLEN:
+        checkNumOfActuals(nArgs, 1);
+        doStrlen(pos);
+        handleStack = false;
+        break;
+    case Builtin::SIG:
+        checkNumOfActuals(nArgs, 1);
+        doSig(pos);
+        handleStack = false;
+        break;
+    case Builtin::USIG:
+        checkNumOfActuals(nArgs, 1);
+        doUsig(pos);
+        handleStack = false;
+        break;
+
 
     default:
         throw QString("built-in not yet implemented");

@@ -101,18 +101,18 @@ module Mandelbrot
            inc(z)
          end
 
-         byteAcc := BITSHL(byteAcc, 1) + escape
+         byteAcc := SHL(byteAcc, 1) + escape
          inc(bitNum)
 
          // Code is very similar for these cases, but using separate blocks
          // ensures we skip the shifting when it's unnecessary, which is most cases.
          if bitNum = 8 then
-           sum := bitxor(sum,byteAcc)
+           sum := bxor(sum,byteAcc)
            byteAcc := 0
            bitNum  := 0
          elsif x = (size - 1) then
-           byteAcc := BITSHL(byteAcc,8 - bitNum)
-           sum := bitxor(sum,byteAcc)
+           byteAcc := SHL(byteAcc,8 - bitNum)
+           sum := bxor(sum,byteAcc)
            byteAcc := 0
            bitNum  := 0
          end

@@ -24,9 +24,9 @@ Declaration AstModel::globalScope;
 Type* AstModel::types[Type::MaxBasicType] = {0};
 
 const char* Builtin::name[] = {
-    "ABS", "CAP", "BITAND", "BITASR", "BITNOT", "BITOR", "BITS", "BITSHL", "BITSHR",
-    "BITXOR", "CAST", "CHR", "DEFAULT", "FLOOR", "FLT", "GETENV", "LEN", "MAX",
-    "MIN", "ODD", "ORD", "SIZE", "STRLEN", "VAL",
+    "ABS", "CAP", "BAND", "BASR", "BNOT", "BOR", "BSET", "SHL", "SHR",
+    "BXOR", "CAST", "CHR", "DEFAULT", "FLOOR", "FLT", "GETENV", "LEN", "MAX",
+    "MIN", "ODD", "ORD", "SIZE", "STRLEN", "VAL", "SIG", "USIG",
     "ASSERT", "DEC", "DISPOSE", "EXCL", "HALT", "INC",
     "INCL", "NEW", "PCALL", "PRINT", "PRINTLN", "RAISE", "SETENV",
 };
@@ -130,14 +130,14 @@ AstModel::AstModel():helper(0),helperId(0)
 
         addBuiltin("ABS", Builtin::ABS);
         addBuiltin("CAP", Builtin::CAP);
-        addBuiltin("BITAND", Builtin::BITAND);
-        addBuiltin("BITASR", Builtin::BITASR);
-        addBuiltin("BITNOT", Builtin::BITNOT);
-        addBuiltin("BITOR", Builtin::BITOR);
-        addBuiltin("BITS", Builtin::BITS);
-        addBuiltin("BITSHL", Builtin::BITSHL);
-        addBuiltin("BITSHR", Builtin::BITSHR);
-        addBuiltin("BITXOR", Builtin::BITXOR);
+        addBuiltin("BAND", Builtin::BAND);
+        addBuiltin("BASR", Builtin::ASR);
+        addBuiltin("BNOT", Builtin::BNOT);
+        addBuiltin("BOR", Builtin::BOR);
+        addBuiltin("BSET", Builtin::BSET);
+        addBuiltin("SHL", Builtin::SHL);
+        addBuiltin("SHR", Builtin::SHR);
+        addBuiltin("BXOR", Builtin::BXOR);
         addBuiltin("CHR", Builtin::CHR);
         addBuiltin("DEFAULT", Builtin::DEFAULT);
         addBuiltin("FLOOR", Builtin::FLOOR);
@@ -152,6 +152,8 @@ AstModel::AstModel():helper(0),helperId(0)
         addBuiltin("STRLEN", Builtin::STRLEN);
         addBuiltin("CAST", Builtin::CAST);
         addBuiltin("VAL", Builtin::VAL);
+        addBuiltin("SIG", Builtin::SIG);
+        addBuiltin("USIG", Builtin::USIG);
         addBuiltin("ASSERT", Builtin::ASSERT);
         addBuiltin("DEC", Builtin::DEC);
         addBuiltin("DISPOSE", Builtin::DISPOSE);

@@ -125,3 +125,8 @@ void MIC$$exit(int res)
 {
     _Exit(res);
 }
+
+unsigned int MIC$$strlen(char* str)
+{
+	return strlen(str);
+}

@@ -30,9 +30,10 @@ begin
 
 	// ok: e := {$20 61 62 63$}
 	// ok: e := {data}
-	//e := data // TODO this is now a byte array literal, not a constructor
+	e := data // ok, handled like {data}
+	e := $20 61 62 63$ // ok, handled like {$20 61 62 63$}
 	// equal to 
-	e := A{ 20h 61h 62h 63h } // TODO: not yet implemented i }
+	//e := A{ 20h 61h 62h 63h } // TODO: not yet implemented i }
 	i := 64h
 	println(e[2])
 	println("Arrays done")

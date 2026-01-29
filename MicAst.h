@@ -29,9 +29,9 @@ namespace Mic
     {
         enum Type {
             // functions
-            ABS, CAP, BITAND, BITASR, BITNOT, BITOR, BITS, BITSHL, BITSHR,
-            BITXOR, CAST, CHR, DEFAULT, FLOOR, FLT, GETENV, LEN, MAX,
-            MIN, ODD, ORD, SIZE, STRLEN, VAL,
+            ABS, CAP, BAND, ASR, BNOT, BOR, BSET, SHL, SHR,
+            BXOR, CAST, CHR, DEFAULT, FLOOR, FLT, GETENV, LEN, MAX,
+            MIN, ODD, ORD, SIZE, STRLEN, VAL, SIG, USIG,
             // procedures
             ASSERT, DEC, DISPOSE, EXCL, HALT, INC,
             INCL, NEW, PCALL, PRINT, PRINTLN, RAISE, SETENV,

@@ -23,6 +23,8 @@ extern void MIC$$strcopy(char* lhs, char* rhs);
 extern void MIC$$assert(unsigned char cond, unsigned int line, char* file);
 extern void MIC$$begin$();
 extern void MIC$$exit(int res);
+extern unsigned int MIC$$strlen(char* str);
+
 
 #endif // __MIC$_INCLUDED__
 

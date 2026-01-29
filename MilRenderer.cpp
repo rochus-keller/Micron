@@ -282,7 +282,8 @@ static void renderComponents( QTextStream& out, const QVariant& data )
         out << IlAsmRenderer::formatDouble(data);
         break;
     default:
-        Q_ASSERT(false);
+        out << data.toByteArray() << "?";
+        break;
     }
 }
 

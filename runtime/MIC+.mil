@@ -2,6 +2,7 @@ module MIC$
 
 type _$1 = array of char
 type _$2 = pointer to _$1
+type _$3 = pointer to char
 
 proc relop1(lhs, rhs: _$2; op: i4): u4 extern
 proc relop2(lhs: _$2; rhs: char; op: i4): u4 extern
@@ -18,5 +19,6 @@ proc printBool(b: u1) extern
 proc printSet(s: u4) extern
 proc assert(cond: u1; line: u4; file: _$2) extern
 proc exit(res: i4) extern
+proc strlen(const str: _$3): u4 extern
 
 end MIC$

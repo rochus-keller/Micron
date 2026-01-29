@@ -181,6 +181,19 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
     {
         out->line_(pos);
         out->ldc_i4(quint8(dequote(rhs.val.toByteArray())[0]));
+    }else if( lhs && lhs->isByteArray() && rhs.type->kind == Type::ByteArrayLit )
+    {
+        // a byte array literal is saved on the stack the same way as an array constructor
+        Mil::ConstrLiteral obj;
+        obj.typeRef = toQuali(lhs);
+        QVector<QVariant> arr(lhs->len);
+        const QByteArray str = rhs.val.toByteArray();
+        Q_ASSERT(str.size() == arr.size());
+        for( int i = 0; i < str.size(); i++ )
+            arr[i] = QVariant::fromValue((char)str[i]);
+        obj.data = QVariant::fromValue(arr.toList());
+        out->line_(pos);
+        out->ldc_obj(obj);
     }else if( lhs && lhs->kind == Type::Proc && rhs.mode == Value::Procedure )
     {
         Declaration* proc = rhs.val.value<Declaration*>();
