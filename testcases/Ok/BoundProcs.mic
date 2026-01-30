@@ -25,7 +25,7 @@ var p: proc (^)(const str: ^array of char)
 	a: array 4 of T1
 	ap: pointer to array 4 of T1
 	app: pointer to array of T1
-	n: u32
+	n: u4
 
 begin
 

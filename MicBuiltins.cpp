@@ -473,14 +473,7 @@ void Builtins::bitarith(int op)
         }
     }else
     {
-#if 0
-        // no, args were already pushed in Evaluator::recursiveRun Expression::Call
-        if( lhs.isConst() )
-            ev->pushMilStack(lhs);
-        if( rhs.isConst() )
-            ev->pushMilStack(rhs);
-#endif
-
+        // both operands are already on MIL stack, even if one was const
         switch(op)
         {
         case Builtin::BAND:
@@ -553,6 +546,7 @@ void Builtins::doCast(const RowCol &pos)
 {
     Value value = ev->stack.takeLast();
     Value type = ev->stack.takeLast();
+    Q_ASSERT(type.mode == Value::TypeDecl);
     ev->stack.push_back(value);
     ev->castNum(type.type, pos);
     ev->stack.back().type = type.type;
@@ -562,8 +556,9 @@ void Builtins::doVal(const RowCol &pos)
 {
     Value value = ev->stack.takeLast();
     Value type = ev->stack.takeLast();
+    Q_ASSERT(type.mode == Value::TypeDecl);
     ev->stack.push_back(value);
-    ev->convNum(type.type, pos);
+    ev->convNum(type.type, pos); // handles const
     ev->stack.back().type = type.type;
 }
 
@@ -605,38 +600,48 @@ void Builtins::doFlt()
     ev->stack.push_back(v);
 }
 
-void Builtins::doShiftRight()
+void Builtins::doShiftRight(const RowCol& pos)
 {
     Value rhs = ev->stack.takeLast();
     Value lhs = ev->stack.takeLast();
     if( lhs.type->isInt() )
     {
-        if( lhs.isConst() )
+        if( lhs.isConst() && rhs.isConst() )
             lhs.val = lhs.val.toLongLong() >> rhs.val.toUInt();
         else
+        {
+            lhs.mode = Value::Val;
             ev->out->shr_();
+        }
     }else
     {
-        if( lhs.isConst() )
+        if( lhs.isConst() && rhs.isConst() )
             lhs.val = lhs.val.toULongLong() >> rhs.val.toUInt();
         else
+        {
+            lhs.mode = Value::Val;
             ev->out->shr_(true);
+        }
     }
     ev->stack.push_back(lhs);
 }
 
-void Builtins::doShiftLeft()
+void Builtins::doShiftLeft(const RowCol& pos)
 {
     Value rhs = ev->stack.takeLast();
     Value lhs = ev->stack.takeLast();
-    if( lhs.isConst() )
+    if( lhs.isConst() && rhs.isConst() )
         lhs.val = lhs.val.toULongLong() << rhs.val.toUInt();
     else
+    {
+        // both are already on MIL stack, regardless whether one might be const
+        lhs.mode = Value::Val;
         ev->out->shl_();
+    }
     ev->stack.push_back(lhs);
 }
 
-void Builtins::doOrd()
+void Builtins::doOrd(const RowCol& pos)
 {
     Value v = ev->stack.takeLast();
     if( v.isConst() )
@@ -670,6 +675,7 @@ void Builtins::doOrd()
         }
     }else
     {
+        // value is already on MIL stack
         switch( v.type->kind )
         {
         case Type::StrLit:
@@ -714,6 +720,7 @@ void Builtins::doSize(const RowCol& pos)
     }else
     {
         ev->out->sizeof_(ev->toQuali(v.type));
+        v.mode = Value::Val;
     }
     v.type = ev->mdl->getType(Type::UINT32);
     ev->stack.push_back(v);
@@ -733,6 +740,7 @@ void Builtins::doStrlen(const RowCol &pos)
     }
 
     v.type = ev->mdl->getType(Type::UINT32);
+    v.mode = Value::Val;
     ev->stack.push_back(v);
 }
 
@@ -801,6 +809,33 @@ void Builtins::checkNumOfActuals(int nArgs, int min, int max)
         if( nArgs < min || nArgs > max )
             throw QString("expecting %1 to %2 arguments").arg(min).arg(max);
     }
+}
+
+
+void Builtins::pushActualsToMilStack(int nArgs, const RowCol &pos)
+{
+    Q_ASSERT( ev->stack.size() >= nArgs );
+    if( !allArgsConst(nArgs) )
+        return;
+    for( int i = nArgs; i > 0; i-- )
+    {
+        Value& v = ev->stack[ev->stack.size() - i];
+        ev->pushMilStack(v, pos);
+        if( v.isConst() )
+            v.mode = Value::Val;
+    }
+}
+
+bool Builtins::allArgsConst(int nArgs)
+{
+    Q_ASSERT( ev->stack.size() >= nArgs );
+    for( int i = nArgs; i > 0; i-- )
+    {
+        const Value& v = ev->stack[ev->stack.size() - i];
+        if( !v.isConst() )
+            return false;
+    }
+    return true;
 }
 
 void Builtins::ASSERT(int nArgs,const RowCol& pos)
@@ -931,7 +966,8 @@ void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
                 ev->out->ldc_i4(step.val.toInt());
             else
                 ev->out->ldloc_(tmp);
-        }
+        }else
+            ev->out->ldc_i4(1);
         ev->out->ptroff_(ev->toQuali(what.type->getType()));
         ev->out->stind_(Mil::EmiTypes::IntPtr);
     }else
@@ -951,6 +987,7 @@ void Builtins::DEC(int nArgs,const RowCol& pos)
 void Builtins::LEN(int nArgs,const RowCol& pos)
 {
     Value what = ev->stack.takeLast();
+
     if( !what.isConst() )
         ev->out->pop_();
     Type* arr = what.type;
@@ -1088,6 +1125,8 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
     Value ret;
     ret.mode = Value::Val;
     ret.type = ev->mdl->getType(Type::NoType);
+
+    // NOTE: when we come here, all args are on ev->stack and not yet pushed to MIL stack (new since 2026-01-30
     bool handleStack = true;
     try
     {
@@ -1096,25 +1135,30 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
     case Builtin::PRINT:
     case Builtin::PRINTLN:
         checkNumOfActuals(nArgs, 1);
+        pushActualsToMilStack(nArgs,pos);
         PRINT(nArgs,builtin == Builtin::PRINTLN,pos);
         break;
     case Builtin::NEW:
         checkNumOfActuals(nArgs, 1, 2);
+        pushActualsToMilStack(nArgs,pos);
         NEW(nArgs,pos);
         handleStack = false;
         break;
     case Builtin::DISPOSE:
         checkNumOfActuals(nArgs, 1);
+        pushActualsToMilStack(nArgs,pos);
         DISPOSE(nArgs,pos);
         handleStack = false;
         break;
     case Builtin::INC:
         checkNumOfActuals(nArgs, 1, 2);
+        pushActualsToMilStack(nArgs,pos);
         INC(nArgs,pos);
         handleStack = false;
         break;
     case Builtin::DEC:
         checkNumOfActuals(nArgs, 1, 2);
+        pushActualsToMilStack(nArgs,pos);
         DEC(nArgs,pos);
         handleStack = false;
         break;
@@ -1125,6 +1169,7 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         break;
     case Builtin::ASSERT:
         checkNumOfActuals(nArgs, 3);
+        pushActualsToMilStack(nArgs,pos);
         ASSERT(nArgs,pos);
         handleStack = false;
         break;
@@ -1142,11 +1187,13 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         break;
     case Builtin::ASR:
     case Builtin::SHR:
-        doShiftRight();
+        checkNumOfActuals(nArgs, 2);
+        doShiftRight(pos);
         handleStack = false;
         break;
     case Builtin::SHL:
-        doShiftLeft();
+        checkNumOfActuals(nArgs, 2);
+        doShiftLeft(pos);
         handleStack = false;
         break;
     case Builtin::ABS:
@@ -1161,7 +1208,7 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         break;
     case Builtin::ORD:
         checkNumOfActuals(nArgs, 1);
-        doOrd();
+        doOrd(pos);
         handleStack = false;
         break;
     case Builtin::DEFAULT:
@@ -1181,6 +1228,7 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         break;
     case Builtin::HALT:
         checkNumOfActuals(nArgs, 1);
+        pushActualsToMilStack(nArgs,pos);
         ev->out->call_(coreName("exit"),1,false);
         break;
     case Builtin::SIZE:

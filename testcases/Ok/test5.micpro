@@ -7,11 +7,17 @@ Options=@ByteArray()
 Suffixes=@Invalid()
 WorkingDir=
 
+[.]
+size=0
+
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/Arrays.mic
-1\RelPath=Arrays.mic
-size=1
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/GenericTest1.mic
+1\RelPath=GenericTest1.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/Generic1.mic
+2\RelPath=Generic1.mic
+size=2
 
 [Packages]
 1\Name=@ByteArray()
-size=1
+2\Name=@ByteArray()
+size=2

@@ -101,8 +101,7 @@ bool Evaluator::binaryOp(quint8 op, const RowCol& pos)
     err.clear();
     if( stack.size() < 2 )
     {
-        err = "expecting two values on the stack";
-        return false;
+        return error("expecting two values on the stack",pos);
     }
     Value rhs = stack.takeLast();
     Value lhs = stack.takeLast();
@@ -251,8 +250,7 @@ bool Evaluator::assign(const RowCol& pos)
     err.clear();
     if( stack.size() < 2 )
     {
-        err = "expecting two values on the stack";
-        return false;
+        return error("expecting two values on the stack",pos);
     }
 
     if( !prepareRhs( stack[stack.size()-2].type, true, pos ) )
@@ -789,14 +787,30 @@ template <typename Out, typename In>
 bool bitCast(QVariant &v) {
     Out result; In tmp;
     // Determine the internal storage format to avoid value-altering conversions
-    if (v.type() == QVariant::Double) {
-        tmp = v.toDouble();
-    } else if (v.type() == QVariant::LongLong) {
+    switch( v.type() )
+    {
+    case QMetaType::LongLong:
         tmp = v.toLongLong();
-    } else if (v.type() == QVariant::ULongLong) {
+        break;
+    case QMetaType::ULongLong:
         tmp = v.toULongLong();
-    } else {
+        break;
+    case QMetaType::Double:
+        tmp = v.toDouble();
+        break;
+    case QMetaType::Int:
+    case QMetaType::Long:
+        tmp = v.toInt();
+        break;
+    case QMetaType::UInt:
+    case QMetaType::ULong:
+        tmp = v.toUInt();
+        break;
+    default: {
+        const char* tn = v.typeName();
+        const int t = v.type();
         Q_ASSERT(false);
+    }
     }
     memcpy(&result, &tmp, sizeof(In));
     v = result;
@@ -953,7 +967,7 @@ void Evaluator::assureTopOnMilStack(bool pop, const RowCol& pos)
         this->pop();
 }
 
-void Evaluator::shortCircuitAnd(Expression* e)
+bool Evaluator::shortCircuitAnd(Expression* e)
 {
 #if 0
     recursiveRun(e->lhs);
@@ -966,19 +980,24 @@ void Evaluator::shortCircuitAnd(Expression* e)
 #else
     if( e->lhs->isConst() && e->rhs->isConst() )
     {
-        recursiveRun(e->lhs);
-        recursiveRun(e->rhs);
-        binaryOp(e->kind,e->pos);
+        if( !recursiveRun(e->lhs) )
+            return false;
+        if( !recursiveRun(e->rhs) )
+            return false;
+        if( binaryOp(e->kind,e->pos) )
+            return false;
     }else
     {
         // p and q : if p then q, else FALSE
         out->line_(e->pos);
         out->iif_();
-        recursiveRun(e->lhs);
+        if( !recursiveRun(e->lhs) )
+            return false;
         assureTopOnMilStack(true, e->lhs->pos);
         out->line_(e->pos);
         out->then_();
-        recursiveRun(e->rhs);
+        if( !recursiveRun(e->rhs) )
+            return false;
         assureTopOnMilStack(false, e->rhs->pos); // leave the bool result on the stack
         out->line_(e->pos);
         out->else_();
@@ -986,9 +1005,10 @@ void Evaluator::shortCircuitAnd(Expression* e)
         out->end_();
     }
 #endif
+    return true;
 }
 
-void Evaluator::shortCircuitOr(Expression* e)
+bool Evaluator::shortCircuitOr(Expression* e)
 {
 #if 0
     recursiveRun(e->lhs);
@@ -1001,26 +1021,40 @@ void Evaluator::shortCircuitOr(Expression* e)
 #else
     if( e->lhs->isConst() && e->rhs->isConst() )
     {
-        recursiveRun(e->lhs);
-        recursiveRun(e->rhs);
-        binaryOp(e->kind, e->pos);
+        if( !recursiveRun(e->lhs) )
+            return false;
+        if( !recursiveRun(e->rhs) )
+            return false;
+        if( !binaryOp(e->kind, e->pos) )
+            return false;
     }else
     {
         // p or q : if p then TRUE, else q
         out->line_(e->pos);
         out->iif_();
-        recursiveRun(e->lhs);
+        if( !recursiveRun(e->lhs) )
+        {
+            out->then_();
+            out->else_();
+            out->end_();
+            return false;
+        }
         assureTopOnMilStack(true, e->lhs->pos);
         out->line_(e->pos);
         out->then_();
         out->ldc_i4(1); // push TRUE
         out->line_(e->pos);
         out->else_();
-        recursiveRun(e->rhs);
+        if( !recursiveRun(e->rhs) )
+        {
+            out->end_();
+            return false;
+        }
         assureTopOnMilStack(false, e->rhs->pos); // leave the bool result on the stack
         out->end_();
     }
 #endif
+    return true;
 }
 
 bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
@@ -1280,19 +1314,19 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs, const Ro
                 switch(op)
                 {
                 case Expression::Mul:
-                    res.val = a * b;
+                    res.val = qint64(a * b);
                     break;
                 case Expression::Div:
                     res.val = (qint64)(a < 0 ? (a - b + 1) / b : a / b);
                     break;
                 case Expression::Mod:
-                    res.val = a < 0 ? (b - 1) + ((a - b + 1)) % b : a % b;
+                    res.val = qint64(a < 0 ? (b - 1) + ((a - b + 1)) % b : a % b);
                     break;
                 case Expression::Add:
-                    res.val = a + b;
+                    res.val = qint64(a + b);
                     break;
                 case Expression::Sub:
-                    res.val = a - b;
+                    res.val = qint64(a - b);
                     break;
                 default:
                     Q_ASSERT(false);
@@ -1785,6 +1819,31 @@ void Evaluator::unaryMinusOp(Value& v, const RowCol& pos)
             }
         }else
             Q_ASSERT(false);
+        Type* to = 0;
+        switch(v.type->kind)
+        {
+        case Type::UINT8:
+            to = mdl->getType(Type::INT8);
+            break;
+        case Type::UINT16:
+            to = mdl->getType(Type::INT16);
+            break;
+        case Type::UINT32:
+            to = mdl->getType(Type::INT32);
+            break;
+        case Type::UINT64:
+            to = mdl->getType(Type::INT64);
+            break;
+        default:
+            //Q_ASSERT(false);
+            break;
+        }
+        if( to )
+        {
+            castNum(to, pos);
+            v.type = to;
+        }
+
     }else if( v.type->isSet() )
     {
         if( v.isConst() )
@@ -1800,7 +1859,30 @@ void Evaluator::unaryMinusOp(Value& v, const RowCol& pos)
 
 void Evaluator::unaryPlusOp(Value& v, const RowCol& pos)
 {
-    // NOP
+    Type* to = 0;
+    switch(v.type->kind)
+    {
+    case Type::UINT8:
+        to = mdl->getType(Type::INT8);
+        break;
+    case Type::UINT16:
+        to = mdl->getType(Type::INT16);
+        break;
+    case Type::UINT32:
+        to = mdl->getType(Type::INT32);
+        break;
+    case Type::UINT64:
+        to = mdl->getType(Type::INT64);
+        break;
+    default:
+        //Q_ASSERT(false);
+        break;
+    }
+    if( to )
+    {
+        castNum(to, pos);
+        v.type = to;
+    }
 }
 
 Qualident Evaluator::toQuali(Declaration* d, Declaration *module)
@@ -1950,10 +2032,12 @@ bool Evaluator::recursiveRun(Expression* e)
             return false;
         break;
     case Expression::Or:
-        shortCircuitOr(e);
+        if( !shortCircuitOr(e) )
+            return false;
         break;
     case Expression::And:
-        shortCircuitAnd(e);
+        if( !shortCircuitAnd(e) )
+            return false;
         break;
     case Expression::FieldSelect:
         if( !recursiveRun(e->lhs) )
@@ -2063,23 +2147,39 @@ bool Evaluator::recursiveRun(Expression* e)
             const DeclList formals = e->lhs->kind == Expression::Super && e->lhs->lhs
                     ? e->lhs->lhs->getFormals()
                     : e->lhs->getFormals(); // no receiver here because args doesn't include it
+            const bool isBuiltIn = e->lhs->kind == Expression::Builtin;
+            int nonConsts = 0;
             for(int i = 0; i < args.size(); i++ )
             {
                 bindUniInt(args[i], i < formals.size() ? formals[i]->getType()->isInt() : false);
 
                 if( !recursiveRun(args[i]) )
                     return false;
+                if(!top().isConst() && top().mode != Value::TypeDecl)
+                    nonConsts++;
 
-                if( i == 0 && e->lhs->kind == Expression::Builtin && e->lhs->val.toInt() == Builtin::ORD && args[i]->getType()->kind == Type::StrLit )
-                {
-                    // this is a fix because we need the first char of the string literal here, not a string
-                    stack.back().val = (char)stack.back().val.toByteArray()[0];
-                    stack.back().type = mdl->getType(Type::CHAR);
-                }
                 if( i < formals.size() )
+                {
+                    Q_ASSERT( !isBuiltIn );
                     prepareRhs(formals[i]->getType(), false, args[i]->pos);
-                else
-                    assureTopOnMilStack(false, args[i]->pos); // effects builtin args and variable args
+                }else if( isBuiltIn )
+                {
+                    // in case of built-ins, either all args or none are pushed to MIL-stack.
+                    // if recursiveRun has already pushed at least on to MIL-stack, also all others have to be pushed,
+                    // otherwise we get in trouble with the order. If none is pushed, Builtins::callBuiltin will do so
+                    Q_ASSERT( isBuiltIn );
+                    if( nonConsts > 0 )
+                    {
+                        if( i == 0 && isBuiltIn && e->lhs->val.toInt() == Builtin::ORD && args[i]->getType()->kind == Type::StrLit )
+                        {
+                            // this is a fix because we need the first char of the string literal here, not a string
+                            stack.back().val = (char)stack.back().val.toByteArray()[0];
+                            stack.back().type = mdl->getType(Type::CHAR);
+                        }
+                        assureTopOnMilStack(false, args[i]->pos); // effects builtin args and variable args
+                    }
+                }else
+                    Q_ASSERT(false);
             }
             if( !recursiveRun(e->lhs) ) // here 'b' of "a.b()" is evaluated in case of proc type calls;
                 return false;

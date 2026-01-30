@@ -206,7 +206,7 @@ void Validator::visitStatSeq(Statement* stat)
                 {
                     Q_ASSERT( stat->args == 0 );
                     stat->args = lastExprInSeq;
-                    if( lastExprInSeq->next )
+                    if( lastExprInSeq && lastExprInSeq->next )
                     {
                         // split ExprStat
                         Statement* s = new Statement();
@@ -1058,7 +1058,7 @@ Expression* Validator::visitExpr(Expression* e)
                 e->rhs = stackAt(-1); // offset
                 Type* lhsT = deref(e->lhs->getType());
                 Type* rhsT = deref(e->rhs->getType());
-                if( lhsT->kind != Type::Pointer || !(rhsT->isInteger() || isInt32(rhsT) || rhsT->kind == Type::INTPTR) )
+                if( lhsT->kind != Type::Pointer || !(rhsT->isInteger() || isInt32(rhsT) ) )
                 {
                     error(e, "expecting a pointer and an integer offset on the stack");
                     break;
@@ -1244,6 +1244,8 @@ Expression* Validator::visitExpr(Expression* e)
             {
                 Expression* if_ = e->e;
 
+                if( if_ == 0 || if_->next == 0 || if_->next->next == 0 || if_->next->next->next)
+                    return 0; // already reported
                 Q_ASSERT(if_ && if_->kind == IL_if && if_->next->kind == IL_then &&
                          if_->next->next->kind == IL_else &&
                          if_->next->next->next == 0); // no IL_end

@@ -249,7 +249,9 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
                 proc.body << ProcData::Op(e->kind);
 
                 Expression* if_ = e->e;
-                Q_ASSERT(if_ && if_->kind == IL_if && if_->next->kind == IL_then &&
+                if( if_ == 0 || if_->next == 0 || if_->next->next == 0 || if_->next->next->next)
+                    return; // already reported
+                Q_ASSERT(if_->kind == IL_if && if_->next->kind == IL_then &&
                          if_->next->next->kind == IL_else &&
                          if_->next->next->next == 0); // no IL_end
 

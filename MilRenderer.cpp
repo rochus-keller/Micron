@@ -665,7 +665,7 @@ void IlAstRenderer::endModule()
 
     // dump("before validation");
 
-    if( toDelete )
+    if( toDelete || !errors.isEmpty() )
     {
         delete module;
         module = 0;

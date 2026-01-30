@@ -1476,7 +1476,7 @@ void Parser2::length(quint32& len) {
         Value v = ev->pop();
         if( v.type == 0 || !v.type->isUInt() )
         {
-            error(tok,QString("an array length must be empty or a positive integer"));
+            error(tok,QString("an array length must be empty or an unsigned integer"));
             len = 1;
         }else
         {

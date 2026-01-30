@@ -1,0 +1,33 @@
+module PointerArith
+
+var
+  str: array 30 of char
+  p: pointer to char
+  
+procedure iif_test*(c: int32): boolean
+inline begin
+    return (c = +(ord(' '))) or false
+end iif_test
+
+
+procedure switch_test(c: int32)
+begin
+    case c of
+    | +ord('|'):
+        print("|")
+    | -1:
+        print(-1)
+    end
+end switch_test
+
+begin
+  str := "this is a string"
+  println(str)
+  p := @str[5]
+  while p^ # 0x do
+    println(p^)
+    inc(p)
+  end
+  println(iif_test(0))
+  switch_test(124)
+end PointerArith

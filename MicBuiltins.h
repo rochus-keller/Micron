@@ -31,6 +31,7 @@ public:
 
     Builtins(Evaluator*);
     void callBuiltin(quint8 builtin, int nArgs, const RowCol& pos);
+    // when callBuiltin, either all args are already on MIL stack, or none (if allArgsConst)
 
 protected:
     int addIncDecTmp();
@@ -51,15 +52,18 @@ protected:
     void doDefault();
     void doAbs();
     void doFlt();
-    void doShiftRight();
-    void doShiftLeft();
-    void doOrd();
+    void doShiftRight(const RowCol& pos);
+    void doShiftLeft(const RowCol &pos);
+    void doOrd(const RowCol &pos);
     void doSize(const RowCol &pos);
     void doStrlen(const RowCol& pos);
     void doSig(const RowCol &pos);
     void doUsig(const RowCol &pos);
 
     void checkNumOfActuals(int nArgs, int min, int max = 0);
+    void pushActualsToMilStack(int nArgs, const RowCol& pos);
+    void pushToMilStack(Value& v, const RowCol& pos);
+    bool allArgsConst(int nArgs);
 private:
     Evaluator* ev;
 };

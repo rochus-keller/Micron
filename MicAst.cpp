@@ -94,37 +94,39 @@ AstModel::AstModel():helper(0),helperId(0)
 
         types[Type::UINT8] = addType("UINT8", Type::UINT8);
         addTypeAlias("BYTE", types[Type::UINT8] );
-        addTypeAlias("U8", types[Type::UINT8] );
+        addTypeAlias("U1", types[Type::UINT8] );
 
         types[Type::INT8] = addType("INT8", Type::INT8);
-        addTypeAlias("I8", types[Type::INT8] );
+        addTypeAlias("I1", types[Type::INT8] );
 
         types[Type::INT16] = addType("INT16", Type::INT16);
         addTypeAlias("SHORTINT", types[Type::INT16] );
-        addTypeAlias("I16", types[Type::INT16] );
+        addTypeAlias("I2", types[Type::INT16] );
 
         types[Type::UINT16] = addType("UINT16", Type::UINT16);
-        addTypeAlias("U16", types[Type::UINT16] );
+        addTypeAlias("U2", types[Type::UINT16] );
 
         types[Type::INT32] = addType("INT32", Type::INT32);
         addTypeAlias("INTEGER", types[Type::INT32] );
-        addTypeAlias("I32", types[Type::INT32] );
+        addTypeAlias("I4", types[Type::INT32] );
 
         types[Type::UINT32] = addType("UINT32", Type::UINT32);
-        addTypeAlias("U32", types[Type::UINT32] );
+        addTypeAlias("U4", types[Type::UINT32] );
 
         types[Type::INT64] = addType("INT64", Type::INT64);
         addTypeAlias("LONGINT", types[Type::INT64] );
-        addTypeAlias("I64", types[Type::INT64] );
+        addTypeAlias("I8", types[Type::INT64] );
 
         types[Type::UINT64] = addType("UINT64", Type::UINT64);
-        addTypeAlias("U64", types[Type::UINT64] );
+        addTypeAlias("U8", types[Type::UINT64] );
 
         types[Type::FLT32] = addType("FLT32", Type::FLT32);
         addTypeAlias("REAL", types[Type::FLT32] );
+        addTypeAlias("R4", types[Type::FLT32] );
 
         types[Type::FLT64] = addType("FLT64", Type::FLT64);
         addTypeAlias("LONGREAL", types[Type::FLT64] );
+        addTypeAlias("R8", types[Type::FLT64] );
 
         types[Type::SET] = addType("SET", Type::SET);
 
@@ -696,7 +698,7 @@ QVariant Expression::getConstValue() const
 
 DeclList Expression::getFormals(bool includeReceiver) const
 {
-    if( kind == ProcDecl || kind == MethSelect )
+    if( kind == ProcDecl || kind == MethSelect || kind == IntfSelect )
         return val.value<Declaration*>()->getParams(includeReceiver);
     else if( type && type->kind == Type::Proc )
         return type->subs; // subs doesn't include a receiver by definition

@@ -97,8 +97,8 @@ protected:
     bool unaryOp(quint8 op, const RowCol& pos); // Tok_Tilde, Tok_NOT, Tok_Plus, Tok_Minus, Tok_At
     bool binaryOp(quint8 op, const RowCol &pos); // push lhs first
     void assureTopOnMilStack(bool pop, const RowCol &pos); // send current top const to mil stack
-    void shortCircuitAnd(Expression*);
-    void shortCircuitOr(Expression*);
+    bool shortCircuitAnd(Expression*);
+    bool shortCircuitOr(Expression*);
 
     // designator:
     bool derefPointer(bool byVal, const RowCol &pos); // unary op
