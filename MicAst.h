@@ -141,6 +141,7 @@ namespace Mic
         bool isStructured() const { return kind == Array || kind == Record || kind == Object; }
         bool isCharArray() const { return kind == Array && getType() && getType()->kind == CHAR; }
         bool isByteArray() const { return kind == Array && getType() && getType()->kind == UINT8; }
+        bool isObjectOrObjectPointer() const;
 
         Declaration* findSub(const QByteArray& name) const;
         Declaration* findMember(const QByteArray& name, bool recurseSuper = false) const;

@@ -1342,7 +1342,10 @@ void Parser2::TypeDeclaration() {
 
     thisDecl = 0;
     if( t && !q.second.d_val.isEmpty() )
-        out->addType(ev->toQuali(t).second,d->pos,t->decl->isPublic(),toMilQuali(q), Mil::EmiTypes::Alias);
+        // handle the case where the declaration points to a named type, i.e. the name of this declaration is associated with
+        // an existing declaration
+        out->addType(d->name,d->pos,t->decl->isPublic(),toMilQuali(q), Mil::EmiTypes::Alias);
+        // before, wrong: out->addType(ev->toQuali(t).second,d->pos,t->decl->isPublic(),toMilQuali(q), Mil::EmiTypes::Alias);
     else
         emitType(t);
 }
@@ -2229,6 +2232,7 @@ bool Parser2::checkRelOp(Expression* e)
             return error(e->pos.d_row, e->pos.d_col, "operation not supported for given operands");
     }else
         return error(e->pos.d_row, e->pos.d_col, "operands not compatible with operator");
+    // TODO: IS operator is missing
     return true;
 }
 
@@ -2475,7 +2479,13 @@ Expression* Parser2::designator(bool needsLvalue) {
                 }else if( proc->getType()->kind != Type::Pointer )
                 {
                     error(lpar,"type guard only applicable to pointer types");
-                    // TODO: avoid casting records on the stack by value
+                    hasError = true;
+                }
+                if( !hasError &&
+                        ((retType->isObjectOrObjectPointer() && !proc->getType()->isObjectOrObjectPointer() ) ||
+                         (!retType->isObjectOrObjectPointer() && proc->getType()->isObjectOrObjectPointer() ) ) )
+                {
+                    error(lpar,"type guard cannot cast object to other types or vice versa");
                     hasError = true;
                 }
 
@@ -2484,6 +2494,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 Type* t = addHelperType(Type::Pointer, 0, retType, tmp->pos);
                 tmp->setType(t);
                 res = tmp;
+
 #if 0
                 else if( !ev->cast() )
                 {

@@ -179,10 +179,14 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::CAST:
         expectingNArgs(args,2);
-        if( args.first()->kind != Expression::TypeDecl || !args.first()->getType()->isNumber() )
-            throw QString("expecting declaration of number type as first argument");
-        if( !args.last()->getType()->isNumber() )
-            throw QString("expecting a number type as second argument");
+        if( args.first()->kind != Expression::TypeDecl ||
+                !(args.first()->getType()->isNumber() || args.first()->getType()->kind == Type::Pointer) )
+            throw QString("expecting declaration of number or pointer type as first argument");
+        if( !args.last()->getType()->isNumber() && !args.last()->getType()->kind == Type::Pointer )
+            throw QString("expecting a number or pointer type as second argument");
+        if( (args.first()->getType()->isNumber() && !args.last()->getType()->isNumber()) ||
+            (args.first()->getType()->kind == Type::Pointer && args.last()->getType()->kind != Type::Pointer) )
+            throw QString("both arguments must be either number or pointer type");
         if( args.first()->getType()->getByteSize() != args.last()->getType()->getByteSize())
             throw QString("can only cast between types of same byte width");
         *ret = args.first()->getType();
@@ -548,7 +552,10 @@ void Builtins::doCast(const RowCol &pos)
     Value type = ev->stack.takeLast();
     Q_ASSERT(type.mode == Value::TypeDecl);
     ev->stack.push_back(value);
-    ev->castNum(type.type, pos);
+    if( type.type->isNumber() )
+        ev->castNum(type.type, pos);
+    else
+        ev->out->castptr_(ev->toQuali(type.type));
     ev->stack.back().type = type.type;
 }
 

@@ -1929,6 +1929,8 @@ Qualident Evaluator::toQuali(Type* t, Declaration *module)
     if( t == 0 )
         return Qualident();
 
+    if( t->kind == Type::Undefined )
+        return qMakePair(QByteArray(),QByteArray("?"));
     if( t->isSimple() )
     {
         if( symbols[Type::Any].isEmpty() )

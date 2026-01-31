@@ -391,6 +391,8 @@ Node::~Node()
 
 void Node::setType(Type* t)
 {
+    if( t )
+        Q_ASSERT(t != this); // don't make a type point to itself
     if( type && ownstype )
         delete type;
     type = t;

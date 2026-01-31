@@ -292,6 +292,16 @@ Declaration*AstModel::findDecl(const QByteArray& id, bool recursive) const
     return 0;
 }
 
+bool Type::isObjectOrObjectPointer() const
+{
+    if( kind == Object )
+        return true;
+    if( kind == Pointer && getType() && getType()->kind == Object )
+        return true;
+    else
+        return false;
+}
+
 Declaration*AstModel::findDecl(Declaration* import, const QByteArray& id) const
 {
     if( import == 0 )
