@@ -34,6 +34,8 @@ public:
     void pushCurProc(Declaration*d) { curProcs.push_back(d); }
     void popCurProc() { curProcs.pop_back(); }
 
+    bool isStackEmpty() const { return stack.empty(); }
+
     bool evaluate(Expression*, bool assureOnMilStack = false);
 
     bool prepareRhs(Type* lhs, bool assig, const RowCol &pos);

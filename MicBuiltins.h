@@ -34,7 +34,7 @@ public:
     // when callBuiltin, either all args are already on MIL stack, or none (if allArgsConst)
 
 protected:
-    int addIncDecTmp();
+    int addIncDecTmp(bool isInt64);
 
     // builtin implementations
     void PRINT(int nArgs, bool ln, const RowCol &pos);

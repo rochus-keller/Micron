@@ -21,9 +21,10 @@ typedef unsigned char* Files$_$12;
 
 extern struct Files$Handle* Files$Old(char* name);
 extern struct Files$Handle* Files$New(char* name);
+extern struct Files$Handle* Files$System(int);
 extern void Files$Close(struct Files$Handle* f);
-extern void Files$Delete(char* name, int* res);
-extern void Files$Rename(char* old, char* new, int* res);
+extern unsigned char Files$Delete(char* name);
+extern unsigned char Files$Rename(char* old, char* new_);
 extern int Files$Length(struct Files$Handle* f);
 extern unsigned char Files$Eof(struct Files$Handle* f);
 extern void Files$CreationDate(struct Files$Handle* f, int* t, int* d);

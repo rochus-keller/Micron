@@ -744,10 +744,10 @@ void Builtins::doStrlen(const RowCol &pos)
     }else
     {
         ev->out->call_(coreName("strlen"),1,true);
+        v.mode = Value::Val;
     }
 
     v.type = ev->mdl->getType(Type::UINT32);
-    v.mode = Value::Val;
     ev->stack.push_back(v);
 }
 
@@ -894,7 +894,7 @@ void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
         step = ev->stack.takeLast();
         if( !step.isConst() )
         {
-            tmp = addIncDecTmp();
+            tmp = addIncDecTmp(step.type->is64());
             ev->out->stloc_(tmp); // store second argument to temporary, remove it from ev->stack
         }
     }
@@ -919,7 +919,8 @@ void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
                 else
                 {
                     ev->out->ldloc_(tmp);
-                    ev->out->conv_(Mil::EmiTypes::I8);
+                    if( !step.type->is64() )
+                        ev->out->conv_(Mil::EmiTypes::I8);
                 }
             }else
                 ev->out->ldc_i8(1);
@@ -937,7 +938,11 @@ void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
                 if( step.isConst() )
                     ev->out->ldc_i4(step.val.toInt());
                 else
+                {
                     ev->out->ldloc_(tmp);
+                    if( step.type->is64() )
+                        ev->out->conv_(Mil::EmiTypes::I4);
+                }
             }else
                 ev->out->ldc_i4(1);
             if( inc )
@@ -1281,14 +1286,14 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
     }
 }
 
-int Builtins::addIncDecTmp()
+int Builtins::addIncDecTmp(bool isInt64)
 {
     bool doublette;
     Declaration* decl = ev->mdl->addDecl(Token::getSymbol("_$incdec"),&doublette);
     if( !doublette )
     {
         decl->kind = Declaration::LocalDecl;
-        decl->setType(ev->mdl->getType(Type::INT32));
+        decl->setType(ev->mdl->getType(isInt64 ? Type::INT64 : Type::INT32));
         decl->outer = ev->mdl->getTopScope();
         decl->id = ev->out->addLocal(ev->toQuali(decl->getType()),decl->name);
     }

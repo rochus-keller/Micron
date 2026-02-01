@@ -651,6 +651,11 @@ void Parser2::RunParser(const Import &import) {
     allTypes.clear();
 	next();
     module(import);
+#if 0
+    // TODO this happens and has to be fixes
+    if( !ev->isStackEmpty() )
+        error(thisMod->pos, "leaving module evaluation stack is not empty");
+#endif
 }
 
 Declaration*Parser2::takeModule()
@@ -3575,8 +3580,10 @@ void Parser2::ForStatement() {
     {
         // to := end
         Expression* lhs = toExpr(to, to->pos);
-        Expression* end = expression(0);
+        Expression* end = expression(idxvar->getType());
         ev->bindUniInt(end, idxvar->getType()->isInt());
+        if( end->getType()->kind != idxvar->getType()->kind )
+            end = ev->createAutoConv(end, idxvar->getType());
         ev->assign(lhs, end, to->pos);
         Expression::deleteAllExpressions();
     }
@@ -3923,6 +3930,11 @@ void Parser2::ProcedureDeclaration() {
 			invalid("ProcedureDeclaration");
         mdl->closeScope();
         ev->popCurProc();
+#if 0
+        // TODO this happens and has to be fixes
+        if( !ev->isStackEmpty() )
+            error(procDecl->pos, "leaving proc evaluation stack is not empty");
+#endif
 	} else
 		invalid("ProcedureDeclaration");
 }

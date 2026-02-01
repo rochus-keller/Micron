@@ -343,7 +343,7 @@ namespace Mic
         Type* newType(Type::Kind form);
         Type* addType(const QByteArray& name, Type::Kind form);
         void addTypeAlias(const QByteArray& name, Type*);
-        void addBuiltin(const QByteArray& name, Builtin::Type);
+        void addBuiltin(Builtin::Type);
     private:
         QList<Declaration*> scopes;
         Declaration* helper;

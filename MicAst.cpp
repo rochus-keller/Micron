@@ -24,7 +24,7 @@ Declaration AstModel::globalScope;
 Type* AstModel::types[Type::MaxBasicType] = {0};
 
 const char* Builtin::name[] = {
-    "ABS", "CAP", "BAND", "BASR", "BNOT", "BOR", "BSET", "SHL", "SHR",
+    "ABS", "CAP", "BAND", "ASR", "BNOT", "BOR", "BSET", "SHL", "SHR",
     "BXOR", "CAST", "CHR", "DEFAULT", "FLOOR", "FLT", "GETENV", "LEN", "MAX",
     "MIN", "ODD", "ORD", "SIZE", "STRLEN", "VAL", "SIG", "USIG",
     "ASSERT", "DEC", "DISPOSE", "EXCL", "HALT", "INC",
@@ -130,45 +130,45 @@ AstModel::AstModel():helper(0),helperId(0)
 
         types[Type::SET] = addType("SET", Type::SET);
 
-        addBuiltin("ABS", Builtin::ABS);
-        addBuiltin("CAP", Builtin::CAP);
-        addBuiltin("BAND", Builtin::BAND);
-        addBuiltin("BASR", Builtin::ASR);
-        addBuiltin("BNOT", Builtin::BNOT);
-        addBuiltin("BOR", Builtin::BOR);
-        addBuiltin("BSET", Builtin::BSET);
-        addBuiltin("SHL", Builtin::SHL);
-        addBuiltin("SHR", Builtin::SHR);
-        addBuiltin("BXOR", Builtin::BXOR);
-        addBuiltin("CHR", Builtin::CHR);
-        addBuiltin("DEFAULT", Builtin::DEFAULT);
-        addBuiltin("FLOOR", Builtin::FLOOR);
-        addBuiltin("FLT", Builtin::FLT);
-        addBuiltin("GETENV", Builtin::GETENV);
-        addBuiltin("LEN", Builtin::LEN);
-        addBuiltin("MAX", Builtin::MAX);
-        addBuiltin("MIN", Builtin::MIN);
-        addBuiltin("ODD", Builtin::ODD);
-        addBuiltin("ORD", Builtin::ORD);
-        addBuiltin("SIZE", Builtin::SIZE);
-        addBuiltin("STRLEN", Builtin::STRLEN);
-        addBuiltin("CAST", Builtin::CAST);
-        addBuiltin("VAL", Builtin::VAL);
-        addBuiltin("SIG", Builtin::SIG);
-        addBuiltin("USIG", Builtin::USIG);
-        addBuiltin("ASSERT", Builtin::ASSERT);
-        addBuiltin("DEC", Builtin::DEC);
-        addBuiltin("DISPOSE", Builtin::DISPOSE);
-        addBuiltin("EXCL", Builtin::EXCL);
-        addBuiltin("HALT", Builtin::HALT);
-        addBuiltin("INC", Builtin::INC);
-        addBuiltin("INCL", Builtin::INCL);
-        addBuiltin("NEW", Builtin::NEW);
-        addBuiltin("PCALL", Builtin::PCALL);
-        addBuiltin("PRINT", Builtin::PRINT);
-        addBuiltin("PRINTLN", Builtin::PRINTLN);
-        addBuiltin("RAISE", Builtin::RAISE);
-        addBuiltin("SETENV", Builtin::SETENV);
+        addBuiltin(Builtin::ABS);
+        addBuiltin(Builtin::CAP);
+        addBuiltin(Builtin::BAND);
+        addBuiltin(Builtin::ASR);
+        addBuiltin(Builtin::BNOT);
+        addBuiltin(Builtin::BOR);
+        addBuiltin(Builtin::BSET);
+        addBuiltin(Builtin::SHL);
+        addBuiltin(Builtin::SHR);
+        addBuiltin(Builtin::BXOR);
+        addBuiltin(Builtin::CHR);
+        addBuiltin(Builtin::DEFAULT);
+        addBuiltin(Builtin::FLOOR);
+        addBuiltin(Builtin::FLT);
+        addBuiltin(Builtin::GETENV);
+        addBuiltin(Builtin::LEN);
+        addBuiltin(Builtin::MAX);
+        addBuiltin(Builtin::MIN);
+        addBuiltin(Builtin::ODD);
+        addBuiltin(Builtin::ORD);
+        addBuiltin(Builtin::SIZE);
+        addBuiltin(Builtin::STRLEN);
+        addBuiltin(Builtin::CAST);
+        addBuiltin(Builtin::VAL);
+        addBuiltin(Builtin::SIG);
+        addBuiltin(Builtin::USIG);
+        addBuiltin(Builtin::ASSERT);
+        addBuiltin(Builtin::DEC);
+        addBuiltin(Builtin::DISPOSE);
+        addBuiltin(Builtin::EXCL);
+        addBuiltin(Builtin::HALT);
+        addBuiltin(Builtin::INC);
+        addBuiltin(Builtin::INCL);
+        addBuiltin(Builtin::NEW);
+        addBuiltin(Builtin::PCALL);
+        addBuiltin(Builtin::PRINT);
+        addBuiltin(Builtin::PRINTLN);
+        addBuiltin(Builtin::RAISE);
+        addBuiltin(Builtin::SETENV);
     }
 }
 
@@ -379,8 +379,9 @@ void AstModel::addTypeAlias(const QByteArray& name, Type* t)
     d2->setType(t);
 }
 
-void AstModel::addBuiltin(const QByteArray& name, Builtin::Type t)
+void AstModel::addBuiltin(Builtin::Type t)
 {
+    const QByteArray name = Builtin::name[t];
     Declaration* d = addDecl(Token::getSymbol(name.toUpper()));
     d->kind = Declaration::Builtin;
     d->setType(types[Type::NoType]);

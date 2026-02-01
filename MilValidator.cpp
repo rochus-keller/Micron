@@ -282,7 +282,10 @@ void Validator::visitStatSeq(Statement* stat)
                 }
                 Type* lhsT = deref(locals[stat->id]->getType());
                 if( !assigCompat(lhsT,stat->args) )
+                {
+                    //assigCompat(lhsT,stat->args); // TEST
                     error(stat, "local variable type not compatible with value on stack");
+                }
             }
             break;
         case IL_stvar:
