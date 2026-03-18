@@ -22,6 +22,7 @@
 extern "C" {
 #include "oakwood/Input.h"
 #include "oakwood/MathL.h"
+#include "oakwood/Math.h"
 #include "oakwood/Out.h"
 }
 using namespace Mil;
@@ -203,7 +204,27 @@ static bool Out_String(void* args, void* ret)
     Out$String((char*)Interpreter::toP(args,0));
     return true;
 }
+// float Math$cos(float x)
+static bool Math_cos(void* args, void* ret)
+{
+    const float res = Math$cos(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
 
+static bool Math_sin(void* args, void* ret)
+{
+    const float res = Math$sin(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+
+static bool Math_sqrt(void* args, void* ret)
+{
+    const float res = Math$sqrt(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
 
 void VmOakwood::addTo(Interpreter* ip)
 {
@@ -233,4 +254,7 @@ void VmOakwood::addTo(Interpreter* ip)
     ip->registerProc("MathL", "arcsinh", MathL_arcsinh);
     ip->registerProc("MathL", "arccosh", MathL_arccosh);
     ip->registerProc("MathL", "arctanh", MathL_arctanh);
+    ip->registerProc("Math", "cos", Math_cos);
+    ip->registerProc("Math", "sin", Math_sin);
+    ip->registerProc("Math", "sqrt", Math_sqrt);
 }

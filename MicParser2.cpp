@@ -713,7 +713,8 @@ void Parser2::checkPointerResolved(Type * ptr)
     {
         if( deferred[i].first == ptr )
         {
-            error(deferred[i].second, "cannot resolve pointer base type");
+            resolveDeferred(i, true);
+            //error(deferred[i].second, "cannot resolve pointer base type");
             return;
         }
     }
@@ -2015,9 +2016,9 @@ Type *Parser2::addHelperType(Type * t)
     if( res == 0 )
         return t;
     // else
-    Q_ASSERT( !t->ownstype ); // since the base type is already found, this one cannot be th owner
+    Q_ASSERT( !t->owned ); // since the base type is already found, this one cannot be th owner
     Q_ASSERT( !t->deferred );
-    delete t;
+    // TODO delete t;
     return res;
 }
 
@@ -2286,8 +2287,6 @@ Expression* Parser2::designator(bool needsLvalue) {
 
     Token tok = la;
 
-    bool isLvalue = true;
-
     Symbol* s = 0;
     Expression* res = maybeQualident(&s);
     if( !res )
@@ -2295,10 +2294,6 @@ Expression* Parser2::designator(bool needsLvalue) {
 
     if( s && needsLvalue )
         s->kind = Symbol::Lval;
-
-    // TODO: check res is a variable
-    if( !res->isLvalue() )
-        isLvalue = false;
 
     // TODO: track read-only
 
@@ -2415,7 +2410,6 @@ Expression* Parser2::designator(bool needsLvalue) {
                 // inlined ExpList
                 tok = la;
                 Type* pt = formals.isEmpty() ? 0 : formals.first()->getType();
-
                 Expression* arg = expression(pt, renderLvalue(proc,args.size()));
                 if( arg == 0 )
                     return 0;
@@ -2519,7 +2513,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             invalid("selector");
     }
 
-    if( !needsLvalue && isLvalue )
+    if( !needsLvalue && res->isLvalue() ) // TODO: why not just check needsLvalue?
     {
         res->setByVal();
     }
@@ -2660,26 +2654,29 @@ void Parser2::resolveDeferreds(bool reportError)
     if( deferred.isEmpty() )
         return;
     for(int i = 0; i < deferred.size(); i++ )
+        resolveDeferred(i, reportError);
+}
+
+void Parser2::resolveDeferred(int i, bool reportError)
+{
+    if( deferred[i].first == 0 )
+        return; // already handled
+    Declaration* d = findDecl(deferred[i].second);
+    if( d == 0 )
+        deferred[i].first = 0; // already reported
+    else if( d->getType() == 0 || d->kind != Declaration::TypeDecl )
     {
-        if( deferred[i].first == 0 )
-            continue; // already handled
-        Declaration* d = findDecl(deferred[i].second);
-        if( d == 0 )
-            deferred[i].first = 0; // already reported
-        else if( d->getType() == 0 || d->kind != Declaration::TypeDecl )
+        if( reportError && !deferred[i].first->invalid )
         {
-            if( reportError && !deferred[i].first->invalid )
-            {
-                error(deferred[i].second, QString("cannot resolve type: %1").arg(deferred[i].second.d_val.constData()) );
-                deferred[i].first = 0;
-            }
-        }else
-        {
-            markRef(d, deferred[i].second.toRowCol());
-            deferred[i].first->setType(d->getType());
-            deferred[i].first->deferred = false;
+            error(deferred[i].second, QString("cannot resolve type: %1").arg(deferred[i].second.d_val.constData()) );
             deferred[i].first = 0;
         }
+    }else
+    {
+        markRef(d, deferred[i].second.toRowCol());
+        deferred[i].first->setType(d->getType());
+        deferred[i].first->deferred = false;
+        deferred[i].first = 0;
     }
 }
 
@@ -4411,7 +4408,7 @@ void Parser2::import() {
 
 	if( FIRST_MetaActuals(la.d_type) ) {
         // inlined MetaActuals();
-        resolveDeferreds();
+        //resolveDeferreds();
         expect(Tok_Lpar, false, "MetaActuals");
         Expression* e = ConstExpression(0);
         if( e && !ev->evaluate(e) )

@@ -218,8 +218,6 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,1);
         if( !args.first()->getType()->isReal() )
             throw "expecting floating point type";
-        if( args.first()->getType()->kind != Type::UINT8 )
-            args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::UINT8) );
         if( args[0]->getType()->kind == Type::FLT64 )
             *ret = mdl->getType(Type::INT64);
         else
@@ -310,6 +308,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::SIG:
         expectingNArgs(args,1);
+        *ret = args[0]->getType(); // to avoid crash
         switch(args.first()->getType()->kind)
         {
         case Type::UINT8:
@@ -347,6 +346,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         } break;
     case Builtin::USIG:
         expectingNArgs(args,1);
+        *ret = args[0]->getType(); // to avoid crash
         switch(args.first()->getType()->kind)
         {
         case Type::INT8:
@@ -607,6 +607,28 @@ void Builtins::doFlt()
     ev->stack.push_back(v);
 }
 
+void Builtins::doFloor()
+{
+    Value v = ev->stack.takeLast();
+    Q_ASSERT(v.type->isReal());
+    if( v.type->kind == Type::FLT64 )
+    {
+        v.type = ev->mdl->getType(Type::INT64);
+        if( v.isConst() )
+            v.val = (qint64)v.val.toDouble();
+        else
+            ev->out->conv_(Mil::EmiTypes::I8);
+    }else
+    {
+        v.type = ev->mdl->getType(Type::INT32);
+        if( v.isConst() )
+            v.val = (qint32)v.val.toFloat();
+        else
+            ev->out->conv_(Mil::EmiTypes::I4);
+    }
+    ev->stack.push_back(v);
+}
+
 void Builtins::doShiftRight(const RowCol& pos)
 {
     Value rhs = ev->stack.takeLast();
@@ -754,7 +776,7 @@ void Builtins::doStrlen(const RowCol &pos)
 void Builtins::doSig(const RowCol &pos)
 {
     Value value = ev->stack.takeLast();
-    Type* to;
+    Type* to = value.type; // just in case
     switch(value.type->kind)
     {
     case Type::UINT8:
@@ -781,7 +803,7 @@ void Builtins::doSig(const RowCol &pos)
 void Builtins::doUsig(const RowCol &pos)
 {
     Value value = ev->stack.takeLast();
-    Type* to;
+    Type* to = value.type; // just in case
     switch(value.type->kind)
     {
     case Type::INT8:
@@ -797,11 +819,26 @@ void Builtins::doUsig(const RowCol &pos)
         to = ev->mdl->getType(Type::UINT64);
         break;
     default:
-        Q_ASSERT(false);
+        // Q_ASSERT(false);
+        break;
     }
     ev->stack.push_back(value);
     ev->castNum(to, pos);
     ev->stack.back().type = to;
+}
+
+void Builtins::doChr(const RowCol &pos)
+{
+    Value v = ev->stack.takeLast();
+    if( v.isConst() )
+    {
+        // NOP
+    }else
+    {
+        // NOP
+    }
+    ev->stack.push_back(v);
+
 }
 
 void Builtins::checkNumOfActuals(int nArgs, int min, int max)
@@ -1218,6 +1255,11 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         doFlt();
         handleStack = false;
         break;
+    case Builtin::FLOOR:
+        checkNumOfActuals(nArgs, 1);
+        doFloor();
+        handleStack = false;
+        break;
     case Builtin::ORD:
         checkNumOfActuals(nArgs, 1);
         doOrd(pos);
@@ -1250,7 +1292,8 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         break;
     case Builtin::CHR:
         checkNumOfActuals(nArgs, 1);
-        ev->stack.back().type = ev->mdl->getType(Type::CHAR);
+        doChr(pos);
+        handleStack = false;
         break;
     case Builtin::STRLEN:
         checkNumOfActuals(nArgs, 1);

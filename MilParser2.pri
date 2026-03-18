@@ -16,6 +16,7 @@ SOURCES += \
     runtime/MIC++.c \
     oakwood/Input+.c \
     oakwood/MathL+.c \
+    oakwood/Math+.c \
     oakwood/Out+.c \
     MilVmCode.cpp \
     MilVmOakwood.cpp \

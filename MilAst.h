@@ -39,7 +39,7 @@ namespace Mil
             kind(0),
     #endif
             meta(m),anonymous(false),objectInit(false),typebound(false),
-            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),validated(false),generic(0),
+            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),validated(false),generic(0),hasErrors(0),
             type(0),public_(0),entryPoint(0),owned(0),nobody(0),pointerInit(0),override_(0),translated(0),foreign_(0),subsborrowed(0) {}
         virtual ~Node();
 
@@ -76,8 +76,9 @@ namespace Mil
         uint validated : 1;
         uint translated : 1; // module
         uint entryPoint : 1; // procedure: begin$; module: top entry
+        uint hasErrors : 1; // module
 
-        // 29 bits
+        // 30 bits
 
         Mic::RowCol pos; // Declaration, Expression
 

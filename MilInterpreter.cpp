@@ -298,6 +298,13 @@ static bool MIC_printStr(void* args, void* ret)
     return true;
 }
 
+static bool MIC_strlen(void* args, void* ret)
+{
+    const uint32_t l = MIC$$strlen(*(char**)args);
+    Interpreter::retI4(ret,l);
+    return true;
+}
+
 static bool MIC_printCh(void* args, void* ret)
 {
     MIC$$printCh(*(qint32*)args);
@@ -360,6 +367,7 @@ struct Interpreter::Imp
         REGISTER_MICPROC(printCh);
         REGISTER_MICPROC(printBool);
         REGISTER_MICPROC(printSet);
+        REGISTER_MICPROC(strlen);
         REGISTER_MICPROC(assert);
     }
 

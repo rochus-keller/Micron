@@ -759,7 +759,7 @@ int Expression::strLitLen() const
 
 void Expression::setByVal()
 {
-    // go back the desig which leaves a ref to type on the stack and mark it to leave a value instead
+    // go back to the desig which leaves a ref to type on the stack and mark it to leave a value instead
     Expression* cur = this;
     while( cur && !cur->isLvalue() )
         cur = cur->lhs;

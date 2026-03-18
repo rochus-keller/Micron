@@ -663,12 +663,19 @@ void IlAstRenderer::endModule()
 
     resolveAll(true);
 
-    dump("before validation");
+    //dump("before validation");
 
-    if( toDelete || !errors.isEmpty() )
+    if( toDelete )
     {
         delete module;
         module = 0;
+        return;
+    }
+
+    if( !errors.isEmpty() )
+    {
+        // module is already in model
+        module->hasErrors = true;
         return;
     }
 
@@ -676,6 +683,7 @@ void IlAstRenderer::endModule()
     Validator v(mdl);
     if( !v.validate(module) )
     {
+        module->hasErrors = true;
         foreach( const Validator::Error& e, v.errors )
         {
             Error ee;

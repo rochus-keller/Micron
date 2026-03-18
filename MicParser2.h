@@ -177,6 +177,7 @@ namespace Mic {
         Declaration* addDecl(const Token& id, quint8 visi, Declaration::Kind mode, bool* doublette = 0, bool mark = true);
         Declaration* addDecl(const IdentDef& id, Declaration::Kind mode, bool* doublette = 0, bool mark = true);
         void resolveDeferreds(bool reportError = false);
+        void resolveDeferred(int i, bool reportError = false);
         Expression* toExpr(Declaration* d, const RowCol&);
         void emitType(Type*);
         Declaration* addHelper(Type*);

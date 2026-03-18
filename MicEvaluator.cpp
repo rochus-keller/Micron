@@ -229,6 +229,7 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         out->ldiface_(toQuali(lhs));
     }else
     {
+        Q_ASSERT( &rhs == &stack.back() );
         Type* t = rhs.type;
         assureTopOnMilStack(false, pos); // modifies stack.back() i.e. rhs
         adjustNumType(t,lhs);
@@ -1452,7 +1453,12 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs, const Ro
         res.type = mdl->getType(Type::StrLit);
         Q_ASSERT( op == Expression::Add );
         Q_ASSERT( lhs.isConst() && rhs.isConst() );
-        res.val = lhs.val.toByteArray() + rhs.val.toByteArray();
+        QByteArray tmp = lhs.val.toByteArray();
+        if( !tmp.isEmpty() && tmp[tmp.size()-1] == 0 )
+            tmp.chop(1); // get rid of the extra \x00 at the end of a literal
+        tmp += rhs.val.toByteArray();
+        res.val = tmp;
+        res.mode = Value::Const;
     }else
         error(QString("operation '%1' not supported for these operands: %2, %3").arg(Expression::getName(op))
                 .arg(lhs.type->getName()).arg(rhs.type->getName()), pos);

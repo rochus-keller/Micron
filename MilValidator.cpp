@@ -1800,7 +1800,7 @@ bool Validator::checkIfPointerInit(Type* t)
         }
         return false;
     case Type::NameRef:
-        return checkIfObjectInit(deref(t));
+        return checkIfObjectInit(deref(t)); // TODO: looks like a bug!
     default:
         return false;
     }
