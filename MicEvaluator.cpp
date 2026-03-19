@@ -508,11 +508,21 @@ bool Evaluator::desigField(Declaration* field, bool byVal, const RowCol& pos)
 
     Q_ASSERT(field);
     out->line_(pos);
-    const Mil::Trident desig = qMakePair(toQuali(lhs.type),field->name);
+    Mil::Trident td;
+    if( field->kind == Declaration::Variant )
+    {
+        // add indirection via $ field which represents the variant part of the record
+        td = qMakePair(toQuali(lhs.type),Token::getSymbol("$"));
+        out->ldflda_(td);
+        Qualident q = toQuali(lhs.type);
+        q.second = Token::getSymbol(q.second+"$Var$");
+        td = qMakePair( q,field->name);
+    }else
+        td = qMakePair(toQuali(lhs.type),field->name);
     if( byVal )
-        out->ldfld_(desig);
+        out->ldfld_(td);
     else
-        out->ldflda_(desig);
+        out->ldflda_(td);
 
     Value res;
     res.ref = !byVal;
@@ -2426,14 +2436,30 @@ bool Evaluator::stfld(Expression* lhs, Expression* rhs, const RowCol &pos)
     if( lhs == 0 || lhs->lhs == 0 || rhs == 0 )
         return false;
 
-    if( !evaluate(lhs->lhs) ) // pointer to record
-        return false;
-    Value pointer = stack.takeLast(); // record reference
-    Q_ASSERT(pointer.ref && pointer.type && (pointer.type->kind == Type::Record || pointer.type->kind == Type::Object));
-
+    Q_ASSERT(lhs->kind == Expression::FieldSelect);
     Declaration* field = lhs->val.value<Declaration*>();
     Q_ASSERT(field);
-    const Mil::Trident desig = qMakePair(toQuali(pointer.type),field->name);
+
+    if( !evaluate(lhs->lhs) ) // pointer to record
+            return false;
+
+    Mil::Trident td;
+
+    if( field->kind == Declaration::Variant )
+    {
+        // add indirection via $ field which represents the variant part of the record
+        td = qMakePair(toQuali(lhs->lhs->getType()),Token::getSymbol("$"));
+        out->ldflda_(td);
+        Qualident q = toQuali(lhs->lhs->getType());
+        q.second = Token::getSymbol(q.second+"$Var$");
+        td = qMakePair( q,field->name);
+        Value pointer = stack.takeLast(); // union reference
+    }else
+    {
+        Value pointer = stack.takeLast(); // record reference
+        td = qMakePair(toQuali(pointer.type),field->name);
+        Q_ASSERT(pointer.ref && pointer.type && (pointer.type->kind == Type::Record || pointer.type->kind == Type::Object));
+    }
 
     if( !evaluate(rhs) ) // value
         return false;
@@ -2444,7 +2470,7 @@ bool Evaluator::stfld(Expression* lhs, Expression* rhs, const RowCol &pos)
     Value value = stack.takeLast();
 
     out->line_(pos);
-    out->stfld_(desig);
+    out->stfld_(td);
 
     return err.isEmpty();
 }

@@ -1894,22 +1894,31 @@ void Parser2::emitType(Type* t)
     {
         if( t->kind == Type::Record )
         {
-            bool hasFixed = true;
-            bool hasVariant = false;
+            DeclList fixed, variant;
             foreach( Declaration* field, t->subs )
             {
                 if( field->kind == Declaration::Field )
-                    hasFixed = true;
+                    fixed << field;
                 else if( field->kind == Declaration::Variant )
-                    hasVariant = true;
+                    variant << field;
+            }
+            const QByteArray name = ev->toQuali(t).second;
+            const QByteArray name2 = Token::getSymbol(name + "$Var$");
+
+            // represent a variant record as a struct with embedded union, even if there is no fixed part
+            if( !variant.isEmpty() )
+            {
+                out->beginType(name2,t->decl->pos,t->decl->isPublic(), Mil::EmiTypes::Union );
+                foreach( Declaration* field, variant )
+                    out->addField(field->name,field->pos,ev->toQuali(field->getType()),field->isPublic(),field->id);
+                out->endType();
             }
 
-            out->beginType(ev->toQuali(t).second,t->decl->pos,t->decl->isPublic(),
-                           !hasFixed ? Mil::EmiTypes::Union : Mil::EmiTypes::Struct );
-            // TODO: represent a variant record as a struct with embedded union, even if there is no fixed part
-            // TODO: record can have fixed and variable part which go to separate struct and union or embedded union
-            foreach( Declaration* field, t->subs )
+            out->beginType(name,t->decl->pos,t->decl->isPublic(), Mil::EmiTypes::Struct );
+            foreach( Declaration* field, fixed )
                 out->addField(field->name,field->pos,ev->toQuali(field->getType()),field->isPublic(),field->id);
+            if( !variant.isEmpty() )
+                out->addField(Token::getSymbol("$"),variant.first()->pos,Qualident(QByteArray(), name2),variant.first()->isPublic());
         }else if( t->kind == Type::Object )
         {
             Type* base = t->getType();
@@ -2318,20 +2327,33 @@ Expression* Parser2::designator(bool needsLvalue) {
             }
             if( res->getType()->kind == Type::Record || res->getType()->kind == Type::Object || res->getType()->kind == Type::Interface )
             {
+                QList<Declaration*> path;
                 Declaration* field = res->getType()->findMember(cur.d_val,res->getType()->kind == Type::Object);
                 if( field == 0 ) {
                     // field not found, so try each inlined record field/variant depth first
-                    QList<Declaration*> path = res->getType()->findInlined(cur.d_val,res->getType()->kind == Type::Object);
+                    path = res->getType()->findInlined(cur.d_val,res->getType()->kind == Type::Object);
                     if( path.isEmpty() )
                     {
                         error(cur,QString("the record doesn't have a field named '%1'").
                               arg(cur.d_val.constData()) );
                         return 0;
                     } // else
-                    for(int i = 0; i < path.size(); i++ )
-                        res = createSelector(path[i], res, needsLvalue, tok.toRowCol());
                 }else
-                    res = createSelector(field, res, needsLvalue, tok.toRowCol());
+                    path << field;
+                for(int i = 0; i < path.size(); i++ )
+                {
+#if 0               // not necessary, we generate accessor code on the fly
+                    if( res->getType()->kind == Type::Record && path[i]->kind == Declaration::Variant )
+                    {
+                        // check if there is a "union" access in the path and prefix it with the synthetic "union name $"
+                        Expression* tmp = Expression::create(Expression::FieldSelect, tok.toRowCol() );
+                        tmp->lhs = res;
+                        tmp->setType(path[i]->getType());
+                        res = tmp;
+                    }
+#endif
+                    res = createSelector(path[i], res, needsLvalue, tok.toRowCol());
+                }
             }else
             {
                 error(cur,QString("cannot select a field in given type") );

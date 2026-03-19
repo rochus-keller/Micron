@@ -9,7 +9,8 @@ type
      b: integer
      inline c: record x, y: int32; end;
     end;
-    
+   
+  (* works with both, with or without bars *)
   R2 = record
     kind: K
     case
@@ -22,9 +23,10 @@ var
   r: R
 begin
   r.kind := C
-  r.x := 3 // via inline shortcut
+  r.y := 3 // via inline shortcut
   r.b := 4
   
-  println(r.c.x) // not using inline
+  println(r.c.y) // not using inline
   println(r.b)
+  println(r.c.x) // identical to r.b
 end CaseRec1

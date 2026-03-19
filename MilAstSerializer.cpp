@@ -371,7 +371,7 @@ static void renderStats(ProcData& proc, Statement* s, quint32& line, AstSerializ
                         td.first = s->d->outer->toQuali();
                         proc.body << ProcData::Op(s->kind, QVariant::fromValue(td));
                     }else
-                        qCritical() << proc.name << proc.body.size() << s_opName[s->kind] << ": invalid declaration";
+                        qCritical() << "AstSerializer ERROR:" << proc.name << proc.body.size() << s_opName[s->kind] << ": invalid declaration";
                 } break;
             default:
                 proc.body << ProcData::Op(s->kind);
