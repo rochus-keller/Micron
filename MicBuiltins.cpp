@@ -182,7 +182,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         if( args.first()->kind != Expression::TypeDecl ||
                 !(args.first()->getType()->isNumber() || args.first()->getType()->kind == Type::Pointer) )
             throw QString("expecting declaration of number or pointer type as first argument");
-        if( !args.last()->getType()->isNumber() && !args.last()->getType()->kind == Type::Pointer )
+        if( !args.last()->getType()->isNumber() && args.last()->getType()->kind != Type::Pointer )
             throw QString("expecting a number or pointer type as second argument");
         if( (args.first()->getType()->isNumber() && !args.last()->getType()->isNumber()) ||
             (args.first()->getType()->kind == Type::Pointer && args.last()->getType()->kind != Type::Pointer) )
@@ -364,6 +364,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         default:
             throw "expecting signed integer";
         }
+        break;
 
     // procedures:
         // TODO: complete

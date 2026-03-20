@@ -496,6 +496,8 @@ QVariant Type::getMax(Kind t)
         return std::numeric_limits<float>::max();
     case FLT64:
         return std::numeric_limits<double>::max();
+    default:
+        break;
     }
     return QVariant();
 }

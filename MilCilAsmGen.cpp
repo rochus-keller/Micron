@@ -76,6 +76,7 @@ QByteArray CilAsmGen::declRef(Declaration * d)
     default:
         Q_ASSERT(false);
     }
+    return QByteArray();
 }
 
 QByteArray CilAsmGen::declName(Declaration * d)
@@ -100,6 +101,7 @@ QByteArray CilAsmGen::declName(Declaration * d)
     default:
         Q_ASSERT(false);
     }
+    return QByteArray();
 }
 
 bool CilAsmGen::generate(Declaration* module, QIODevice* device)

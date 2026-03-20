@@ -2027,7 +2027,7 @@ Type *Parser2::addHelperType(Type * t)
     // else
     Q_ASSERT( !t->owned ); // since the base type is already found, this one cannot be th owner
     Q_ASSERT( !t->deferred );
-    // TODO delete t;
+    delete t;
     return res;
 }
 

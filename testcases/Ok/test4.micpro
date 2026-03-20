@@ -7,11 +7,15 @@ Options=@ByteArray()
 Suffixes=@Invalid()
 WorkingDir=
 
+[.]
+size=0
+
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/Mandelbrot.mic
-1\RelPath=Mandelbrot.mic
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/CaseRec1.mic
+1\RelPath=CaseRec1.mic
 size=1
 
 [Packages]
 1\Name=@ByteArray()
-size=1
+2\Name=@ByteArray()
+size=2

@@ -1286,6 +1286,7 @@ Expression* Validator::visitExpr(Expression* e)
             return e;
         e = e->next;
     }
+    return 0;
 }
 
 void Validator::error(Node *n, const QString & str)
@@ -1778,6 +1779,7 @@ bool Validator::checkIfObjectInit(Type* t)
     default:
         return false;
     }
+    return false;
 }
 
 bool Validator::checkIfPointerInit(Type* t)
@@ -1804,6 +1806,7 @@ bool Validator::checkIfPointerInit(Type* t)
     default:
         return false;
     }
+    return false;
 }
 
 int Validator::findLabel(const char* name) const

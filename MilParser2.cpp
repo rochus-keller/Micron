@@ -1063,6 +1063,7 @@ Type* Parser2::type() {
         return NamedType();
 	} else
 		invalid("type");
+    return 0;
 }
 
 Type* Parser2::NamedType(bool allowAny) {
@@ -2808,5 +2809,6 @@ quint32 Parser2::numberOrIdent(bool param)
         }
     } else
         invalid("numberOrIdent");
+    return 0;
 }
 

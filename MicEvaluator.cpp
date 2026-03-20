@@ -825,6 +825,7 @@ bool bitCast(QVariant &v) {
     }
     memcpy(&result, &tmp, sizeof(In));
     v = result;
+    return true;
 }
 
 static inline bool bitCast(QVariant &v, Type* out, Type* in)
