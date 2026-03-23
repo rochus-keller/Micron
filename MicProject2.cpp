@@ -32,7 +32,7 @@
 #include "MilToken.h"
 #include "MilCeeGen.h"
 #include "MilCilAsmGen.h"
-#include "MilLlvmGen.h"
+//#include "MilLlvmGen.h"
 #include "MilAstSerializer.h"
 #include "MilInterpreter.h"
 #include "MilVmOakwood.h"
@@ -641,7 +641,6 @@ bool Project2::generateLlvm(const QString &outDir)
         writeC("oakwood", "MathL", outDir);
         writeC("oakwood", "Strings", outDir);
     }
-#endif
 
     QSet<Mil::Declaration*> used;
     QDir dir(outDir);
@@ -670,6 +669,7 @@ bool Project2::generateLlvm(const QString &outDir)
             cg.generate(module, &body);
         } // else TODO
     }
+#endif
 
     return true;
 }

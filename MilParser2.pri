@@ -3,7 +3,9 @@
 SOURCES += \
     $$PWD/MilAstSerializer.cpp \
     $$PWD/MilCilAsmGen.cpp \
-    $$PWD/MilLlvmGen.cpp \
+    $$PWD/MilElfReader.cpp \
+    $$PWD/MilElfWriter.cpp \
+    $$PWD/MilVmCode2.cpp \
     MilLexer.cpp \
     MilToken.cpp \
     MilTokenType.cpp \
@@ -26,7 +28,9 @@ SOURCES += \
 HEADERS += \
     $$PWD/MilAstSerializer.h \
     $$PWD/MilCilAsmGen.h \
-    $$PWD/MilLlvmGen.h \
+    $$PWD/MilElfReader.h \
+    $$PWD/MilElfWriter.h \
+    $$PWD/MilVmCode2.h \
     MilLexer.h \
     MilToken.h \
     MilTokenType.h \

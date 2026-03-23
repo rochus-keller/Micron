@@ -125,15 +125,15 @@ size=0
 6\RelPath=Arrays5.mic
 60\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/casttest.mic
 60\RelPath=casttest.mic
-61\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/PointerArith.mic
-61\RelPath=PointerArith.mic
+61\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/CaseRec1.mic
+61\RelPath=CaseRec1.mic
 7\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/BoundProcs.mic
 7\RelPath=BoundProcs.mic
 8\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/CompCon1.mic
 8\RelPath=CompCon1.mic
 9\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/CompCon2.mic
 9\RelPath=CompCon2.mic
-size=60
+size=61
 
 [Packages]
 1\Name=@ByteArray()

@@ -125,6 +125,8 @@ public:
     void addExternal(const char* module, const char* name, quint32 id);
 
     bool compile(Declaration* procOrModule);
+    bool compileProc(Declaration* proc);
+
 
     qint64 getInt(quint32 n) const { return ints[n]; }
     double getDouble(quint32 n) const { return doubles[n]; }
@@ -133,6 +135,8 @@ public:
     const char* getString(quint32 n) const { return strings[n].c_str(); }
     const std::vector<char>& getObject(quint32 n) const { return objects[n]; }
     const Template& getTemplate(quint32 n) const { return templates[n]; }
+
+    int procCount() const { return procs.size(); }
 
     int findProc(Declaration* proc) const
     {
@@ -169,7 +173,10 @@ protected:
     bool translateProc(Declaration* proc);
     bool translateModule(Declaration* m);
     bool translateProc(Procedure& proc);
-    bool translateStatSeq(Procedure& proc, Statement* s);
+    bool translateStat(Procedure& proc, Statement*& s);
+    virtual bool translateStatSeq(Procedure& proc, Statement* s);
+    virtual bool translateStatExpr(Procedure& proc, Statement* s);
+    bool translateExpr(Procedure& proc, Expression* e);
     bool translateExprSeq(Procedure& proc, Expression* e);
     bool translateInit(Procedure& proc, quint32 id);
     void render(char* data, quint32 off, Type* t, Constant* c);
@@ -235,7 +242,7 @@ protected:
         {
             ComponentList* cl = c->c;
             Q_ASSERT( cl->type );
-            obj.resize(deref(cl->type)->getByteSize(sizeof(void*)));
+            obj.resize(deref(cl->type)->getByteSize(pointerWidth));
             render(obj.data(), 0, cl);
         }
         return id;
@@ -279,7 +286,7 @@ protected:
     }
 
 
-private:
+protected:
     const quint8 pointerWidth;
     const quint8 stackAlignment;
     AstModel* mdl;
