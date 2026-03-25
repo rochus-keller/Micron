@@ -208,6 +208,8 @@ namespace X86
         void fild_s(Register base, qint32 disp);
         // FISTP dword [base + disp]
         void fistp_s(Register base, qint32 disp);
+        // FISTTP dword [base + disp] (SSE3 truncating store)
+        void fisttp_s(Register base, qint32 disp);
 
         void faddp();
         void fsubp();

@@ -606,6 +606,13 @@ void Emitter::fistp_s(Register base, qint32 disp)
     emitModRM_m(3, base, disp);
 }
 
+void Emitter::fisttp_s(Register base, qint32 disp)
+{
+    // FISTTP dword [base + disp]: 0xDB /1 (SSE3 truncating store)
+    emitByte(0xDB);
+    emitModRM_m(1, base, disp);
+}
+
 void Emitter::faddp()
 {
     emitByte(0xDE); emitByte(0xC1);

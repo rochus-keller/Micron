@@ -142,6 +142,13 @@ quint32 ElfWriter::sectionSize(quint32 sectionIdx) const
     return d_sections[sectionIdx].data.size();
 }
 
+void ElfWriter::patchWord(quint32 sectionIdx, quint32 offset, quint32 value)
+{
+    Q_ASSERT(sectionIdx > 0 && sectionIdx < quint32(d_sections.size()));
+    Q_ASSERT(offset + 4 <= quint32(d_sections[sectionIdx].data.size()));
+    memcpy(d_sections[sectionIdx].data.data() + offset, &value, 4);
+}
+
 ElfWriter::StandardSections ElfWriter::createStandardSections()
 {
     StandardSections ss;

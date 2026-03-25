@@ -80,6 +80,7 @@ namespace Mil
         void appendToSection(quint32 sectionIdx, const char* data, quint32 len);
         void appendToSection(quint32 sectionIdx, const QByteArray& data);
         quint32 sectionSize(quint32 sectionIdx) const;
+        void patchWord(quint32 sectionIdx, quint32 offset, quint32 value);
 
         // Convenience: create standard sections and return their indices
         struct StandardSections {

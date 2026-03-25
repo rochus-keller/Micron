@@ -137,6 +137,16 @@ public:
     const Template& getTemplate(quint32 n) const { return templates[n]; }
 
     int procCount() const { return procs.size(); }
+    int vtableCount() const { return vtables.size(); }
+    int findVtableIdx(Type* object) const
+    {
+        for( int i = 0; i < vtables.size(); i++ )
+        {
+            if( vtables[i]->type == object )
+                return i;
+        }
+        return -1;
+    }
 
     int findProc(Declaration* proc) const
     {

@@ -1637,8 +1637,21 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         // this is a nop here; it is unnecessary to convert the stack slot
         break;
 
+    case IL_ptroff: {
+        // ptroff: ptr += offset * sizeof(element_type)
+        // Stack has: [pointer, offset] — both i4 on 32-bit
+        // Lower to: ldc_i4(elemSize), mul_i4, add_i4
+        Type* elemType = deref(e->d->getType());
+        quint32 elemSize = elemType->getByteSize(pointerWidth);
+        if( elemSize != 1 ) {
+            emitOp(proc, LL_ldc_i4, addInt(elemSize));
+            emitOp(proc, LL_mul_i4);
+        }
+        emitOp(proc, LL_add_i4);
+        break;
+    }
+
     case IL_sizeof:
-    case IL_ptroff:
     case IL_newvla:
 
         qCritical() << "ERROR: not yet implemented in interpreter:" << s_opName[e->kind];
