@@ -133,10 +133,10 @@ OPDEF(vt_size, SizeArg), // suffix of ldarg_vt, starg_vt, ldloc_vt, stloc_vt, ld
 OPDEF(callvirt, ProcArg), OPDEF(isinst, VtableArg),
 OPDEF(callmi, NoOpArgs),
 OPDEF(callinst, ProcArg),
+OPDEF(line, IntArg),
 
 // TODO:
 OPDEF(newvla, NoOpArgs),
-OPDEF(line, NoOpArgs),
 
 
 

@@ -159,10 +159,10 @@ void Project::generateC()
     foreach( Declaration* module, mdl->getModules() )
     {
         CeeGen cg(mdl);
-        QFile header( escapeFilename(module->name) + ".h");
+        QFile header( CeeGen::escapeFilename(module->name) + ".h");
         header.open(QFile::WriteOnly);
         QFile* body = 0;
-        QFile b( escapeFilename(module->name) + ".c");
+        QFile b( CeeGen::escapeFilename(module->name) + ".c");
         if( !module->nobody )
         {
             b.open(QFile::WriteOnly);

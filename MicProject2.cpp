@@ -499,7 +499,6 @@ bool Project2::generateC(const QString &outDir)
         writeC("oakwood", "Strings", outDir);
     }
 
-    QSet<Mil::Declaration*> used;
     QDir dir(outDir);
     // TODO: check if files can be created and written
     foreach( Mil::Declaration* module, loader.getModel().getModules() )
@@ -508,17 +507,6 @@ bool Project2::generateC(const QString &outDir)
     {
         if( module->generic ) // skip not fully instantiated modules
             continue;
-        Mil::Declaration* sub = module->subs;
-        while(sub)
-        {
-            if( sub->kind == Mil::Declaration::Import )
-            {
-                Mil::Declaration* imported = sub->imported;
-                if( imported && !imported->generic )
-                    used.insert(imported);
-            }
-            sub = sub->next;
-        }
         Mil::CeeGen cg(&loader.getModel());
         QFile header( dir.absoluteFilePath(escapeFilename(module->name) + ".h"));
         header.open(QFile::WriteOnly);
@@ -540,23 +528,17 @@ bool Project2::generateC(const QString &outDir)
     out << "// main+.c" << endl;
     out << Mil::CeeGen::genDedication() << endl << endl;
 
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
-    {
-        // if a module is not in "used", it is never imported and thus a root module
-        if( !used.contains(module) && !module->nobody && !module->generic )
-            out << "#include \"" <<  escapeFilename(module->name) << ".h\"" << endl;
-    }
+    Mil::DeclList roots = loader.getModel().getRootModules();
+    foreach( Mil::Declaration* module, roots )
+        out << "#include \"" <<  escapeFilename(module->name) << ".h\"" << endl;
 
     out << endl;
 
     out << "int main(int argc, char** argv) {" << endl;
 
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
-    {
+    foreach( Mil::Declaration* module, roots )
         // if a module is not in "used", it is never imported and thus a root module
-        if( !used.contains(module) && !module->nobody && !module->generic )
-            out << "    " <<  module->name << "$begin$();" << endl;
-    }
+        out << "    " <<  module->name << "$begin$();" << endl;
     out << "    return 0;" << endl;
     out << "}" << endl;
 

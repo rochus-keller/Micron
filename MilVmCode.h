@@ -123,6 +123,7 @@ public:
     ~Code();
 
     void addExternal(const char* module, const char* name, quint32 id);
+    void setGenerateLines(bool b) { generateLines = b; }
 
     bool compile(Declaration* procOrModule);
     bool compileProc(Declaration* proc);
@@ -191,6 +192,7 @@ protected:
     bool translateInit(Procedure& proc, quint32 id);
     void render(char* data, quint32 off, Type* t, Constant* c);
     void render(char* data, quint32 start, ComponentList* cl );
+    void handleLines(Procedure& proc,Node *n);
     Type* deref(Type* t)
     {
         if( t && t->kind == Type::NameRef )
@@ -299,6 +301,8 @@ protected:
 protected:
     const quint8 pointerWidth;
     const quint8 stackAlignment;
+    bool generateLines;
+    quint32 lastLine;
     AstModel* mdl;
 
     // accessing std::vector is cheaper than QVector or QByteArray

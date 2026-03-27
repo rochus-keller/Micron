@@ -364,7 +364,8 @@ namespace Mil
         Declaration* findModuleByName( const QByteArray& ) const;
         bool addModule(Declaration*);
         const Declaration* getGlobals() const { return &globals; }
-        DeclList& getModules() { return modules; }
+        const DeclList& getModules() const { return modules; }
+        DeclList getRootModules() const;
         Type* getBasicType(quint8) const;
         Declaration* resolve(const Quali&) const;
 

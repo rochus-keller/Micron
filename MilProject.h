@@ -40,14 +40,6 @@ namespace Mil
         void generateC();
         void interpret(bool dump = false);
         void dumpMil();
-
-        static inline QByteArray escapeFilename( const QByteArray& fileName )
-        {
-            QByteArray res = fileName;
-            res.replace('$','+');
-            return res;
-        }
-
     protected:
         Declaration* loadModule( const Import& imp );
 

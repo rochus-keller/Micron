@@ -23,7 +23,7 @@
 // adopted from Oberon+ project
 
 #include <QMainWindow>
-#include <MonoTools/MonoDebugger.h>
+#include <LeanDap/DapDebuggerInt.h>
 
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -31,11 +31,6 @@ class QLabel;
 class QTextBrowser;
 class QProcess;
 
-namespace Mono
-{
-class Engine;
-class IlView;
-}
 namespace Gui
 {
 class AutoMenu;
@@ -47,7 +42,7 @@ namespace Mic
     class Declaration;
     class Type;
     class Symbol;
-    using Mono::DebuggerEvent;
+    using Dap::DebuggerEvent;
 
     class Ide : public QMainWindow
     {
@@ -75,7 +70,6 @@ namespace Mic
             Location(const QString& f, quint32 l, quint16 c, quint16 y ):d_file(f),d_line(l),d_col(c),d_yoff(y){}
         };
         void createTerminal();
-        void createIlView();
         void createMods();
         void createMod();
         void createHier();
@@ -108,7 +102,6 @@ namespace Mic
         void removePosMarkers();
         void pushLocation( const Location& );
         void clear();
-        bool checkEngine(bool withFastasm = false);
         quint32 getMonoModule( Declaration* ); // returns typeId
         bool updateBreakpoint(Declaration*, quint32 line, bool add );
         void syncEditorMarks(Symbol* selected, Declaration* module);
@@ -166,12 +159,11 @@ namespace Mic
         void onBuildDir();
         void onAbout();
         void onQt();
-        void onByteMode();
         void onSetRunCommand();
-        void onConsole( const QString& msg, bool err );
+        void onConsole( const QString& msg);
         void onError( const QString& );
         void onFinished(int exitCode, bool normalExit);
-        void onDbgEvent( const DebuggerEvent& );
+        void onDbgEvent( const Dap::DebuggerEvent& );
         void onRemoveAllBreakpoints();
         void onBreakOnExceptions();
         void onRowColMode();
@@ -183,11 +175,8 @@ namespace Mic
     private:
         class DocTab;
         DocTab* d_tab;
-        Mono::Debugger* d_dbg;
-        Mono::Engine* d_eng;
+        Dap::DebuggerInt* d_dbg;
         Project2* d_pro;
-        Mono::IlView* d_il;
-        QLabel* d_ilTitle;
         QTextBrowser* d_term;
         QTreeWidget* d_mods;
         QTreeWidget* d_mod;
@@ -203,7 +192,7 @@ namespace Mic
         QTreeWidget* d_errs;
         QList<Location> d_backHisto; // d_backHisto.last() ist aktuell angezeigtes Objekt
         QList<Location> d_forwardHisto;
-        enum Mode { LineMode, RowColMode, BytecodeMode };
+        enum Mode { LineMode, RowColMode };
         quint8 d_mode;
         bool d_lock, d_lock2, d_lock3, d_lock4;
         bool d_filesDirty;
@@ -217,7 +206,7 @@ namespace Mic
         quint32 d_curThread;
         enum Status { Idle, Compiling, Generating, Running };
         Status d_status;
-        QList<Mono::Debugger::Frame> d_stack;
+        QList<Dap::Frame> d_stack;
         qint32 d_curRow;
         qint16 d_curCol;
         quint8 d_curLevel;

@@ -130,6 +130,35 @@ bool AstModel::addModule(Declaration* module)
     return true;
 }
 
+DeclList AstModel::getRootModules() const
+{
+    QSet<Mil::Declaration*> used;
+    foreach( Mil::Declaration* module, getModules() )
+    {
+        if( module->generic ) // skip not fully instantiated modules
+            continue;
+        Mil::Declaration* sub = module->subs;
+        while(sub)
+        {
+            if( sub->kind == Mil::Declaration::Import )
+            {
+                Mil::Declaration* imported = sub->imported;
+                if( imported && !imported->generic )
+                    used.insert(imported);
+            }
+            sub = sub->next;
+        }
+    }
+    DeclList res;
+    foreach( Mil::Declaration* module, getModules() )
+    {
+        // if a module is not in "used", it is never imported and thus a root module
+        if( !used.contains(module) && !module->nobody && !module->generic )
+            res << module;
+    }
+    return res;
+}
+
 Type* AstModel::getBasicType(quint8 k) const
 {
     if( k < Type::MaxBasicType )

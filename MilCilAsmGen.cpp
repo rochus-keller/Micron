@@ -18,6 +18,7 @@
 */
 
 // derived from CeeGen; same logic; generates ECMA 335 IL asm text instead
+// work in progress, likely obsolete
 
 #include "MilCilAsmGen.h"
 #include "MilValidator.h"

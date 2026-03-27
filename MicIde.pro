@@ -24,36 +24,25 @@ TEMPLATE = app
 
 INCLUDEPATH += .. 
 
-DEFINES += _MONO_ENGINE_EXT_
-
 SOURCES +=  MicProject2.cpp \
     MicHighlighter.cpp \
     MicIde.cpp \
     ../GuiTools/CodeEditor.cpp \
     ../GuiTools/DocSelector.cpp \
-    ../GuiTools/DocTabWidget.cpp \
-    ../MonoTools/MonoEngine.cpp \
-    ../MonoTools/MonoDebugger.cpp \
-    ../MonoTools/MonoIlView.cpp \
-    ../MonoTools/MonoMdbGen.cpp 
+    ../GuiTools/DocTabWidget.cpp
 
 HEADERS  += MicProject2.h \
     MicHighlighter.h \
     MicIde.h \
     ../GuiTools/CodeEditor.h \
     ../GuiTools/DocSelector.h \
-    ../GuiTools/DocTabWidget.h \
-    ../MonoTools/MonoEngine.h \
-    ../MonoTools/MonoDebugger.h \
-    ../MonoTools/MonoDebuggerPrivate.h \
-    ../MonoTools/MonoIlView.h \
-    ../MonoTools/MonoMdbGen.h 
+    ../GuiTools/DocTabWidget.h
 
 include( MicUtils.pri )
 include( MicParser.pri )
 include( MilParser2.pri )
 include( ../GuiTools/Menu.pri )
-include( ../PeLib/PeLib.pri )
+include( ../LeanDap/LeanDapInt.pri )
 
 CONFIG(debug, debug|release) {
         DEFINES += _DEBUG

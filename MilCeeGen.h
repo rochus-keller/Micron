@@ -36,6 +36,12 @@ namespace Mil
         bool generate(Declaration* module, QIODevice* header, QIODevice* body = 0);
         static bool requiresBody(Declaration* module);
         static QString genDedication();
+        static inline QByteArray escapeFilename( const QByteArray& fileName )
+        {
+            QByteArray res = fileName;
+            res.replace('$','+');
+            return res;
+        }
     protected:
         void visitModule();
         void visitProcedure(Declaration*);

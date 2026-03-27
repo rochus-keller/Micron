@@ -37,7 +37,7 @@ static const int op_args[] = {
 };
 
 Code::Code(AstModel* mdl, quint8 pointerWidth, quint8 stackAlignment):
-    mdl(mdl),pointerWidth(pointerWidth), stackAlignment(stackAlignment)
+    mdl(mdl),pointerWidth(pointerWidth), stackAlignment(stackAlignment), lastLine(0), generateLines(false)
 {
 
 }
@@ -248,6 +248,7 @@ bool Code::translateStat(Procedure &proc, Statement *& s)
 {
     if( s == 0 )
         return true;
+    handleLines(proc, s);
     switch(s->kind)
     {
     case IL_starg:
@@ -687,6 +688,9 @@ bool Code::translateExprSeq(Procedure& proc, Expression* e)
 bool Code::translateExpr(Procedure& proc, Expression* e)
 {
     // Use the member pointerWidth (target pointer size), not sizeof(void*) (host pointer size)
+
+    handleLines(proc, e);
+
     Type* t = deref(e->getType());
     Type* lhsT = deref(e->lhs ? e->lhs->getType() : 0);
     Type* rhsT = deref(e->rhs ? e->rhs->getType() : 0);
@@ -1775,6 +1779,17 @@ void Code::render(char* data, quint32 start, ComponentList* cl)
     }
 }
 
+void Code::handleLines(Procedure &proc, Node* n)
+{
+    if( !generateLines )
+        return;
+    if( n->pos.line() != lastLine )
+    {
+        lastLine = n->pos.line(); // TODO: should we support row/col?
+        emitOp(proc, LL_line, lastLine );
+    }
+}
+
 void Code::downcopy(Vtable* vt)
 {
     // make sure that each vtable is filled with inherited methods as far as used
@@ -1882,7 +1897,7 @@ bool Code::dumpModule(QTextStream& out, Declaration* module)
 
 bool Code::dumpAll(QTextStream& out)
 {
-    DeclList& modules = mdl->getModules();
+    const DeclList& modules = mdl->getModules();
     foreach( Declaration* module, modules )
         dumpModule(out, module);
     return true;

@@ -19,7 +19,6 @@
 
 #include "MilCeeGen.h"
 #include "MilValidator.h"
-#include "MilProject.h"
 #include <QDateTime>
 #include <QCoreApplication>
 #include <QtDebug>
@@ -84,11 +83,11 @@ bool CeeGen::generate(Declaration* module, QIODevice* header, QIODevice* body)
     while( sub )
     {
         if(sub->kind == Declaration::Importer )
-             bout << "#include \"" << Project::escapeFilename(sub->name) << ".h\"" << endl;
+             bout << "#include \"" << escapeFilename(sub->name) << ".h\"" << endl;
 
         sub = sub->next;
     }
-    bout << "#include \"" << Project::escapeFilename(module->name) << ".h\"" << endl;
+    bout << "#include \"" << escapeFilename(module->name) << ".h\"" << endl;
     bout << "#include \"MIC+.h\"" << endl;
     bout << "#include <stdlib.h>" << endl;
     bout << "#include <string.h>" << endl;
@@ -151,7 +150,7 @@ void CeeGen::visitModule()
        switch(sub->kind)
        {
        case Declaration::Import:
-            hout << "#include \"" << Project::escapeFilename(sub->name) << ".h\"" << endl;
+            hout << "#include \"" << escapeFilename(sub->name) << ".h\"" << endl;
             break;
        case Declaration::TypeDecl:
            typeDecl(hout, sub);
