@@ -95,8 +95,10 @@ double MathL$arctanh(double x)
 	return atanh(x);
 }
 
+#ifndef _MIC_NO_BEGIN_
 void MathL$begin$()
 {
 }
+#endif
 
 

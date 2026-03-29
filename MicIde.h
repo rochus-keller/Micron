@@ -24,12 +24,12 @@
 
 #include <QMainWindow>
 #include <LeanDap/DapDebuggerInt.h>
+#include <QProcess>
 
 class QTreeWidget;
 class QTreeWidgetItem;
 class QLabel;
 class QTextBrowser;
-class QProcess;
 
 namespace Gui
 {
@@ -102,7 +102,6 @@ namespace Mic
         void removePosMarkers();
         void pushLocation( const Location& );
         void clear();
-        quint32 getMonoModule( Declaration* ); // returns typeId
         bool updateBreakpoint(Declaration*, quint32 line, bool add );
         void syncEditorMarks(Symbol* selected, Declaration* module);
         void syncModView(Declaration* decl);
@@ -162,7 +161,7 @@ namespace Mic
         void onSetRunCommand();
         void onConsole( const QString& msg);
         void onError( const QString& );
-        void onFinished(int exitCode, bool normalExit);
+        void onFinished(int exitCode, QProcess::ExitStatus);
         void onDbgEvent( const Dap::DebuggerEvent& );
         void onRemoveAllBreakpoints();
         void onBreakOnExceptions();
@@ -172,10 +171,13 @@ namespace Mic
         void onNoWarnings();
         void onConvertAllToUtf8();
         void onIncremental();
+        void onReadyStdout();
+        void onReadyStderr();
     private:
         class DocTab;
         DocTab* d_tab;
         Dap::DebuggerInt* d_dbg;
+        QProcess* d_run;
         Project2* d_pro;
         QTextBrowser* d_term;
         QTreeWidget* d_mods;
@@ -211,7 +213,6 @@ namespace Mic
         qint16 d_curCol;
         quint8 d_curLevel;
         QHash<QByteArray, QSet<quint32> > d_breakPoints; // module name -> line number
-        QHash<Declaration*,quint32> d_loadedAssemblies; // -> assemblyId
     };
 }
 

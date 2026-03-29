@@ -51,6 +51,8 @@ void Out$Open()
 {
 }
 
+#ifndef _MIC_NO_BEGIN_
 void Out$begin$()
 {
 }
+#endif

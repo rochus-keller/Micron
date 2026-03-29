@@ -32,6 +32,7 @@
 #include "MilToken.h"
 #include "MilCeeGen.h"
 #include "MilCilAsmGen.h"
+#include "MilX86Renderer.h"
 //#include "MilLlvmGen.h"
 #include "MilAstSerializer.h"
 #include "MilInterpreter.h"
@@ -485,19 +486,8 @@ bool Project2::parse()
 
 bool Project2::generateC(const QString &outDir)
 {
-    writeC("runtime", "MIC+", outDir);
-
-    if( useBuiltInOakwood() )
-    {
-        writeC("oakwood", "Args", outDir);
-        writeC("oakwood", "In", outDir);
-        writeC("oakwood", "Out", outDir);
-        writeC("oakwood", "Files", outDir);
-        writeC("oakwood", "Input", outDir);
-        writeC("oakwood", "Math", outDir);
-        writeC("oakwood", "MathL", outDir);
-        writeC("oakwood", "Strings", outDir);
-    }
+    QStringList cFiles;
+    copyCResources(outDir, cFiles);
 
     QDir dir(outDir);
     // TODO: check if files can be created and written
@@ -686,6 +676,101 @@ bool Project2::generateMil(const QString &outDir)
         } // else TODO
     }
     return true;
+}
+
+bool Project2::generateX86(const QString &outDir, QStringList& objFiles)
+{
+    // x86 backend: generate ELF32 relocatable objects for each module
+     loader.getModel().calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
+
+     bool hasErrors = false;
+
+     foreach( Mil::Declaration* module, loader.getModulesInDependencyOrder() )
+     {
+         if( module->name == "MIC$" || module->generic )
+             continue;
+
+         // Reset all flags for this module's compile pass
+         foreach( Mil::Declaration* m, loader.getModel().getModules() )
+         {
+             m->translated = false;
+             for (Mil::Declaration* sub = m->subs; sub; sub = sub->next) {
+                 if (sub->kind == Mil::Declaration::Procedure)
+                     sub->validated = false;
+                 if (sub->kind == Mil::Declaration::TypeDecl && sub->getType()) {
+                     foreach (Mil::Declaration* msub, sub->getType()->subs) {
+                         if (msub->kind == Mil::Declaration::Procedure)
+                             msub->validated = false;
+                     }
+                 }
+             }
+         }
+
+         Mil::X86::Renderer renderer(&loader.getModel());
+         renderer.setCdeclReturns(true);
+
+         if( !renderer.renderModule(module) )
+         {
+             qCritical() << "error generating x86 code for module" << module->name
+                         << ":" << renderer.errorMessage();
+             hasErrors = true;
+             break;
+         }
+
+         const QString objFile = QDir(outDir).absoluteFilePath(Mil::CeeGen::escapeFilename(module->name) + ".o");
+
+         if( !renderer.writeToFile(objFile) )
+         {
+             qCritical() << "cannot write object file" << objFile;
+             hasErrors = true;
+             break;
+         }
+         qDebug() << "  generated" << objFile;
+         objFiles << objFile;
+     }
+
+     if( !hasErrors )
+     {
+         qDebug() << "#### generated" << objFiles.size() << "x86 object files";
+
+         // Generate main.o that calls all module inits in dependency order
+         QByteArrayList moduleNames;
+         foreach( Mil::Declaration* module, loader.getModel().getRootModules() )
+         {
+             if( module->name == "MIC$" )
+                 continue;
+             moduleNames << module->name;
+         }
+         QString mainObj;
+         mainObj = QDir(outDir).absoluteFilePath("main+.o");
+
+         if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj) )
+         {
+             qDebug() << "  generated" << mainObj;
+             objFiles << mainObj;
+         }
+         else
+             qCritical() << "cannot generate main+.o";
+     }
+     return !hasErrors;
+}
+
+bool Project2::copyCResources(const QString &outDir, QStringList &cFiles)
+{
+    cFiles << writeC("runtime", "MIC+", outDir);
+
+    if( useBuiltInOakwood() )
+    {
+        cFiles << writeC("oakwood", "Args", outDir);
+        cFiles << writeC("oakwood", "In", outDir);
+        cFiles << writeC("oakwood", "Out", outDir);
+        cFiles << writeC("oakwood", "Files", outDir);
+        cFiles << writeC("oakwood", "Input", outDir);
+        cFiles << writeC("oakwood", "Math", outDir);
+        cFiles << writeC("oakwood", "MathL", outDir);
+        cFiles << writeC("oakwood", "Strings", outDir);
+    }
+    return !cFiles.contains(QString());
 }
 
 bool Project2::interpret(const QString& outDir)
@@ -950,12 +1035,14 @@ void Project2::parseLib(const QString & name)
     modules.append(ms);
 }
 
-void Project2::writeC(const QString& where, const QString &what, const QString &out)
+QString Project2::writeC(const QString& where, const QString &what, const QString &out)
 {
     QDir dir(out);
     const bool a = QFile::copy(QString(":/%1/%2.h").arg(where).arg(what), dir.absoluteFilePath(what+".h"));
-    const bool b = QFile::copy(QString(":/%1/%2+.c").arg(where).arg(what), dir.absoluteFilePath(what+"+.c"));
-    qDebug() << what << a << b;
+    const QString to = dir.absoluteFilePath(what+"+.c");
+    const bool b = QFile::copy(QString(":/%1/%2+.c").arg(where).arg(what), to);
+    return to;
+    // qDebug() << what << a << b;
 }
 
 bool Project2::save()

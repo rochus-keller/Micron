@@ -7,6 +7,7 @@ SOURCES += \
     $$PWD/MilElfWriter.cpp \
     $$PWD/MilVmCode2.cpp \
     $$PWD/MilX86Emitter.cpp \
+    $$PWD/MilX86Renderer.cpp \
     MilLexer.cpp \
     MilToken.cpp \
     MilTokenType.cpp \
@@ -33,6 +34,7 @@ HEADERS += \
     $$PWD/MilElfWriter.h \
     $$PWD/MilVmCode2.h \
     $$PWD/MilX86Emitter.h \
+    $$PWD/MilX86Renderer.h \
     MilLexer.h \
     MilToken.h \
     MilTokenType.h \

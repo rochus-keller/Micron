@@ -376,10 +376,12 @@ Ide::Ide(QWidget *parent)
     connect(d_dbg, SIGNAL(sigError(QString)), this, SLOT(onError(QString)) );
     connect(d_dbg, SIGNAL(sigLog(QString)), this, SLOT(onConsole(QString)) );
 
-    /* TODO
-    connect(d_eng, SIGNAL(onError(QString)), this, SLOT(onError(QString)));
-    connect(d_eng,SIGNAL(onFinished(int,bool)), this, SLOT(onFinished(int,bool)));
-    */
+    d_run = new QProcess(this);
+    d_run->setProcessChannelMode(QProcess::SeparateChannels);
+    connect(d_run, SIGNAL(readyReadStandardOutput()), this, SLOT(onReadyStdout()));
+    connect(d_run, SIGNAL(readyReadStandardError()), this, SLOT(onReadyStderr()));
+    connect(d_run, SIGNAL(finished(int,QProcess::ExitStatus)), this, SLOT(onFinished(int,QProcess::ExitStatus)));
+
 
     d_tab = new DocTab(this);
     d_tab->setCloserIcon( ":/images/close.png" );
@@ -1591,7 +1593,7 @@ bool Ide::compile(bool all, bool doGenerate )
     if( res && doGenerate )
     {
        if( !generate(all) )
-           QMessageBox::critical(this,tr("Compiler"),tr("There was an error when generating an assembly; "
+           QMessageBox::critical(this,tr("Compiler"),tr("There was an error when generating the project; "
                                                         "see Output window for more information"));
     }
     onErrors();
@@ -1605,70 +1607,67 @@ bool Ide::compile(bool all, bool doGenerate )
 
 bool Ide::generate(bool forceAll)
 {
+    Q_UNUSED(forceAll);
+
     if( d_status != Idle )
         return false;
-
-#if 0
-    // TODO
-
-    // NOTE fastasm seems still to make problems, maybe related to the mscorelib.dll version;
-    // the same code which issues a runtime exception runs without problems when compiled with
-    // ILASM or Pelib; so somehow fastasm seems to generate wrong code or meta for the same IL.
-    // Anyway we can do well without fastasm because neither fastasm nor ILASM generate useful MDBs.
-    const CilGen::How how = CilGen::Pelib; // CilGen::Fastasm; CilGen::Ilasm
-    // Pelib is factor 1.4 faster than Fastasm for generating the IL and factor ~3 incl. IL to assembly compilation;
-    // compared to ilasm.exe for compilation (instead of fastasm.exe) Pelib is even a factor 29 faster.
 
     const QString buildPath = d_pro->getBuildDir(true);
     QDir buildDir(buildPath);
     if( !buildDir.mkpath(buildPath) )
     {
-        QMessageBox::critical(this, tr("Generating Assemblies"), tr("Cannot create build directory '%1'").arg(buildPath));
+        QMessageBox::critical(this, tr("Generating X86"), tr("Cannot create build directory '%1'").arg(buildPath));
         return false;
     }
-    QFile test(buildDir.absoluteFilePath("__obx_probe__"));
-    if( !test.open(QIODevice::WriteOnly) )
+
+    QStringList cFiles;
+    if( !d_pro->copyCResources(buildPath, cFiles) )
     {
-        QMessageBox::critical(this, tr("Generating Assemblies"), tr("Cannot write to files in '%1'").arg(buildPath));
+        QMessageBox::critical(this, tr("Generating X86"), tr("Cannot copy embedded libraries to build directory"));
         return false;
     }
-    test.remove();
-
-    if( how == CilGen::Fastasm && !checkEngine(true) )
-        return false;
-
     const QTime start = QTime::currentTime();
-    d_status = Generating;
-    const bool ok = CilGen::translateAll(d_pro, how, d_debugging && d_ovflCheck, buildPath, forceAll );
-    qDebug() << "generated in" << start.msecsTo(QTime::currentTime()) << "[ms]";
-
-    if( ok && how == CilGen::Fastasm )
+    QStringList objFiles;
+    if( !d_pro->generateX86(buildPath, objFiles) )
+        // TODO: we have to use an indirect main+.o calling __mic$init so we can put a fflush at the end; currently the output is cut
+        return false;
+    for( int i = 0; i < cFiles.size(); i++ )
     {
-        logMessage("\nGenerating application...\n\n",SysInfo,false);
-        QDir monoDir( d_eng->getMonoDir() );
-        d_eng->init();
-        d_eng->setWorkDir(buildPath);
-        d_eng->run( monoDir.absoluteFilePath("fastasm.exe"), QStringList() << buildDir.absoluteFilePath("batch") );
-        if( !d_debugging )
+        QString& file = cFiles[i];
+        const QString cmd = QString("gcc -m32 -fno-stack-protector -D_MIC_NO_BEGIN_ -c %1 -o %2.o").arg(file).arg(file);
+        //qDebug() << cmd; // TEST
+        const int res = QProcess::execute(cmd);
+        if( res != 0 )
         {
-            QFile files(buildDir.absoluteFilePath("modules"));
-            if( files.open(QIODevice::ReadOnly) )
-            {
-                while( !files.atEnd() )
-                {
-                    const QByteArray line = files.readLine().trimmed();
-                    const QString fileName = buildDir.absoluteFilePath(QString::fromUtf8(line));
-                    QFile::remove(fileName+".dll.mdb");
-                    QFile::remove(fileName+".exe.mdb");
-                }
-            }
+            QMessageBox::critical(this, tr("Generating X86"), tr("error compiling '%1'").arg(file));
+            return false;
         }
-    }else
-        d_status = Idle;
+        file += ".o";
+    }
+    const QString name = d_pro->getProjectPath().isEmpty()? QString("a.out"): QFileInfo(d_pro->getProjectPath()).baseName();
 
-    return ok;
-#endif
-    return false;
+    QString old = QDir::currentPath();
+    QDir::setCurrent(buildPath);
+    QStringList args;
+    args << "-m" << "elf_i386";
+    foreach( const QString& file, cFiles )
+        args << QFileInfo(file).fileName();
+    foreach( const QString& file, objFiles )
+        args << QFileInfo(file).fileName();
+    args << "-o" << name;
+    args << "-lc" <<  "-lm" << "-dynamic-linker" << "/lib/ld-linux.so.2";
+    //qDebug() << "ld" << args; // TEST
+    const int res = QProcess::execute("ld", args);
+    QDir::setCurrent(old);
+    if( res != 0 )
+    {
+        QMessageBox::critical(this, tr("Generating X86"), tr("error linking application"));
+        return false;
+    }
+
+    qDebug() << "generated and built in" << start.msecsTo(QTime::currentTime()) << "[ms]";
+
+    return true;
 }
 
 bool Ide::run()
@@ -1677,16 +1676,21 @@ bool Ide::run()
         return false;
     QDir buildDir( d_pro->getBuildDir(true) );
     logMessage("\nStarting application...\n\n",SysInfo,false);
-    d_dbg->addBreakpoint("Fibonacci.mic", 20 );
-    d_dbg->open("/home/me/Entwicklung/Modules/build-MicMain-Desktop-Debug/Fibonacci"); // stop at entry doesn't work and is in assembler
-    d_debugging = true; // TEST
+
 #if 0
     // TODO
-    d_eng->init( d_debugging ? d_dbg->open() : 0 );
-    d_eng->setAssemblySearchPaths( QStringList() << d_pro->getBuildDir(true), true );
     d_eng->setEnv( "OBERON_FILE_SYSTEM_ROOT", d_pro->getWorkingDir(true) );
-    d_eng->run( buildDir.absoluteFilePath("Main#.exe"));
 #endif
+
+    const QString where = d_pro->getBuildDir(true);
+    const QString name = d_pro->getProjectPath().isEmpty()? QString("a.out"): QFileInfo(d_pro->getProjectPath()).baseName();
+    const QString what = QDir(where).absoluteFilePath(name);
+
+    if( d_debugging )
+        d_dbg->open(what); // stop at entry doesn't work and is in assembler
+    else
+        d_run->start(what);
+
     d_status = Running;
     return true;
 }
@@ -2587,12 +2591,9 @@ void Ide::onToggleBreakPt()
         d_breakPoints[fm->d_mod->name].insert(line + 1);
     else
         d_breakPoints[fm->d_mod->name].remove(line + 1);
-    if( d_status == Running && d_debugging )
-    {
-        const bool res = updateBreakpoint(fm->d_mod,line+1,on);
-        if( !res )
-            qWarning() << "cannot change breakpoint at line" << line << "in" << fm->d_mod->name;
-    }
+    const bool res = updateBreakpoint(fm->d_mod,line+1,on);
+    if( !res )
+        qWarning() << "cannot change breakpoint at line" << line << "in" << fm->d_mod->name;
 }
 
 void Ide::onStepIn()
@@ -2700,91 +2701,13 @@ void Ide::clear()
     d_errs->clear();
 }
 
-quint32 Ide::getMonoModule(Declaration *m)
-{
-    quint32 assemblyId = d_loadedAssemblies.value(m);
-    if( assemblyId == 0 )
-        return 0;
-    // this is the class representing the Micron module (don't mix up with the module term in Mono)
-
-    // NOTE: d_dbt->findType (both on VM and assembly level) doesn't find any type in the form of
-    // som.IdentityDictionary(DeltaBlue.Sym,DeltaBlue.Strength)
-    // som\.IdentityDictionary(DeltaBlue\.Sym\,DeltaBlue\.Strength)
-    // som.IdentityDictionary
-    // som\.IdentityDictionary
-    // but only as IdentityDictionary!!
-    // similarly nested classes are not found:
-    // not CD2+reduceCollisionSet.ForEachInterface
-    // not CD2+reduceCollisionSet\.ForEachInterface
-    // but CD2+CollisionDetector does work
-
-#if 0
-    // TODO
-
-    // doesn't find types with (.,) in name, neither escaped nor unescaped, neither on VM nor assembly level
-    //const QByteArray escaped = monoEscape(m->getFullName());
-    const QByteArray escaped = m->name;
-    //qDebug() << "searching for" << escaped << "in" << m->getName();
-    return d_dbg->findType(escaped,assemblyId);
-#endif
-    return 0;
-}
-
 bool Ide::updateBreakpoint(Declaration *m, quint32 line, bool add)
 {
-    if( d_status != Running || !d_debugging )
-        return false;
-    const quint32 assemblyId = d_loadedAssemblies.value(m);
-    if( assemblyId == 0 )
-        return false;
-    Declaration* scope;
-    d_pro->findSymbolBySourcePos(m,line,1, &scope );
-    if( scope == 0 )
-        return false;
-    Declaration* proc = 0;
-    switch( scope->kind )
-    {
-    case Declaration::Procedure:
-        proc = scope;
-        break;
-    case Declaration::Module:
-        break;
-    default:
-        return false;
-    }
-    quint32 type;
-    QByteArray procName;
-#if 0
-    // TODO
-    if( proc && proc->typebound )
-    {
-        QByteArray name = dottedName(proc->outer);
-        name = m->name + "+" + name;
-        type = d_dbg->findType(name,assemblyId);
-        procName = proc->name;
-    }else
-    {
-        type = getMonoModule(m);
-        if( proc )
-            procName = dottedName(proc);
-        else
-            procName = ".cctor";
-    }
-    if( type == 0 )
-        return false;
-
-    QList<quint32> meth = d_dbg->getMethods(type,procName);
-    if( meth.size() != 1 )
-        return false;
-
-    Debugger::MethodDbgInfo info = d_dbg->getMethodInfo(meth.first());
-    const quint32 iloff = info.find(line,-1);
     if( add )
-        return d_dbg->addBreakpoint(meth.first(),iloff);
+        d_dbg->addBreakpoint(m->data.value<ModuleData>().source, line);
     else
-        return d_dbg->removeBreakpoint(meth.first(),iloff);
-#endif
-    return false;
+        d_dbg->removeBreakpoint(m->data.value<ModuleData>().source, line);
+    return true;
 }
 
 void Ide::onAbout()
@@ -2843,7 +2766,7 @@ void Ide::onError(const QString& msg)
     QMessageBox::critical(this, tr("Runtime"), msg );
 }
 
-void Ide::onFinished(int exitCode, bool normalExit)
+void Ide::onFinished(int exitCode, QProcess::ExitStatus status)
 {
     if( d_status == Generating )
     {
@@ -2862,14 +2785,13 @@ void Ide::onFinished(int exitCode, bool normalExit)
         QFile::remove(outDir.absoluteFilePath("batch"));
     }else if( d_status == Running )
     {
-        if( normalExit )
-            logMessage(tr("\nThe application finished with code %1\n\n").arg(exitCode),SysInfo,false);
+        if( status )
+            logMessage(tr("\nThe application crashed\n\n"),LogError,false);
         else
-            logMessage(tr("\nThe execution engine crashed\n\n"),LogError,false);
+            logMessage(tr("\nThe application finished with code %1\n\n").arg(exitCode),SysInfo,false);
         if( d_debugging )
             d_dbg->close();
         d_status = Idle;
-        d_loadedAssemblies.clear();
         removePosMarkers();
         d_localsView->clear();
         d_stackView->clear();
@@ -2895,7 +2817,7 @@ void Ide::onDbgEvent(const Dap::DebuggerEvent& e)
             fillStack();
         }else if( e.reason == "exception" )
         {
-            onFinished(0, true);
+            onFinished(0, QProcess::CrashExit);
         }
         break;
     case Dap::DebuggerEvent::Continued:
@@ -2905,7 +2827,7 @@ void Ide::onDbgEvent(const Dap::DebuggerEvent& e)
         break;
     case Dap::DebuggerEvent::Exited:
         d_curThread = e.threadId;
-        onFinished(e.reason.toInt(), true);
+        onFinished(e.reason.toInt(), QProcess::NormalExit);
         break;
     }
 }
@@ -2919,8 +2841,7 @@ void Ide::onRemoveAllBreakpoints()
         Editor* e = static_cast<Editor*>( d_tab->widget(i) );
         e->clearBreakPoints();
     }
-    if( d_status == Running && d_debugging )
-        d_dbg->clearAllBreakpoints();
+    d_dbg->clearAllBreakpoints();
 }
 
 void Ide::onBreakOnExceptions()
@@ -3032,13 +2953,23 @@ void Ide::onIncremental()
     d_incremental = !d_incremental;
 }
 
+void Ide::onReadyStdout()
+{
+    onConsole(d_run->readAllStandardOutput());
+}
+
+void Ide::onReadyStderr()
+{
+    onError(d_run->readAllStandardError());
+}
+
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.3.15");
+    a.setApplicationVersion("0.4.0");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

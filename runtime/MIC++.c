@@ -130,3 +130,13 @@ unsigned int MIC$$strlen(char* str)
 {
 	return strlen(str);
 }
+
+void* MIC$$alloc(unsigned int size)
+{
+    return malloc(size);
+}
+
+void MIC$$free(void* ptr)
+{
+    free(ptr);
+}

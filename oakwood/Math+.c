@@ -2,7 +2,7 @@
 
 float Math$sqrt(float x)
 {
-    return fsqrt(x);
+    return sqrtf(x);
 }
 
 float Math$power(float x, float b)
@@ -95,8 +95,10 @@ float Math$arctanh(float x)
     return atanh(x);
 }
 
+#ifndef _MIC_NO_BEGIN_
 void Math$begin$()
 {
 }
+#endif
 
 

@@ -1517,13 +1517,17 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
     case IL_calli: {
         // Compute argsSize and returnSize from the function pointer type.
         // e->lhs is the function pointer expression; its type is the proc type.
+        // NOTE: procType->subs parameters may not have their offsets computed
+        // (procedure pointer types don't go through calcParamsLocalsLayout),
+        // so we sum sizes directly instead of relying on lastParam->off.
         Type* procType = deref(e->lhs->getType());
         quint32 calliArgsSize = 0;
-        if (!procType->subs.isEmpty()) {
-            Declaration* lastParam = procType->subs.last();
-            calliArgsSize = stackAligned(lastParam->off
-                                         + lastParam->getType()->getByteSize(pointerWidth));
+        for (int i = 0; i < procType->subs.size(); i++) {
+            quint32 paramSize = procType->subs[i]->getType()->getByteSize(pointerWidth);
+            calliArgsSize += qMax(paramSize, (quint32)stackAlignment);
         }
+        if (calliArgsSize > 0)
+            calliArgsSize = stackAligned(calliArgsSize);
         quint32 calliReturnSize = 0;
         if (procType->getType())
             calliReturnSize = stackAligned(procType->getType()->getByteSize(pointerWidth));
@@ -1536,13 +1540,13 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         // e->lhs is the MethRef expression; its type is the bound proc type.
         // The type's subs list contains the explicit parameters (NOT including self).
         // Self is implicit — we add pointerWidth for it.
+        // NOTE: methType->subs parameters may not have their offsets computed
+        // (same issue as IL_calli above), so we sum sizes directly.
         Type* methType = deref(e->lhs->getType());
         quint32 callmiArgsSize = pointerWidth; // Start with self pointer
-        if (!methType->subs.isEmpty()) {
-            Declaration* lastParam = methType->subs.last();
-            callmiArgsSize = stackAligned(pointerWidth
-                                          + lastParam->off
-                                          + lastParam->getType()->getByteSize(pointerWidth));
+        for (int i = 0; i < methType->subs.size(); i++) {
+            quint32 paramSize = methType->subs[i]->getType()->getByteSize(pointerWidth);
+            callmiArgsSize += qMax(paramSize, (quint32)stackAlignment);
         }
         quint32 callmiReturnSize = 0;
         if (methType->getType())

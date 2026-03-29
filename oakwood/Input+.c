@@ -78,8 +78,10 @@ void Input$Mouse( int* keys, int* x, int* y)
 	// TODO
 }
 
+#ifndef _MIC_NO_BEGIN_
 void Input$begin$()
 {
 }
+#endif
 
 

@@ -123,6 +123,8 @@ namespace Mic
         bool generateCil(const QString& outDir);
         bool generateLlvm(const QString& outDir);
         bool generateMil(const QString& outDir);
+        bool generateX86(const QString& outDir, QStringList &objFiles);
+        bool copyCResources(const QString& outDir, QStringList& cFiles);
 
         bool interpret(const QString &outDir = QString());
 
@@ -185,7 +187,7 @@ namespace Mic
         const ModuleSlot* find(Declaration*) const;
         File* toFile(const Mic::Import& imp);
         void parseLib(const QString&);
-        void writeC(const QString &in, const QString& what, const QString& out);
+        QString writeC(const QString &in, const QString& what, const QString& out);
 
     private:
         AstModel d_mdl;
