@@ -83,7 +83,11 @@ quint32 Renderer::getOrCreateExtSymbol(int procIdx)
     Vm::Procedure* proc = d_code.getProc(procIdx);
     Q_ASSERT(proc && proc->decl);
 
-    QByteArray name = elfSymName(proc->decl->toPath());
+    QByteArray name;
+    if (proc->decl->kind == Declaration::Module)
+        name = elfSymName(proc->decl->name + QByteArray("$begin$"));
+    else
+        name = elfSymName(proc->decl->toPath());
     quint32 symIdx = d_elf.addSymbol(name, 0, 0, 0, STB_GLOBAL, STT_FUNC);
     d_extProcSymbols[procIdx] = symIdx;
     return symIdx;
@@ -332,7 +336,7 @@ bool Renderer::renderModule(Declaration* module)
         int codeIdx;
     };
     QList<ProcInfo> allProcs;
-
+    QSet<int> seenCodeIdx;
     {
         int idx = d_code.findProc(module);
         if (idx >= 0) {
@@ -340,17 +344,19 @@ bool Renderer::renderModule(Declaration* module)
             pi.decl = module;
             pi.codeIdx = idx;
             allProcs.append(pi);
+            seenCodeIdx.insert(idx);
         }
     }
 
     for (Declaration* d = module->subs; d; d = d->next) {
         if (d->kind == Declaration::Procedure && !d->forward) {
             int idx = d_code.findProc(d);
-            if (idx >= 0) {
+            if (idx >= 0 && !seenCodeIdx.contains(idx)) {
                 ProcInfo pi;
                 pi.decl = d;
                 pi.codeIdx = idx;
                 allProcs.append(pi);
+                seenCodeIdx.insert(idx);
             }
         }
         if (d->kind == Declaration::TypeDecl && d->getType()) {
@@ -359,11 +365,12 @@ bool Renderer::renderModule(Declaration* module)
                 foreach (Declaration* sub, t->subs) {
                     if (sub->kind == Declaration::Procedure && !sub->forward) {
                         int idx = d_code.findProc(sub);
-                        if (idx >= 0) {
+                        if (idx >= 0 && !seenCodeIdx.contains(idx)) {
                             ProcInfo pi;
                             pi.decl = sub;
                             pi.codeIdx = idx;
                             allProcs.append(pi);
+                            seenCodeIdx.insert(idx);
                         }
                     }
                 }
@@ -381,7 +388,7 @@ bool Renderer::renderModule(Declaration* module)
             name = elfSymName(d->toPath());
 
         bool isExported = (d->kind == Declaration::Module) || d->public_;
-        quint8 binding = isExported ? STB_GLOBAL : STB_LOCAL;
+        quint8 binding = (isExported || d_cdeclReturns) ? STB_GLOBAL : STB_LOCAL;
 
         quint32 symIdx = d_elf.addSymbol(name, d_sections.text, 0, 0, binding, STT_FUNC);
         d_procSymbols[allProcs[i].codeIdx] = symIdx;
