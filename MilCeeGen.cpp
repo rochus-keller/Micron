@@ -818,9 +818,10 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             break;
 
         case IL_pop:
-            // pop removes a value from the stack without using it
-            // this corresponds to not evaluating the expression which pushed this value altogether
-            // expression(out, s->args);
+            out << ws(level);
+            // we have to call this even if the result is discarded because args could be a function call
+            expression(out, s->args);
+            out << ";" << endl;
             break;
 
         case IL_free:
@@ -1227,9 +1228,18 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_cast_r8:
     case IL_cast_i8:
     case IL_cast_i4:
+#if 0
+        // this only works if e->lhs is an lvalue, but it could also be e.g. an arithmetic expression
         out << "(*(" << typeRef(Validator::tokToBasicType(mdl, e->kind)) << "*)&";
         expression(out, e->lhs);
         out << ")";
+#else
+        out << "((union { " << typeRef(e->lhs->getType()) << " from; "
+            << typeRef(Validator::tokToBasicType(mdl, e->kind)) << " to; })"
+            << "{ .from = ";
+        expression(out, e->lhs);
+        out << "}).to";
+#endif
         break;
 
 
