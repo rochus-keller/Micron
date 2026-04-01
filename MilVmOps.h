@@ -119,7 +119,7 @@ OPDEF(brfalse_i4, JumpArg),
 
 OPDEF(ldproc, ProcArg), OPDEF(ldmeth, ProcArg), OPDEF(ldmeth_iface, ProcArg), OPDEF(ldmeth_struct, ProcArg),
 OPDEF(ldiface, NoOpArgs),
-OPDEF(sizeof, 1), // TODO
+OPDEF(sizeof, 1), // TODO not needed
 OPDEF(ptroff, NoOpArgs),
 OPDEF(strcpy, NoOpArgs),
 OPDEF(pop, SizeArg), OPDEF(dup, SizeArg),
@@ -137,6 +137,8 @@ OPDEF(line, IntArg),
 
 // TODO:
 OPDEF(newvla, NoOpArgs),
+// plus low-level ops: GETREG, PUTREG, CLI, STI, NOP
+// plus managed GCNEW
 
 
 

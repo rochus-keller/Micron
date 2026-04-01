@@ -871,7 +871,11 @@ void Ide::onAbort()
 {
     ENABLED_IF(d_status == Running);
 
-    d_dbg->close();
+    if( d_debugging )
+        d_dbg->close();
+    else
+        d_run->kill();
+    onFinished(0, QProcess::NormalExit);
 }
 
 void Ide::onNewPro()
@@ -1674,17 +1678,23 @@ bool Ide::run()
 {
     if( d_status != Idle )
         return false;
-    QDir buildDir( d_pro->getBuildDir(true) );
+
+    const QString where = d_pro->getBuildDir(true);
+    const QString name = d_pro->getProjectPath().isEmpty()? QString("a.out"): QFileInfo(d_pro->getProjectPath()).baseName();
+    const QString what = QDir(where).absoluteFilePath(name);
+
+    if( !QFileInfo(what).isExecutable() )
+    {
+        onError("There is no application to run");
+        return false;
+    }
+
     logMessage("\nStarting application...\n\n",SysInfo,false);
 
 #if 0
     // TODO
     d_eng->setEnv( "OBERON_FILE_SYSTEM_ROOT", d_pro->getWorkingDir(true) );
 #endif
-
-    const QString where = d_pro->getBuildDir(true);
-    const QString name = d_pro->getProjectPath().isEmpty()? QString("a.out"): QFileInfo(d_pro->getProjectPath()).baseName();
-    const QString what = QDir(where).absoluteFilePath(name);
 
     if( d_debugging )
         d_dbg->open(what); // stop at entry doesn't work and is in assembler
@@ -2969,7 +2979,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.02");
+    a.setApplicationVersion("0.4.03");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

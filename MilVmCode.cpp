@@ -1529,10 +1529,16 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         if (calliArgsSize > 0)
             calliArgsSize = stackAligned(calliArgsSize);
         quint32 calliReturnSize = 0;
-        if (procType->getType())
+        bool calliFpReturn = false;
+        if (procType->getType()) {
             calliReturnSize = stackAligned(procType->getType()->getByteSize(pointerWidth));
-        // Encode: lower 11 bits = argsSize, upper 11 bits = returnSize
-        emitOp(proc, LL_calli, (calliReturnSize << 11) | (calliArgsSize & 0x7FF));
+            calliFpReturn = procType->getType()->isFloat();
+        }
+        // Encode: lower 11 bits = argsSize, upper 11 bits = returnSize.
+        // Bit 0 of returnSize encodes fpReturn (safe because returnSize is always
+        // a multiple of 4, so bit 0 is otherwise always 0).
+        quint32 encodedRetSize = calliReturnSize | (calliFpReturn ? 1 : 0);
+        emitOp(proc, LL_calli, (encodedRetSize << 11) | (calliArgsSize & 0x7FF));
         break;
     }
     case IL_callmi: {
@@ -1549,11 +1555,15 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
             callmiArgsSize += qMax(paramSize, (quint32)stackAlignment);
         }
         quint32 callmiReturnSize = 0;
-        if (methType->getType())
+        bool callmiFpReturn = false;
+        if (methType->getType()) {
             callmiReturnSize = stackAligned(methType->getType()->getByteSize(pointerWidth));
-        // Encode: lower 11 bits = argsSize, upper 11 bits = returnSize
-        // (val field is 22 bits, max 2047 each — more than enough)
-        emitOp(proc, LL_callmi, (callmiReturnSize << 11) | (callmiArgsSize & 0x7FF));
+            callmiFpReturn = methType->getType()->isFloat();
+        }
+        // Encode: lower 11 bits = argsSize, upper 11 bits = returnSize.
+        // Bit 0 of returnSize encodes fpReturn (same convention as LL_calli).
+        quint32 encodedMethRetSize = callmiReturnSize | (callmiFpReturn ? 1 : 0);
+        emitOp(proc, LL_callmi, (encodedMethRetSize << 11) | (callmiArgsSize & 0x7FF));
         break;
     }
     case IL_iif:

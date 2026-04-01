@@ -103,7 +103,8 @@ namespace X86
         void clearLabels();
 
         // Stack adjustment after call, copy return value, adjust SP
-        void emitCallStackAdj(quint32 argsSize, quint32 returnSize);
+        // fpReturn: true if the callee returns float/double in ST(0) per cdecl ABI
+        void emitCallStackAdj(quint32 argsSize, quint32 returnSize, bool fpReturn = false);
 
         // Compute contiguous "pushed size" and rearrange stack to match aligned layout
         quint32 emitArgAlignment(Declaration* decl);

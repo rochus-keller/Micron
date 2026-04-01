@@ -10,7 +10,7 @@ The language of choice for such tasks is usually C, with which the author has be
 
 This project attempts to create a programming language and toolchain that combines the modularization, strictness and simplicity of Oberon with the power and flexibility of C. The language is aimed at experienced developers who know how to deal with the risks of direct memory and pointer manipulation. The preprocessor is replaced by language concepts that can largely substitute its features, supplemented by explicit support for generic programming, inlining and procedures that run at compile time. Thereby the focus is always on simplicity and the greatest effect with a practicable effort.
  
-NOTE that this project is in an early stage and work-in-progress.
+NOTE that this project is work-in-progress and not yet released for general use.
 
 #### Planned features
 
@@ -22,8 +22,8 @@ NOTE that this project is in an early stage and work-in-progress.
 - [x] Implement an IDE with source navigation and debugger
 - [x] Complete language and add explicit language levels
 - [x] Implement a MIL interpreter for the full language scope (WIP)
-- [ ] Implement a native backend
-- [ ] Migrate some notable C projects to Micron as a proof-of-concept and to optimize the language
+- [x] Implement a native backend (WIP)
+- [ ] Migrate some notable C and Oberon projects to Micron as a proof-of-concept and to optimize the language
 
 
 #### Status on February 4, 2024

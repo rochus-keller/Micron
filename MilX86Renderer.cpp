@@ -665,17 +665,32 @@ void Renderer::clearLabels()
     d_branchLabels.clear();
 }
 
-void Renderer::emitCallStackAdj(quint32 argsSize, quint32 returnSize)
+void Renderer::emitCallStackAdj(quint32 argsSize, quint32 returnSize, bool fpReturn)
 {
     if (d_cdeclReturns && returnSize > 0 && returnSize <= 8) {
-        // cdecl mode: callee returned in EAX (<=4) or EAX:EDX (<=8).
-        // Pop args, then push the register result onto the eval stack.
-        if (argsSize > 0)
-            d_emitter.add_ri(ESP, argsSize);
-        if (returnSize <= 4)
-            d_emitter.push_r(EAX);
-        else
-            pushRegPair(EAX, EDX);
+        // cdecl mode: callee returned value in register(s).
+        // Pop args, then push the result onto the eval stack.
+        if (fpReturn) {
+            // float/double returned in ST(0) per i386 cdecl ABI.
+            // Make room on the eval stack and store from FPU.
+            if (argsSize > returnSize) {
+                d_emitter.add_ri(ESP, argsSize - returnSize);
+            } else if (argsSize < returnSize) {
+                d_emitter.sub_ri(ESP, returnSize - argsSize);
+            }
+            if (returnSize <= 4)
+                d_emitter.fstp_s(ESP, 0);
+            else
+                d_emitter.fstp_d(ESP, 0);
+        } else {
+            // Integer/pointer returned in EAX (<=4) or EAX:EDX (<=8).
+            if (argsSize > 0)
+                d_emitter.add_ri(ESP, argsSize);
+            if (returnSize <= 4)
+                d_emitter.push_r(EAX);
+            else
+                pushRegPair(EAX, EDX);
+        }
     } else if (returnSize == 0) {
         if (argsSize > 0)
             d_emitter.add_ri(ESP, argsSize);
@@ -1950,21 +1965,33 @@ int Renderer::emitOp(Procedure& proc, int pc)
             d_elf.addRelocation(d_sections.relText, callOff, symIdx, R_386_PC32);
         }
 
-        emitCallStackAdj(callee->argsSize + padding, callee->returnSize);
+        const bool fpReturn = callee->decl && callee->decl->getType() && callee->decl->getType()->isFloat();
+        emitCallStackAdj(callee->argsSize + padding, callee->returnSize, fpReturn);
         return 1;
     }
 
     case LL_ret: {
         quint32 retSize = val;
         if (d_cdeclReturns && retSize <= 4) {
-            // cdecl: return in EAX
-            em.mov_rm(EAX, ESP, 0);
+            // Check if return type is float (retSize 4 = float)
+            Type* retType = proc.decl->getType();
+            if (retType && retType->isFloat()) {
+                // cdecl: return float in ST(0) per i386 ABI
+                em.fld_s(ESP, 0);
+            } else {
+                em.mov_rm(EAX, ESP, 0);
+            }
         } else if (d_cdeclReturns && retSize <= 8) {
-            // cdecl: return in EAX:EDX
-            em.mov_rm(EAX, ESP, 0);
-            em.mov_rm(EDX, ESP, 4);
+            // Check if return type is double (retSize 8 = double)
+            Type* retType = proc.decl->getType();
+            if (retType && retType->isFloat()) {
+                // cdecl: return double in ST(0) per i386 ABI
+                em.fld_d(ESP, 0);
+            } else {
+                em.mov_rm(EAX, ESP, 0);
+                em.mov_rm(EDX, ESP, 4);
+            }
         } else {
-            // Stack-based return: write to [EBP+8]
             for (quint32 w = 0; w < retSize; w += 4) {
                 em.mov_rm(EAX, ESP, (qint32)w);
                 em.mov_mr(EBP, (qint32)(8 + w), EAX);
@@ -2521,21 +2548,25 @@ int Renderer::emitOp(Procedure& proc, int pc)
     }
 
     case LL_calli: {
+        quint32 rawReturnSize = (val >> 11) & 0x7FF;
+        bool fpReturn = rawReturnSize & 1;
         quint32 argsSize = val & 0x7FF;
-        quint32 returnSize = (val >> 11) & 0x7FF;
+        quint32 returnSize = rawReturnSize & ~1u;
         popReg(EAX); // function pointer
         em.call_r(EAX);
-        emitCallStackAdj(argsSize, returnSize);
+        emitCallStackAdj(argsSize, returnSize, fpReturn);
         return 1;
     }
     case LL_callmi: {
+        quint32 rawReturnSize = (val >> 11) & 0x7FF;
+        bool fpReturn = rawReturnSize & 1;
         quint32 argsSize = val & 0x7FF;
-        quint32 returnSize = (val >> 11) & 0x7FF;
+        quint32 returnSize = rawReturnSize & ~1u;
         popReg(EAX); // method_ptr
         popReg(ECX); // obj_ptr
         pushReg(ECX); // push obj back as self (first arg)
         em.call_r(EAX);
-        emitCallStackAdj(argsSize, returnSize);
+        emitCallStackAdj(argsSize, returnSize, fpReturn);
         return 1;
     }
 
@@ -2565,7 +2596,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
             slot = callee->decl->getPd()->slot;
         em.mov_rm(EAX, ECX, (qint32)slot * 4); // method addr
         em.call_r(EAX);
-        emitCallStackAdj(argsSize + padding, callee->returnSize);
+        const bool fpReturn = callee->decl && callee->decl->getType() && callee->decl->getType()->isFloat();
+        emitCallStackAdj(argsSize + padding, callee->returnSize, fpReturn);
         return 1;
     }
 
