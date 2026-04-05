@@ -288,6 +288,7 @@ static void process(const QString& file, const QStringList& searchPaths,
             }
 
             Mil::X86::Renderer renderer(&mgr.loader.getModel());
+            renderer.setEmitDwarf(dbg);
             renderer.setCdeclReturns(cdeclRet);
 
             if( !renderer.renderModule(module) )
@@ -339,7 +340,7 @@ static void process(const QString& file, const QStringList& searchPaths,
             else
                 mainObj = QDir(info.absolutePath()).absoluteFilePath("main+.o");
 
-            if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj) )
+            if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj, cdeclRet) )
             {
                 qDebug() << "  generated" << mainObj;
                 objFiles << mainObj;

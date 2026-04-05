@@ -111,6 +111,7 @@ namespace Mic
         void setBuildDir( const QString& );
         QByteArrayList getOptions() const { return d_options; }
         void setOptions( const QByteArrayList& );
+        void setDbg(bool on) { d_dbg = on; }
 
         bool addFile(const QString& filePath, const VirtualPath& package = QByteArrayList() );
         bool removeFile( const QString& filePath );
@@ -206,6 +207,7 @@ namespace Mic
         qint16 d_level;
         bool d_dirty;
         bool d_useBuiltInOakwood;
+        bool d_dbg;
     };
 }
 

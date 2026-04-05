@@ -21,6 +21,7 @@
 #include <Micron/MicAtom.h>
 #include <QtDebug>
 #include <QFile>
+#include <QFileInfo>
 using namespace Mil;
 using namespace Vm;
 using namespace X86;
@@ -44,8 +45,8 @@ static const quint8 R_386_32   = 1;  // S + A (absolute 32-bit)
 static const quint8 R_386_PC32 = 2;  // S + A - P (PC-relative 32-bit)
 
 Renderer::Renderer(AstModel* mdl)
-    : d_mdl(mdl), d_code(mdl, 4, 4), d_cdeclReturns(false),
-      d_localsSize(0), d_argsSize(0),
+    : d_mdl(mdl), d_code(mdl, 4, 4), d_emitDwarf(false), d_cdeclReturns(false),
+      d_dwarf(0), d_localsSize(0), d_argsSize(0),
       d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0),
       d_elf(ElfWriter::ArchX86)
 {
@@ -273,6 +274,13 @@ void Renderer::initGlobalVarVtables(Declaration* module)
 Renderer::~Renderer()
 {
     clearLabels();
+    delete d_dwarf;
+}
+
+void Renderer::setEmitDwarf(bool v)
+{
+    d_emitDwarf = v;
+    d_code.setGenerateLines(d_emitDwarf);
 }
 
 bool Renderer::renderModule(Declaration* module)
@@ -328,6 +336,22 @@ bool Renderer::renderModule(Declaration* module)
     {
         quint32 zero = 0;
         d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
+    }
+
+    if (d_emitDwarf) {
+        delete d_dwarf;
+        d_dwarf = new DwarfEmitter(d_elf, ElfWriter::ArchX86);
+        QByteArray srcFile;
+        QByteArray srcDir;
+        if (module->md && !module->md->source.isEmpty()) {
+            QFileInfo info(module->md->source);
+            srcDir = info.absolutePath().toUtf8();
+            srcFile = info.fileName().toUtf8();
+        }else {
+            srcFile = module->name + ".mic";
+            qWarning() << "X86::Renderer::renderModule: incomplete source file information for " << module->name;
+        }
+        d_dwarf->beginCompilationUnit(srcFile, srcDir);
     }
 
     // Collect all procedures
@@ -432,6 +456,49 @@ bool Renderer::renderModule(Declaration* module)
             d_emitter.ret();
         }
 
+        // subprogram
+        if (d_dwarf) {
+            Declaration* decl = allProcs[i].decl;
+            quint32 procEndPC = d_emitter.currentPosition();
+
+            QByteArray procName;
+            if (decl->kind == Declaration::Module)
+                procName = decl->name + "$begin$";
+            else
+                procName = decl->toPath();
+
+            quint32 declLine = decl->pos.line();
+            d_dwarf->addSubprogram(procName, procStartPC, procEndPC, declLine);
+
+            if (declLine > 0)
+                d_dwarf->addLineEntry(procStartPC, declLine);
+
+            if (decl->kind == Declaration::Procedure) {
+                QList<Declaration*> params = decl->getParams();
+                for (int p = 0; p < params.size(); p++) {
+                    Declaration* param = params[p];
+                    quint32 typeRef = d_dwarf->getOrCreateType(param->getType());
+                    qint32 fpOff = FP_TO_ARGS + param->off;
+                    d_dwarf->addParameter(param->name, fpOff, typeRef);
+                }
+
+                QList<Declaration*> locals = decl->getLocals();
+                for (int l = 0; l < locals.size(); l++) {
+                    Declaration* loc = locals[l];
+                    quint32 typeRef = d_dwarf->getOrCreateType(loc->getType());
+                    qint32 fpOff = -((qint32)d_localsSize) + loc->off;
+                    d_dwarf->addLocalVariable(loc->name, fpOff, typeRef);
+                }
+            }
+
+            if (decl->kind == Declaration::Procedure && !decl->forward) {
+                ProcedureData* pd = decl->getPd();
+                if (pd && pd->end.isValid())
+                    d_dwarf->addLineEntry(procEndPC > 0 ? procEndPC - 1 : 0, pd->end.line());
+            }
+
+            d_dwarf->endSubprogram();
+        }
     }
 
     // Copy machine code to .text
@@ -443,6 +510,21 @@ bool Renderer::renderModule(Declaration* module)
     // Write .micron.mod
     QByteArray modContent = "module " + module->name + "\n";
     d_elf.appendToSection(d_sections.micronMod, modContent);
+
+    // module variables
+    if (d_dwarf) {
+        QList<Declaration*> vars = module->getVars();
+        for (int v = 0; v < vars.size(); v++) {
+            Declaration* var = vars[v];
+            quint32 typeRef = d_dwarf->getOrCreateType(var->getType());
+            d_dwarf->addModuleVariable(var->name, var->off, typeRef, var->pos.line());
+        }
+    }
+
+    if (d_dwarf) {
+        d_dwarf->endCompilationUnit();
+        d_dwarf->finalize(d_textSymIdx, d_dataSymIdx);
+    }
 
     return true;
 }
@@ -2677,7 +2759,11 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
 
     case LL_line:
-        // NOP
+        if (d_dwarf) {
+            quint32 line = val;
+            if (line > 0)
+                d_dwarf->addLineEntry(em.currentPosition(), line);
+        }
         return 1;
 
     case LL_invalid:

@@ -23,6 +23,7 @@
 #include <Micron/MilVmCode2.h>
 #include <Micron/MilX86Emitter.h>
 #include <Micron/MilElfWriter.h>
+#include <Micron/MilDwarfEmitter.h>
 #include <QMap>
 
 namespace Mil
@@ -54,6 +55,8 @@ namespace X86
         ~Renderer();
 
         // Configuration
+        void setEmitDwarf(bool v);
+        bool emitDwarf() const { return d_emitDwarf; }
         void setCdeclReturns(bool v) { d_cdeclReturns = v; }
 
         // Returns via register for values <= 8 bytes
@@ -124,7 +127,9 @@ namespace X86
         X86::Emitter d_emitter;
         ElfWriter d_elf;
 
+        bool d_emitDwarf;
         bool d_cdeclReturns;
+        DwarfEmitter* d_dwarf;
 
         quint32 d_localsSize;
         quint32 d_argsSize;

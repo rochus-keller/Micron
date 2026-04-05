@@ -1026,6 +1026,7 @@ void Ide::onExportMil()
     if( !compile(false,false) ) // otherwise allocated flag is already set after one generator run
         return;
 
+    d_pro->setDbg(d_debugging);
     if( !d_pro->generateMil(dirPath) )
         QMessageBox::critical(this,tr("Save MIL"),tr("There was an error when generating IL; "
                                                    "see Output window for more information"));
@@ -1590,6 +1591,7 @@ bool Ide::compile(bool all, bool doGenerate )
 
     const QTime start = QTime::currentTime();
     d_status = Compiling;
+    d_pro->setDbg(d_debugging);
     const bool res = d_pro->parse(); // !all);
     d_status = Idle;
     qDebug() << "recompiled" << d_pro->getFiles().size() << "files with" << d_pro->getSloc() << "SLOC in"
@@ -1632,6 +1634,7 @@ bool Ide::generate(bool forceAll)
     }
     const QTime start = QTime::currentTime();
     QStringList objFiles;
+    d_pro->setDbg(d_debugging);
     if( !d_pro->generateX86(buildPath, objFiles) )
         // TODO: we have to use an indirect main+.o calling __mic$init so we can put a fflush at the end; currently the output is cut
         return false;
@@ -2979,7 +2982,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.04");
+    a.setApplicationVersion("0.4.05");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

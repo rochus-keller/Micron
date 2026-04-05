@@ -671,8 +671,8 @@ bool Project2::generateMil(const QString &outDir)
         {
             QFile body( dir.absoluteFilePath(QString::fromLatin1(module->name) + ".mil"));
             body.open(QFile::WriteOnly);
-            Mil::IlAsmRenderer r(&body, false);
-            Mil::AstSerializer::render(&r,module, Mil::AstSerializer::None);
+            Mil::IlAsmRenderer r(&body, d_dbg);
+            Mil::AstSerializer::render(&r,module, d_dbg ? Mil::AstSerializer::RowsOnly : Mil::AstSerializer::None);
         } // else TODO
     }
     return true;
@@ -708,6 +708,7 @@ bool Project2::generateX86(const QString &outDir, QStringList& objFiles)
 
          Mil::X86::Renderer renderer(&loader.getModel());
          renderer.setCdeclReturns(true);
+         renderer.setEmitDwarf(d_dbg);
 
          if( !renderer.renderModule(module) )
          {
@@ -857,7 +858,7 @@ Declaration *Project2::loadModule(const Import &imp)
     }else
         lex.lex.setStream(file->d_filePath);
 
-    Mil::Emitter e(&imr, Mil::Emitter::RowsAndCols);
+    Mil::Emitter e(&imr, d_dbg ? Mil::Emitter::RowsOnly : Mil::Emitter::None);
     Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
     p.RunParser(fixedImp);
     if( p.getModule() )
