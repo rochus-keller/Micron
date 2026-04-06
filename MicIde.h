@@ -143,7 +143,6 @@ namespace Mic
         void onRemoveFile();
         void onRemoveDir();
         void onEnableDebug();
-        void onOvflChecks();
         void onBreak();
         void handleGoBack();
         void handleGoForward();
@@ -173,6 +172,8 @@ namespace Mic
         void onIncremental();
         void onReadyStdout();
         void onReadyStderr();
+        void onSearchSym();
+        void onShowDepOrder();
     private:
         class DocTab;
         DocTab* d_tab;
@@ -200,7 +201,6 @@ namespace Mic
         bool d_filesDirty;
         bool d_pushBackLock;
         bool d_debugging;
-        bool d_ovflCheck;
         bool d_suspended; // we are in debugger but code is suspended
         bool d_breakOnExceptions;
         bool d_noWarnings;

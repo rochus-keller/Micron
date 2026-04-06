@@ -142,6 +142,7 @@ namespace Mic
         typedef QList<QPair<Declaration*, SymList> > UsageByMod;
         UsageByMod getUsage( Declaration* ) const;
         DeclList getSubs(Declaration* d) const;
+        DeclList getDependencyOrder() const { return dependencyOrder; }
 
         quint32 getSloc() const;
 
@@ -197,6 +198,7 @@ namespace Mic
         QList<File*> d_libs; // temporary solution
         typedef QList<ModuleSlot> Modules;
         Modules modules;
+        DeclList dependencyOrder;
         QHash<Declaration*, DeclList> subs;
         FileGroups d_groups;
         QString d_filePath; // path where the project file was loaded from or saved to

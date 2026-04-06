@@ -52,7 +52,7 @@ namespace Mic
     #endif
             meta(m),deferred(false),anonymous(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
-            owned(false),type(0),autoself(0),invalid(0),hasSubs(0),ffi_(0),dynamic(0){}
+            owned(false),type(0),autoself(0),invalid(0),hasSubs(0),ffi_(0),dynamic(0),used(0){}
         ~Node();
 
         enum Meta { Inval, T, D, E };
@@ -82,11 +82,12 @@ namespace Mic
         uint invalid : 1; // module
         uint hasSubs : 1; // class/method: has overrides; module: has clients
         uint dynamic : 1; // true virtual method
+        uint used : 1; // forward decl, import: actually referenced
 
         // Expression
         uint byVal : 1; // option for LocalVar, Param, ModuleVar, Select, Index
 
-        // 25
+        // 26
 
         RowCol pos; // Declaration, Expression
 
@@ -187,6 +188,8 @@ namespace Mic
         bool isLvalue() const { return kind == VarDecl || kind == LocalDecl || kind == ParamDecl; }
         bool isPublic() const { return visi >= ReadOnly; }
         Declaration* getModule();
+        Declaration* find(const QByteArray& name, bool recursive = true);
+        Declaration *deforward();
     };
     typedef QList<Declaration*> DeclList;
 
@@ -338,6 +341,7 @@ namespace Mic
 
         Type* getType(quint8 basicType) const { return types[basicType]; }
 
+        static Declaration* getGlobalScope() { return &globalScope; }
         static void cleanupGlobals();
     protected:
         Type* newType(Type::Kind form);

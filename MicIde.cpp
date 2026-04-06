@@ -219,7 +219,7 @@ public:
             QTextCursor cur = cursorForPosition(e->pos());
             Symbol* e = d_pro->findSymbolBySourcePos(
                         getPath(),cur.blockNumber() + 1,cur.positionInBlock() + 1);
-            if( e )
+            if( e && e->decl)
             {
                 Declaration* decl = e->decl;
                 d_ide->pushLocation( Ide::Location( getPath(), cur.blockNumber(), cur.positionInBlock(), verticalScrollBar()->value() ) );
@@ -232,6 +232,11 @@ public:
                     Declaration* super = decl->data.value<Declaration*>();
                     if( decl->typebound && super )
                         decl = super;
+                }else if( decl->kind == Declaration::ForwardDecl )
+                {
+                    Declaration* d = decl->deforward();
+                    if( d )
+                        decl = d;
                 }
                 d_ide->showEditor( decl, false, true );
                 //setCursorPosition( sym->pos.d_row - 1, sym->pos.d_col - 1, true );
@@ -363,7 +368,7 @@ void messageHander(QtMsgType type, const QMessageLogContext& ctx, const QString&
 
 Ide::Ide(QWidget *parent)
     : QMainWindow(parent),d_lock(false),d_filesDirty(false),d_pushBackLock(false),
-      d_lock2(false),d_lock3(false),d_lock4(false),d_debugging(false),d_ovflCheck(true),d_mode(LineMode),
+      d_lock2(false),d_lock3(false),d_lock4(false),d_debugging(false),d_mode(LineMode),
       d_suspended(false),d_curRow(0),d_curCol(0),d_curThread(0),d_status(Idle),
       d_breakOnExceptions(false),d_noWarnings(false),d_incremental(false)
 {
@@ -396,6 +401,7 @@ Ide::Ide(QWidget *parent)
     new Gui::AutoShortcut( tr(OBN_NEXTDOC_SC), this, d_tab, SLOT(onDocSelect()) );
     new Gui::AutoShortcut( tr(OBN_PREVDOC_SC), this, d_tab, SLOT(onDocSelect()) );
     new Gui::AutoShortcut( tr("CTRL+W"), this, d_tab, SLOT(onCloseDoc()) );
+    new Gui::AutoShortcut( tr("CTRL+SHIFT+F"), this, this, SLOT(onSearchSym()) );
 
     connect( d_tab, SIGNAL( currentChanged(int) ), this, SLOT(onTabChanged() ) );
     connect( d_tab, SIGNAL(closing(int)), this, SLOT(onTabClosing(int)) );
@@ -755,6 +761,7 @@ void Ide::createMenuBar()
     pop->addAutoCommand( "Replace...", SLOT(handleReplace()) );
     pop->addSeparator();
     pop->addAutoCommand( "&Go to line...", SLOT(handleGoto()), tr("CTRL+G"), true );
+    pop->addAutoCommand( "Go to symbol...", SLOT(onSearchSym()), tr("CTRL+SHIFT+F"), true );
     pop->addSeparator();
     pop->addAutoCommand( "Indent", SLOT(handleIndent()) );
     pop->addAutoCommand( "Unindent", SLOT(handleUnindent()) );
@@ -773,6 +780,7 @@ void Ide::createMenuBar()
 
     pop = new Gui::AutoMenu( tr("Build && Run"), this );
     pop->addCommand( "Check Syntax", this, SLOT(onParse()), tr("CTRL+T"), false );
+    pop->addCommand( "Show dependency order...", this, SLOT(onShowDepOrder()) );
     pop->addCommand( "Compile", this, SLOT(onCompile()), tr("CTRL+B"), false );
     pop->addCommand( "Suppress Warnings", this, SLOT(onNoWarnings()) );
     //pop->addCommand( "Incremental Build (alpha!)", this, SLOT(onIncremental()) );
@@ -790,7 +798,6 @@ void Ide::createMenuBar()
 
     pop = new Gui::AutoMenu( tr("Debug"), this );
     pop->addCommand( "Enable debugging", this, SLOT(onEnableDebug()),tr(OBN_ENDBG_SC), false );
-    pop->addCommand( "Generate overflow checks", this, SLOT(onOvflChecks()) );
     pop->addCommand( "Row/column mode", this, SLOT(onRowColMode()) );
     pop->addSeparator();
     pop->addCommand( "Toggle breakpoint", this, SLOT(onToggleBreakPt()), tr(OBN_TOGBP_SC), false);
@@ -1514,13 +1521,6 @@ void Ide::onEnableDebug()
     d_debugging = !d_debugging;
 }
 
-void Ide::onOvflChecks()
-{
-    CHECKED_IF( d_status == Idle, d_ovflCheck );
-
-    d_ovflCheck = !d_ovflCheck;
-}
-
 void Ide::onBreak()
 {
     //ENABLED_IF(!d_suspended && d_mode == Running && d_debugging);
@@ -1905,7 +1905,6 @@ void Ide::addDebugMenu(Gui::AutoMenu* pop)
     Gui::AutoMenu* sub = new Gui::AutoMenu(tr("Debugger"), this, false );
     pop->addMenu(sub);
     sub->addCommand( "Enable debugging", this, SLOT(onEnableDebug()),tr(OBN_ENDBG_SC), false );
-    sub->addCommand( "Generate overflow checks", this, SLOT(onOvflChecks()) );
     sub->addCommand( "Toggle breakpoint", this, SLOT(onToggleBreakPt()), tr(OBN_TOGBP_SC), false);
     sub->addCommand( "Remove all breakpoints", this, SLOT(onRemoveAllBreakpoints()));
     sub->addCommand( "Step in", this, SLOT(onStepIn()), tr(OBN_STEPIN_SC), false);
@@ -2040,6 +2039,8 @@ static inline QString declKindName(Declaration* decl)
         return "Proc";
     case Declaration::Module:
         return "Module";
+    case Declaration::ForwardDecl:
+        return "Forward";
     default:
         break;
     }
@@ -2067,8 +2068,6 @@ void Ide::fillXref()
     Symbol* hit = d_pro->findSymbolBySourcePos(f->d_mod, line, col, &scope);
     if( hit && hit->decl )
     {
-        d_xref->clear();
-        d_xrefTitle->setText(QString("%1 '%2'").arg(declKindName(hit->decl)).arg(hit->decl->name.constData()));
         QTreeWidgetItem* black = fillXref(hit, f->d_mod);
         if( black && !d_lock3 )
         {
@@ -2084,7 +2083,8 @@ void Ide::fillXref()
 
 QTreeWidgetItem* Ide::fillXref(Symbol* hit, Declaration* module)
 {
-    if( hit == 0 || hit->decl == 0 )
+   d_xref->clear();
+   if( hit == 0 || hit->decl == 0 )
         return 0;
 
     QTreeWidgetItem* black = 0;
@@ -2098,6 +2098,8 @@ QTreeWidgetItem* Ide::fillXref(Symbol* hit, Declaration* module)
     }
 
     Project2::UsageByMod usage = d_pro->getUsage(hit->decl);
+
+    d_xrefTitle->setText(QString("%1 '%2'").arg(declKindName(hit->decl)).arg(hit->decl->name.constData()));
 
     QFont f = d_xref->font();
     f.setBold(true);
@@ -2132,6 +2134,52 @@ QTreeWidgetItem* Ide::fillXref(Symbol* hit, Declaration* module)
         }
     }
     return black;
+}
+
+void Ide::onSearchSym()
+{
+    ENABLED_IF(true);
+
+    d_xref->clear();
+    d_xrefTitle->clear();
+
+    const QString text = QInputDialog::getText(this, "Search by symbols", "Qualident:");
+    const QByteArrayList components = text.toUtf8().split('.');
+    if( components.isEmpty() || components.size() > 2 )
+        return;
+    Mic::Declaration* module = 0;
+    if( components.size() == 2 )
+    {
+        const QByteArray mod = Token::getSymbol(components.first());
+        module = d_pro->findModule(mod);
+        if( module == 0 )
+            module = AstModel::getGlobalScope()->find(mod);
+    }else
+    {
+        Project2::File* f = d_pro->findFile(d_tab->getCurrentDoc().toString());
+        if( f && f->d_mod )
+            module = f->d_mod;
+    }
+
+    Declaration* sym = 0;
+    QByteArray name;
+    if( components.size() == 1 )
+        name = Token::getSymbol(components.first());
+    else
+        name = Token::getSymbol(components.last());
+    if( module )
+        sym = module->find(name);
+    if( sym == 0 )
+        sym = AstModel::getGlobalScope()->find(name);
+    if( sym == 0 )
+        sym = d_pro->findModule(name);
+
+    if( sym == 0 )
+        return;
+
+    Symbol s;
+    s.decl = sym;
+    fillXref(&s, module);
 }
 
 void Ide::fillStack()
@@ -2233,6 +2281,26 @@ static inline void createArrayElems( QTreeWidgetItem* parent, const void* ptr,
             break;
         }
     }
+}
+
+void Ide::onShowDepOrder()
+{
+    ENABLED_IF( d_pro->errors.isEmpty() );
+
+    DeclList deps = d_pro->getDependencyOrder();
+    QString buf;
+    QTextStream out(&buf);
+    for( int i = 0; i < deps.size(); i++ )
+    {
+        Declaration* module = deps[i];
+        ModuleData md = module->data.value<ModuleData>();
+        // out << i+1 << " " << module->name << endl;
+        out << QFileInfo(md.source).fileName() << endl;
+    }
+    out.flush();
+
+    QInputDialog::getMultiLineText(this, tr("Module Dependency Order"), QString(), buf);
+
 }
 
 static void fillModItems(QTreeWidgetItem* item, Declaration* n, Declaration* p, Type* r,
@@ -2982,7 +3050,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.05");
+    a.setApplicationVersion("0.4.06");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

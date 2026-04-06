@@ -21,6 +21,7 @@
 #include "MilElfWriter.h"
 #include "MilAst.h"
 #include <QtDebug>
+#include <algorithm>
 
 using namespace Mil;
 
@@ -129,6 +130,25 @@ DwarfEmitter::DwarfEmitter(ElfWriter& elf, ElfWriter::Architecture arch)
       d_lowPC(0xFFFFFFFF), d_highPC(0)
 {
     d_str.append('\0');
+
+    // Pre-create all debug sections and their section symbols NOW, before
+    // any global (code) symbols are added.  ElfWriter::addSymbol inserts
+    // LOCAL symbols before globals, which shifts global indices.  If we
+    // waited until finalize() to create these, every .rel.text relocation
+    // that was already emitted against a global symbol would reference the
+    // wrong symbol after the shift.
+    d_abbrevSecIdx = d_elf.addSection(QByteArray(".debug_abbrev"), SHT_PROGBITS_VAL, 0, 1);
+    d_abbrevSymIdx = d_elf.addSectionSymbol(d_abbrevSecIdx);
+
+    d_infoSecIdx = d_elf.addSection(QByteArray(".debug_info"), SHT_PROGBITS_VAL, 0, 1);
+
+    d_strSecIdx = d_elf.addSection(QByteArray(".debug_str"), SHT_PROGBITS_VAL, SHF_STRINGS, 1);
+    d_strSymIdx = d_elf.addSectionSymbol(d_strSecIdx);
+
+    d_lineSecIdx = d_elf.addSection(QByteArray(".debug_line"), SHT_PROGBITS_VAL, 0, 1);
+    d_lineSymIdx = d_elf.addSectionSymbol(d_lineSecIdx);
+
+    d_frameSecIdx = d_elf.addSection(QByteArray(".debug_frame"), SHT_PROGBITS_VAL, 0, 4);
 }
 
 void DwarfEmitter::appendULEB128(QByteArray& buf, quint32 value)
@@ -177,6 +197,15 @@ quint32 DwarfEmitter::addDebugString(const QByteArray& str)
     return offset;
 }
 
+void DwarfEmitter::appendStringRef(const QByteArray& str)
+{
+    DwarfReloc r;
+    r.offset = d_info.size();
+    r.target = RELOC_STR;
+    d_infoRelocs.append(r);
+    appendLE32(d_info, addDebugString(str));
+}
+
 void DwarfEmitter::beginCompilationUnit(const QByteArray& filename,
                                         const QByteArray& directory,
                                         const QByteArray& producer)
@@ -191,35 +220,51 @@ void DwarfEmitter::beginCompilationUnit(const QByteArray& filename,
 
     d_cuStartOffset = d_info.size();
 
-    // CU Header (DWARF v4, 32-bit format):
     appendLE32(d_info, 0);    // unit_length placeholder
     appendLE16(d_info, 4);    // DWARF version 4
-    appendLE32(d_info, 0);    // abbrev offset
+
+    // Abbrev offset - needs relocation against .debug_abbrev
+    {
+        DwarfReloc rAbbrev;
+        rAbbrev.offset = d_info.size();
+        rAbbrev.target = RELOC_ABBREV;
+        d_infoRelocs.append(rAbbrev);
+        appendLE32(d_info, 0);    // abbrev offset (relocated)
+    }
     d_info.append(static_cast<char>(4)); // address_size = 4 bytes
 
     appendULEB128(d_info, ABBREV_COMPILE_UNIT);
 
-    appendLE32(d_info, addDebugString(producer));
+    // DW_AT_producer needs relocation against .debug_str
+    appendStringRef(producer);
 
     // Use DW_LANG_Pascal83 as closest standard language to Oberon/Micron.
     // This enables GDB's info args/info locals to work with the DWARF entries.
     appendLE16(d_info, DW_LANG_Pascal83);
 
-    appendLE32(d_info, addDebugString(filename));
+    // DW_AT_name needs relocation against .debug_str
+    appendStringRef(filename);
 
-    appendLE32(d_info, addDebugString(directory));
+    // DW_AT_comp_dir needs relocation against .debug_str
+    appendStringRef(directory);
 
-    // DW_AT_low_pc (DW_FORM_addr) - placeholder, patched in endCompilationUnit
+    // DW_AT_low_pc placeholder, patched in endCompilationUnit
     // Record relocation for this address (will be patched to actual .text offset)
     DwarfReloc r; r.offset = d_info.size(); r.target = RELOC_TEXT;
     d_infoRelocs.append(r);
     appendLE32(d_info, 0);
 
-    // DW_AT_high_pc (DW_FORM_data4) - length, no relocation needed
+    // DW_AT_high_pc length, no relocation needed
     appendLE32(d_info, 0);
 
-    // DW_AT_stmt_list (DW_FORM_sec_offset) - offset into .debug_line (always 0)
-    appendLE32(d_info, 0);
+    // DW_AT_stmt_list offset into .debug_line
+    {
+        DwarfReloc rLine;
+        rLine.offset = d_info.size();
+        rLine.target = RELOC_LINE;
+        d_infoRelocs.append(rLine);
+        appendLE32(d_info, 0); // relocated to .debug_line
+    }
 }
 
 void DwarfEmitter::endCompilationUnit()
@@ -248,9 +293,11 @@ void DwarfEmitter::endCompilationUnit()
 }
 
 void DwarfEmitter::addSubprogram(const QByteArray& name, quint32 lowPC, quint32 highPC,
-                                 quint32 line)
+                                 quint32 line, quint32 prologuePC)
 {
     // lowPC/highPC: start/end address in .text
+    // prologuePC: address where push ebp; mov ebp, esp starts (may differ from lowPC
+    //   for begin$ functions that have a guard check before the prologue)
 
     Q_ASSERT(d_inCU);
 
@@ -259,15 +306,23 @@ void DwarfEmitter::addSubprogram(const QByteArray& name, quint32 lowPC, quint32 
 
     appendULEB128(d_info, ABBREV_SUBPROGRAM);
 
-    appendLE32(d_info, addDebugString(name));
+    // DW_AT_name needs relocation against .debug_str
+    appendStringRef(name);
 
-    // DW_AT_low_pc (DW_FORM_addr) - needs relocation against .text
+    // DW_AT_low_pc needs relocation against .text
     DwarfReloc r; r.offset = d_info.size(); r.target = RELOC_TEXT;
     d_infoRelocs.append(r);
     appendLE32(d_info, lowPC);
 
-    // DW_AT_high_pc (DW_FORM_data4) - length, no relocation needed
+    // DW_AT_high_pc length, no relocation needed
     appendLE32(d_info, highPC - lowPC);
+
+    // Record bounds for FDE generation
+    SubprogramBounds bounds;
+    bounds.lowPC = lowPC;
+    bounds.highPC = highPC;
+    bounds.prologuePC = (prologuePC > 0) ? prologuePC : lowPC;
+    d_fdes.append(bounds);
 
     appendULEB128(d_info, line);
 
@@ -276,7 +331,7 @@ void DwarfEmitter::addSubprogram(const QByteArray& name, quint32 lowPC, quint32 
     appendULEB128(d_info, expr.size());
     d_info.append(expr);
 
-    // DW_AT_external (DW_FORM_flag_present) - always present for exported procs
+    // DW_AT_external always present for exported procs
 }
 
 void DwarfEmitter::addParameter(const QByteArray& name, qint32 fpOffset, quint32 typeRef)
@@ -287,9 +342,10 @@ void DwarfEmitter::addParameter(const QByteArray& name, qint32 fpOffset, quint32
 
     appendULEB128(d_info, ABBREV_PARAMETER);
 
-    appendLE32(d_info, addDebugString(name));
+    // DW_AT_name needs relocation against .debug_str
+    appendStringRef(name);
 
-    // DW_AT_type (DW_FORM_ref4) - offset within CU
+    // DW_AT_type offset within CU
     appendLE32(d_info, typeRef);
 
     // DW_AT_location (DW_FORM_exprloc)
@@ -310,7 +366,8 @@ void DwarfEmitter::addLocalVariable(const QByteArray& name, qint32 fpOffset, qui
 
     appendULEB128(d_info, ABBREV_VARIABLE);
 
-    appendLE32(d_info, addDebugString(name));
+    // DW_AT_name needs relocation against .debug_str
+    appendStringRef(name);
 
     appendLE32(d_info, typeRef);
 
@@ -337,7 +394,8 @@ void DwarfEmitter::addModuleVariable(const QByteArray& name, quint32 address,
 
     appendULEB128(d_info, ABBREV_MODULE_VAR);
 
-    appendLE32(d_info, addDebugString(name));
+    // DW_AT_name needs relocation against .debug_str
+    appendStringRef(name);
 
     appendLE32(d_info, typeRef);
 
@@ -360,7 +418,8 @@ quint32 DwarfEmitter::addBaseType(const QByteArray& name, quint8 encoding, quint
 
     appendULEB128(d_info, ABBREV_BASE_TYPE);
 
-    appendLE32(d_info, addDebugString(name));
+    // DW_AT_name needs relocation against .debug_str
+    appendStringRef(name);
 
     d_info.append(static_cast<char>(encoding));
 
@@ -377,7 +436,7 @@ quint32 DwarfEmitter::addPointerType(quint32 baseTypeRef)
 
     d_info.append(static_cast<char>(4));
 
-    // DW_AT_type (DW_FORM_ref4) - pointed-to type
+    // DW_AT_type pointed-to type
     appendLE32(d_info, baseTypeRef);
 
     return offset;
@@ -390,7 +449,8 @@ quint32 DwarfEmitter::addStructType(const QByteArray& name, quint32 byteSize)
     // has children: members
     appendULEB128(d_info, ABBREV_STRUCT_TYPE);
 
-    appendLE32(d_info, addDebugString(name));
+    // DW_AT_name needs relocation against .debug_str
+    appendStringRef(name);
 
     appendULEB128(d_info, byteSize);
 
@@ -401,7 +461,8 @@ void DwarfEmitter::addStructMember(const QByteArray& name, quint32 typeRef, quin
 {
     appendULEB128(d_info, ABBREV_MEMBER);
 
-    appendLE32(d_info, addDebugString(name));
+    // DW_AT_name needs relocation against .debug_str
+    appendStringRef(name);
 
     appendLE32(d_info, typeRef);
 
@@ -420,7 +481,7 @@ quint32 DwarfEmitter::addArrayType(quint32 elemTypeRef, quint32 count)
     // children: subrange
     appendULEB128(d_info, ABBREV_ARRAY_TYPE);
 
-    // DW_AT_type (DW_FORM_ref4) - element type
+    // DW_AT_type element type
     appendLE32(d_info, elemTypeRef);
 
     if (count > 0) {
@@ -651,12 +712,17 @@ void DwarfEmitter::buildDebugFrame()
     // Frame layout depends on architecture:
     // ARM: PUSH {R11, LR} -> CFA = R11 + 8, R11 at CFA-8, LR at CFA-4
     // x86: PUSH EBP; MOV EBP,ESP -> CFA = EBP + 8, EBP at CFA-8, EIP at CFA-4
-    // Both use the same logical structure: CFA = FP + 8
+    //
+    // The CIE defines the initial rules valid at function entry (before the
+    // prologue): CFA = ESP + 4, return address at [CFA-4] = [ESP].
+    // Each FDE then advances through the prologue to describe the state after
+    // push ebp; mov ebp, esp.
 
     const bool isX86 = (d_arch == ElfWriter::ArchX86);
-    const quint32 fpReg = isX86 ? 5 : 11;       // EBP=5, R11=11
-    const quint32 raReg = isX86 ? 8 : 14;        // EIP=8, LR=14
-    const quint32 codeAlign = isX86 ? 1 : 4;     // x86 variable-length, ARM 4-byte
+    const quint32 spReg = isX86 ? 4 : 13;        // ESP=4, SP=13
+    const quint32 fpReg = isX86 ? 5 : 11;         // EBP=5, R11=11
+    const quint32 raReg = isX86 ? 8 : 14;         // EIP=8, LR=14
+    const quint32 codeAlign = isX86 ? 1 : 4;      // x86 variable-length, ARM 4-byte
 
     int cieStart = d_frame.size();
     appendLE32(d_frame, 0); // length placeholder
@@ -665,33 +731,101 @@ void DwarfEmitter::buildDebugFrame()
 
     d_frame.append(static_cast<char>(4)); // v4
 
-    d_frame.append('\0');
+    d_frame.append('\0'); // augmentation (empty)
 
     d_frame.append(static_cast<char>(4)); // address size 4
 
-    d_frame.append(static_cast<char>(0));
+    d_frame.append(static_cast<char>(0)); // segment size
 
     appendULEB128(d_frame, codeAlign);
 
-    appendSLEB128(d_frame, -4); // stack grows down, word-sized slots
+    appendSLEB128(d_frame, -4); // data_alignment_factor: stack grows down, word-sized slots
 
     appendULEB128(d_frame, raReg);
 
+    // CIE initial instructions: state at function entry (before prologue).
+    // CFA = ESP + 4 (return address is at [ESP], so CFA is just above it).
+    // Return address (EIP) is saved at CFA - 4 = [ESP].
     d_frame.append(static_cast<char>(DW_CFA_def_cfa));
-    appendULEB128(d_frame, fpReg);
-    appendULEB128(d_frame, 8);  // offset
-
-    d_frame.append(static_cast<char>(DW_CFA_offset | fpReg));
-    appendULEB128(d_frame, 2); // offset 2 * abs(data_alignment_factor) = 8
+    appendULEB128(d_frame, spReg);
+    appendULEB128(d_frame, 4);  // CFA = ESP + 4
 
     d_frame.append(static_cast<char>(DW_CFA_offset | raReg));
-    appendULEB128(d_frame, 1); // offset 1 * 4 = 4
+    appendULEB128(d_frame, 1); // EIP at CFA - 1*4 = CFA - 4 = [ESP]
 
     while ((d_frame.size() - cieStart) % 4 != 0)
         d_frame.append(static_cast<char>(DW_CFA_nop));
 
     quint32 cieLen = d_frame.size() - cieStart - 4;
     patchLE32(d_frame, cieStart, cieLen);
+
+    // Emit FDEs for each subprogram
+    for (int i = 0; i < d_fdes.size(); i++) {
+        int fdeStart = d_frame.size();
+        appendLE32(d_frame, 0); // length placeholder
+
+        // CIE pointer: in .debug_frame this is the byte offset to the CIE
+        // from the beginning of the section (which is 0 = cieStart).
+        appendLE32(d_frame, cieStart);
+
+        // Relocated start address of the function
+        DwarfReloc r;
+        r.offset = d_frame.size();
+        r.target = RELOC_TEXT;
+        d_frameRelocs.append(r);
+        appendLE32(d_frame, d_fdes[i].lowPC);
+
+        // Length of the function
+        appendLE32(d_frame, d_fdes[i].highPC - d_fdes[i].lowPC);
+
+        // Emit prologue CFA instructions.
+        // The prologue (push ebp; mov ebp, esp) may not start at lowPC for
+        // begin$ functions that have a guard check.  We first advance to
+        // prologuePC, then describe the prologue.
+        quint32 prologuePC = d_fdes[i].prologuePC;
+        quint32 lowPC = d_fdes[i].lowPC;
+
+        // Advance from lowPC to the push ebp instruction (if there is a gap)
+        quint32 guardLen = prologuePC - lowPC;
+        if (guardLen > 0) {
+            // Use DW_CFA_advance_loc variants depending on delta size
+            if (guardLen <= 63) {
+                d_frame.append(static_cast<char>(DW_CFA_advance_loc | guardLen));
+            } else {
+                d_frame.append(static_cast<char>(0x02)); // DW_CFA_advance_loc1
+                d_frame.append(static_cast<char>(guardLen & 0xFF));
+            }
+        }
+
+        // After push ebp (1 byte on x86): CFA = ESP + 8, EBP saved at CFA - 8
+        quint32 pushSize = isX86 ? 1 : 4;
+        if (pushSize <= 63)
+            d_frame.append(static_cast<char>(DW_CFA_advance_loc | pushSize));
+        else
+            d_frame.append(static_cast<char>(DW_CFA_advance_loc | 1)); // fallback
+
+        d_frame.append(static_cast<char>(DW_CFA_def_cfa_offset));
+        appendULEB128(d_frame, 8); // CFA = ESP + 8
+
+        d_frame.append(static_cast<char>(DW_CFA_offset | fpReg));
+        appendULEB128(d_frame, 2); // EBP at CFA - 2*4 = CFA - 8
+
+        // After mov ebp, esp (2 bytes on x86): CFA = EBP + 8
+        quint32 movSize = isX86 ? 2 : 4;
+        if (movSize <= 63)
+            d_frame.append(static_cast<char>(DW_CFA_advance_loc | movSize));
+        else
+            d_frame.append(static_cast<char>(DW_CFA_advance_loc | 1)); // fallback
+
+        d_frame.append(static_cast<char>(DW_CFA_def_cfa_register));
+        appendULEB128(d_frame, fpReg); // CFA = EBP + 8 (offset unchanged)
+
+        while ((d_frame.size() - fdeStart) % 4 != 0)
+            d_frame.append(static_cast<char>(DW_CFA_nop));
+
+        quint32 fdeLen = d_frame.size() - fdeStart - 4;
+        patchLE32(d_frame, fdeStart, fdeLen);
+    }
 }
 
 void DwarfEmitter::buildDebugLine()
@@ -752,15 +886,7 @@ void DwarfEmitter::buildDebugLine()
     quint32 headerLen = d_line.size() - headerBodyStart;
     patchLE32(d_line, headerLenOffset, headerLen);
 
-    for (int i = 0; i < d_lineEntries.size() - 1; i++) {
-        for (int j = i + 1; j < d_lineEntries.size(); j++) {
-            if (d_lineEntries[j].address < d_lineEntries[i].address) {
-                LineEntry tmp = d_lineEntries[i];
-                d_lineEntries[i] = d_lineEntries[j];
-                d_lineEntries[j] = tmp;
-            }
-        }
-    }
+    std::sort(d_lineEntries.begin(), d_lineEntries.end(), sortLineEntry);
 
     quint32 curAddr = 0;
     quint32 curLine = 1;
@@ -808,6 +934,17 @@ void DwarfEmitter::buildDebugLine()
         d_line.append(static_cast<char>(DW_LNS_copy));
     }
 
+    // Advance PC to the end of the compilation unit before emitting end_sequence
+    // so the debugger knows the last statement's address range extends to highPC.
+    {
+        quint32 addrDelta = d_highPC - curAddr;
+        if (addrDelta > 0) {
+            d_line.append(static_cast<char>(DW_LNS_advance_pc));
+            quint32 minInsnLen = (d_arch == ElfWriter::ArchX86) ? 1 : 4;
+            appendULEB128(d_line, addrDelta / minInsnLen);
+        }
+    }
+
     d_line.append(static_cast<char>(0));
     appendULEB128(d_line, 1); // length = 1
     d_line.append(static_cast<char>(DW_LNE_end_sequence));
@@ -821,32 +958,32 @@ void DwarfEmitter::finalize(quint32 textSymIdx, quint32 dataSymIdx)
     // Must be called after all DIEs and line entries have been added.
     // textSymIdx and dataSymIdx are the ELF section symbol indices for .text
     // and .data, used to generate relocations in .rel.debug_info and .rel.debug_line.
+    //
+    // The debug sections and their section symbols were already created in the
+    // constructor (to avoid shifting global symbol indices).  Here we just
+    // build the content and append it to the pre-created sections.
 
     buildAbbrevTable();
     buildDebugFrame();
     buildDebugLine();
 
-    quint32 abbrevIdx = d_elf.addSection(QByteArray(".debug_abbrev"), SHT_PROGBITS_VAL, 0, 1);
-    d_elf.appendToSection(abbrevIdx, d_abbrev);
-
-    quint32 infoIdx = d_elf.addSection(QByteArray(".debug_info"), SHT_PROGBITS_VAL, 0, 1);
-    d_elf.appendToSection(infoIdx, d_info);
-
-    quint32 strIdx = d_elf.addSection(QByteArray(".debug_str"), SHT_PROGBITS_VAL, SHF_STRINGS, 1);
-    d_elf.appendToSection(strIdx, d_str);
-
-    quint32 lineIdx = d_elf.addSection(QByteArray(".debug_line"), SHT_PROGBITS_VAL, 0, 1);
-    d_elf.appendToSection(lineIdx, d_line);
-
-    quint32 frameIdx = d_elf.addSection(QByteArray(".debug_frame"), SHT_PROGBITS_VAL, 0, 4);
-    d_elf.appendToSection(frameIdx, d_frame);
+    d_elf.appendToSection(d_abbrevSecIdx, d_abbrev);
+    d_elf.appendToSection(d_infoSecIdx, d_info);
+    d_elf.appendToSection(d_strSecIdx, d_str);
+    d_elf.appendToSection(d_lineSecIdx, d_line);
+    d_elf.appendToSection(d_frameSecIdx, d_frame);
 
     if (!d_infoRelocs.isEmpty()) {
         quint32 relInfoIdx = d_elf.addSection(QByteArray(".rel.debug_info"), SHT_REL_VAL, 0, 4);
-        d_elf.configureRelSection(relInfoIdx, infoIdx);
+        d_elf.configureRelSection(relInfoIdx, d_infoSecIdx);
         for (int i = 0; i < d_infoRelocs.size(); i++) {
             const DwarfReloc& r = d_infoRelocs[i];
-            quint32 symIdx = (r.target == RELOC_TEXT) ? textSymIdx : dataSymIdx;
+            quint32 symIdx = 0;
+            if (r.target == RELOC_TEXT) symIdx = textSymIdx;
+            else if (r.target == RELOC_DATA) symIdx = dataSymIdx;
+            else if (r.target == RELOC_STR) symIdx = d_strSymIdx;
+            else if (r.target == RELOC_ABBREV) symIdx = d_abbrevSymIdx;
+            else if (r.target == RELOC_LINE) symIdx = d_lineSymIdx;
             quint8 relType = (d_arch == ElfWriter::ArchX86) ? R_386_32_VAL : R_ARM_ABS32_VAL;
             d_elf.addRelocation(relInfoIdx, r.offset, symIdx, relType);
         }
@@ -854,12 +991,23 @@ void DwarfEmitter::finalize(quint32 textSymIdx, quint32 dataSymIdx)
 
     if (!d_lineRelocs.isEmpty()) {
         quint32 relLineIdx = d_elf.addSection(QByteArray(".rel.debug_line"), SHT_REL_VAL, 0, 4);
-        d_elf.configureRelSection(relLineIdx, lineIdx);
+        d_elf.configureRelSection(relLineIdx, d_lineSecIdx);
         quint8 relType = (d_arch == ElfWriter::ArchX86) ? R_386_32_VAL : R_ARM_ABS32_VAL;
         for (int i = 0; i < d_lineRelocs.size(); i++) {
             const DwarfReloc& r = d_lineRelocs[i];
             quint32 symIdx = (r.target == RELOC_TEXT) ? textSymIdx : dataSymIdx;
             d_elf.addRelocation(relLineIdx, r.offset, symIdx, relType);
+        }
+    }
+
+    if (!d_frameRelocs.isEmpty()) {
+        quint32 relFrameIdx = d_elf.addSection(QByteArray(".rel.debug_frame"), SHT_REL_VAL, 0, 4);
+        d_elf.configureRelSection(relFrameIdx, d_frameSecIdx);
+        quint8 relType = (d_arch == ElfWriter::ArchX86) ? R_386_32_VAL : R_ARM_ABS32_VAL;
+        for (int i = 0; i < d_frameRelocs.size(); i++) {
+            const DwarfReloc& r = d_frameRelocs[i];
+            quint32 symIdx = (r.target == RELOC_TEXT) ? textSymIdx : dataSymIdx;
+            d_elf.addRelocation(relFrameIdx, r.offset, symIdx, relType);
         }
     }
 }

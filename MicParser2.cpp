@@ -648,6 +648,7 @@ Parser2::~Parser2()
 void Parser2::RunParser(const Import &import) {
 	errors.clear();
     deferred.clear();
+    forwards.clear();
     allTypes.clear();
 	next();
     module(import);
@@ -1085,6 +1086,7 @@ void Parser2::ForwardDeclaration()
         return;
     procDecl->kind = Declaration::ForwardDecl;
     mdl->closeScope();
+    forwards << procDecl;
 
     QByteArray binding;
     if( procDecl->typebound )
@@ -1854,6 +1856,8 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
     case Declaration::ForwardDecl:
         k = Expression::ProcDecl;
         val = QVariant::fromValue(d);
+        if( d->kind == Declaration::ForwardDecl )
+            d->used = true;
         break;
     case Declaration::ConstDecl:
         k = Expression::ConstDecl;
@@ -2561,6 +2565,7 @@ Expression* Parser2::maybeQualident(Symbol** s)
         {
             // this is the one and only qualident case
             markRef(d, tok.toRowCol());
+            d->used = true;
             expect(Tok_Dot, false, "selector");
             expect(Tok_ident, false, "selector");
             tok = cur;
@@ -2606,6 +2611,7 @@ Declaration* Parser2::resolveQualident(Parser2::Quali* qq, bool allowUnresovedLo
             return 0;
         }
         markRef(import, q.first.toRowCol());
+        import->used = true;
         Declaration* decl = mdl->findDecl(import, q.second.d_val);
         if( decl == 0 )
         {
@@ -2699,6 +2705,20 @@ void Parser2::resolveDeferred(int i, bool reportError)
         deferred[i].first->setType(d->getType());
         deferred[i].first->deferred = false;
         deferred[i].first = 0;
+    }
+}
+
+void Parser2::checkForwards()
+{
+    for(int i = 0; i < forwards.size(); i++ )
+    {
+        Declaration* forward = forwards[i];
+        Declaration* orig = forward->deforward();
+
+        if( !forward->used )
+            ; // error(forward->pos, "unused forward declaration" ); // TODO: warning instead of error, or ignore
+        else if( orig == 0 || orig == forward )
+            error(forward->pos, "forward is referenced, but there is no implementation" );
     }
 }
 
@@ -4374,6 +4394,8 @@ void Parser2::module(const Import & import) {
 	}
 
     resolveDeferreds(true); // report remaining deferreds not resolved as error
+    checkForwards();
+    // TODO: check for unused imports
 
     mdl->closeScope();
 

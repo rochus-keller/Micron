@@ -52,7 +52,8 @@ namespace Mil
 
         void endCompilationUnit();
 
-        void addSubprogram(const QByteArray& name, quint32 lowPC, quint32 highPC, quint32 line);
+        void addSubprogram(const QByteArray& name, quint32 lowPC, quint32 highPC, quint32 line,
+                           quint32 prologuePC = 0);
         void addParameter(const QByteArray& name, qint32 fpOffset, quint32 typeRef);
         void addLocalVariable(const QByteArray& name, qint32 fpOffset, quint32 typeRef);
         void endSubprogram();
@@ -105,6 +106,19 @@ namespace Mil
         ElfWriter& d_elf;
         ElfWriter::Architecture d_arch;
 
+        // Pre-created ELF section indices and their section symbol indices.
+        // Created in the constructor so that debug section symbols are added
+        // to the symbol table BEFORE any global (code) symbols, avoiding
+        // index shifts that would break existing .rel.text relocations.
+        quint32 d_abbrevSecIdx;
+        quint32 d_infoSecIdx;
+        quint32 d_strSecIdx;
+        quint32 d_lineSecIdx;
+        quint32 d_frameSecIdx;
+        quint32 d_abbrevSymIdx;
+        quint32 d_strSymIdx;
+        quint32 d_lineSymIdx;
+
         QByteArray d_info; // .debug_info
         QByteArray d_abbrev; // .debug_abbrev
         QByteArray d_str; // .debug_str
@@ -123,7 +137,9 @@ namespace Mil
             quint32 column;
         };
         QList<LineEntry> d_lineEntries;
-
+        static bool sortLineEntry(const DwarfEmitter::LineEntry& a, const DwarfEmitter::LineEntry& b) {
+            return a.address < b.address;
+        }
         // Source file info for line table
         QByteArray d_filename;
         QByteArray d_directory;
@@ -131,13 +147,24 @@ namespace Mil
         quint32 d_lowPC;
         quint32 d_highPC;
 
-        enum RelocTarget { RELOC_TEXT, RELOC_DATA };
+        enum RelocTarget { RELOC_TEXT, RELOC_DATA, RELOC_STR, RELOC_ABBREV, RELOC_LINE };
         struct DwarfReloc {
             quint32 offset; // offset within the section (d_info or d_line)
             RelocTarget target; // which section symbol to relocate against
         };
         QList<DwarfReloc> d_infoRelocs; // for .debug_info
         QList<DwarfReloc> d_lineRelocs; // for .debug_line
+        QList<DwarfReloc> d_frameRelocs; // for .debug_frame
+
+        // Subprogram bounds for FDE generation
+        struct SubprogramBounds {
+            quint32 lowPC;
+            quint32 highPC;
+            quint32 prologuePC; // PC where push ebp; mov ebp, esp starts
+        };
+        QList<SubprogramBounds> d_fdes;
+
+        void appendStringRef(const QByteArray& str);
     };
 
 } // namespace Mil

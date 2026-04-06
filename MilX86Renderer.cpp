@@ -447,6 +447,11 @@ bool Renderer::renderModule(Declaration* module)
             d_emitter.mov_mi(ECX, 0, 1);
         }
 
+        // Record where the actual prologue (push ebp; mov ebp, esp) begins.
+        // For begin$ functions this is after the guard check; for regular
+        // procedures it equals procStartPC.
+        quint32 prologuePC = d_emitter.currentPosition();
+
         if (!renderProcedure(*proc, procIdx))
             return false;
 
@@ -468,7 +473,7 @@ bool Renderer::renderModule(Declaration* module)
                 procName = decl->toPath();
 
             quint32 declLine = decl->pos.line();
-            d_dwarf->addSubprogram(procName, procStartPC, procEndPC, declLine);
+            d_dwarf->addSubprogram(procName, procStartPC, procEndPC, declLine, prologuePC);
 
             if (declLine > 0)
                 d_dwarf->addLineEntry(procStartPC, declLine);

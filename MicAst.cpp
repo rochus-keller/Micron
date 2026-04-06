@@ -593,6 +593,31 @@ int Declaration::getIndexOf(Declaration* ref) const
     return -1;
 }
 
+Declaration*Declaration::find(const QByteArray& name, bool recursive)
+{
+    Declaration* d = link;
+    while( d )
+    {
+        if( d->name.constData() == name.constData() )
+            return d;
+        d = d->next;
+    }
+    if( recursive && outer )
+        return outer->find(name);
+    return 0;
+}
+
+Declaration *Declaration::deforward()
+{
+    if( kind == ForwardDecl )
+    {
+        Declaration* d = data.value<Declaration*>();
+        if( d )
+            return d->deforward();
+    }
+    return this;
+}
+
 Declaration *Declaration::getModule()
 {
     if( kind == Module )

@@ -126,6 +126,7 @@ void Project2::clear(bool all, bool reloadMic)
 {
     d_mdl.clear();
     modules.clear();
+    dependencyOrder.clear();
     loader.getModel().clear();
     errors.clear();
     subs.clear();
@@ -883,7 +884,10 @@ Declaration *Project2::loadModule(const Import &imp)
 
     res = p.takeModule();
     if( res )
+    {
         res->invalid = hasErrors;
+        dependencyOrder << res;
+    }
 
     if( fixedImp.metaActuals.isEmpty() )
         file->d_mod = res; // in case of generic modules, file->d_mod points to the non-instantiated version
