@@ -23,6 +23,7 @@ SOURCES += \
     oakwood/MathL+.c \
     oakwood/Math+.c \
     oakwood/Out+.c \
+    oakwood/Files+.c \
     MilVmCode.cpp \
     MilVmOakwood.cpp \
     MilEmitter.cpp \

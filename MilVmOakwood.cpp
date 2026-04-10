@@ -24,6 +24,7 @@ extern "C" {
 #include "oakwood/MathL.h"
 #include "oakwood/Math.h"
 #include "oakwood/Out.h"
+#include "oakwood/Files.h"
 }
 using namespace Mil;
 
@@ -226,6 +227,61 @@ static bool Math_sqrt(void* args, void* ret)
     return true;
 }
 
+// struct Files$Handle* Files$Open(const char* name, int mode)
+static bool Files_Open(void* args, void* ret)
+{
+    struct Files$Handle* res = Files$Open((const char*)Interpreter::toP(args,0), Interpreter::toI4(args,Interpreter::StackAlign));
+    Interpreter::retP(ret,res);
+    return true;
+}
+
+// struct Files$Handle* Files$System(int what)
+static bool Files_System(void* args, void* ret)
+{
+    struct Files$Handle* res = Files$System(Interpreter::toI4(args,0));
+    Interpreter::retP(ret,res);
+    return true;
+}
+
+// void Files$Close(struct Files$Handle* f)
+static bool Files_Close(void* args, void* ret)
+{
+    Files$Close((struct Files$Handle*)Interpreter::toP(args,0));
+    return true;
+}
+
+// unsigned char Files$Delete(char* name)
+static bool Files_Delete(void* args, void* ret)
+{
+    const int res = Files$Delete((char*)Interpreter::toP(args,0));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+// unsigned char Files$Eof(struct Files$Handle* f)
+static bool Files_Eof(void* args, void* ret)
+{
+    const int res = Files$Eof((struct Files$Handle*)Interpreter::toP(args,0));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+// unsigned char Files$Read(struct Files$Handle* f, unsigned char* x)
+static bool Files_Read(void* args, void* ret)
+{
+    const int res = Files$Read((struct Files$Handle*)Interpreter::toP(args,0), (unsigned char*)Interpreter::toP(args,Interpreter::StackAlign));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+// unsigned char Files$Write(struct Files$Handle* f, unsigned char x)
+static bool Files_Write(void* args, void* ret)
+{
+    const int res = Files$Write((struct Files$Handle*)Interpreter::toP(args,0), Interpreter::toI4(args,Interpreter::StackAlign));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
 void VmOakwood::addTo(Interpreter* ip)
 {
     ip->registerProc("Input", "Time", Input_Time);
@@ -257,4 +313,11 @@ void VmOakwood::addTo(Interpreter* ip)
     ip->registerProc("Math", "cos", Math_cos);
     ip->registerProc("Math", "sin", Math_sin);
     ip->registerProc("Math", "sqrt", Math_sqrt);
+    ip->registerProc("Files", "Open", Files_Open);
+    ip->registerProc("Files", "System", Files_System);
+    ip->registerProc("Files", "Close", Files_Close);
+    ip->registerProc("Files", "Delete", Files_Delete);
+    ip->registerProc("Files", "Eof", Files_Eof);
+    ip->registerProc("Files", "Read", Files_Read);
+    ip->registerProc("Files", "Write", Files_Write);
 }

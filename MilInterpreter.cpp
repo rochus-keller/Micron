@@ -335,6 +335,12 @@ static bool MIC_assert(void* args, void* ret)
     return true;
 }
 
+static bool MIC_exit(void* args, void* ret)
+{
+    MIC$$exit(Interpreter::toI4(args, 0));
+    return true;
+}
+
 #define REGISTER_MICPROC(name) \
     ffiProcs.push_back(MIC_##name); code.addExternal(MIC$, Mic::Atom::getAtom(#name), ffiProcs.size()-1);
 
@@ -369,6 +375,7 @@ struct Interpreter::Imp
         REGISTER_MICPROC(printSet);
         REGISTER_MICPROC(strlen);
         REGISTER_MICPROC(assert);
+        REGISTER_MICPROC(exit);
     }
 
     bool run(Declaration* proc)

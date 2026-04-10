@@ -5,11 +5,15 @@ TYPE
 	Handle = RECORD END;
 	File = POINTER TO Handle;
 	Std = (Stdin, Stdout, Stderr)
+	Mode = (
+  	ReadOnly, // Opens an existing file for reading only; fails if the file does not exist. C: "rb"
+  	Create, // Creates a new file or truncates an existing file to zero length, for read/write. C: "wb+"
+  	Modify // Opens an existing file for reading and writing without truncating; fails if not exist. C: "rb+"
+  	)
 	
-PROCEDURE Old (name: POINTER TO ARRAY OF CHAR): File EXTERN;
-PROCEDURE New (name: POINTER TO ARRAY OF CHAR): File EXTERN;
-PROCEDURE System (what: Std): File EXTERN;
+PROCEDURE Open (name: POINTER TO ARRAY OF CHAR; mode: Mode): File EXTERN;
 PROCEDURE Close (f: File) EXTERN;
+PROCEDURE System (what: Std): File EXTERN;
 PROCEDURE Delete (name: POINTER TO ARRAY OF CHAR):BOOLEAN EXTERN;
 PROCEDURE Rename (old, new_: POINTER TO ARRAY OF CHAR):BOOLEAN EXTERN;
 PROCEDURE Length (f: File): INT32 EXTERN;
@@ -39,3 +43,4 @@ PROCEDURE WriteSet (f: File; x: SET):BOOLEAN EXTERN;
 PROCEDURE WriteBool (f: File; x: BOOLEAN):BOOLEAN EXTERN;
 PROCEDURE WriteBytes (f: File; x: POINTER TO ARRAY OF BYTE;n: INT32):INT32 EXTERN;
 END Files.
+

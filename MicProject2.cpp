@@ -324,6 +324,11 @@ Project2::File* Project2::findFile(const QString& file) const
         const ModuleSlot* ms = find(file.toLatin1());
         if( ms )
             return ms->file;
+        foreach( File* lib, d_libs )
+        {
+            if( lib->d_filePath == file )
+                return lib;
+        }
     }
     return f.data();
 }
@@ -1026,7 +1031,7 @@ void Project2::parseLib(const QString & name)
     lex.sourcePath = path; // to keep file name if invalid
     lex.lex.setStream(path);
     Mil::Emitter e(&imr, Mil::Emitter::RowsAndCols);
-    Mic::Parser2 p(&d_mdl,&lex, &e, this, false);
+    Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
     p.RunParser();
     ModuleSlot ms;
     ms.decl = p.takeModule();
