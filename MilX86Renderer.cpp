@@ -1449,10 +1449,36 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_div_i8:
     case LL_div_un_i8:
     case LL_rem_i8:
-    case LL_rem_un_i8:
-        qWarning() << "X86Renderer: 64-bit div/rem not yet implemented";
-        em.add_ri(ESP, 8); // pop b, leave a as placeholder result
+    case LL_rem_un_i8: {
+        // NOTE that this assumes C implemented intrinsics and doesn't consider d_cdeclReturns!
+        // 64-bit div/rem via __mic$ intrinsic call.
+        // Stack: [b_lo ESP+0][b_hi ESP+4][a_lo ESP+8][a_hi ESP+12]
+        // cdecl expects: [a_lo ESP+0][a_hi ESP+4][b_lo ESP+8][b_hi ESP+12]
+        // Swap a and b on the stack:
+        em.mov_rm(EAX, ESP, 0);   // b_lo
+        em.mov_rm(ECX, ESP, 8);   // a_lo
+        em.mov_mr(ESP, 0, ECX);   // a_lo -> ESP+0
+        em.mov_mr(ESP, 8, EAX);   // b_lo -> ESP+8
+        em.mov_rm(EAX, ESP, 4);   // b_hi
+        em.mov_rm(ECX, ESP, 12);  // a_hi
+        em.mov_mr(ESP, 4, ECX);   // a_hi -> ESP+4
+        em.mov_mr(ESP, 12, EAX);  // b_hi -> ESP+12
+        // Call the appropriate intrinsic
+        const char* funcName;
+        switch ((LL_op)op.op) {
+        case LL_div_i8:    funcName = "__mic$div_i8"; break;
+        case LL_div_un_i8: funcName = "__mic$div_un_i8"; break;
+        case LL_rem_i8:    funcName = "__mic$rem_i8"; break;
+        default:           funcName = "__mic$rem_un_i8"; break;
+        }
+        quint32 sym = d_elf.addSymbol(funcName, 0, 0, 0, STB_GLOBAL, STT_FUNC);
+        quint32 callOff = em.call_rel32(-4);
+        d_elf.addRelocation(d_sections.relText, callOff, sym, R_386_PC32);
+        // cdecl return: 64-bit result in EDX:EAX (lo in EAX, hi in EDX)
+        em.add_ri(ESP, 16);       // clean up all args
+        pushRegPair(EAX, EDX);    // push result (lo, hi)
         return 1;
+    }
     case LL_neg_i8: {
         // NEG lo sets CF if lo was nonzero; then SBB hi from 0
         em.mov_rm(EAX, ESP, 0);  // lo

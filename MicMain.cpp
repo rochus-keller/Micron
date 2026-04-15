@@ -26,6 +26,7 @@
 #include "MicParser2.h"
 #include "MilEmitter.h"
 #include "MilAstSerializer.h"
+#include "MilArmv7Renderer.h"
 #include "MilX86Renderer.h"
 #include <QCoreApplication>
 #include <QFile>
@@ -205,8 +206,242 @@ public:
     }
 };
 
+static void compileEigen(Manager& mgr, const QString& outPath, bool dbg = false )
+{
+#if 0
+    Mil::EiGen::TargetCode target = Mil::EiGen::translate(arch.toUtf8().constData());
+    if( target == Mil::EiGen::NoTarget )
+        qCritical() << "unknown architecture:" << arch;
+    else
+    {
+        const qint8 alig = Mil::EiGen::stack_align(target);
+        mgr.loader.getModel().calcMemoryLayouts(Mil::EiGen::pointer_width(target), alig, 2 * alig);
+
+        Mil::EiGen gen(&mgr.loader.getModel(), target);
+        QStringList objFiles;
+        bool hasErrors = false;
+
+        foreach( Mil::Declaration* module, mgr.loader.getModel().getModules() )
+        {
+            if( module->name == "MIC$" )
+                continue;
+            QTemporaryFile cod;
+            if( !cod.open() )
+                qCritical() << "cannot open temporary file for Eigen IR";
+            else if( !gen.generate(module, &cod, dbg) )
+                qCritical() << "error generating module" << module->name;
+            else
+            {
+                cod.flush();
+                cod.close();
+                QString objFile;
+                if( !outPath.isEmpty() )
+                {
+                    objFile = QDir(outPath).absoluteFilePath(module->name + ".obj"); // TODO: escape name
+                }else if( module->md && !module->md->source.isEmpty() )
+                {
+                    QFileInfo info(module->md->source);
+                    objFile = info.absoluteDir().absoluteFilePath(module->name + ".obj");
+                }else
+                {
+                    qCritical() << "don't know where to store object and symbol files for" << module->name;
+                    hasErrors = true;
+                    break;
+                }
+                if( dumpLL )
+                {
+                    QFileInfo info(objFile);
+                    QString path = info.absoluteDir().absoluteFilePath(info.baseName() + ".cod");
+                    QFile::remove(path);
+                    if( !QFile::copy(cod.fileName(),path) )
+                        qWarning() << "failed to copy" << cod.fileName() << "to" << path;
+                }
+                if( !Mil::Backend::generate(cod.fileName(),objFile, target, dbg) )
+                {
+                    qCritical() << "cannot generate object file for" << module->name;
+                    hasErrors = true;
+                    break;
+                }else
+                    objFiles << objFile;
+            }
+        }
+        if( !hasErrors )
+        {
+            QString outFile;
+            QString suffix;
+#ifdef Q_OS_WIN32
+            suffis = ".exe";
+#endif
+            if( !outPath.isEmpty() )
+            {
+                outFile = QDir(outPath).absoluteFilePath(info.baseName() + suffix);
+            }else
+            {
+                QFileInfo info(file);
+                outFile = info.absoluteDir().absoluteFilePath(info.baseName() + suffix);
+            }
+            Mil::Backend::link(objFiles, rtLibs, outFile, target, false, dbg);
+        }
+    }
+#endif
+}
+
+static void compileArm(Manager& mgr, const QString& outPath, bool dbg = false, bool useAapcs = true, bool hasHwDiv = true)
+{
+    // ARMv7 backend: generate ELF relocatable objects for each module
+    mgr.loader.getModel().calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
+
+    QStringList objFiles;
+    bool hasErrors = false;
+
+    foreach( Mil::Declaration* module, mgr.loader.getModulesInDependencyOrder() )
+    {
+        if( module->name == "MIC$" )
+            continue;
+
+        // Reset all flags for this module's compile pass
+        foreach( Mil::Declaration* m, mgr.loader.getModel().getModules() )
+        {
+            m->translated = false;
+            for (Mil::Declaration* sub = m->subs; sub; sub = sub->next) {
+                if (sub->kind == Mil::Declaration::Procedure)
+                    sub->validated = false;
+                if (sub->kind == Mil::Declaration::TypeDecl && sub->getType()) {
+                    foreach (Mil::Declaration* msub, sub->getType()->subs) {
+                        if (msub->kind == Mil::Declaration::Procedure)
+                            msub->validated = false;
+                    }
+                }
+            }
+        }
+
+        Mil::Arm::Renderer renderer(&mgr.loader.getModel());
+        renderer.setEmitDwarf(dbg);
+        renderer.setUseAapcs(useAapcs);
+        renderer.setHardwareDivide(hasHwDiv); // set false for Cortex-A8 (BeagleBone)
+
+        if( !renderer.renderModule(module) )
+        {
+            qCritical() << "error generating ARM code for module" << module->name
+                        << ":" << renderer.errorMessage();
+            hasErrors = true;
+            break;
+        }
+
+        const QString objFile = QDir(outPath).absoluteFilePath(module->name + ".o");
+
+        if( !renderer.writeToFile(objFile) )
+        {
+            qCritical() << "cannot write object file" << objFile;
+            hasErrors = true;
+            break;
+        }
+        qDebug() << "  generated" << objFile;
+        objFiles << objFile;
+    }
+
+    if( !hasErrors )
+    {
+        qDebug() << "#### generated" << objFiles.size() << "ELF relocatable object files";
+
+        // Generate main.o that calls all module inits in dependency order
+        QByteArrayList moduleNames;
+        foreach( Mil::Declaration* module, mgr.loader.getModel().getRootModules() )
+        {
+            if( module->name == "MIC$" )
+                continue;
+            moduleNames << module->name;
+        }
+        const QString mainObj = QDir(outPath).absoluteFilePath("main+.o");
+        if( Mil::Arm::Renderer::generateMainObject(moduleNames, mainObj, useAapcs) )
+        {
+            qDebug() << "  generated" << mainObj;
+            objFiles << mainObj;
+        }
+        else
+            qCritical() << "cannot generate main+.o";
+    }
+}
+
+static void compileX86(Manager& mgr, const QString& outPath, bool dbg = false, bool cdeclRet = true)
+{
+    // x86 backend: generate ELF32 relocatable objects for each module
+    mgr.loader.getModel().calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
+
+    QStringList objFiles;
+    bool hasErrors = false;
+
+    foreach( Mil::Declaration* module, mgr.loader.getModulesInDependencyOrder() )
+    {
+        if( module->name == "MIC$" )
+            continue;
+
+        // Reset all flags for this module's compile pass
+        foreach( Mil::Declaration* m, mgr.loader.getModel().getModules() )
+        {
+            m->translated = false;
+            for (Mil::Declaration* sub = m->subs; sub; sub = sub->next) {
+                if (sub->kind == Mil::Declaration::Procedure)
+                    sub->validated = false;
+                if (sub->kind == Mil::Declaration::TypeDecl && sub->getType()) {
+                    foreach (Mil::Declaration* msub, sub->getType()->subs) {
+                        if (msub->kind == Mil::Declaration::Procedure)
+                            msub->validated = false;
+                    }
+                }
+            }
+        }
+
+        Mil::X86::Renderer renderer(&mgr.loader.getModel());
+        renderer.setEmitDwarf(dbg);
+        renderer.setCdeclReturns(cdeclRet);
+
+        if( !renderer.renderModule(module) )
+        {
+            qCritical() << "error generating x86 code for module" << module->name
+                        << ":" << renderer.errorMessage();
+            hasErrors = true;
+            break;
+        }
+
+        const QString objFile = QDir(outPath).absoluteFilePath(module->name + ".o");
+
+        if( !renderer.writeToFile(objFile) )
+        {
+            qCritical() << "cannot write object file" << objFile;
+            hasErrors = true;
+            break;
+        }
+        qDebug() << "  generated" << objFile;
+        objFiles << objFile;
+    }
+
+    if( !hasErrors )
+    {
+        qDebug() << "#### generated" << objFiles.size() << "x86 object files";
+
+        // Generate main.o that calls all module inits in dependency order
+        QByteArrayList moduleNames;
+        foreach( Mil::Declaration* module, mgr.loader.getModel().getRootModules() )
+        {
+            if( module->name == "MIC$" )
+                continue;
+            moduleNames << module->name;
+        }
+        const QString mainObj = QDir(outPath).absoluteFilePath("main+.o");
+        if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj, cdeclRet) )
+        {
+            qDebug() << "  generated" << mainObj;
+            objFiles << mainObj;
+        }
+        else
+            qCritical() << "cannot generate main+.o";
+    }
+}
+
 static void process(const QString& file, const QStringList& searchPaths,
-                    bool run, bool dumpIL, bool dumpLL, const QString& arch, bool dbg, bool cdeclRet, const QString& outPath, const QStringList& rtLibs)
+                    bool run, bool dumpIL, bool dumpLL, bool eigen, const QString& arch, bool dbg, bool cdeclRet, bool useAapcs,
+                    QString outPath, const QStringList& rtLibs)
 {
     int ok = 0;
     int all = 0;
@@ -214,7 +449,6 @@ static void process(const QString& file, const QStringList& searchPaths,
     timer.start();
 
     Manager mgr;
-
     mgr.dbg = dbg;
 
     QFileInfo info(file);
@@ -258,97 +492,23 @@ static void process(const QString& file, const QStringList& searchPaths,
         }
     }
 
+    if( outPath.isEmpty() )
+       outPath = mgr.rootPath;
+#if 0
+    if( all == ok && eigen )
+    {
+        compileEigen(mgr, outPath, dbg);
+    }
+#endif
+    if( all == ok && (arch == "arm7" || arch == "armv7") )
+    {
+        compileArm(mgr, outPath, dbg, useAapcs);
+    }
     if( all == ok && (arch == "x86" || arch == "i386") )
     {
-        // x86 backend: generate ELF32 relocatable objects for each module
-        mgr.loader.getModel().calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
-
-        QStringList objFiles;
-        bool hasErrors = false;
-
-        foreach( Mil::Declaration* module, mgr.loader.getModulesInDependencyOrder() )
-        {
-            if( module->name == "MIC$" )
-                continue;
-
-            // Reset all flags for this module's compile pass
-            foreach( Mil::Declaration* m, mgr.loader.getModel().getModules() )
-            {
-                m->translated = false;
-                for (Mil::Declaration* sub = m->subs; sub; sub = sub->next) {
-                    if (sub->kind == Mil::Declaration::Procedure)
-                        sub->validated = false;
-                    if (sub->kind == Mil::Declaration::TypeDecl && sub->getType()) {
-                        foreach (Mil::Declaration* msub, sub->getType()->subs) {
-                            if (msub->kind == Mil::Declaration::Procedure)
-                                msub->validated = false;
-                        }
-                    }
-                }
-            }
-
-            Mil::X86::Renderer renderer(&mgr.loader.getModel());
-            renderer.setEmitDwarf(dbg);
-            renderer.setCdeclReturns(cdeclRet);
-
-            if( !renderer.renderModule(module) )
-            {
-                qCritical() << "error generating x86 code for module" << module->name
-                            << ":" << renderer.errorMessage();
-                hasErrors = true;
-                break;
-            }
-
-            QString objFile;
-            if( !outPath.isEmpty() )
-            {
-                objFile = QDir(outPath).absoluteFilePath(module->name + ".o");
-            }else if( module->md && !module->md->source.isEmpty() )
-            {
-                QFileInfo minfo(module->md->source);
-                objFile = minfo.absoluteDir().absoluteFilePath(module->name + ".o");
-            }else
-            {
-                objFile = QDir(info.absolutePath()).absoluteFilePath(module->name + ".o");
-            }
-
-            if( !renderer.writeToFile(objFile) )
-            {
-                qCritical() << "cannot write object file" << objFile;
-                hasErrors = true;
-                break;
-            }
-            qDebug() << "  generated" << objFile;
-            objFiles << objFile;
-        }
-
-        if( !hasErrors )
-        {
-            qDebug() << "#### generated" << objFiles.size() << "x86 object files";
-
-            // Generate main.o that calls all module inits in dependency order
-            QByteArrayList moduleNames;
-            foreach( Mil::Declaration* module, mgr.loader.getModel().getRootModules() )
-            {
-                if( module->name == "MIC$" )
-                    continue;
-                moduleNames << module->name;
-            }
-            QString mainObj;
-            if( !outPath.isEmpty() )
-                mainObj = QDir(outPath).absoluteFilePath("main+.o");
-            else
-                mainObj = QDir(info.absolutePath()).absoluteFilePath("main+.o");
-
-            if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj, cdeclRet) )
-            {
-                qDebug() << "  generated" << mainObj;
-                objFiles << mainObj;
-            }
-            else
-                qCritical() << "cannot generate main+.o";
-        }
+        compileX86(mgr, outPath, dbg, cdeclRet);
     }
+
     if( all == ok && run )
     {
         Mil::Interpreter r(&mgr.loader.getModel());
@@ -395,12 +555,16 @@ int main(int argc, char *argv[])
     cp.addOption(dump);
     QCommandLineOption dump2("l", "dump low-level bytecode"); // interpreter or eigen
     cp.addOption(dump2);
+    QCommandLineOption eigen("e", "use Eigen backend");
+    cp.addOption(eigen);
     QCommandLineOption arch("a", "generate code for the given architecture", "arch");
     cp.addOption(arch);
     QCommandLineOption dbg("g", "generate debug information");
     cp.addOption(dbg);
-    QCommandLineOption cdeclRet("C", "use cdecl-compatible return values (EAX/EAX:EDX for <=8 bytes, x86 only)");
+    QCommandLineOption cdeclRet("cdecl", "use cdecl-compatible return values (EAX/EAX:EDX for <=8 bytes, x86 only)");
     cp.addOption(cdeclRet);
+    QCommandLineOption aapcs("aapcs", "use AAPCS32 calling convention (args in R0-R3, return in R0/R0-R1, ARM only)");
+    cp.addOption(aapcs);
     QCommandLineOption libs("L", "add a directory where the compiler looks for the runtime libraries", "path");
     cp.addOption(libs);
 
@@ -423,7 +587,7 @@ int main(int argc, char *argv[])
         outPath = outPaths.first();
 
     process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2),
-            cp.value(arch), cp.isSet(dbg), cp.isSet(cdeclRet), outPath, cp.values(libs) );
+            cp.isSet(eigen) || cp.isSet(arch), cp.value(arch), cp.isSet(dbg), cp.isSet(cdeclRet), cp.isSet(aapcs), outPath, cp.values(libs) );
 
     return 0;
 }

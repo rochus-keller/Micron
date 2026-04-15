@@ -780,12 +780,11 @@ void Ide::createMenuBar()
 
     pop = new Gui::AutoMenu( tr("Build && Run"), this );
     pop->addCommand( "Check Syntax", this, SLOT(onParse()), tr("CTRL+T"), false );
-    pop->addCommand( "Show dependency order...", this, SLOT(onShowDepOrder()) );
     pop->addCommand( "Compile", this, SLOT(onCompile()), tr("CTRL+B"), false );
     pop->addCommand( "Suppress Warnings", this, SLOT(onNoWarnings()) );
-    //pop->addCommand( "Incremental Build (alpha!)", this, SLOT(onIncremental()) );
     pop->addCommand( "Set Command...", this, SLOT(onSetRunCommand()) );
     pop->addCommand( "Set Input File...", this, SLOT(onSetInputFile()) );
+    pop->addCommand( "Show dependency order...", this, SLOT(onShowDepOrder()) );
     pop->addSeparator();
     pop->addCommand( "Export MIL...", this, SLOT(onExportMil()) );
     pop->addCommand( "Export low-level bytecode...", this, SLOT(onExportLl()) );
@@ -3050,7 +3049,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.07");
+    a.setApplicationVersion("0.4.08");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

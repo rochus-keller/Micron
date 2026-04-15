@@ -140,3 +140,113 @@ void MIC$$free(void* ptr)
 {
     free(ptr);
 }
+
+
+// intrinsics
+
+int __mic$div_i4(int a, int b)
+{
+    return a / b;
+}
+
+unsigned int __mic$div_un_i4(unsigned int a, unsigned int b)
+{
+    return a / b;
+}
+
+int __mic$rem_i4(int a, int b)
+{
+    return a % b;
+}
+
+unsigned int __mic$rem_un_i4(unsigned int a, unsigned int b)
+{
+    return a % b;
+}
+
+// Helper function to perform 64-bit division without gcc intrinsics
+static void udivmod64(uint64_t num, uint64_t den, uint64_t *quot, uint64_t *rem)
+{
+    // Fast path: If both numbers fit in 32 bits, use native 32-bit hardware math.
+    // This will naturally fall back to your _i4 functions or native instructions.
+    if ((num >> 32) == 0 && (den >> 32) == 0) {
+        if (den == 0) {
+            // Intentionally trigger a standard 32-bit divide-by-zero hardware trap
+            *quot = (uint32_t)num / (uint32_t)den;
+            *rem = 0;
+            return;
+        }
+        *quot = (uint32_t)num / (uint32_t)den;
+        *rem  = (uint32_t)num % (uint32_t)den;
+        return;
+    }
+
+    // Software binary long division
+    uint64_t q = 0;
+    uint64_t r = 0;
+
+    for (int i = 63; i >= 0; i--) {
+        // Shift remainder left by 1 and bring down the next bit of the numerator
+        r = (r << 1) | ((num >> i) & 1);
+
+        // If remainder is greater than or equal to denominator, subtract and set quotient bit
+        if (r >= den) {
+            r -= den;
+            q |= (1ULL << i);
+        }
+    }
+
+    *quot = q;
+    *rem = r;
+}
+
+uint64_t __mic$div_un_i8(uint64_t a, uint64_t b)
+{
+    uint64_t q, r;
+    udivmod64(a, b, &q, &r);
+    return q;
+}
+
+uint64_t __mic$rem_un_i8(uint64_t a, uint64_t b)
+{
+    uint64_t q, r;
+    udivmod64(a, b, &q, &r);
+    return r;
+}
+
+int64_t __mic$div_i8(int64_t a, int64_t b)
+{
+    int neg_a = a < 0;
+    int neg_b = b < 0;
+
+    // Cast to unsigned before negating to safely handle INT64_MIN
+    uint64_t ua = neg_a ? -(uint64_t)a : (uint64_t)a;
+    uint64_t ub = neg_b ? -(uint64_t)b : (uint64_t)b;
+
+    uint64_t q, r;
+    udivmod64(ua, ub, &q, &r);
+
+    // Apply sign to quotient
+    if (neg_a != neg_b) {
+        return -(int64_t)q;
+    }
+    return (int64_t)q;
+}
+
+int64_t __mic$rem_i8(int64_t a, int64_t b)
+{
+    int neg_a = a < 0;
+    int neg_b = b < 0;
+
+    uint64_t ua = neg_a ? -(uint64_t)a : (uint64_t)a;
+    uint64_t ub = neg_b ? -(uint64_t)b : (uint64_t)b;
+
+    uint64_t q, r;
+    udivmod64(ua, ub, &q, &r);
+
+    // In C, the remainder takes the sign of the dividend (a)
+    if (neg_a) {
+        return -(int64_t)r;
+    }
+    return (int64_t)r;
+}
