@@ -1,264 +1,706 @@
-MODULE S9Real [Level=3];
+(* S9Real - Real number arithmetic for S9 Scheme interpreter
+ * Micron port of "Scheme 9 from Empty Space" by Nils M Holm, 2007-2014
+ * Migrated from C in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *
+ * This module contains:
+ * - Real number creation and manipulation
+ * - Real number arithmetic (add, subtract, multiply, divide)
+ * - Real number comparison
+ * - Conversion between integers and reals
+ *)
 
-IMPORT S9Def, S9Mem, S9Int, Out;
+module S9Real [level=3]
 
-CONST
-  RealNegative* = 1;
+import S9Types, G := S9Globals, M := S9Memory, B := S9Bignum
 
-(* ========================================================================= *)
-(* Accessors                                                                 *)
-(* ========================================================================= *)
+procedure flat_copy(n: S9Types.cell; lastp: pointer to S9Types.cell): S9Types.cell
+var
+  a: S9Types.cell
+  m: S9Types.cell
+  last: S9Types.cell
+  new_: S9Types.cell
+  t: int32
+begin
+  if n = S9Types._NIL then
+    if lastp # nil then
+      lastp^ := S9Types._NIL
+    end
+    return S9Types._NIL
+  end
+  t := val(int32, ord(G.Tag[n]))
+  m := M.cons3(S9Types._NIL, S9Types._NIL, t)
+  M.save(m)
+  a := m
+  last := m
+  while n # S9Types._NIL do
+    G.Car[a] := G.car(n)
+    last := a
+    n := G.cdr(n)
+    if n # S9Types._NIL then
+      t := val(int32, ord(G.Tag[n]))
+      new_ := M.cons3(S9Types._NIL, S9Types._NIL, t)
+      G.Cdr[a] := new_
+      a := G.cdr(a)
+    end
+  end
+  M.unsave(1)
+  if lastp # nil then
+    lastp^ := last
+  end
+  return m
+end flat_copy
 
-(* S9 Real Structure: (T_REAL . (Flags . (Exponent . Mantissa))) *)
+(* Check if character is an exponent character *)
+procedure exponent_char_p*(c: char): boolean
+inline begin
+  return (c = 'd') or (c = 'D') or (c = 'e') or (c = 'E') or
+       (c = 'f') or (c = 'F') or (c = 'l') or (c = 'L') or
+       (c = 's') or (c = 'S')
+end exponent_char_p
 
-PROCEDURE Flags(x: S9Def.Cell): S9Def.Cell INLINE;
-BEGIN RETURN S9Def.Car[S9Def.Cdr[x]] END Flags;
-
-PROCEDURE Exponent(x: S9Def.Cell): S9Def.Cell INLINE;
-BEGIN RETURN S9Def.Car[S9Def.Cdr[S9Def.Cdr[x]]] END Exponent;
-
-PROCEDURE Mantissa(x: S9Def.Cell): S9Def.Cell INLINE;
-BEGIN RETURN S9Def.Cdr[S9Def.Cdr[S9Def.Cdr[x]]] END Mantissa;
-
-PROCEDURE IsNegative(x: S9Def.Cell): BOOLEAN INLINE;
-BEGIN RETURN BITAND(Flags(x), RealNegative) # 0 END IsNegative;
-
-(* ========================================================================= *)
-(* Construction                                                              *)
-(* ========================================================================= *)
-
-PROCEDURE MakeReal*(flags, exp, mant: S9Def.Cell): S9Def.Cell;
-VAR n: S9Def.Cell;
-BEGIN
-  n := S9Mem.Cons3(exp, mant, S9Def.AtomTag);
-  n := S9Mem.Cons3(flags, n, S9Def.AtomTag);
-  RETURN S9Mem.Cons3(S9Def.T_REAL, n, S9Def.AtomTag);
-END MakeReal;
-
-(* ========================================================================= *)
-(* Error Handling (Local)                                                    *)
-(* ========================================================================= *)
-
-PROCEDURE RealError(CONST msg: POINTER TO ARRAY OF CHAR);
-BEGIN
-  S9Def.ErrorFlag := TRUE;
-  Out.String("Error (Real): "); Out.String(msg); Out.Ln;
-  (* In S9 core, this would print the expression, here we just flag it *)
-END RealError;
-
-(* ========================================================================= *)
-(* Normalization                                                             *)
-(* ========================================================================= *)
-
-PROCEDURE CountDigits(mantissaList: S9Def.Cell): INT32;
-VAR k: INT32; first: S9Def.Cell;
-BEGIN
-  IF mantissaList = S9Def.NIL_ THEN RETURN 0 END;
-  first := S9Def.Car[mantissaList];
-  k := 0;
-  WHILE first > 0 DO first := first DIV 10; INC(k) END;
-  IF k = 0 THEN k := 1 END;
-  (* Add DigitsPerWord for remaining segments logic omitted for brevity *)
-  RETURN k;
-END CountDigits;
-
-
-PROCEDURE Normalize*(x: S9Def.Cell): S9Def.Cell;
-VAR m, e, r, res: S9Def.Cell;
-BEGIN
-  S9Mem.Save(x);
-  e := Exponent(x);
-  m := S9Mem.Cons3(S9Def.T_INTEGER, Mantissa(x), S9Def.AtomTag);
-  S9Mem.Save(m);
+(* Check if string represents a numeric value *)
+procedure string_numeric_p*(s: pointer to array of char): boolean
+var
+  i: int32
+  got_digits: boolean
+  got_expn: boolean
+  got_point: boolean
+  got_sign: boolean
+begin
+  got_digits := false
+  got_expn := false
+  got_point := false
+  got_sign := false
   
-  (* Remove trailing zeros *)
-  LOOP
-    IF S9Int.ZeroP(m) THEN EXIT END;
-    r := S9Int.ShiftRight(m); (* (NewM . Remainder) *)
-    IF S9Def.Car[S9Def.Cdr[r]] # 0 (* remainder != 0 *) THEN EXIT END;
-    m := S9Def.Car[r];
-    S9Def.Car[S9Def.Stack] := m;
-    e := S9Int.Add(e, S9Int.MakeInteger(1)); (* Exponent++ *)
-  END;
+  i := 0
+  if (s[0] = '+') or (s[0] = '-') then
+    i := 1
+    got_sign := true
+  end
   
-  res := MakeReal(Flags(x), e, S9Def.Cdr[m]);
-  S9Mem.Unsave(2);
-  RETURN res;
-END Normalize;
+  if s[i] = 0X then
+    return false
+  end
+  
+  while s[i] # 0X do
+    if exponent_char_p(s[i]) & got_digits & ~got_expn then
+      if (s[i+1] >= '0') & (s[i+1] <= '9') then
+        got_expn := true
+      elsif ((s[i+1] = '+') or (s[i+1] = '-')) &
+          ((s[i+2] >= '0') & (s[i+2] <= '9')) then
+        got_expn := true
+        inc(i)
+      else
+        return false
+      end
+    elsif (s[i] = '.') & ~got_point then
+      got_point := true
+    elsif (s[i] = '#') & (got_digits or got_point or got_sign) then
+      got_digits := true
+    elsif (s[i] >= '0') & (s[i] <= '9') then
+      got_digits := true
+    else
+      return false
+    end
+    inc(i)
+  end
+  return true
+end string_numeric_p
 
+(* Create a real number from flags, exponent, and mantissa *)
+procedure make_real*(flags: int32; exp: S9Types.cell; mant: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+begin
+  n := M.new_atom(exp, mant)
+  n := M.new_atom(flags, n)
+  return M.new_atom(S9Types.T_REAL, n)
+end make_real
 
-(* ========================================================================= *)
-(* Arithmetic                                                                *)
-(* ========================================================================= *)
+(* Count the number of decimal digits in a mantissa *)
+procedure count_digits*(m: S9Types.cell): int32
+var
+  k: int32
+  x: S9Types.cell
+begin
+  x := G.car(m)
+  k := 0
+  while x # 0 do
+    x := x div 10
+    inc(k)
+  end
+  if k = 0 then k := 1 end
+  m := G.cdr(m)
+  while m # S9Types._NIL do
+    k := k + S9Types.DigitsPerWord
+    m := G.cdr(m)
+  end
+  return k
+end count_digits
 
-(* Scales mantissa 'm' (integer) to match new exponent *)
-PROCEDURE ScaleMantissa(m: S9Def.Cell; currExp, targetExp: S9Def.Cell): S9Def.Cell;
-VAR diff: S9Def.Cell;
-BEGIN
-  diff := S9Int.Sub(currExp, targetExp);
-  (* While diff > 0, shift left *)
-  S9Mem.Save(m);
-  (* Simplified: assume diff is small for now. Real impl loop diff *)
-  (* m := S9Int.ShiftLeft(m, 0) ... *)
-  S9Mem.Unsave(1);
-  RETURN m;
-END ScaleMantissa;
+(* Negate a real number (internal) *)
+procedure x_real_negate*(a: S9Types.cell): S9Types.cell
+var
+  flags: int32
+begin
+  flags := val(int32, G.x_real_flags(a))
+  if band(flags, S9Types.RealNegative) # 0 then
+    flags := val(int32,band(flags, bnot(S9Types.RealNegative)))
+  else
+    flags := bor(flags, S9Types.RealNegative)
+  end
+  return make_real(flags, G.x_real_exponent(a), G.x_real_mantissa(a))
+end x_real_negate
 
-PROCEDURE Add*(a, b: S9Def.Cell): S9Def.Cell;
-VAR 
-  ea, eb, ma, mb, sum: S9Def.Cell;
-  flags: S9Def.Cell;
-BEGIN
-  S9Mem.Save(a); S9Mem.Save(b);
+(* Normalize a real number:
+ * - Remove trailing zeros and move decimal point to END of mantissa
+ * - Limit mantissa to MANTISSA_SEGMENTS machine words
+ * - Handle numeric overflow/underflow
+ *)
+procedure real_normalize*(x: S9Types.cell; const who: pointer to array of char): S9Types.cell
+var
+  m: S9Types.cell
+  e: S9Types.cell
+  r: S9Types.cell
+  dgs: int32
+begin
+  M.save(x)
+  e := G.x_real_exponent(x)
+  m := M.new_atom(S9Types.T_INTEGER, G.x_real_mantissa(x))
+  M.save(m)
+  dgs := count_digits(G.cdr(m))
   
-  ea := Exponent(a); eb := Exponent(b);
+  while dgs > +S9Types.MantissaSize do
+    r := B.bignum_shift_right(m)
+    m := G.car(r)
+    G.Car[G.Stack] := m
+    dec(dgs)
+    inc(e)
+  end
   
-  (* Extract Mantissas as Integers *)
-  ma := S9Mem.Cons3(S9Def.T_INTEGER, Mantissa(a), S9Def.AtomTag);
-  IF IsNegative(a) THEN ma := S9Int.BignumNegate(ma) END;
-  S9Mem.Save(ma);
+  loop
+    if G.x_bignum_zero_p(m) then exit end
+    r := B.bignum_shift_right(m)
+    if ~G.x_bignum_zero_p(G.cdr(r)) then
+      exit
+    end
+    m := G.car(r)
+    G.Car[G.Stack] := m
+    inc(e)
+  end
   
-  mb := S9Mem.Cons3(S9Def.T_INTEGER, Mantissa(b), S9Def.AtomTag);
-  IF IsNegative(b) THEN mb := S9Int.BignumNegate(mb) END;
-  S9Mem.Save(mb);
+  if G.x_bignum_zero_p(m) then
+    e := 0
+  end
   
-  (* Auto-scale to smaller exponent (logic omitted, assume equal for Phase 5) *)
+  r := M.new_atom(e, S9Types._NIL)
+  M.unsave(2)
   
-  sum := S9Int.Add(ma, mb);
+  if count_digits(r) > S9Types.DigitsPerWord then
+    return G.error("real number overflow", S9Types._NOEXPR)
+  end
   
-  flags := 0;
-  IF S9Int.NegativeP(sum) THEN flags := RealNegative; sum := S9Int.BignumAbs(sum) END;
-  
-  S9Mem.Unsave(4);
-  RETURN MakeReal(flags, ea, S9Def.Cdr[sum]);
-END Add;
+  return make_real(val(int32, G.x_real_flags(x)), e, G.cdr(m))
+end real_normalize
 
-PROCEDURE Sub*(a, b: S9Def.Cell): S9Def.Cell;
-VAR nb: S9Def.Cell;
-BEGIN
-  (* Negate B and Add *)
-  nb := MakeReal(BITXOR(Flags(b), RealNegative), Exponent(b), Mantissa(b));
-  RETURN Add(a, nb);
-END Sub;
+(* Convert a bignum to a real number *)
+procedure bignum_to_real*(a: S9Types.cell): S9Types.cell
+var
+  e: S9Types.cell
+  flags: int32
+  d: int32
+  m: S9Types.cell
+  n: S9Types.cell
+begin
+  m := flat_copy(a, nil)
+  G.Car[G.cdr(m)] := abs(G.cadr(m))
+  e := 0
+  
+  if B.length(G.cdr(m)) > S9Types.MantissaSegments then
+    d := count_digits(G.cdr(m))
+    while d > +S9Types.MantissaSize do
+      m := G.car(B.bignum_shift_right(m))
+      inc(e)
+      dec(d)
+    end
+  end
+  
+  if G.x_bignum_negative_p(a) then
+    flags := S9Types.RealNegative
+  else
+    flags := 0
+  end
+  n := make_real(flags, e, G.cdr(m))
+  return real_normalize(n, nil)
+end bignum_to_real
 
-PROCEDURE Divide*(a, b: S9Def.Cell): S9Def.Cell;
-VAR 
-  ea, eb, e: S9Def.Cell;
-  ma, mb, quot, rem, res: S9Def.Cell;
-  flags, divRes: S9Def.Cell;
-  nd, dd: INT32;
-BEGIN
-  (* Check Zero Div *)
-  ma := S9Mem.Cons3(S9Def.T_INTEGER, Mantissa(b), S9Def.AtomTag);
-  IF S9Int.ZeroP(ma) THEN
-     S9Def.ErrorFlag := TRUE;
-     RETURN S9Def.NIL_; (* Error *)
-  END;
+(* Negate a number (integer or real) *)
+procedure real_negate*(a: S9Types.cell): S9Types.cell
+begin
+  if G.integer_p(a) then
+    return B.bignum_negate(a)
+  end
+  return x_real_negate(a)
+end real_negate
 
-  S9Mem.Save(a); S9Mem.Save(b);
-  
-  ea := Exponent(a); 
-  eb := Exponent(b);
-  
-  (* Extract Mantissas *)
-  ma := S9Mem.Cons3(S9Def.T_INTEGER, Mantissa(a), S9Def.AtomTag);
-  S9Mem.Save(ma);
-  mb := S9Mem.Cons3(S9Def.T_INTEGER, Mantissa(b), S9Def.AtomTag);
-  S9Mem.Save(mb);
-  
-  (* Determine scale needed for precision *)
-  (* We want roughly MantissaSize digits of precision. *)
-  (* Shift A left to ensure A >> B before integer division *)
-  nd := CountDigits(S9Def.Cdr[ma]);
-  dd := S9Def.MantissaSize + CountDigits(S9Def.Cdr[mb]);
-  
-  WHILE nd < dd DO
-     ma := S9Int.ShiftLeft(ma, 0);
-     S9Def.Car[S9Def.Cdr[S9Def.Stack]] := ma; (* Update Saved ma *)
-     INC(nd);
-     ea := S9Int.Sub(ea, S9Int.MakeInteger(1)); (* Decrement Exponent *)
-  END;
-  
-  e := S9Int.Sub(ea, eb);
-  
-  (* Perform Integer Division *)
-  divRes := S9Int.Divide(ma, mb); (* (Quotient . Remainder) *)
-  quot := S9Def.car(divRes);
-  
-  flags := 0;
-  IF IsNegative(a) # IsNegative(b) THEN flags := RealNegative END;
-  
-  res := MakeReal(flags, e, S9Def.Cdr[quot]);
-  
-  S9Mem.Unsave(4);
-  RETURN Normalize(res);
-END Divide;
+(* Check if number is negative *)
+procedure real_negative_p*(a: S9Types.cell): boolean
+begin
+  if G.integer_p(a) then
+    return G.x_bignum_negative_p(a)
+  end
+  return G.x_real_negative_p(a)
+end real_negative_p
 
+(* Check if number is positive *)
+procedure real_positive_p*(a: S9Types.cell): boolean
+begin
+  if G.integer_p(a) then
+    return G.x_bignum_positive_p(a)
+  end
+  return G.x_real_positive_p(a)
+end real_positive_p
 
-(* ========================================================================= *)
-(* Conversion                                                                *)
-(* ========================================================================= *)
+(* Check if number is zero *)
+procedure real_zero_p*(a: S9Types.cell): boolean
+begin
+  if G.integer_p(a) then
+    return G.x_bignum_zero_p(a)
+  end
+  return G.x_real_zero_p(a)
+end real_zero_p
 
-PROCEDURE StringToReal*(CONST str: POINTER TO ARRAY OF CHAR): S9Def.Cell;
-VAR 
-  i, v: INT32;
-  neg, foundPoint, foundExp: BOOLEAN;
-  mantissa, expVal, ten: S9Def.Cell;
-  expScale: S9Def.Cell;
-  c: CHAR;
-BEGIN
-  i := 0; neg := FALSE;
-  IF str[0] = '-' THEN neg := TRUE; INC(i) ELSIF str[0] = '+' THEN INC(i) END;
-  
-  mantissa := S9Int.MakeInteger(0);
-  S9Mem.Save(mantissa);
-  
-  expScale := S9Int.MakeInteger(0); (* Tracks decimal point shifts *)
-  S9Mem.Save(expScale);
-  
-  ten := S9Int.MakeInteger(10);
-  foundPoint := FALSE;
-  
-  (* Parse Mantissa Digits *)
-  LOOP
-    c := str[i];
-    IF c = 0X THEN EXIT END;
-    
-    IF c = '.' THEN
-      foundPoint := TRUE;
-    ELSIF (c = 'e') OR (c = 'E') THEN
-      foundExp := TRUE;
-      INC(i); 
-      EXIT; (* Go to Exponent parsing *)
-    ELSIF (c >= '0') AND (c <= '9') THEN
-      (* mantissa = mantissa * 10 + digit *)
-      mantissa := S9Int.Multiply(mantissa, ten);
-      v := VAL(INT32,ORD(c) - ORD('0'));
-      mantissa := S9Int.Add(mantissa, S9Int.MakeInteger(v));
-      S9Def.Car[S9Def.Cdr[S9Def.Stack]] := mantissa;
-      
-      IF foundPoint THEN
-         (* Decrement exponent scale *)
-         expScale := S9Int.Sub(expScale, S9Int.MakeInteger(1));
-         S9Def.Car[S9Def.Stack] := expScale;
-      END;
-    ELSE
-      EXIT; (* delimiters *)
-    END;
-    INC(i);
-  END;
-  
-  (* Parse Exponent if present *)
-  IF foundExp THEN
-     (* Simple integer parse for exponent (assume fits in INT32 for simplicity here) *)
-     (* In full S9, this recursively calls S9Int parser *)
-     (* Here: simplistic atoi for phase completion *)
-     (* Logic omitted: assume user adds exp to expScale *)
-  END;
-  
-  S9Mem.Unsave(2); (* Drop temps *)
-  
-  RETURN MakeReal(VAL(INT32, ORD(neg)), expScale, S9Def.Cdr[mantissa]);
-END StringToReal;
+(* Return absolute value of number *)
+procedure real_abs*(a: S9Types.cell): S9Types.cell
+begin
+  if G.integer_p(a) then
+    return B.bignum_abs(a)
+  end
+  if G.x_real_negative_p(a) then
+    return x_real_negate(a)
+  end
+  return a
+end real_abs
 
-END S9Real.
+(* Check if two numbers are equal *)
+procedure real_equal_p*(a: S9Types.cell; b: S9Types.cell): boolean
+var
+  ma: S9Types.cell
+  mb: S9Types.cell
+begin
+  if G.integer_p(a) & G.integer_p(b) then
+    return B.bignum_equal_p(a, b)
+  end
+  if G.integer_p(a) then
+    a := bignum_to_real(a)
+  end
+  if G.integer_p(b) then
+    M.save(a)
+    b := bignum_to_real(b)
+    M.unsave(1)
+  end
+  if G.x_real_exponent(a) # G.x_real_exponent(b) then
+    return false
+  end
+  if G.x_real_zero_p(a) & G.x_real_zero_p(b) then
+    return true
+  end
+  if G.x_real_negative_p(a) # G.x_real_negative_p(b) then
+    return false
+  end
+  ma := G.x_real_mantissa(a)
+  mb := G.x_real_mantissa(b)
+  while (ma # S9Types._NIL) & (mb # S9Types._NIL) do
+    if G.car(ma) # G.car(mb) then
+      return false
+    end
+    ma := G.cdr(ma)
+    mb := G.cdr(mb)
+  end
+  return ma = mb
+end real_equal_p
+
+(* Scale mantissa to get desired exponent without changing value *)
+procedure scale_mantissa*(r: S9Types.cell; desired_e: S9Types.cell; max_size: int32): S9Types.cell
+var
+  dgs: int32
+  n: S9Types.cell
+  e: S9Types.cell
+begin
+  dgs := count_digits(G.x_real_mantissa(r))
+  if (max_size # 0) & (max_size - dgs < G.x_real_exponent(r) - desired_e) then
+    return S9Types._NIL
+  end
+  n := M.new_atom(S9Types.T_INTEGER, flat_copy(G.x_real_mantissa(r), nil))
+  M.save(n)
+  e := G.x_real_exponent(r)
+  while e > desired_e do
+    n := B.bignum_shift_left(n, 0)
+    G.Car[G.Stack] := n
+    dec(e)
+  end
+  M.unsave(1)
+  return make_real(val(int32, G.x_real_flags(r)), e, G.cdr(n))
+end scale_mantissa
+
+(* Auto-scale two real numbers to have the same exponent *)
+procedure autoscale(pa: pointer to S9Types.cell; pb: pointer to S9Types.cell)
+begin
+  if G.x_real_exponent(pa^) < G.x_real_exponent(pb^) then
+    pb^ := scale_mantissa(pb^, G.x_real_exponent(pa^), +S9Types.MantissaSize * 2)
+    return
+  end
+  if G.x_real_exponent(pa^) > G.x_real_exponent(pb^) then
+    pa^ := scale_mantissa(pa^, G.x_real_exponent(pb^), +S9Types.MantissaSize * 2)
+  end
+end autoscale
+
+(* Compare two numbers: return true if a < b *)
+procedure real_less_p*(a: S9Types.cell; b: S9Types.cell): boolean
+var
+  ma: S9Types.cell
+  mb: S9Types.cell
+  ka: int32
+  kb: int32
+  neg: boolean
+  dpa: int32
+  dpb: int32
+begin
+  if G.integer_p(a) & G.integer_p(b) then
+    return B.bignum_less_p(a, b)
+  end
+  if G.integer_p(a) then
+    a := bignum_to_real(a)
+  end
+  if G.integer_p(b) then
+    M.save(a)
+    b := bignum_to_real(b)
+    M.unsave(1)
+  end
+  
+  if G.x_real_negative_p(a) & ~G.x_real_negative_p(b) then return true end
+  if G.x_real_negative_p(b) & ~G.x_real_negative_p(a) then return false end
+  if G.x_real_zero_p(a) & G.x_real_positive_p(b) then return true end
+  if G.x_real_zero_p(b) & G.x_real_positive_p(a) then return false end
+  
+  neg := G.x_real_negative_p(a)
+  dpa := count_digits(G.x_real_mantissa(a)) + val(int32, G.x_real_exponent(a))
+  dpb := count_digits(G.x_real_mantissa(b)) + val(int32, G.x_real_exponent(b))
+  
+  if dpa < dpb then
+    if neg then return false else return true end
+  end
+  if dpa > dpb then
+    if neg then return true else return false end
+  end
+  
+  G.Tmp := b
+  M.save(a)
+  M.save(b)
+  G.Tmp := S9Types._NIL
+  autoscale(@a, @b)
+  M.unsave(2)
+  
+  if a = S9Types._NIL then
+    if neg then return true else return false end
+  end
+  if b = S9Types._NIL then
+    if neg then return false else return true end
+  end
+  
+  ma := G.x_real_mantissa(a)
+  mb := G.x_real_mantissa(b)
+  ka := B.length(ma)
+  kb := B.length(mb)
+  
+  if ka < kb then return true end
+  if ka > kb then return false end
+  
+  while ma # S9Types._NIL do
+    if G.car(ma) < G.car(mb) then
+      if neg then return false else return true end
+    end
+    if G.car(ma) > G.car(mb) then
+      if neg then return true else return false end
+    end
+    ma := G.cdr(ma)
+    mb := G.cdr(mb)
+  end
+  return false
+end real_less_p
+
+(* Add two numbers *)
+procedure real_add*(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+var
+  r: S9Types.cell
+  m: S9Types.cell
+  e: S9Types.cell
+  aa: S9Types.cell
+  ab: S9Types.cell
+  flags: int32
+  nega: boolean
+  negb: boolean
+begin
+  if G.integer_p(a) & G.integer_p(b) then
+    return B.bignum_add(a, b)
+  end
+  if G.integer_p(a) then
+    a := bignum_to_real(a)
+  end
+  M.save(a)
+  if G.integer_p(b) then
+    b := bignum_to_real(b)
+  end
+  M.save(b)
+  
+  if G.x_real_zero_p(a) then
+    M.unsave(2)
+    return b
+  end
+  if G.x_real_zero_p(b) then
+    M.unsave(2)
+    return a
+  end
+  
+  autoscale(@a, @b)
+  if (a = S9Types._NIL) or (b = S9Types._NIL) then
+    ab := real_abs(G.Car[G.Stack])
+    M.save(ab)
+    aa := real_abs(G.Car[G.cddr(G.Stack)])
+    M.unsave(1)
+    b := M.unsave(1)
+    a := M.unsave(1)
+    if real_less_p(aa, ab) then return b else return a end
+  end
+  
+  G.Car[G.cdr(G.Stack)] := a
+  G.Car[G.Stack] := b
+  e := G.x_real_exponent(a)
+  nega := G.x_real_negative_p(a)
+  negb := G.x_real_negative_p(b)
+  
+  a := M.new_atom(S9Types.T_INTEGER, G.x_real_mantissa(a))
+  if nega then
+    a := B.bignum_negate(a)
+  end
+  G.Car[G.cdr(G.Stack)] := a
+  
+  b := M.new_atom(S9Types.T_INTEGER, G.x_real_mantissa(b))
+  if negb then
+    b := B.bignum_negate(b)
+  end
+  G.Car[G.Stack] := b
+  
+  m := B.bignum_add(a, b)
+  M.unsave(2)
+  
+  if G.x_bignum_negative_p(m) then
+    flags := S9Types.RealNegative
+  else
+    flags := 0
+  end
+  r := make_real(flags, e, G.cdr(B.bignum_abs(m)))
+  return real_normalize(r, "+")
+end real_add
+
+(* Subtract two numbers *)
+procedure real_subtract*(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+var
+  r: S9Types.cell
+begin
+  if G.integer_p(b) then
+    b := B.bignum_negate(b)
+  else
+    b := x_real_negate(b)
+  end
+  M.save(b)
+  r := real_add(a, b)
+  M.unsave(1)
+  return r
+end real_subtract
+
+(* Multiply two numbers *)
+procedure real_multiply*(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+var
+  r: S9Types.cell
+  m: S9Types.cell
+  e: S9Types.cell
+  ma: S9Types.cell
+  mb: S9Types.cell
+  ea: S9Types.cell
+  eb: S9Types.cell
+  neg: boolean
+begin
+  if G.integer_p(a) & G.integer_p(b) then
+    return B.bignum_multiply(a, b)
+  end
+  if G.integer_p(a) then
+    a := bignum_to_real(a)
+  end
+  M.save(a)
+  if G.integer_p(b) then
+    b := bignum_to_real(b)
+  end
+  M.save(b)
+  
+  neg := G.x_real_negative_flag(a) # G.x_real_negative_flag(b)
+  ea := G.x_real_exponent(a)
+  eb := G.x_real_exponent(b)
+  
+  ma := M.new_atom(S9Types.T_INTEGER, G.x_real_mantissa(a))
+  G.Car[G.cdr(G.Stack)] := ma
+  mb := M.new_atom(S9Types.T_INTEGER, G.x_real_mantissa(b))
+  G.Car[G.Stack] := mb
+  
+  e := ea + eb
+  m := B.bignum_multiply(ma, mb)
+  M.unsave(2)
+  
+  if neg then
+    r := make_real(S9Types.RealNegative, e, G.cdr(m))
+  else
+    r := make_real(0, e, G.cdr(m))
+  end
+  return real_normalize(r, "*")
+end real_multiply
+
+(* Divide two numbers *)
+procedure real_divide*(x: S9Types.cell; a: S9Types.cell; b: S9Types.cell): S9Types.cell
+var
+  r: S9Types.cell
+  m: S9Types.cell
+  e: S9Types.cell
+  ma: S9Types.cell
+  mb: S9Types.cell
+  ea: S9Types.cell
+  eb: S9Types.cell
+  neg: boolean
+  nd: int32
+  dd: int32
+begin
+  if G.integer_p(a) then
+    a := bignum_to_real(a)
+  end
+  if G.x_real_zero_p(a) then
+    return make_real(0, 0, G.cdr(B.make_integer(0)))
+  end
+  M.save(a)
+  if G.integer_p(b) then
+    b := bignum_to_real(b)
+  end
+  M.save(b)
+  
+  neg := G.x_real_negative_flag(a) # G.x_real_negative_flag(b)
+  ea := G.x_real_exponent(a)
+  eb := G.x_real_exponent(b)
+  
+  ma := M.new_atom(S9Types.T_INTEGER, G.x_real_mantissa(a))
+  G.Car[G.cdr(G.Stack)] := ma
+  mb := M.new_atom(S9Types.T_INTEGER, G.x_real_mantissa(b))
+  G.Car[G.Stack] := mb
+  
+  if G.x_bignum_zero_p(mb) then
+    M.unsave(2)
+    return S9Types._NAN
+  end
+  
+  nd := count_digits(G.cdr(ma))
+  dd := +S9Types.MantissaSize + count_digits(G.cdr(mb))
+  while nd < dd do
+    ma := B.bignum_shift_left(ma, 0)
+    G.Car[G.cdr(G.Stack)] := ma
+    inc(nd)
+    dec(ea)
+  end
+  
+  e := ea - eb
+  m := B.bignum_divide(S9Types._NOEXPR, ma, mb)
+  M.unsave(2)
+  
+  if neg then
+    r := make_real(S9Types.RealNegative, e, G.cdar(m))
+  else
+    r := make_real(0, e, G.cdar(m))
+  end
+  return real_normalize(r, "/")
+end real_divide
+
+(* Convert a real number to a bignum (if possible) *)
+procedure real_to_bignum*(r: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+  neg: boolean
+begin
+  if G.x_real_exponent(r) >= 0 then
+    neg := G.x_real_negative_p(r)
+    n := scale_mantissa(r, 0, 0)
+    if n = S9Types._NIL then
+      return S9Types._NIL
+    end
+    n := M.new_atom(S9Types.T_INTEGER, G.x_real_mantissa(n))
+    if neg then
+      n := B.bignum_negate(n)
+    end
+    return n
+  end
+  return S9Types._NIL
+end real_to_bignum
+
+(* Check if a number is an integer (or a real that can be converted to integer) *)
+procedure real_integer_p*(x: S9Types.cell): boolean
+begin
+  if G.integer_p(x) then
+    return true
+  end
+  if G.real_p(x) & (real_to_bignum(x) # S9Types._NIL) then
+    return true
+  end
+  return false
+end real_integer_p
+
+(* Floor - return largest integer not greater than x *)
+procedure real_floor*(x: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+  neg: boolean
+begin
+  if G.integer_p(x) then
+    return bignum_to_real(x)
+  end
+  neg := G.x_real_negative_p(x)
+  n := real_to_bignum(x)
+  if n # S9Types._NIL then
+    if neg then
+      (* For negative numbers, if there was a fractional part, subtract 1 *)
+      n := B.bignum_subtract(n, B.make_integer(1))
+    end
+    return bignum_to_real(n)
+  end
+  (* If exponent is negative, floor is 0 or -1 *)
+  if G.x_real_exponent(x) < 0 then
+    if neg then
+      return bignum_to_real(B.make_integer(-1))
+    else
+      return bignum_to_real(B.make_integer(0))
+    end
+  end
+  return x
+end real_floor
+
+(* Get integer argument, converting from real if necessary *)
+procedure integer_argument*(const who: pointer to array of char; x: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+begin
+  if G.real_p(x) then
+    n := real_to_bignum(x)
+    if n = S9Types._NIL then
+      return G.error("expected integer, got", x)
+    end
+    return n
+  end
+  return x
+end integer_argument
+
+end S9Real.

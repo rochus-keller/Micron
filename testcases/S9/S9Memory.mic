@@ -1,0 +1,530 @@
+(* S9Memory - Memory management for S9 Scheme interpreter
+ * Micron port of "Scheme 9 from Empty Space" by Nils M Holm, 2007-2014
+ * Migrated from C in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *
+ * This module contains:
+ * - Memory pool allocation (cons cells and vectors)
+ * - Garbage collection (mark and sweep with Deutsch/Schorr/Waite algorithm)
+ * - Cell allocation (cons3, new_vec)
+ * - Stack operations (save, unsave)
+ *)
+
+module S9Memory [level=3]
+
+import S9Types, G := S9Globals
+import Out, Files
+
+
+(* GC root array - pointers to global variables that need to be marked *)
+var
+  GC_root: array 32 of pointer to S9Types.cell
+  GC_root_count: int32
+
+  (* Statistics counters - simplified from C version *)
+  Run_stats: boolean
+  Verbose_GC: int32
+  Cons_stats: boolean
+
+  (* Counters for statistics *)
+  Collections: int64
+  Nodes: int64
+  Conses: int64
+
+(* Initialize GC roots *)
+procedure init_gc_roots*()
+begin
+  GC_root_count := 0
+  (* Add all global variables that need to be marked *)
+  GC_root[GC_root_count] := @G.Stack; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Stack_bottom; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.State_stack; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Tmp_car; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Tmp_cdr; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Tmp; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Symbols; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Program; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Environment; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Acc; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Apply_magic; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Callcc_magic; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.New; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.File_list; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.Trace_list; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_arrow; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_else; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_extensions; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_latest; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_library_path; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_loading; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_quasiquote; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_quote; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_unquote; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_unquote_splicing; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_and; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_begin; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_cond; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_define; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_define_syntax; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_if; inc(GC_root_count)
+  GC_root[GC_root_count] := @G.S_lambda; inc(GC_root_count)
+  (* Terminate with nil pointer - not needed in Micron but kept for clarity *)
+end init_gc_roots
+
+(* Allocate a new cons segment *)
+procedure new_cons_segment*()
+var
+  new_car: pointer to array of S9Types.cell
+  new_cdr: pointer to array of S9Types.cell
+  new_tag: pointer to array of char
+  new_size: int32
+  i: int32
+begin
+  new_size := G.Cons_pool_size + G.Cons_segment_size
+  
+  (* Allocate new arrays *)
+  new(new_car, new_size)
+  new(new_cdr, new_size)
+  new(new_tag, new_size)
+  
+  if (new_car = nil) or (new_cdr = nil) or (new_tag = nil) then
+    G.fatal("new_cons_segment: out of physical memory")
+    return
+  end
+  
+  (* Copy old data if exists *)
+  if G.Car # nil then
+    for i := 0 to G.Cons_pool_size - 1 do
+      new_car[i] := G.Car[i]
+      new_cdr[i] := G.Cdr[i]
+      new_tag[i] := G.Tag[i]
+    end
+    dispose(G.Car)
+    dispose(G.Cdr)
+    dispose(G.Tag)
+  end
+  
+  (* Initialize new portion *)
+  for i := G.Cons_pool_size to new_size - 1 do
+    new_car[i] := 0
+    new_cdr[i] := 0
+    new_tag[i] := 0X
+  end
+  
+  G.Car := new_car
+  G.Cdr := new_cdr
+  G.Tag := new_tag
+  G.Cons_pool_size := new_size
+  G.Cons_segment_size := G.Cons_segment_size * 3 div 2
+end new_cons_segment
+
+(* Allocate a new vector segment *)
+procedure new_vec_segment*()
+var
+  new_vecs: pointer to array of S9Types.cell
+  new_size: int32
+  i: int32
+begin
+  new_size := G.Vec_pool_size + G.Vec_segment_size
+  
+  new(new_vecs, new_size)
+  if new_vecs = nil then
+    G.fatal("new_vec_segment: out of physical memory")
+    return
+  end
+  
+  (* Copy old data if exists *)
+  if G.Vectors # nil then
+    for i := 0 to G.Vec_pool_size - 1 do
+      new_vecs[i] := G.Vectors[i]
+    end
+    dispose(G.Vectors)
+  end
+  
+  (* Initialize new portion *)
+  for i := G.Vec_pool_size to new_size - 1 do
+    new_vecs[i] := 0
+  end
+  
+  G.Vectors := new_vecs
+  G.Vec_pool_size := new_size
+  G.Vec_segment_size := G.Vec_segment_size * 3 div 2
+end new_vec_segment
+
+(* Mark nodes which can be accessed through N.
+ * Using the Deutsch/Schorr/Waite pointer reversal algorithm.
+ * S0: M==0, S==0, unvisited, process CAR (vectors: process 1st slot);
+ * S1: M==1, S==1, CAR visited, process CDR (vectors: process next slot);
+ * S2: M==1, S==0, completely visited, return to parent.
+ *)
+procedure mark*(n: S9Types.cell)
+var
+  p: S9Types.cell
+  parent: S9Types.cell
+  v, v1: pointer to S9Types.cell
+  i: int32
+begin
+  parent := S9Types._NIL
+  
+  loop
+    if G.special_value_p(n) or (band(ord(G.Tag[n]), S9Types.MarkTag) # 0) then
+      if parent = S9Types._NIL then
+        exit
+      end
+      
+      if band(ord(G.Tag[parent]), S9Types.VectorTag) # 0 then
+        (* S1 --> S1|done *)
+        i := val(int32, G.vector_index(parent))
+        v := G.vector(parent)
+        if (band(ord(G.Tag[parent]), S9Types.StateTag) # 0) &
+           (i + 1 < G.vector_len(parent)) then
+          (* S1 --> S1 *)
+          inc(v,i)
+          v1 := v
+          inc(v1,1)
+          p := v1^
+          v^ := n
+          n := p
+          G.Vectors[G.Cdr[parent] - 2] := i + 1
+        else
+          (* S1 --> done *)
+          p := parent
+          inc(v,i)
+          parent := v^
+          v^ := n
+          n := p
+        end
+      elsif band(ord(G.Tag[parent]), S9Types.StateTag) # 0 then
+        (* S1 --> S2 *)
+        p := G.Cdr[parent]
+        G.Cdr[parent] := G.Car[parent]
+        G.Car[parent] := n
+        G.Tag[parent] := chr(band(ord(G.Tag[parent]), bnot(S9Types.StateTag)))
+        G.Tag[parent] := chr(bor(ord(G.Tag[parent]), S9Types.MarkTag))
+        n := p
+      else
+        (* S2 --> done *)
+        p := parent
+        parent := G.Cdr[p]
+        G.Cdr[p] := n
+        n := p
+      end
+    else
+      if band(ord(G.Tag[n]), S9Types.VectorTag) # 0 then
+        (* S0 --> S1|S2 *)
+        G.Tag[n] := chr(bor(ord(G.Tag[n]), S9Types.MarkTag))
+        G.Vectors[G.Cdr[n] - 3] := n  (* vector_link *)
+        if (G.Car[n] = S9Types.T_VECTOR) & (G.vector_len(n) # 0) then
+          G.Tag[n] := chr(bor(ord(G.Tag[n]), S9Types.StateTag))
+          G.Vectors[G.Cdr[n] - 2] := 0  (* vector_index *)
+          v := G.vector(n)
+          p := v^
+          v^ := parent
+          parent := n
+          n := p
+        end
+      elsif band(ord(G.Tag[n]), S9Types.AtomTag) # 0 then
+        (* S0 --> S2 *)
+        if G.input_port_p(n) or G.output_port_p(n) then
+          G.Port_flags[G.port_no(n)] := chr(bor(ord(G.Port_flags[G.port_no(n)]), S9Types.UsedTag))
+        end
+        p := G.Cdr[n]
+        G.Cdr[n] := parent
+        parent := n
+        n := p
+        G.Tag[parent] := chr(bor(ord(G.Tag[parent]), S9Types.MarkTag))
+      else
+        (* S0 --> S1 *)
+        p := G.Car[n]
+        G.Car[n] := parent
+        G.Tag[n] := chr(bor(ord(G.Tag[n]), S9Types.MarkTag))
+        parent := n
+        n := p
+        G.Tag[parent] := chr(bor(ord(G.Tag[parent]), S9Types.StateTag))
+      end
+    end
+  end
+end mark
+
+(* Mark and sweep GC *)
+procedure gc*(): int32
+var
+  i: int32
+  k: int32
+begin
+  if Run_stats then
+    inc(Collections)
+  end
+  
+  (* Mark locked ports as used, clear others *)
+  for i := 0 to S9Types.MaxPorts - 1 do
+    if band(ord(G.Port_flags[i]), S9Types.LockTag) # 0 then
+      G.Port_flags[i] := chr(bor(ord(G.Port_flags[i]), S9Types.UsedTag))
+    else
+      G.Port_flags[i] := chr(band(ord(G.Port_flags[i]), bnot(S9Types.UsedTag)))
+    end
+  end
+  
+  (* Mark all reachable objects *)
+  for i := 0 to GC_root_count - 1 do
+    mark(GC_root[i]^)
+  end
+  
+  (* Sweep: collect unmarked cells into free list *)
+  k := 0
+  G.Free_list := S9Types._NIL
+  for i := 0 to G.Cons_pool_size - 1 do
+    if band(ord(G.Tag[i]), S9Types.MarkTag) = 0 then
+      G.Cdr[i] := G.Free_list
+      G.Free_list := i
+      inc(k)
+    else
+      G.Tag[i] := chr(band(ord(G.Tag[i]), bnot(S9Types.MarkTag)))
+    end
+  end
+  
+  (* Close unused ports *)
+  for i := 0 to S9Types.MaxPorts - 1 do
+    if (band(ord(G.Port_flags[i]), S9Types.UsedTag) = 0) & (G.Ports[i] # nil) then
+      Files.Close(G.Ports[i])
+      G.Ports[i] := nil
+    end
+  end
+  
+  if Verbose_GC > 1 then
+    Out.String("GC: ")
+    Out.Int(k, 0)
+    Out.String(" nodes reclaimed")
+    Out.Ln
+  end
+  
+  return k
+end gc
+
+(* Allocate a fresh node and initialize with pcar, pcdr, ptag *)
+procedure cons3*(pcar: S9Types.cell; pcdr: S9Types.cell; ptag: int32): S9Types.cell
+var
+  n: S9Types.cell
+  k: int32
+begin
+  if Run_stats then
+    inc(Nodes)
+    if Cons_stats then
+      inc(Conses)
+    end
+  end
+  
+  if G.Free_list = S9Types._NIL then
+    if ptag = 0 then
+      G.Tmp_car := pcar
+    end
+    if (ptag # S9Types.VectorTag) & (ptag # S9Types.PortTag) then
+      G.Tmp_cdr := pcdr
+    end
+    k := gc()
+    
+    (* Performance increases dramatically if we do not wait for the pool to run dry *)
+    if k < G.Cons_pool_size div 2 then
+      if (G.Memory_limit_kn # 0) & 
+         (G.Cons_pool_size + G.Cons_segment_size > G.Memory_limit_kn) then
+        G.error("hit memory limit", S9Types._NOEXPR)
+      else
+        new_cons_segment()
+        if Verbose_GC > 0 then
+          Out.String("GC: new segment, nodes = ")
+          Out.Int(G.Cons_pool_size, 0)
+          Out.String(", next segment = ")
+          Out.Int(G.Cons_segment_size, 0)
+          Out.Ln
+        end
+        gc()
+      end
+    end
+    G.Tmp_car := S9Types._NIL
+    G.Tmp_cdr := S9Types._NIL
+  end
+  
+  if G.Free_list = S9Types._NIL then
+    G.fatal("cons3: failed to recover from low memory condition")
+    return S9Types._NIL
+  end
+  
+  n := G.Free_list
+  G.Free_list := G.Cdr[G.Free_list]
+  G.Car[n] := pcar
+  G.Cdr[n] := pcdr
+  G.Tag[n] := chr(ptag)
+  return n
+end cons3
+
+(* Convenience function: cons with no tag *)
+procedure cons*(pcar: S9Types.cell; pcdr: S9Types.cell): S9Types.cell
+inline begin
+  return cons3(pcar, pcdr, 0)
+end cons
+
+(* Convenience function: new_atom with ATOM_TAG *)
+procedure new_atom*(pcar: S9Types.cell; pcdr: S9Types.cell): S9Types.cell
+inline begin
+  return cons3(pcar, pcdr, S9Types.AtomTag)
+end new_atom
+
+(* Mark all vectors unused *)
+procedure unmark_vectors()
+var
+  p: int32
+  k: S9Types.cell
+  link: int32
+begin
+  p := 0
+  while p < G.Free_vecs do
+    link := p
+    k := G.Vectors[p + S9Types.RawVectorSize]
+    p := p + val(int32, G.vector_size(k))
+    G.Vectors[link] := S9Types._NIL
+  end
+end unmark_vectors
+
+(* In situ vector pool garbage collection and compaction *)
+procedure gcv*(): int32
+var
+  v: S9Types.cell
+  k, i: int32
+  to_: int32
+  from: int32
+begin
+  unmark_vectors()
+  gc()  (* re-mark live vectors *)
+  
+  to_ := 0
+  from := 0
+  while from < G.Free_vecs do
+    v := G.Vectors[from + S9Types.RawVectorSize]
+    k := val(int32, G.vector_size(v))
+    if G.Vectors[from + S9Types.RawVectorLink] # S9Types._NIL then
+      if to_ # from then
+        (* Move vector data *)
+        for i := 0 to k - 1 do
+          G.Vectors[to_ + i] := G.Vectors[from + i]
+        end
+        G.Cdr[G.Vectors[to_ + S9Types.RawVectorLink]] := to_ + S9Types.RawVectorData
+      end
+      to_ := to_ + k
+    end
+    from := from + k
+  end
+  
+  k := val(int32, G.Free_vecs) - to_
+  if Verbose_GC > 1 then
+    Out.String("GC: gcv: ")
+    Out.Int(k, 0)
+    Out.String(" cells reclaimed")
+    Out.Ln
+  end
+  G.Free_vecs := to_
+  return k
+end gcv
+
+(* Allocate a new vector *)
+procedure new_vec*(type_: S9Types.cell; size: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+  k: int32
+  wsize: int32
+begin
+  wsize := val(int32, G.vector_size(size))
+  
+  if G.Free_vecs + wsize >= G.Vec_pool_size then
+    gcv()
+    while G.Free_vecs + wsize >= G.Vec_pool_size do
+      new_vec_segment()
+      if Verbose_GC > 0 then
+        Out.String("GC: new vector segment, cells = ")
+        Out.Int(G.Vec_pool_size, 0)
+        Out.String(", next segment = ")
+        Out.Int(G.Vec_segment_size, 0)
+        Out.Ln
+      end
+    end
+  end
+  
+  n := cons3(type_, G.Free_vecs + S9Types.RawVectorData, S9Types.VectorTag)
+  G.Vectors[G.Free_vecs + S9Types.RawVectorLink] := n
+  G.Vectors[G.Free_vecs + S9Types.RawVectorIndex] := 0
+  G.Vectors[G.Free_vecs + S9Types.RawVectorSize] := size
+  G.Free_vecs := G.Free_vecs + wsize
+  return n
+end new_vec
+
+(* Save a value on the stack *)
+procedure save*(n: S9Types.cell)
+inline begin
+  G.Stack := cons(n, G.Stack)
+end save
+
+(* Save evaluator state *)
+procedure save_state*(v: S9Types.cell)
+inline begin
+  G.State_stack := cons3(v, G.State_stack, S9Types.AtomTag)
+end save_state
+
+(* Remove k items from the stack and return the last one removed *)
+procedure unsave*(k: int32): S9Types.cell
+var
+  n: S9Types.cell
+begin
+  n := S9Types._NIL
+  while k > 0 do
+    if G.Stack = S9Types._NIL then
+      G.fatal("unsave: stack underflow")
+      return S9Types._NIL
+    end
+    n := G.Car[G.Stack]
+    G.Stack := G.Cdr[G.Stack]
+    dec(k)
+  end
+  return n
+end unsave
+
+(* Make a binding (v . a) *)
+procedure make_binding*(v: S9Types.cell; a: S9Types.cell): S9Types.cell
+inline begin
+  return cons(v, a)
+end make_binding
+
+(* Initialize memory subsystem *)
+procedure init_memory*()
+begin
+  G.Cons_segment_size := S9Types.InitialSegmentSize
+  G.Vec_segment_size := S9Types.InitialSegmentSize
+  G.Cons_pool_size := 0
+  G.Vec_pool_size := 0
+  G.Car := nil
+  G.Cdr := nil
+  G.Tag := nil
+  G.Vectors := nil
+  G.Free_list := S9Types._NIL
+  G.Free_vecs := 0
+  G.Stack := S9Types._NIL
+  G.Stack_bottom := S9Types._NIL
+  G.State_stack := S9Types._NIL
+  G.Tmp_car := S9Types._NIL
+  G.Tmp_cdr := S9Types._NIL
+  G.Tmp := S9Types._NIL
+  
+  Run_stats := false
+  Verbose_GC := 0
+  Cons_stats := false
+  Collections := 0
+  Nodes := 0
+  Conses := 0
+  
+  new_cons_segment()
+  new_vec_segment()
+  init_gc_roots()
+  
+  (* Initialize free list *)
+  gc()
+end init_memory
+
+end S9Memory.

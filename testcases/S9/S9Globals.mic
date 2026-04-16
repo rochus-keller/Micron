@@ -1,0 +1,621 @@
+(* S9Globals - Global variables for S9 Scheme interpreter
+ * Micron port of "Scheme 9 from Empty Space" by Nils M Holm, 2007-2014
+ * Migrated from C in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *
+ * This module contains all global variables and INLINE accessor procedures.
+ *)
+
+module S9Globals [level=3]
+
+import S9Types
+import Files
+
+type
+  (* File handle type for ports - using Oakwood Files module *)
+  FilePtr* = Files.File
+  Fatal* = proc (const msg: pointer to array of char)
+  Error* = proc (const msg: pointer to array of char; expr: S9Types.cell): S9Types.cell
+  
+var
+  (* Memory pool sizes *)
+  Cons_segment_size*: int32
+  Vec_segment_size*: int32
+  Cons_pool_size*: int32
+  Vec_pool_size*: int32
+
+  (* Core data structures - pointers to arrays allocated at runtime *)
+  Car*: pointer to array of S9Types.cell
+  Cdr*: pointer to array of S9Types.cell
+  Tag*: pointer to array of char
+
+  (* Vector storage *)
+  Vectors*: pointer to array of S9Types.cell
+
+  (* Free lists *)
+  Free_list*: S9Types.cell
+  Free_vecs*: S9Types.cell
+
+  (* Primitive procedures *)
+  Primitives*: pointer to array of S9Types.Prim
+  Last_prim*: int32
+  Max_prims*: int32
+
+  (* Stacks *)
+  Stack*: S9Types.cell
+  Stack_bottom*: S9Types.cell
+  State_stack*: S9Types.cell
+
+  (* Temporary storage for GC protection *)
+  Tmp_car*: S9Types.cell
+  Tmp_cdr*: S9Types.cell
+  Tmp*: S9Types.cell
+
+  (* Symbol table and program *)
+  Symbols*: S9Types.cell
+  Program*: S9Types.cell
+  Environment*: S9Types.cell
+  Acc*: S9Types.cell
+
+  (* Magic values for apply and call/cc *)
+  Apply_magic*: S9Types.cell
+  Callcc_magic*: S9Types.cell
+
+  (* New cell allocation *)
+  New*: S9Types.cell
+
+  (* Reader state *)
+  Level*: int32
+  Load_level*: int32
+  Displaying*: int32
+
+  (* Call trace for debugging *)
+  Called_procedures*: array S9Types.MaxCallTrace of S9Types.cell
+  Proc_ptr*: int32
+  Proc_max*: int32
+  File_list*: S9Types.cell
+  Line_no*: int32
+  Opening_line*: int32
+
+  (* Printer state *)
+  Printer_count*: int32
+  Printer_limit*: int32
+
+  (* Trace list *)
+  Trace_list*: S9Types.cell
+
+  (* I/O ports *)
+  Ports*: array S9Types.MaxPorts of FilePtr
+  Port_flags*: array S9Types.MaxPorts of char
+  Input_port*: int32
+  Output_port*: int32
+  Error_port*: int32
+
+  (* Command line and configuration *)
+  Command_line*: pointer to pointer to array of char
+  Memory_limit_kn*: int64
+  Quiet_mode*: int32
+
+  (* Error flag - volatile in C, but Micron doesn't have volatile *)
+  Error_flag*: int32
+
+  (* Predefined symbol references *)
+  S_arrow*: S9Types.cell
+  S_else*: S9Types.cell
+  S_extensions*: S9Types.cell
+  S_latest*: S9Types.cell
+  S_library_path*: S9Types.cell
+  S_loading*: S9Types.cell
+  S_quasiquote*: S9Types.cell
+  S_quote*: S9Types.cell
+  S_unquote*: S9Types.cell
+  S_unquote_splicing*: S9Types.cell
+  S_and*: S9Types.cell
+  S_begin*: S9Types.cell
+  S_cond*: S9Types.cell
+  S_define*: S9Types.cell
+  S_define_syntax*: S9Types.cell
+  S_if*: S9Types.cell
+  S_lambda*: S9Types.cell
+  S_or*: S9Types.cell
+  S_set_b*: S9Types.cell
+
+  (* Rejected character for reader *)
+  Rejected_char*: int32
+  Has_rejected*: boolean
+
+  (* GC statistics *)
+  Verbose_GC*: int32
+  Run_stats*: int32
+  Cons_stats*: int32
+
+  (* Temporary buffer for string formatting *)
+  Buf*: array S9Types.TokenLength of char
+  
+  (* Error handling *)
+  fatalProc*: Fatal
+  errorProc*: Error
+
+(* ============================================================
+ * INLINE accessor procedures
+ * These replace the C macros for accessing cons cells
+ * ============================================================ *)
+
+(* Basic car/cdr accessors *)
+procedure car*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[x]
+end car
+
+procedure cdr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Cdr[x]
+end cdr
+
+(* Two-level accessors *)
+procedure caar*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[Car[x]]
+end caar
+
+procedure cadr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[Cdr[x]]
+end cadr
+
+procedure cdar*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Cdr[Car[x]]
+end cdar
+
+procedure cddr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Cdr[Cdr[x]]
+end cddr
+
+(* Three-level accessors *)
+procedure caaar*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[Car[Car[x]]]
+end caaar
+
+procedure caadr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[Car[Cdr[x]]]
+end caadr
+
+procedure cadar*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[Cdr[Car[x]]]
+end cadar
+
+procedure caddr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[Cdr[Cdr[x]]]
+end caddr
+
+procedure cdaar*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Cdr[Car[Car[x]]]
+end cdaar
+
+procedure cdadr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Cdr[Car[Cdr[x]]]
+end cdadr
+
+procedure cddar*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Cdr[Cdr[Car[x]]]
+end cddar
+
+procedure cdddr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Cdr[Cdr[Cdr[x]]]
+end cdddr
+
+(* Four-level accessors *)
+procedure caaddr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[Car[Cdr[Cdr[x]]]]
+end caaddr
+
+procedure caddar*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[Cdr[Cdr[Car[x]]]]
+end caddar
+
+procedure cadadr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[Cdr[Car[Cdr[x]]]]
+end cadadr
+
+procedure cadddr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Car[Cdr[Cdr[Cdr[x]]]]
+end cadddr
+
+procedure cddadr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Cdr[Cdr[Car[Cdr[x]]]]
+end cddadr
+
+procedure cdddar*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Cdr[Cdr[Cdr[Car[x]]]]
+end cdddar
+
+procedure cddddr*(x: S9Types.cell): S9Types.cell
+inline begin
+  return Cdr[Cdr[Cdr[Cdr[x]]]]
+end cddddr
+
+(* ============================================================
+ * Setter procedures for car/cdr (since INLINE can't be lvalues)
+ * ============================================================ *)
+
+procedure set_car*(x: S9Types.cell; v: S9Types.cell)
+inline begin
+  Car[x] := v
+end set_car
+
+procedure set_cdr*(x: S9Types.cell; v: S9Types.cell)
+inline begin
+  Cdr[x] := v
+end set_cdr
+
+(* ============================================================
+ * Field accessors for atoms
+ * Note: For pointer type conversions, we use typeguards (ptr(T))
+ * instead of cast(), which is only for numeric types.
+ * ============================================================ *)
+
+procedure string*(n: S9Types.cell): pointer to char
+var
+  tmp: pointer to S9Types.cell
+begin
+  tmp := @Vectors[Cdr[n]]
+  return tmp(char)
+end string
+
+procedure string_len*(n: S9Types.cell): S9Types.cell
+inline begin
+  return Vectors[Cdr[n] - 1]
+end string_len
+
+procedure symbol_name*(n: S9Types.cell): pointer to char
+var
+  tmp: pointer to S9Types.cell
+begin
+  tmp := @Vectors[Cdr[n]]
+  return tmp(char)
+end symbol_name
+
+procedure symbol_len*(n: S9Types.cell): S9Types.cell
+inline begin
+  return Vectors[Cdr[n] - 1]
+end symbol_len
+
+procedure vector*(n: S9Types.cell): pointer to S9Types.cell
+inline begin
+  return @Vectors[Cdr[n]]
+end vector
+
+procedure vector_link*(n: S9Types.cell): S9Types.cell
+inline begin
+  return Vectors[Cdr[n] - 3]
+end vector_link
+
+procedure vector_index*(n: S9Types.cell): S9Types.cell
+inline begin
+  return Vectors[Cdr[n] - 2]
+end vector_index
+
+procedure vector_size*(k: S9Types.cell): S9Types.cell
+inline begin
+  return (k + val(S9Types.cell, size(S9Types.cell)) - 1) div val(S9Types.cell, size(S9Types.cell)) + 3
+end vector_size
+
+procedure vector_len*(n: S9Types.cell): S9Types.cell
+inline begin
+  return vector_size(string_len(n)) - 3
+end vector_len
+
+procedure port_no*(n: S9Types.cell): S9Types.cell
+inline begin
+  return cadr(n)
+end port_no
+
+procedure char_value*(n: S9Types.cell): S9Types.cell
+inline begin
+  return cadr(n)
+end char_value
+
+(* ============================================================
+ * Real number field accessors
+ * ============================================================ *)
+
+procedure x_real_flags*(x: S9Types.cell): S9Types.cell
+inline begin
+  return cadr(x)
+end x_real_flags
+
+procedure x_real_exponent*(x: S9Types.cell): S9Types.cell
+inline begin
+  return caddr(x)
+end x_real_exponent
+
+procedure x_real_mantissa*(x: S9Types.cell): S9Types.cell
+inline begin
+  return cdddr(x)
+end x_real_mantissa
+
+procedure x_real_negative_flag*(x: S9Types.cell): S9Types.cell
+inline begin
+  return band(x_real_flags(x), S9Types.RealNegative)
+end x_real_negative_flag
+
+procedure real_exponent*(x: S9Types.cell): S9Types.cell
+inline begin
+  return caddr(x)
+end real_exponent
+
+(* ============================================================
+ * Type predicates
+ * ============================================================ *)
+
+procedure special_value_p*(x: S9Types.cell): boolean
+inline begin
+  return x < 0
+end special_value_p
+
+procedure eof_p*(n: S9Types.cell): boolean
+inline begin
+  return n = S9Types.END_OF_FILE
+end eof_p
+
+procedure undefined_p*(n: S9Types.cell): boolean
+inline begin
+  return n = S9Types._UNDEFINED
+end undefined_p
+
+procedure unspecific_p*(n: S9Types.cell): boolean
+inline begin
+  return n = S9Types._UNSPECIFIC
+end unspecific_p
+
+procedure boolean_p*(n: S9Types.cell): boolean
+inline begin
+  return (n = S9Types._TRUE) or (n = S9Types._FALSE)
+end boolean_p
+
+procedure constant_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.ConstTag) # 0)
+end constant_p
+
+procedure integer_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.AtomTag) # 0) & (Car[n] = S9Types.T_INTEGER)
+end integer_p
+
+procedure number_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.AtomTag) # 0) & 
+       ((Car[n] = S9Types.T_REAL) or (Car[n] = S9Types.T_INTEGER))
+end number_p
+
+procedure primitive_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.AtomTag) # 0) & (Car[n] = S9Types.T_PRIMITIVE)
+end primitive_p
+
+procedure procedure_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.AtomTag) # 0) & (Car[n] = S9Types.T_PROCEDURE)
+end procedure_p
+
+procedure continuation_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.AtomTag) # 0) & (Car[n] = S9Types.T_CONTINUATION)
+end continuation_p
+
+procedure real_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.AtomTag) # 0) & (Car[n] = S9Types.T_REAL)
+end real_p
+
+procedure special_p*(n: S9Types.cell): boolean
+inline begin
+  return (n = S_quote) or (n = S_begin) or (n = S_if) or (n = S_cond) or
+       (n = S_and) or (n = S_or) or (n = S_lambda) or (n = S_set_b) or
+       (n = S_define) or (n = S_define_syntax)
+end special_p
+
+procedure char_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.AtomTag) # 0) & (Car[n] = S9Types.T_CHAR)
+end char_p
+
+procedure syntax_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.AtomTag) # 0) & (Car[n] = S9Types.T_SYNTAX)
+end syntax_p
+
+procedure input_port_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.AtomTag) # 0) & 
+       (band(ord(Tag[n]), S9Types.PortTag) # 0) & (Car[n] = S9Types.T_INPUT_PORT)
+end input_port_p
+
+procedure output_port_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.AtomTag) # 0) & 
+       (band(ord(Tag[n]), S9Types.PortTag) # 0) & (Car[n] = S9Types.T_OUTPUT_PORT)
+end output_port_p
+
+procedure symbol_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.VectorTag) # 0) & (Car[n] = S9Types.T_SYMBOL)
+end symbol_p
+
+procedure vector_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.VectorTag) # 0) & (Car[n] = S9Types.T_VECTOR)
+end vector_p
+
+procedure string_p*(n: S9Types.cell): boolean
+inline begin
+  return ~special_value_p(n) & (band(ord(Tag[n]), S9Types.VectorTag) # 0) & (Car[n] = S9Types.T_STRING)
+end string_p
+
+procedure atom_p*(n: S9Types.cell): boolean
+inline begin
+  return special_value_p(n) or (band(ord(Tag[n]), S9Types.AtomTag) # 0) or 
+       (band(ord(Tag[n]), S9Types.VectorTag) # 0)
+end atom_p
+
+procedure auto_quoting_p*(n: S9Types.cell): boolean
+inline begin
+  return atom_p(n)
+end auto_quoting_p
+
+procedure pair_p*(x: S9Types.cell): boolean
+inline begin
+  return ~atom_p(x)
+end pair_p
+
+(* ============================================================
+ * Bignum predicates
+ * ============================================================ *)
+
+procedure x_bignum_negative_p*(a: S9Types.cell): boolean
+inline begin
+  return cadr(a) < 0
+end x_bignum_negative_p
+
+procedure x_bignum_zero_p*(a: S9Types.cell): boolean
+inline begin
+  return (cadr(a) = 0) & (cddr(a) = S9Types._NIL)
+end x_bignum_zero_p
+
+procedure x_bignum_positive_p*(a: S9Types.cell): boolean
+inline begin
+  return ~x_bignum_negative_p(a) & ~x_bignum_zero_p(a)
+end x_bignum_positive_p
+
+(* ============================================================
+ * Real number predicates
+ * ============================================================ *)
+
+procedure x_real_zero_p*(x: S9Types.cell): boolean
+inline begin
+  return (car(x_real_mantissa(x)) = 0) & (cdr(x_real_mantissa(x)) = S9Types._NIL)
+end x_real_zero_p
+
+procedure x_real_negative_p*(x: S9Types.cell): boolean
+inline begin
+  return (x_real_negative_flag(x) # 0) & ~x_real_zero_p(x)
+end x_real_negative_p
+
+procedure x_real_positive_p*(x: S9Types.cell): boolean
+inline begin
+  return (x_real_negative_flag(x) = 0) & ~x_real_zero_p(x)
+end x_real_positive_p
+
+(* ============================================================
+ * Binding structure accessors
+ * ============================================================ *)
+
+procedure binding_box*(x: S9Types.cell): S9Types.cell
+inline begin
+  return x
+end binding_box
+
+procedure binding_value*(x: S9Types.cell): S9Types.cell
+inline begin
+  return cdr(x)
+end binding_value
+
+procedure box_value*(x: S9Types.cell): S9Types.cell
+inline begin
+  return cdr(x)
+end box_value
+
+procedure set_box_value*(n: S9Types.cell; val_: S9Types.cell)
+inline begin
+  Cdr[n] := val_
+end set_box_value
+
+(* ============================================================
+ * Rib structure accessors
+ * ============================================================ *)
+
+procedure rib_args*(x: S9Types.cell): S9Types.cell
+inline begin
+  return car(x)
+end rib_args
+
+procedure rib_append*(x: S9Types.cell): S9Types.cell
+inline begin
+  return cadr(x)
+end rib_append
+
+procedure rib_result*(x: S9Types.cell): S9Types.cell
+inline begin
+  return caddr(x)
+end rib_result
+
+procedure rib_source*(x: S9Types.cell): S9Types.cell
+inline begin
+  return cdddr(x)
+end rib_source
+
+(* ============================================================
+ * Utilities
+ * ============================================================ *)
+
+(* Copy null-terminated string using pointer arithmetic *)
+procedure StrCopy_p*(dst: pointer to char; src: pointer to char)
+begin
+  while src^ # 0X do
+    dst^ := src^
+    inc(dst)
+    inc(src)
+  end
+  dst^ := 0X
+end StrCopy_p
+
+(* Copy null-terminated string from src to dst *)
+procedure StrCopy*(dst: pointer to array of char; src: pointer to array of char)
+var
+  i: int32
+begin
+  i := 0
+  while src[i] # 0X do
+    dst[i] := src[i]
+    inc(i)
+  end
+  dst[i] := 0X
+end StrCopy
+
+procedure fatal*(const msg: pointer to array of char)
+begin 
+  if fatalProc # nil then fatalProc(msg)
+  else halt
+  end
+end fatal
+
+procedure error*(const msg: pointer to array of char; expr: S9Types.cell): S9Types.cell
+begin 
+  if errorProc # nil then return errorProc(msg, expr)
+  else halt
+  end
+  return S9Types._NIL
+end error
+
+begin
+  fatalProc := nil
+  errorProc := nil
+  
+end S9Globals.

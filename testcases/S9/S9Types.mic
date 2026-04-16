@@ -1,0 +1,135 @@
+(* S9Types - Foundation module for S9 Scheme interpreter
+ * Micron port of "Scheme 9 from Empty Space" by Nils M Holm, 2007-2014
+ * Migrated from C in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *
+ * This module contains:
+ * - Basic type definitions (cell)
+ * - Tag constants
+ * - Special values (NIL, TRUE, FALSE, etc.)
+ * - Type constants
+ * - Configuration constants
+ * - Evaluator states
+ * - Primitive procedure record type
+ *)
+
+module S9Types [level=3]
+
+const
+  (* Configuration constants *)
+  DefaultLibraryPath* = ".:lib:ext:contrib:~/.s9fes:/usr/local/share/s9fes"
+  InitialSegmentSize* = 32768
+  TokenLength* = 1024
+  MaxPorts* = 32
+  MaxIoDepth* = 65536
+  HashThreshold* = 5
+  MaxCallTrace* = 100
+  DefaultLimitKn* = 12392
+  PrimSegSize* = 256
+
+  (* Word size configuration - assuming 64-bit *)
+  DigitsPerWord* = 18
+  IntSegLimit* = 1000000000000000000
+  MantissaSegments* = 1
+  MantissaSize* = MantissaSegments * DigitsPerWord
+
+  (* Node tags *)
+  AtomTag* = 01H
+  MarkTag* = 02H
+  StateTag* = 04H
+  VectorTag* = 08H
+  PortTag* = 10H
+  UsedTag* = 20H
+  LockTag* = 40H
+  ConstTag* = 80H
+
+  (* Special values - negative to distinguish from valid cell indices *)
+  (* Note: NIL, TRUE, FALSE are Micron keywords, so we use underscore prefix *)
+  _NIL* = -1
+  _TRUE* = -2
+  _FALSE* = -3
+  END_OF_FILE* = -4
+  _UNDEFINED* = -5
+  _UNSPECIFIC* = -6
+  _NAN* = -7
+  _DOT* = -8
+  _RPAREN* = -9
+  _RBRACK* = -10
+  _NOEXPR* = -11
+
+  (* Type constants *)
+  T_NONE* = -20
+  T_BOOLEAN* = -21
+  T_CHAR* = -22
+  T_INPUT_PORT* = -23
+  T_INTEGER* = -24
+  T_OUTPUT_PORT* = -25
+  T_PAIR* = -26
+  T_PAIR_OR_NIL* = -27
+  T_PRIMITIVE* = -28
+  T_PROCEDURE* = -29
+  T_REAL* = -30
+  T_STRING* = -31
+  T_SYMBOL* = -32
+  T_SYNTAX* = -33
+  T_VECTOR* = -34
+  T_CONTINUATION* = -35
+
+  (* Type shortcuts for primitive procedure definitions *)
+  BOL* = T_BOOLEAN
+  CHR* = T_CHAR
+  INP* = T_INPUT_PORT
+  INT* = T_INTEGER
+  LST* = T_PAIR_OR_NIL
+  OUP* = T_OUTPUT_PORT
+  PAI* = T_PAIR
+  PRC* = T_PROCEDURE
+  REA* = T_REAL
+  STR* = T_STRING
+  SYM* = T_SYMBOL
+  VEC* = T_VECTOR
+  ___* = T_NONE
+
+  (* Real number flags *)
+  RealNegative* = 01H
+
+  (* Internal vector representation offsets *)
+  RawVectorLink* = 0
+  RawVectorIndex* = 1
+  RawVectorSize* = 2
+  RawVectorData* = 3
+
+type
+  (* A "cell" must be large enough to hold a pointer - using int64 for 64-bit systems *)
+  int* = int64
+  cell* = int
+
+  (* Primitive procedure handler type *)
+  PrimHandler* = procedure(expr: cell): cell
+
+  (* Primitive procedure structure *)
+  Prim* = record
+    name*: pointer to array of char
+    handler*: PrimHandler
+    min_args*: int32
+    max_args*: int32    (* -1 = variadic *)
+    arg_types*: array 3 of int32
+  end
+  PrimPtr* = pointer to Prim
+
+  (* Evaluator states *)
+  EvalState* = (
+    EV_ATOM     (* Evaluating atom *)
+    EV_ARGS     (* Evaluating argument list *)
+    EV_BETA     (* Evaluating procedure body *)
+    EV_IF_PRED    (* Evaluating predicate of IF *)
+    EV_SET_VAL    (* Evaluating value of SET! and DEFINE *)
+    EV_MACRO    (* Evaluating value of DEFINE-SYNTAX *)
+    EV_BEGIN    (* Evaluating expressions of BEGIN *)
+    EV_AND      (* Evaluating arguments of AND *)
+    EV_OR       (* Evaluating arguments of OR *)
+    EV_COND     (* Evaluating clauses of COND *)
+    EV_MACRO_EXPAND (* Expanding macro result *)
+  )
+  
+end S9Types.

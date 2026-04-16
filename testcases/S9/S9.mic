@@ -1,0 +1,656 @@
+(* S9 - Main module for S9 Scheme interpreter
+ * Micron port of "Scheme 9 from Empty Space" by Nils M Holm, 2007-2014
+ * Migrated from C in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *
+ * This module contains:
+ * - Initialization
+ * - REPL (Read-Eval-Print Loop)
+ * - Primitive registration
+ * - Main entry point
+ *)
+
+module S9 [level=3]
+
+import T := S9Types
+import G := S9Globals
+import M := S9Memory
+import IO := S9IO
+import E := S9Eval
+import P := S9Prims
+import Files
+
+const
+  Version* = "2014-07-25"
+  DefaultLibraryPath* = ".:~/.s9fes:/usr/local/share/s9fes"
+
+(* ============================================================
+ * Error handling
+ * ============================================================ *)
+
+procedure print_error_form(n: T.cell)
+begin
+  G.Printer_limit := 50
+  IO.print_form(n)
+  G.Printer_limit := 0
+end print_error_form
+
+procedure print_calltrace()
+var
+  i: int32
+  j: int32
+begin
+  j := G.Proc_ptr
+  for i := 0 to G.Proc_max - 1 do
+    dec(j)
+    if j < 0 then j := G.Proc_max - 1 end
+    if G.Called_procedures[j] = T._NIL then return end
+    IO.pr("  ")
+    IO.print_form(G.Called_procedures[j])
+    IO.nl()
+  end
+end print_calltrace
+
+procedure error*(const msg: pointer to array of char; expr: T.cell): T.cell
+type Str = array of char
+begin
+  if G.Error_flag # 0 then
+    return T._UNDEFINED
+  end
+  G.Error_flag := 1
+  G.Output_port := G.Error_port
+  if G.File_list # T._NIL then
+    IO.pr(G.string(G.car(G.File_list))(Str))
+    IO.pr(": ")
+  end
+  IO.ntoa(@G.Buf, G.Line_no, 0)
+  IO.pr(@G.Buf)
+  IO.pr(": ")
+  IO.pr(msg)
+  if expr # T._NOEXPR then
+    IO.pr(": ")
+    print_error_form(expr)
+  end
+  IO.nl()
+  if G.Proc_max > 0 then
+    print_calltrace()
+  end
+  return T._UNDEFINED
+end error
+
+procedure fatal*(const msg: pointer to array of char)
+begin
+  G.Output_port := G.Error_port
+  IO.pr("fatal: ")
+  IO.pr(msg)
+  IO.nl()
+  //IO.bye(1)
+  halt(1)
+end fatal
+
+(* ============================================================
+ * Primitive registration
+ * ============================================================ *)
+
+procedure grow_primitives()
+var
+  new_prims: pointer to array of T.Prim
+  i: int32
+begin
+  G.Max_prims := G.Max_prims + T.PrimSegSize
+  new(new_prims, G.Max_prims)
+  if new_prims = nil then
+    fatal("grow_primitives: out of physical memory")
+  end
+  if G.Primitives # nil then
+    for i := 0 to G.Last_prim - 1 do
+      new_prims[i] := G.Primitives[i]
+    end
+    dispose(G.Primitives)
+  end
+  G.Primitives := new_prims
+end grow_primitives
+
+procedure add_primitive(const name: pointer to array of char; 
+            handler: T.PrimHandler;
+            min_args: int32; max_args: int32;
+            t1: int32; t2: int32; t3: int32)
+var
+  v: T.cell
+  n: T.cell
+begin
+  if name = "apply" then
+    G.Apply_magic := G.Last_prim
+  end
+  if name = "call/cc" then
+    G.Callcc_magic := G.Last_prim
+  end
+  v := IO.symbol_ref(name)
+  n := M.new_atom(G.Last_prim, T._NIL)
+  n := M.new_atom(T.T_PRIMITIVE, n)
+  if G.Last_prim >= G.Max_prims then
+    grow_primitives()
+  end
+  G.Primitives[G.Last_prim].name := name
+  G.Primitives[G.Last_prim].handler := handler
+  G.Primitives[G.Last_prim].min_args := min_args
+  G.Primitives[G.Last_prim].max_args := max_args
+  G.Primitives[G.Last_prim].arg_types[0] := t1
+  G.Primitives[G.Last_prim].arg_types[1] := t2
+  G.Primitives[G.Last_prim].arg_types[2] := t3
+  inc(G.Last_prim)
+  G.Environment := E.extend(v, n, G.Environment)
+end add_primitive
+
+procedure register_core_primitives()
+begin
+  (* Predicates and Booleans *)
+  add_primitive("eq?", P.pp_eq_p, 2, 2, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("eqv?", P.pp_eqv_p, 2, 2, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("not", P.pp_not, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("null?", P.pp_null_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("boolean?", P.pp_boolean_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  
+  (* Type predicates *)
+  add_primitive("char?", P.pp_char_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("integer?", P.pp_integer_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("pair?", P.pp_pair_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("procedure?", P.pp_procedure_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("string?", P.pp_string_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("symbol?", P.pp_symbol_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("vector?", P.pp_vector_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("input-port?", P.pp_input_port_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("output-port?", P.pp_output_port_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("eof-object?", P.pp_eof_object_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  
+  (* Pairs and Lists *)
+  add_primitive("car", P.pp_car, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cdr", P.pp_cdr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cons", P.pp_cons, 2, 2, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("set-car!", P.pp_set_car_b, 2, 2, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("set-cdr!", P.pp_set_cdr_b, 2, 2, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("list", P.pp_list, 0, -1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("length", P.pp_length, 1, 1, T.T_PAIR_OR_NIL, T.T_NONE, T.T_NONE)
+  add_primitive("reverse", P.pp_reverse, 1, 1, T.T_PAIR_OR_NIL, T.T_NONE, T.T_NONE)
+  add_primitive("append2", P.pp_append2, 2, 2, T.T_PAIR_OR_NIL, T.T_NONE, T.T_NONE)
+  add_primitive("list-tail", P.pp_list_tail, 2, 2, T.T_PAIR_OR_NIL, T.T_INTEGER, T.T_NONE)
+  
+  (* cxr procedures *)
+  add_primitive("caar", P.pp_caar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cadr", P.pp_cadr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cdar", P.pp_cdar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cddr", P.pp_cddr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("caaar", P.pp_caaar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("caadr", P.pp_caadr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cadar", P.pp_cadar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("caddr", P.pp_caddr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cdaar", P.pp_cdaar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cdadr", P.pp_cdadr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cddar", P.pp_cddar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cdddr", P.pp_cdddr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("caaaar", P.pp_caaaar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("caaadr", P.pp_caaadr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("caadar", P.pp_caadar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("caaddr", P.pp_caaddr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cadaar", P.pp_cadaar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cadadr", P.pp_cadadr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("caddar", P.pp_caddar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cadddr", P.pp_cadddr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cdaaar", P.pp_cdaaar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cdaadr", P.pp_cdaadr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cdadar", P.pp_cdadar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cdaddr", P.pp_cdaddr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cddaar", P.pp_cddaar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cddadr", P.pp_cddadr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cdddar", P.pp_cdddar, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  add_primitive("cddddr", P.pp_cddddr, 1, 1, T.T_PAIR, T.T_NONE, T.T_NONE)
+  
+  (* Association lists *)
+  add_primitive("assq", P.pp_assq, 2, 2, T.T_NONE, T.T_PAIR_OR_NIL, T.T_NONE)
+  add_primitive("assv", P.pp_assv, 2, 2, T.T_NONE, T.T_PAIR_OR_NIL, T.T_NONE)
+  add_primitive("memq", P.pp_memq, 2, 2, T.T_NONE, T.T_PAIR_OR_NIL, T.T_NONE)
+  add_primitive("memv", P.pp_memv, 2, 2, T.T_NONE, T.T_PAIR_OR_NIL, T.T_NONE)
+  
+  (* Arithmetic *)
+  add_primitive("abs", P.pp_abs, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("=", P.pp_equal, 2, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("<", P.pp_less, 2, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive(">", P.pp_greater, 2, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("<=", P.pp_less_equal, 2, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive(">=", P.pp_greater_equal, 2, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("+", P.pp_plus, 0, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("-", P.pp_minus, 1, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("*", P.pp_times, 0, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("quotient", P.pp_quotient, 2, 2, T.T_REAL, T.T_REAL, T.T_NONE)
+  add_primitive("remainder", P.pp_remainder, 2, 2, T.T_REAL, T.T_REAL, T.T_NONE)
+  add_primitive("negative?", P.pp_negative_p, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("positive?", P.pp_positive_p, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("zero?", P.pp_zero_p, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("even?", P.pp_even_p, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("odd?", P.pp_odd_p, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("max", P.pp_max, 1, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("min", P.pp_min, 1, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  
+  (* Characters *)
+  add_primitive("char->integer", P.pp_char_to_integer, 1, 1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("integer->char", P.pp_integer_to_char, 1, 1, T.T_INTEGER, T.T_NONE, T.T_NONE)
+  add_primitive("char-alphabetic?", P.pp_char_alphabetic_p, 1, 1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-numeric?", P.pp_char_numeric_p, 1, 1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-whitespace?", P.pp_char_whitespace_p, 1, 1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-upper-case?", P.pp_char_upper_case_p, 1, 1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-lower-case?", P.pp_char_lower_case_p, 1, 1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-upcase", P.pp_char_upcase, 1, 1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-downcase", P.pp_char_downcase, 1, 1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char<?", P.pp_char_lt_p, 2, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char<=?", P.pp_char_le_p, 2, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char=?", P.pp_char_eq_p, 2, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char>=?", P.pp_char_ge_p, 2, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char>?", P.pp_char_gt_p, 2, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-ci<?", P.pp_char_ci_lt_p, 2, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-ci<=?", P.pp_char_ci_le_p, 2, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-ci=?", P.pp_char_ci_eq_p, 2, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-ci>=?", P.pp_char_ci_ge_p, 2, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  add_primitive("char-ci>?", P.pp_char_ci_gt_p, 2, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  
+  (* Strings *)
+  add_primitive("make-string", P.pp_make_string, 1, 2, T.T_INTEGER, T.T_CHAR, T.T_NONE)
+  add_primitive("string-length", P.pp_string_length, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string-ref", P.pp_string_ref, 2, 2, T.T_STRING, T.T_INTEGER, T.T_NONE)
+  add_primitive("string-set!", P.pp_string_set_b, 3, 3, T.T_STRING, T.T_INTEGER, T.T_CHAR)
+  add_primitive("string-copy", P.pp_string_copy, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string-fill!", P.pp_string_fill_b, 2, 2, T.T_STRING, T.T_CHAR, T.T_NONE)
+  add_primitive("string-append", P.pp_string_append, 0, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("substring", P.pp_substring, 3, 3, T.T_STRING, T.T_INTEGER, T.T_INTEGER)
+  add_primitive("string<?", P.pp_string_lt_p, 2, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string<=?", P.pp_string_le_p, 2, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string=?", P.pp_string_eq_p, 2, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string>=?", P.pp_string_ge_p, 2, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string>?", P.pp_string_gt_p, 2, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string-ci<?", P.pp_string_ci_lt_p, 2, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string-ci<=?", P.pp_string_ci_le_p, 2, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string-ci=?", P.pp_string_ci_eq_p, 2, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string-ci>=?", P.pp_string_ci_ge_p, 2, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string-ci>?", P.pp_string_ci_gt_p, 2, -1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("string->list", P.pp_string_to_list, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("list->string", P.pp_list_to_string, 1, 1, T.T_PAIR_OR_NIL, T.T_NONE, T.T_NONE)
+  add_primitive("string->symbol", P.pp_string_to_symbol, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("symbol->string", P.pp_symbol_to_string, 1, 1, T.T_SYMBOL, T.T_NONE, T.T_NONE)
+  add_primitive("string", P.pp_string, 0, -1, T.T_CHAR, T.T_NONE, T.T_NONE)
+  
+  (* Vectors *)
+  add_primitive("make-vector", P.pp_make_vector, 1, 2, T.T_INTEGER, T.T_NONE, T.T_NONE)
+  add_primitive("vector", P.pp_vector, 0, -1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("vector-length", P.pp_vector_length, 1, 1, T.T_VECTOR, T.T_NONE, T.T_NONE)
+  add_primitive("vector-ref", P.pp_vector_ref, 2, 2, T.T_VECTOR, T.T_INTEGER, T.T_NONE)
+  add_primitive("vector-set!", P.pp_vector_set_b, 3, 3, T.T_VECTOR, T.T_INTEGER, T.T_NONE)
+  add_primitive("vector-fill!", P.pp_vector_fill_b, 2, 2, T.T_VECTOR, T.T_NONE, T.T_NONE)
+  add_primitive("vector->list", P.pp_vector_to_list, 1, 1, T.T_VECTOR, T.T_NONE, T.T_NONE)
+  add_primitive("list->vector", P.pp_list_to_vector, 1, 1, T.T_PAIR_OR_NIL, T.T_NONE, T.T_NONE)
+  
+  (* I/O *)
+  add_primitive("close-input-port", P.pp_close_input_port, 1, 1, T.T_INPUT_PORT, T.T_NONE, T.T_NONE)
+  add_primitive("close-output-port", P.pp_close_output_port, 1, 1, T.T_OUTPUT_PORT, T.T_NONE, T.T_NONE)
+  add_primitive("current-input-port", P.pp_current_input_port, 0, 0, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("current-output-port", P.pp_current_output_port, 0, 0, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("open-input-file", P.pp_open_input_file, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("open-output-file", P.pp_open_output_file, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("read", P.pp_read, 0, 1, T.T_INPUT_PORT, T.T_NONE, T.T_NONE)
+  add_primitive("read-char", P.pp_read_char, 0, 1, T.T_INPUT_PORT, T.T_NONE, T.T_NONE)
+  add_primitive("peek-char", P.pp_peek_char, 0, 1, T.T_INPUT_PORT, T.T_NONE, T.T_NONE)
+  add_primitive("write", P.pp_write, 1, 2, T.T_NONE, T.T_OUTPUT_PORT, T.T_NONE)
+  add_primitive("display", P.pp_display, 1, 2, T.T_NONE, T.T_OUTPUT_PORT, T.T_NONE)
+  add_primitive("write-char", P.pp_write_char, 1, 2, T.T_CHAR, T.T_OUTPUT_PORT, T.T_NONE)
+  add_primitive("set-input-port!", P.pp_set_input_port_b, 1, 1, T.T_INPUT_PORT, T.T_NONE, T.T_NONE)
+  add_primitive("set-output-port!", P.pp_set_output_port_b, 1, 1, T.T_OUTPUT_PORT, T.T_NONE, T.T_NONE)
+  
+  (* Special primitives *)
+  add_primitive("apply", P.pp_apply, 2, -1, T.T_PROCEDURE, T.T_NONE, T.T_NONE)
+  add_primitive("call/cc", P.pp_call_cc, 1, 1, T.T_PROCEDURE, T.T_NONE, T.T_NONE)
+  add_primitive("eval", P.pp_eval, 1, 2, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("error", P.pp_error, 1, 2, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("gensym", P.pp_gensym, 0, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("symbols", P.pp_symbols, 0, 0, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("reverse!", P.pp_reverse_b, 1, 1, T.T_PAIR_OR_NIL, T.T_NONE, T.T_NONE)
+  add_primitive("unquote", P.pp_unquote, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("unquote-splicing", P.pp_unquote_splicing, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("file-exists?", P.pp_file_exists_p, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("delete-file", P.pp_delete_file, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
+  add_primitive("bit-op", P.pp_bit_op, 3, -1, T.T_INTEGER, T.T_INTEGER, T.T_INTEGER)
+  
+  (* Real number primitives *)
+  add_primitive("real?", P.pp_real_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
+  add_primitive("exact?", P.pp_exact_p, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("inexact?", P.pp_inexact_p, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("exact->inexact", P.pp_exact_to_inexact, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("inexact->exact", P.pp_inexact_to_exact, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("/", P.pp_divide, 1, -1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("floor", P.pp_floor, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("mantissa", P.pp_mantissa, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+  add_primitive("exponent", P.pp_exponent, 1, 1, T.T_REAL, T.T_NONE, T.T_NONE)
+end register_core_primitives
+
+(* ============================================================
+ * Environment initialization
+ * ============================================================ *)
+
+procedure get_library_path(): T.cell
+begin
+  // TODO check S9FES_LIBRARY_PATH env var
+  return IO.make_string(DefaultLibraryPath, sig(strlen(DefaultLibraryPath)))
+end get_library_path
+
+procedure make_initial_env()
+var
+  new_: T.cell
+begin
+  G.Environment := M.cons(T._NIL, T._NIL)
+  G.Environment := E.extend(IO.symbol_ref("**"), T._NIL, G.Environment)
+  G.S_latest := G.cadr(G.Environment)
+  G.Environment := E.extend(IO.symbol_ref("*extensions*"), T._NIL, G.Environment)
+  G.S_extensions := G.cadr(G.Environment)
+  G.Environment := E.extend(IO.symbol_ref("*library-path*"), T._NIL, G.Environment)
+  G.S_library_path := G.cadr(G.Environment)
+  new_ := get_library_path()
+  G.set_box_value(G.S_library_path, new_)
+  G.Environment := E.extend(IO.symbol_ref("*loading*"), T._FALSE, G.Environment)
+  G.S_loading := G.cadr(G.Environment)
+  G.Apply_magic := -1
+  G.Callcc_magic := -1
+  G.Last_prim := 0
+  G.Max_prims := 0
+  grow_primitives()
+  register_core_primitives()
+  G.Environment := M.cons(G.Environment, T._NIL)
+  G.Program := T._TRUE  (* or rehash() will not work *)
+  E.rehash(G.car(G.Environment))
+end make_initial_env
+
+(* ============================================================
+ * Initialization
+ * ============================================================ *)
+
+procedure init*()
+var
+  i: int32
+begin
+  (* Initialize ports *)
+  for i := 2 to T.MaxPorts - 1 do
+    G.Ports[i] := nil
+  end
+  G.Ports[0] := Files.System(Files.Stdin)
+  G.Ports[1] := Files.System(Files.Stdout)
+  G.Ports[2] := Files.System(Files.Stderr)
+  G.Port_flags[0] := chr(T.LockTag)
+  G.Port_flags[1] := chr(T.LockTag)
+  G.Port_flags[2] := chr(T.LockTag)
+  G.Input_port := 0
+  G.Output_port := 1
+  G.Error_port := 2
+  
+  (* Initialize memory pools *)
+  G.Cons_segment_size := T.InitialSegmentSize
+  G.Vec_segment_size := T.InitialSegmentSize
+  G.Cons_pool_size := 0
+  G.Vec_pool_size := 0
+  G.Car := nil
+  G.Cdr := nil
+  G.Tag := nil
+  G.Free_list := T._NIL
+  G.Vectors := nil
+  G.Free_vecs := 0
+  G.Memory_limit_kn := T.DefaultLimitKn * 1024i
+  
+  (* Initialize stacks *)
+  G.Stack := T._NIL
+  G.Stack_bottom := T._NIL
+  G.State_stack := T._NIL
+  
+  (* Initialize temporaries *)
+  G.Tmp_car := T._NIL
+  G.Tmp_cdr := T._NIL
+  G.Tmp := T._NIL
+  
+  (* Initialize globals *)
+  G.Symbols := T._NIL
+  G.Program := T._NIL
+  G.Proc_ptr := 0
+  G.Proc_max := 3
+  G.Environment := T._NIL
+  G.Acc := T._NIL
+  G.Trace_list := T._NIL
+  G.Level := 0
+  G.Line_no := 1
+  G.Error_flag := 0
+  G.Load_level := 0
+  G.Displaying := 0
+  G.Printer_limit := 0
+  G.Quiet_mode := 0
+  G.Run_stats := 0
+  G.File_list := T._NIL
+  G.Primitives := nil
+  
+  (* Allocate initial memory *)
+  M.new_cons_segment()
+  M.new_vec_segment()
+  M.gc()
+  
+  (* Initialize special symbols *)
+  G.S_arrow := IO.symbol_ref("=>")
+  G.S_and := IO.symbol_ref("and")
+  G.S_begin := IO.symbol_ref("begin")
+  G.S_cond := IO.symbol_ref("cond")
+  G.S_define := IO.symbol_ref("define")
+  G.S_define_syntax := IO.symbol_ref("define-syntax")
+  G.S_else := IO.symbol_ref("else")
+  G.S_if := IO.symbol_ref("if")
+  G.S_lambda := IO.symbol_ref("lambda")
+  G.S_or := IO.symbol_ref("or")
+  G.S_quasiquote := IO.symbol_ref("quasiquote")
+  G.S_quote := IO.symbol_ref("quote")
+  G.S_set_b := IO.symbol_ref("set!")
+  G.S_unquote := IO.symbol_ref("unquote")
+  G.S_unquote_splicing := IO.symbol_ref("unquote-splicing")
+  
+  (* Create initial environment *)
+  make_initial_env()
+  E.reset_calltrace()
+  E.init_eval()
+end init
+
+(* ============================================================
+ * REPL (Read-Eval-Print Loop)
+ * ============================================================ *)
+
+procedure clear_leftover_envs()
+begin
+  while G.cdr(G.Environment) # T._NIL do
+    G.Environment := G.cdr(G.Environment)
+  end
+end clear_leftover_envs
+
+procedure repl*()
+var
+  n: T.cell
+  sane_env: T.cell
+begin
+  sane_env := M.cons(T._NIL, T._NIL)
+  M.save(sane_env)
+  
+  loop
+    IO.reset_tty()
+    G.Error_flag := 0
+    G.Input_port := 0
+    G.Output_port := 1
+    clear_leftover_envs()
+    E.reset_calltrace()
+    G.Car[sane_env] := G.Environment
+    
+    if G.Quiet_mode = 0 then
+      IO.pr("> ")
+      IO.flush()
+    end
+    
+    G.Program := IO.xread()
+    if G.Program = T.END_OF_FILE then
+      exit
+    end
+    
+    if G.Error_flag = 0 then
+      n := E.eval(G.Program)
+    end
+    
+    if (G.Error_flag = 0) & ~G.unspecific_p(n) then
+      IO.print_form(n)
+      IO.nl()
+      G.set_box_value(G.S_latest, n)
+    end
+    
+    if G.Error_flag # 0 then
+      G.Environment := G.car(sane_env)
+    end
+  end
+  
+  M.unsave(1)
+  IO.nl()
+end repl
+
+(* ============================================================
+ * Load file
+ * ============================================================ *)
+
+procedure load*(file: pointer to array of char): int32
+var
+  n: T.cell
+  outer_lno: int32
+  new_port: int32
+  old_port: int32
+  outer_loading: T.cell
+begin
+  new_port := P.open_port(file, true)
+  if new_port = -1 then
+    return -1
+  end
+  G.Port_flags[new_port] := chr(bor(G.Port_flags[new_port], T.LockTag))
+  G.File_list := M.cons(IO.make_string(file, sig(strlen(file))), G.File_list)
+  M.save(G.Environment)
+  while G.cdr(G.Environment) # T._NIL do
+    G.Environment := G.cdr(G.Environment)
+  end
+  outer_loading := G.box_value(G.S_loading)
+  G.set_box_value(G.S_loading, T._TRUE)
+  old_port := G.Input_port
+  outer_lno := G.Line_no
+  G.Line_no := 1
+  
+  loop
+    if G.Error_flag # 0 then exit end
+    G.Input_port := new_port
+    n := IO.xread()
+    G.Input_port := old_port
+    if n = T.END_OF_FILE then
+      exit
+    end
+    if G.Error_flag = 0 then
+      n := E.eval(n)
+    end
+  end
+  
+  P.close_port(new_port)
+  G.Line_no := outer_lno
+  G.set_box_value(G.S_loading,outer_loading)
+  G.File_list := G.cdr(G.File_list)
+  E.rehash(G.car(G.Environment))
+  G.Environment := M.unsave(1)
+  return 0
+end load
+
+(* ============================================================
+ * Usage and version info
+ * ============================================================ *)
+
+procedure usage()
+begin
+  IO.pr("Usage: s9 [-h?] [-gnqv] [-f prog [args]] [-m size[m]]")
+  IO.nl()
+  IO.pr("      [-l prog] [-t count] [-- [args]]")
+  IO.nl()
+end usage
+
+procedure long_usage()
+begin
+  IO.nl()
+  usage()
+  IO.nl()
+  IO.pr("-h        display this summary (also -?)")
+  IO.nl()
+  IO.pr("-f file [args]  run program and exit (implies -q)")
+  IO.nl()
+  IO.pr("-g        print GC summaries (-gg = more)")
+  IO.nl()
+  IO.pr("-l file     load program (may be repeated)")
+  IO.nl()
+  IO.pr("-m n[m]     set memory limit to nK (or nM) nodes")
+  IO.nl()
+  IO.pr("-q        be quiet (no banner, no prompt, exit on errors)")
+  IO.nl()
+  IO.pr("-t n      list up to N procedures in call traces")
+  IO.nl()
+  IO.pr("-v        print version and exit")
+  IO.nl()
+  IO.pr("-- [args]     pass subsequent arguments to program")
+  IO.nl()
+  IO.nl()
+end long_usage
+
+procedure version_info()
+type Str = array of char
+begin
+  IO.nl()
+  IO.pr("Scheme 9 from Empty Space by Nils M Holm")
+  IO.nl()
+  IO.nl()
+  IO.pr("version:     ")
+  IO.pr(Version)
+  IO.pr(" (Micron port)")
+  IO.nl()
+  IO.pr("library path:  ")
+  IO.pr(G.string(G.box_value(G.S_library_path))(Str))
+  IO.nl()
+  IO.pr("memory limit:  ")
+  if G.Memory_limit_kn # 0 then
+    IO.ntoa(@G.Buf, G.Memory_limit_kn div 1024, 0)
+    IO.pr(@G.Buf)
+    IO.pr("K nodes")
+    IO.nl()
+  else
+    IO.pr("none")
+    IO.nl()
+  end
+  IO.nl()
+  IO.pr("This program is in the public domain.")
+  IO.nl()
+  IO.nl()
+end version_info
+
+(* ============================================================
+ * Main entry point
+ * ============================================================ *)
+
+procedure main*()
+begin
+  init()
+  
+  if G.Quiet_mode = 0 then
+    IO.pr("Scheme 9 from Empty Space")
+    IO.nl()
+  end
+  
+  repl()
+  IO.reset_tty()
+end main
+
+begin
+  G.errorProc := error
+  G.fatalProc := fatal
+  main()
+end S9.

@@ -1,0 +1,1205 @@
+(* S9IO - Input/Output for S9 Scheme interpreter
+ * Micron port of "Scheme 9 from Empty Space" by Nils M Holm, 2007-2014
+ * Migrated from C in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *
+ * This module contains:
+ * - Character and string I/O
+ * - Reader (read_form, read_list, etc.)
+ * - Printer (print_form, print_integer, etc.)
+ * - Symbol table management
+ * - Port management
+ *)
+
+module S9IO [level=3]
+
+import S9Types, G := S9Globals, M := S9Memory, B := S9Bignum
+import Out, Files
+
+(* Symbol characters allowed in identifiers *)
+var
+  SymChars*: array 20 of char
+  
+(* Forward declarations *)
+procedure ^x_print_form*(n: S9Types.cell)
+procedure ^print_form*(n: S9Types.cell)
+
+(* ============================================================
+ * Low-level I/O
+ * ============================================================ *)
+
+(* Read a character from the current input port *)
+procedure read_c*(): int32
+var
+  c: byte
+begin
+  if G.Has_rejected then
+    G.Has_rejected := false
+    return G.Rejected_char
+  end
+  
+  if G.Ports[G.Input_port] = nil then
+    return -1  (* EOF *)
+  end
+  if Files.Eof(G.Ports[G.Input_port]) then return -1 end
+  Files.Read(G.Ports[G.Input_port], @c)
+  return +c
+end read_c
+
+(* Read a character, case-insensitive version (same as read_c for now) *)
+procedure read_c_ci*(): int32
+begin
+  return read_c()
+end read_c_ci
+
+(* Reject (push back) a character *)
+procedure reject*(c: int32)
+begin
+  G.Rejected_char := c
+  G.Has_rejected := true
+end reject
+
+(* Write a character to the current output port *)
+procedure write_c*(c: char)
+begin
+  if G.Ports[G.Output_port] # nil then
+    Files.Write(G.Ports[G.Output_port], ord(c))
+  else
+    Out.Char(c)
+  end
+end write_c
+
+(* Print a string to the current output port *)
+procedure pr*(const s: pointer to array of char)
+var
+  i: int32
+begin
+  i := 0
+  while s[i] # 0X do
+    write_c(s[i])
+    inc(i)
+  end
+end pr
+
+(* Print a string with length limit *)
+procedure pr_raw*(s: pointer to array of char; len: int32)
+var
+  i: int32
+begin
+  i := 0
+  while (i < len) & (s[i] # 0X) do
+    write_c(s[i])
+    inc(i)
+  end
+end pr_raw
+
+(* Print a newline *)
+procedure nl*()
+begin
+  write_c(0AX)
+end nl
+
+(* Flush output *)
+procedure flush*()
+begin
+  (* Oakwood Files doesn't have explicit flush, but we can use Out.Ln for stdout *)
+  if G.Ports[G.Output_port] = nil then
+    Out.Ln
+  end
+end flush
+
+(* ============================================================
+ * Number to string conversion
+ * ============================================================ *)
+
+type String = pointer to array of char
+(* Convert a cell value to a string *)
+procedure ntoa*(b: pointer to array of char; x: S9Types.cell; w: int32): String
+var
+  buf: array 40 of char
+  i: int32
+  neg: boolean
+  p: int32
+  digit: byte
+begin
+  neg := false
+  if x < 0 then
+    x := -x
+    neg := true
+  end
+  
+  (* Build number in reverse *)
+  i := 39
+  buf[i] := 0X
+  dec(i)
+  
+  if x = 0 then
+    buf[i] := '0'
+    dec(i)
+  else
+    while x # 0 do
+      digit := val(byte,x mod 10)
+      buf[i] := chr(digit + ord('0'))
+      dec(i)
+      x := x div 10
+    end
+  end
+  
+  (* Pad with zeros if needed *)
+  p := 38 - i
+  if neg then dec(w) end
+  while p < w do
+    buf[i] := '0'
+    dec(i)
+    inc(p)
+  end
+  
+  (* Add sign *)
+  if neg then
+    buf[i] := '-'
+    dec(i)
+  end
+  
+  (* Copy to output buffer *)
+  inc(i)
+  p := 0
+  while buf[i] # 0X do
+    b[p] := buf[i]
+    inc(p)
+    inc(i)
+  end
+  b[p] := 0X
+  
+  return b
+end ntoa
+
+(* ============================================================
+ * Symbol table management
+ * ============================================================ *)
+
+(* Find a symbol in the symbol table *)
+procedure find_symbol*(s: pointer to array of char): S9Types.cell
+var
+  y: S9Types.cell
+begin
+  y := G.Symbols
+  while y # S9Types._NIL do
+    if G.symbol_name(G.car(y)) = s then
+      return G.car(y)
+    end
+    y := G.cdr(y)
+  end
+  return S9Types._NIL
+end find_symbol
+
+(* Create a new symbol *)
+procedure make_symbol*(const s: pointer to array of char; k: int32): S9Types.cell
+var
+  n: S9Types.cell
+  i: int32
+  p, s2: pointer to char
+begin
+  n := M.new_vec(S9Types.T_SYMBOL, k + 1)
+  p := G.symbol_name(n)
+  i := 0
+  s2 := @s[0]
+  while i <= k do
+    p^ := s2^
+    inc(p)
+    inc(s2)
+    inc(i)
+  end
+  return n
+end make_symbol
+
+(* Get or create a symbol reference *)
+procedure symbol_ref*(const s: pointer to array of char): S9Types.cell
+var
+  y: S9Types.cell
+  new: S9Types.cell
+  len: int32
+begin
+  y := find_symbol(s)
+  if y # S9Types._NIL then
+    return y
+  end
+  len := sig(strlen(s))
+  new := make_symbol(s, len)
+  G.Symbols := M.cons(new, G.Symbols)
+  return G.car(G.Symbols)
+end symbol_ref
+
+(* ============================================================
+ * Character and string creation
+ * ============================================================ *)
+
+(* Create a character literal *)
+procedure make_char*(x: int32): S9Types.cell
+var
+  n: S9Types.cell
+begin
+  n := M.new_atom(band(x, 0FFH), S9Types._NIL)
+  return M.new_atom(S9Types.T_CHAR, n)
+end make_char
+
+(* Create a string *)
+procedure make_string*(const s: pointer to array of char; k: S9Types.int): S9Types.cell
+var
+  n: S9Types.cell
+  i: int32
+  p: pointer to char
+begin
+  n := M.new_vec(S9Types.T_STRING, k + 1)
+  p := G.string(n)
+  i := 0
+  while i <= k do
+    p^ := s[i]
+    inc(p)
+    inc(i)
+  end
+  return n
+end make_string
+
+(* ============================================================
+ * Helper predicates
+ * ============================================================ *)
+
+(* Check if character is a separator *)
+procedure separator*(c: int32): boolean
+inline begin
+  return (c = +ord(' ')) or (c = +ord(09X)) or (c = +ord(0AX)) or
+       (c = +ord(0DX)) or (c = +ord('(')) or (c = +ord(')')) or
+       (c = +ord(';')) or (c = +ord("'")) or (c = +ord('`')) or
+       (c = +ord(',')) or (c = +ord('"')) or (c = +ord('[')) or
+       (c = +ord(']')) or (c = -1)
+end separator
+
+(* Check if character is symbolic (allowed in identifiers) *)
+procedure is_symbolic*(c: int32): boolean
+var
+  ch: char
+  i: int32
+  
+begin
+  ch := chr(c)
+  if ((ch >= 'a') & (ch <= 'z')) or ((ch >= 'A') & (ch <= 'Z')) then
+    return true
+  end
+  if (ch >= '0') & (ch <= '9') then
+    return true
+  end
+  (* Check if in SymChars *)
+  i := 0
+  while SymChars[i] # 0X do
+    if SymChars[i] = ch then
+      return true
+    end
+    inc(i)
+  end
+  return false
+end is_symbolic
+
+(* Case-insensitive string comparison *)
+procedure strcmp_ci*(s1: pointer to array of char; const s2: pointer to array of char): int32
+var
+  c1: uint32
+  c2: uint32
+  i: int32
+begin
+  i := 0
+  loop
+    c1 := ord(s1[i])
+    c2 := ord(s2[i])
+    (* Convert to lowercase *)
+    if (c1 >= ord('A')) & (c1 <= ord('Z')) then
+      c1 := c1 + 32
+    end
+    if (c2 >= ord('A')) & (c2 <= ord('Z')) then
+      c2 := c2 + 32
+    end
+    if (c1 = 0) or (c2 = 0) or (c1 # c2) then
+      exit
+    end
+    inc(i)
+  end
+  if c1 < c2 then return -1
+  elsif c1 > c2 then return 1
+  else return 0
+  end
+end strcmp_ci
+
+(* ============================================================
+ * Reader
+ * ============================================================ *)
+
+(* Forward declaration *)
+procedure ^read_form*(flags: int32): S9Types.cell
+
+(* Quote a form *)
+procedure quote*(n: S9Types.cell; quotation: S9Types.cell): S9Types.cell
+var
+  q: S9Types.cell
+begin
+  q := M.cons(n, S9Types._NIL)
+  return M.cons(quotation, q)
+end quote
+
+(* Read a character literal *)
+procedure read_character*(): S9Types.cell
+var
+  buf: array 10 of char
+  msg: array 50 of char
+  i: int32
+  c: uint32
+begin
+  i := 0
+  loop
+    if i >= 9 then exit end
+    c := usig(read_c())
+    if (i > 0) & ~(((c >= ord('a')) & (c <= ord('z'))) or
+             ((c >= ord('A')) & (c <= ord('Z')))) then
+      exit
+    end
+    buf[i] := chr(c)
+    inc(i)
+  end
+  reject(sig(c))
+  buf[i] := 0X
+  
+  if i = 0 then
+    c := ord(' ')
+  elsif i = 1 then
+    c := ord(buf[0])
+  elsif strcmp_ci(@buf, "space") = 0 then
+    c := ord(' ')
+  elsif strcmp_ci(@buf, "newline") = 0 then
+    c := ord(0AX)
+  else
+    return G.error("unknown character literal", S9Types._NOEXPR)
+  end
+  return make_char(sig(c))
+end read_character
+
+(* Read a string literal *)
+procedure read_string*(): S9Types.cell
+var
+  s: array S9Types.TokenLength + 1 of char
+  n: S9Types.cell
+  c: int32
+  i: int32
+  q: boolean
+  inv: boolean
+begin
+  i := 0
+  q := false
+  c := read_c()
+  inv := false
+  
+  loop
+    if not (q or (c # sig(ord('"')))) then exit end
+    if c = -1 then
+      return G.error("missing quote in string literal", S9Types._NOEXPR)
+    end
+    if G.Error_flag # 0 then
+      exit
+    end
+    if i >= S9Types.TokenLength - 2i then
+      G.error("string literal too long", S9Types._NOEXPR)
+      dec(i)
+    end
+    if q & (c # sig(ord('"'))) & (c # sig(ord('\'))) then
+      s[i] := '\'
+      inc(i)
+      inv := true
+    end
+    s[i] := chr(c)
+    q := ~q & (c = sig(ord('\')))
+    if ~q then
+      inc(i)
+    end
+    c := read_c()
+  end
+  s[i] := 0X
+  n := make_string(@s, i)
+  G.Tag[n] := chr(bor(ord(G.Tag[n]), S9Types.ConstTag))
+  if inv then
+    G.error("invalid escape sequence in string", n)
+  end
+  return n
+end read_string
+
+(* Report funny character error *)
+procedure funny_char*(const msg: pointer to array of char; c: int32): S9Types.cell
+begin
+  if (c >= 32) & (c < 127) then
+    return G.error(msg, make_char(c))
+  end
+  return G.error(msg, B.make_integer(c))
+end funny_char
+
+(* Check if string is numeric *)
+procedure string_numeric_p*(s: pointer to array of char): boolean
+var
+  i: int32
+begin
+  i := 0
+  if (s[0] = '+') or (s[0] = '-') then
+    i := 1
+  end
+  if s[i] = 0X then
+    return false
+  end
+  while s[i] # 0X do
+    if (s[i] < '0') or (s[i] > '9') then
+      return false
+    end
+    inc(i)
+  end
+  return true
+end string_numeric_p
+
+(* Convert string to bignum *)
+procedure string_to_bignum*(s: pointer to array of char): S9Types.cell
+var
+  n: S9Types.cell
+  v: S9Types.cell
+  k: int32
+  j: int32
+  sign: int32
+  i: int32
+  digit: int32
+  d : int32
+begin
+  sign := 1
+  i := 0
+  if s[0] = '-' then
+    inc(i)
+    sign := -1
+  elsif s[0] = '+' then
+    inc(i)
+  end
+  
+  (* Skip leading zeros *)
+  while (s[i] = '0') & (s[i+1] # 0X) do
+    inc(i)
+  end
+  
+  k := sig(strlen(@s[i]))
+  n := S9Types._NIL
+  
+  while k > 0 do
+    if k <= S9Types.DigitsPerWord then
+      j := k
+    else
+      j := S9Types.DigitsPerWord
+    end
+    
+    (* Parse j digits from position k-j *)
+    v := 0
+    for d := k - j to k - 1 do
+      digit := sig(ord(s[i + d]) - ord('0'))
+      v := v * 10 + digit
+    end
+    
+    (* Terminate the substring for next iteration *)
+    k := k - j
+    if k = 0 then
+      v := v * sign
+    end
+    n := M.new_atom(v, n)
+  end
+  
+  return M.new_atom(S9Types.T_INTEGER, n)
+end string_to_bignum
+
+(* Read a symbol or number *)
+procedure read_symbol_or_number*(c: int32): S9Types.cell
+var
+  s: array S9Types.TokenLength of char
+  i: int32
+  funny: int32
+begin
+  i := 0
+  funny := 0
+  
+  while ~separator(c) do
+    if ~is_symbolic(c) then
+      funny := c
+    end
+    if i >= S9Types.TokenLength - 2i then
+      G.error("symbol too long", S9Types._NOEXPR)
+      dec(i)
+    end
+    s[i] := chr(c)
+    inc(i)
+    c := read_c_ci()
+  end
+  s[i] := 0X
+  reject(c)
+  
+  if funny # 0 then
+    return funny_char("funny character in symbol", funny)
+  end
+  if string_numeric_p(@s) then
+    return string_to_bignum(@s)
+  end
+  if strcmp_ci(@s, "define-macro") = 0 then
+    return G.S_define_syntax
+  end
+  return symbol_ref(@s)
+end read_symbol_or_number
+
+(* Check if next character is closing paren *)
+procedure closing_paren*(): boolean
+var
+  c: int32
+begin
+  c := read_c_ci()
+  reject(c)
+  return c = sig(ord(')'))
+end closing_paren
+
+(* Read a list *)
+procedure read_list*(flags: int32; delim: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+  m: S9Types.cell
+  a: S9Types.cell
+  c: int32
+  new: S9Types.cell
+begin
+  if G.Level = 0 then
+    G.Opening_line := G.Line_no
+  end
+  inc(G.Level)
+  if G.Level > S9Types.MaxIoDepth then
+    G.error("reader: too many nested lists or vectors", S9Types._NOEXPR)
+    return S9Types._NIL
+  end
+  
+  m := M.cons3(S9Types._NIL, S9Types._NIL, flags)
+  M.save(m)
+  a := S9Types._NIL
+  c := 0
+  
+  loop
+    if G.Error_flag # 0 then
+      M.unsave(1)
+      return S9Types._NIL
+    end
+    n := read_form(flags)
+    if n = S9Types.END_OF_FILE then
+      if G.Load_level # 0 then
+        M.unsave(1)
+        return S9Types.END_OF_FILE
+      end
+      G.error("missing ')'", S9Types._NOEXPR)
+    end
+    if n = S9Types._DOT then
+      if c < 1 then
+        G.error("malformed pair", S9Types._NOEXPR)
+      else
+        n := read_form(flags)
+        G.Cdr[a] := n
+        if (n = delim) or (read_form(flags) # delim) then
+          G.error("malformed pair", S9Types._NOEXPR)
+        end
+        M.unsave(1)
+        dec(G.Level)
+        return m
+      end
+    end
+    if (n = S9Types._RPAREN) or (n = S9Types._RBRACK) then
+      if n # delim then
+        if n = S9Types._RPAREN then
+          G.error("list starting with '[' ended with ')'", S9Types._NOEXPR)
+        else
+          G.error("list starting with '(' ended with ']'", S9Types._NOEXPR)
+        end
+      end
+      exit
+    end
+    if a = S9Types._NIL then
+      a := m
+    else
+      a := G.cdr(a)
+    end
+    G.Car[a] := n
+    new := M.cons3(S9Types._NIL, S9Types._NIL, flags)
+    G.Cdr[a] := new
+    inc(c)
+  end
+  
+  dec(G.Level)
+  if a # S9Types._NIL then
+    G.Cdr[a] := S9Types._NIL
+  end
+  M.unsave(1)
+  if c # 0 then return m else return S9Types._NIL end
+end read_list
+
+(* Convert list to vector *)
+procedure list_to_vector*(m: S9Types.cell; const msg: pointer to array of char; flags: int32): S9Types.cell
+var
+  n: S9Types.cell
+  vec: S9Types.cell
+  k: int32
+  p: pointer to S9Types.cell
+begin
+  k := 0
+  n := m
+  while n # S9Types._NIL do
+    if G.atom_p(n) then
+      return G.error(msg, m)
+    end
+    inc(k)
+    n := G.cdr(n)
+  end
+  vec := M.new_vec(S9Types.T_VECTOR, k * sig(size(S9Types.cell)))
+  G.Tag[vec] := chr(bor(ord(G.Tag[vec]), flags))
+  p := G.vector(vec)
+  n := m
+  while n # S9Types._NIL do
+    p^ := G.car(n)
+    inc(p)
+    n := G.cdr(n)
+  end
+  return vec
+end list_to_vector
+
+(* Read a vector *)
+procedure read_vector*(): S9Types.cell
+var
+  n: S9Types.cell
+begin
+  n := read_list(0, S9Types._RPAREN)
+  M.save(n)
+  n := list_to_vector(n, "invalid vector syntax", S9Types.ConstTag)
+  M.unsave(1)
+  return n
+end read_vector
+
+(* Block comment handler *)
+procedure block_comment*(): int32
+var
+  n: int32
+  c: int32
+  state: int32
+begin
+  n := 1
+  state := 0
+  while n # 0 do
+    c := read_c_ci()
+    case c of
+    | -1:
+      G.error("missing |#", S9Types._NOEXPR)
+      return 0
+    | +ord('|'):
+      if state = 1 then
+        inc(n)
+        state := 0
+      else
+        state := -1
+      end
+    | +ord('#'):
+      if state = -1 then
+        dec(n)
+        state := 0
+      else
+        state := 1
+      end
+    | +ord(0AX):
+      inc(G.Line_no)
+      state := 0
+    else
+      state := 0
+    end
+  end
+  return read_c_ci()
+end block_comment
+
+(* Read a form *)
+procedure read_form*(flags: int32): S9Types.cell
+var
+  c: int32
+  c2: int32
+  n: S9Types.cell
+begin
+  c := read_c_ci()
+  
+  (* Skip whitespace and comments *)
+  loop
+    while (c = +ord(' ')) or (c = +ord(09X)) or (c = +ord(0AX)) or (c = sig(ord(0DX))) do
+      if c = sig(ord(0AX)) then
+        inc(G.Line_no)
+      end
+      if G.Error_flag # 0 then
+        return S9Types._NIL
+      end
+      c := read_c_ci()
+    end
+    if c = sig(ord('#')) then
+      c := read_c_ci()
+      if c = sig(ord('!')) then
+        (* Shebang - skip to end of line *)
+        while (c # +ord(0AX)) & (c # -1) do
+          c := read_c_ci()
+        end
+      elsif c = sig(ord('|')) then
+        c := block_comment()
+      else
+        reject(c)
+        c := +ord('#')
+        exit
+      end
+    elsif c # sig(ord(';')) then
+      exit
+    end
+    while (G.Error_flag = 0) & (c # sig(ord(0AX))) & (c # -1) do
+      c := read_c_ci()
+    end
+    if G.Error_flag # 0 then
+      return S9Types._UNSPECIFIC
+    end
+  end
+  
+  if c = -1 then
+    return S9Types.END_OF_FILE
+  end
+  if G.Error_flag # 0 then
+    return S9Types._UNSPECIFIC
+  end
+  
+  if c = sig(ord('(')) then
+    return read_list(flags, S9Types._RPAREN)
+  elsif c = sig(ord('[')) then
+    return read_list(flags, S9Types._RBRACK)
+  elsif (c = +ord("'")) or (c = sig(ord('`'))) then
+    if closing_paren() then
+      return G.error("missing form after quote", S9Types._NOEXPR)
+    end
+    inc(G.Level)
+    if c = sig(ord('`')) then
+      n := quote(read_form(S9Types.ConstTag), G.S_quasiquote)
+    else
+      n := quote(read_form(S9Types.ConstTag), G.S_quote)
+    end
+    dec(G.Level)
+    return n
+  elsif c = sig(ord(',')) then
+    if closing_paren() then
+      return G.error("missing form after ','", S9Types._NOEXPR)
+    end
+    c := read_c_ci()
+    if c = sig(ord('@')) then
+      return quote(read_form(0), G.S_unquote_splicing)
+    else
+      reject(c)
+      if G.Level = 0 then
+        (* Meta command - not implemented in this version *)
+        return S9Types._UNSPECIFIC
+      end
+      return quote(read_form(0), G.S_unquote)
+    end
+  elsif c = sig(ord('#')) then
+    c := read_c_ci()
+    case c of
+    | +ord('f'): return S9Types._FALSE
+    | +ord('t'): return S9Types._TRUE
+    | +ord('\'): return read_character()
+    | +ord('('): return read_vector()
+    else
+      return G.error("unknown # syntax", S9Types._NOEXPR)
+    end
+  elsif c = sig(ord('"')) then
+    return read_string()
+  elsif c = sig(ord(')')) then
+    if G.Level = 0 then
+      return G.error("unexpected ')'", S9Types._NOEXPR)
+    end
+    return S9Types._RPAREN
+  elsif c = sig(ord(']')) then
+    if G.Level = 0 then
+      return G.error("unexpected ']'", S9Types._NOEXPR)
+    end
+    return S9Types._RBRACK
+  elsif c = sig(ord('.')) then
+    c2 := read_c_ci()
+    reject(c2)
+    if separator(c2) then
+      if G.Level = 0 then
+        return G.error("unexpected '.'", S9Types._NOEXPR)
+      end
+      return S9Types._DOT
+    end
+    return read_symbol_or_number(c)
+  elsif is_symbolic(c) then
+    return read_symbol_or_number(c)
+  else
+    return funny_char("funny input character", c)
+  end
+end read_form
+
+(* Main read function *)
+procedure xread*(): S9Types.cell
+begin
+  if G.Ports[G.Input_port] = nil then
+    return G.error("input port is not open", S9Types._NOEXPR)
+  end
+  G.Level := 0
+  return read_form(0)
+end xread
+
+(* ============================================================
+ * Printer
+ * ============================================================ *)
+
+(* Print a bignum integer *)
+procedure print_integer*(n: S9Types.cell): boolean
+var
+  first: boolean
+  buf: array usig(S9Types.DigitsPerWord + 2) of char
+begin
+  if ~G.integer_p(n) then
+    return false
+  end
+  n := G.cdr(n)
+  first := true
+  while n # S9Types._NIL do
+    if first then
+      ntoa(@buf, G.car(n), 0)
+    else
+      ntoa(@buf, G.car(n), S9Types.DigitsPerWord)
+    end
+    pr(@buf)
+    n := G.cdr(n)
+    first := false
+  end
+  return true
+end print_integer
+
+(* Print a character *)
+procedure print_char*(n: S9Types.cell)
+var
+  c: int32
+begin
+  c := val(int32,G.char_value(n))
+  if G.Displaying # 0 then
+    write_c(chr(c))
+  elsif c = sig(ord(' ')) then
+    pr("#\space")
+  elsif c = sig(ord(0AX)) then
+    pr("#\newline")
+  else
+    pr("#\")
+    write_c(chr(c))
+  end
+end print_char
+
+(* Print a string *)
+procedure print_string*(n: S9Types.cell)
+var
+  s: pointer to char
+  k: int32
+  i: int32
+begin
+  s := G.string(n)
+  k := val(int32,G.string_len(n)) - 1
+  if G.Displaying # 0 then
+    i := 0
+    while i < k do
+      write_c(s^)
+      inc(i)
+      inc(s)
+    end
+  else
+    write_c('"')
+    i := 0
+    while i < k do
+      if (s^ = '"') or (s^ = '\') then
+        write_c('\')
+      end
+      write_c(s^)
+      inc(s)
+      inc(i)
+    end
+    write_c('"')
+  end
+end print_string
+
+(* Print a symbol *)
+procedure print_symbol*(n: S9Types.cell)
+var
+  s: pointer to char
+  k: int32
+  i: int32
+begin
+  s := G.symbol_name(n)
+  k := val(int32, G.symbol_len(n)) - 1
+  i := 0
+  while i < k do
+    write_c(s^)
+    inc(i)
+    inc(s)
+  end
+end print_symbol
+
+(* Print a primitive procedure *)
+procedure print_primitive*(n: S9Types.cell)
+var
+  i: int32
+begin
+  i := val(int32,G.cadr(n))
+  pr("#<primitive ")
+  if (i >= 0) & (i < G.Last_prim) then
+    pr(G.Primitives[i].name)
+  else
+    pr("???")
+  end
+  pr(">")
+end print_primitive
+
+(* Print a procedure *)
+procedure print_procedure*(n: S9Types.cell)
+begin
+  pr("#<procedure ")
+  if G.symbol_p(G.cadr(n)) then
+    print_symbol(G.cadr(n))
+  else
+    pr("lambda")
+  end
+  pr(">")
+end print_procedure
+
+(* Print a continuation *)
+procedure print_continuation*(n: S9Types.cell)
+begin
+  pr("#<continuation>")
+end print_continuation
+
+(* Print a syntax object *)
+procedure print_syntax*(n: S9Types.cell)
+begin
+  pr("#<syntax ")
+  print_symbol(G.cadr(n))
+  pr(">")
+end print_syntax
+
+(* Print a vector *)
+procedure print_vector*(n: S9Types.cell)
+var
+  p: pointer to S9Types.cell
+  k: int32
+  i: int32
+begin
+  pr("#(")
+  p := G.vector(n)
+  k := val(int32,G.vector_len(n))
+  i := 0
+  while i < k do
+    print_form(p^)
+    inc(p)
+    inc(i)
+    if i < k then
+      write_c(' ')
+    end
+  end
+  pr(")")
+end print_vector
+
+(* Print a port *)
+procedure print_port*(n: S9Types.cell)
+begin
+  if G.input_port_p(n) then
+    pr("#<input-port>")
+  else
+    pr("#<output-port>")
+  end
+end print_port
+
+
+(* Print a quoted form *)
+procedure print_quoted*(n: S9Types.cell): boolean
+var
+  q: S9Types.cell
+begin
+  if ~G.pair_p(n) then
+    return false
+  end
+  q := G.car(n)
+  if (q # G.S_quote) & (q # G.S_quasiquote) & 
+     (q # G.S_unquote) & (q # G.S_unquote_splicing) then
+    return false
+  end
+  if ~G.pair_p(G.cdr(n)) or (G.cddr(n) # S9Types._NIL) then
+    return false
+  end
+  if q = G.S_quote then
+    write_c("'")
+  elsif q = G.S_quasiquote then
+    write_c('`')
+  elsif q = G.S_unquote then
+    write_c(',')
+  else
+    pr(",@")
+  end
+  x_print_form(G.cadr(n))
+  return true
+end print_quoted
+
+(* Internal print form *)
+procedure x_print_form*(n: S9Types.cell)
+begin
+  if G.Error_flag # 0 then
+    return
+  end
+  
+  (* Check printer limit *)
+  if G.Printer_limit # 0 then
+    inc(G.Printer_count)
+    if G.Printer_count > G.Printer_limit then
+      pr("...")
+      return
+    end
+  end
+  
+  if n = S9Types._NIL then
+    pr("()")
+  elsif n = S9Types._TRUE then
+    pr("#t")
+  elsif n = S9Types._FALSE then
+    pr("#f")
+  elsif n = S9Types.END_OF_FILE then
+    pr("#<eof>")
+  elsif n = S9Types._UNDEFINED then
+    pr("#<undefined>")
+  elsif n = S9Types._UNSPECIFIC then
+    pr("#<unspecific>")
+  elsif G.integer_p(n) then
+    print_integer(n)
+  elsif G.real_p(n) then
+    (* Real number printing - simplified *)
+    pr("#<real>")
+  elsif G.char_p(n) then
+    print_char(n)
+  elsif G.string_p(n) then
+    print_string(n)
+  elsif G.symbol_p(n) then
+    print_symbol(n)
+  elsif G.primitive_p(n) then
+    print_primitive(n)
+  elsif G.procedure_p(n) then
+    print_procedure(n)
+  elsif G.continuation_p(n) then
+    print_continuation(n)
+  elsif G.syntax_p(n) then
+    print_syntax(n)
+  elsif G.vector_p(n) then
+    print_vector(n)
+  elsif G.input_port_p(n) or G.output_port_p(n) then
+    print_port(n)
+  elsif print_quoted(n) then
+    (* Already printed *)
+  elsif G.pair_p(n) then
+    write_c('(')
+    while G.pair_p(n) do
+      x_print_form(G.car(n))
+      n := G.cdr(n)
+      if G.pair_p(n) then
+        write_c(' ')
+      end
+    end
+    if n # S9Types._NIL then
+      pr(" . ")
+      x_print_form(n)
+    end
+    write_c(')')
+  else
+    pr("#<unknown>")
+  end
+end x_print_form
+
+(* Main print function *)
+procedure print_form*(n: S9Types.cell)
+begin
+  G.Printer_count := 0
+  x_print_form(n)
+end print_form
+
+(* ============================================================
+ * List utilities
+ * ============================================================ *)
+
+(* Check if n is a proper list *)
+procedure proper_list_p*(n: S9Types.cell): boolean
+begin
+  while G.pair_p(n) do
+    n := G.cdr(n)
+  end
+  return n = S9Types._NIL
+end proper_list_p
+
+(* Return the length of a list *)
+procedure length*(n: S9Types.cell): int32
+var
+  k: int32
+begin
+  k := 0
+  while n # S9Types._NIL do
+    inc(k)
+    n := G.cdr(n)
+  end
+  return k
+end length
+
+(* Append b to the end of a (destructive) *)
+procedure append_b*(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+var
+  p: S9Types.cell
+begin
+  if a = S9Types._NIL then
+    return b
+  end
+  p := a
+  while G.cdr(p) # S9Types._NIL do
+    p := G.cdr(p)
+  end
+  G.Cdr[p] := b
+  return a
+end append_b
+
+(* Make a flat copy of a list *)
+procedure flat_copy*(n: S9Types.cell; lastp: pointer to S9Types.cell): S9Types.cell
+var
+  a: S9Types.cell
+  m: S9Types.cell
+  last: S9Types.cell
+begin
+  if n = S9Types._NIL then
+    return S9Types._NIL
+  end
+  m := M.cons(G.car(n), S9Types._NIL)
+  M.save(m)
+  a := m
+  n := G.cdr(n)
+  while n # S9Types._NIL do
+    last := M.cons(G.car(n), S9Types._NIL)
+    G.Cdr[a] := last
+    a := last
+    n := G.cdr(n)
+  end
+  if lastp # nil then
+    lastp^ := a
+  end
+  M.unsave(1)
+  return m
+end flat_copy
+
+procedure reset_tty*()
+begin
+  (* No-op: signal handling disabled *)
+end reset_tty
+
+begin
+  SymChars := "!@#$%^&*-/_+=~.?<>:"
+end S9IO.

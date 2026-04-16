@@ -1,0 +1,1064 @@
+(* S9Eval - Evaluator for S9 Scheme interpreter
+ * Micron port of "Scheme 9 from Empty Space" by Nils M Holm, 2007-2014
+ * Migrated from C in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *
+ * This module contains:
+ * - Special form handlers (if, cond, lambda, define, etc.)
+ * - Environment management (lookup, extend, make_env)
+ * - Main evaluator (eval, xeval)
+ * - Syntax expansion
+ *)
+
+module S9Eval [level=3]
+
+import S9Types
+import G := S9Globals
+import M := S9Memory
+import IO := S9IO
+
+(* ============================================================
+ * Error handling
+ * ============================================================ *)
+
+procedure too_few_args*(n: S9Types.cell): S9Types.cell
+begin
+  return G.error("too few arguments", n)
+end too_few_args
+
+procedure too_many_args*(n: S9Types.cell): S9Types.cell
+begin
+  return G.error("too many arguments", n)
+end too_many_args
+
+(* ============================================================
+ * List utilities
+ * ============================================================ *)
+
+(* Check if n is a valid argument list *)
+procedure argument_list_p*(n: S9Types.cell): boolean
+begin
+  if (n = S9Types._NIL) or G.symbol_p(n) then
+    return true
+  end
+  if G.atom_p(n) then
+    return false
+  end
+  while G.pair_p(n) do
+    if ~G.symbol_p(G.car(n)) then
+      return false
+    end
+    n := G.cdr(n)
+  end
+  return (n = S9Types._NIL) or G.symbol_p(n)
+end argument_list_p
+
+(* ============================================================
+ * Hash table support for environments
+ * ============================================================ *)
+
+(* Compute hash of a string *)
+procedure hash*(s: pointer to char): int32
+var
+  h: int32
+  i: int32
+begin
+  h := 0
+  i := 0
+  while s^ # 0X do
+    h := val(int32,(bor(shl(h, 3), ord(s^))))
+    inc(i)
+    inc(s)
+  end
+  return h
+end hash
+
+(* Get hash table size for n elements *)
+procedure hash_size*(n: int32): int32
+begin
+  if n < 5 then return 5 end
+  if n < 11 then return 11 end
+  if n < 23 then return 23 end
+  if n < 47 then return 47 end
+  if n < 97 then return 97 end
+  if n < 199 then return 199 end
+  if n < 499 then return 499 end
+  if n < 997 then return 997 end
+  if n < 9973 then return 9973 end
+  return 19997
+end hash_size
+
+(* Rehash an environment frame *)
+procedure rehash*(e: S9Types.cell)
+var
+  i: int32
+  p: S9Types.cell
+  v, w: pointer to S9Types.cell
+  new_: S9Types.cell
+  h: int32
+  k: int32
+  s: pointer to char
+begin
+  if (G.Program = S9Types._NIL) or (IO.length(e) < S9Types.HashThreshold) then
+    return
+  end
+  k := hash_size(IO.length(e))
+  new_ := M.new_vec(S9Types.T_VECTOR, k * sig(size(S9Types.cell)))
+  G.Car[e] := new_
+  v := G.vector(G.car(e))
+  w := v
+  for i := 0 to k - 1 do
+    v^ := S9Types._NIL
+    inc(v)
+  end
+  p := G.cdr(e)
+  while p # S9Types._NIL do
+    v := w
+    s := G.symbol_name(G.caar(p))
+    h := hash(s)
+    inc(v, h mod k)
+    new_ := M.cons(G.car(p), v^)
+    v := G.vector(G.car(e))
+    v^ := new_
+    p := G.cdr(p)
+  end
+end rehash
+
+(* ============================================================
+ * Environment management
+ * ============================================================ *)
+
+(* Make a binding (variable . value) *)
+procedure make_binding*(v: S9Types.cell; a: S9Types.cell): S9Types.cell
+inline begin
+  return M.cons(v, a)
+end make_binding
+
+(* Extend environment with a new binding *)
+procedure extend*(v: S9Types.cell; a: S9Types.cell; e: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+  new: S9Types.cell
+begin
+  n := make_binding(v, a)
+  new := M.cons(n, G.cdr(e))
+  G.Cdr[e] := new
+  if G.box_value(G.S_loading) = S9Types._FALSE then
+    rehash(e)
+  end
+  return e
+end extend
+
+(* Create a new environment frame *)
+procedure make_env*(rib: S9Types.cell; env: S9Types.cell): S9Types.cell
+var
+  e: S9Types.cell
+begin
+  G.Tmp := env
+  rib := M.cons(S9Types._NIL, rib)
+  e := M.cons(rib, env)
+  G.Tmp := S9Types._NIL
+  if IO.length(rib) >= S9Types.HashThreshold then
+    M.save(e)
+    rehash(rib)
+    M.unsave(1)
+  end
+  return e
+end make_env
+
+(* Try to find variable in hash table *)
+procedure try_hash*(v: S9Types.cell; e: S9Types.cell): S9Types.cell
+var
+  hv: pointer to S9Types.cell
+  p: S9Types.cell
+  h: int32
+  k: int32
+  s: pointer to char
+begin
+  if (e = S9Types._NIL) or (G.car(e) = S9Types._NIL) then
+    return S9Types._NIL
+  end
+  hv := G.vector(G.car(e))
+  k := val(int32, G.vector_len(G.car(e)))
+  s := G.symbol_name(v)
+  h := hash(s)
+  inc(hv, h mod k)
+  p := hv^
+  while p # S9Types._NIL do
+    if G.caar(p) = v then
+      return G.car(p)
+    end
+    p := G.cdr(p)
+  end
+  return S9Types._NIL
+end try_hash
+
+(* Look up a variable in the environment *)
+procedure lookup*(v: S9Types.cell; env: S9Types.cell; req: boolean): S9Types.cell
+var
+  e: S9Types.cell
+  n: S9Types.cell
+begin
+  while env # S9Types._NIL do
+    e := G.car(env)
+    n := try_hash(v, e)
+    if n # S9Types._NIL then
+      return n
+    end
+    if e # S9Types._NIL then
+      e := G.cdr(e)  (* skip over hash table *)
+    end
+    while e # S9Types._NIL do
+      if v = G.caar(e) then
+        return G.car(e)
+      end
+      e := G.cdr(e)
+    end
+    env := G.cdr(env)
+  end
+  if ~req then
+    return S9Types._NIL
+  end
+  if G.special_p(v) then
+    return G.error("invalid syntax", v)
+  else
+    return G.error("symbol not bound", v)
+  end
+end lookup
+
+(* Find a local variable in the current environment frame *)
+procedure find_local_variable*(v: S9Types.cell; e: S9Types.cell): S9Types.cell
+begin
+  if e = S9Types._NIL then
+    return S9Types._NIL
+  end
+  e := G.cdr(e)
+  while e # S9Types._NIL do
+    if v = G.caar(e) then
+      return G.car(e)
+    end
+    e := G.cdr(e)
+  end
+  return S9Types._NIL
+end find_local_variable
+
+(* ============================================================
+ * Special form handlers
+ * ============================================================ *)
+
+(* Set up sequence for AND, BEGIN, OR *)
+procedure make_sequence*(state: int32; neutral: S9Types.cell; x: S9Types.cell;
+             pc: pointer to int32; ps: pointer to int32): S9Types.cell
+begin
+  if G.cdr(x) = S9Types._NIL then
+    return neutral
+  elsif G.cddr(x) = S9Types._NIL then
+    pc^ := 1
+    return G.cadr(x)
+  else
+    pc^ := 2
+    ps^ := state
+    M.save(G.cdr(x))
+    return G.cadr(x)
+  end
+end make_sequence
+
+(* Handle (and ...) *)
+procedure sf_and*(x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
+begin
+  return make_sequence(sig(ord(S9Types.EV_AND)), S9Types._TRUE, x, pc, ps)
+end sf_and
+
+(* Handle (begin ...) *)
+procedure sf_begin*(x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
+begin
+  return make_sequence(sig(ord(S9Types.EV_BEGIN)), S9Types._UNSPECIFIC, x, pc, ps)
+end sf_begin
+
+(* Handle (or ...) *)
+procedure sf_or*(x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
+begin
+  return make_sequence(sig(ord(S9Types.EV_OR)), S9Types._FALSE, x, pc, ps)
+end sf_or
+
+(* Handle (cond ...) *)
+procedure sf_cond*(x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
+var
+  clauses: S9Types.cell
+  p: S9Types.cell
+begin
+  clauses := G.cdr(x)
+  p := clauses
+  while p # S9Types._NIL do
+    if G.atom_p(G.car(p)) then
+      return G.error("cond: invalid syntax", G.car(p))
+    end
+    p := G.cdr(p)
+  end
+  if clauses = S9Types._NIL then
+    return S9Types._UNSPECIFIC
+  end
+  if (G.caar(clauses) = G.S_else) & (G.cdr(clauses) = S9Types._NIL) then
+    p := M.cons(S9Types._TRUE, G.cdar(clauses))
+    clauses := M.cons(p, G.cdr(clauses))
+  end
+  M.save(clauses)
+  pc^ := 2
+  ps^ := sig(ord(S9Types.EV_COND))
+  return G.caar(clauses)
+end sf_cond
+
+(* Handle (if ...) *)
+procedure sf_if*(x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
+var
+  m: S9Types.cell
+  new: S9Types.cell
+begin
+  m := G.cdr(x)
+  if (m = S9Types._NIL) or (G.cdr(m) = S9Types._NIL) then
+    return too_few_args(x)
+  end
+  if (G.cddr(m) # S9Types._NIL) & (G.cdddr(m) # S9Types._NIL) then
+    return too_many_args(x)
+  end
+  if G.cddr(m) = S9Types._NIL then
+    new := M.cons(S9Types._UNSPECIFIC, S9Types._NIL)
+    G.Cdr[G.cdr(m)] := new
+  end
+  M.save(m)
+  pc^ := 2
+  ps^ := sig(ord(S9Types.EV_IF_PRED))
+  return G.car(m)
+end sf_if
+
+(* Handle (quote ...) *)
+procedure sf_quote*(x: S9Types.cell): S9Types.cell
+begin
+  if G.cdr(x) = S9Types._NIL then return too_few_args(x) end
+  if G.cddr(x) # S9Types._NIL then return too_many_args(x) end
+  return G.cadr(x)
+end sf_quote
+
+(* Generate a unique symbol *)
+var
+  Gensym_counter: int32
+
+procedure gensym*(const prefix: pointer to array of char): S9Types.cell
+var
+  buf: array 32 of char
+  i, j: int32
+  n: int32
+  start: int32
+  tmp: char
+begin
+  i := 0
+  while prefix[i] # 0X do
+    buf[i] := prefix[i]
+    inc(i)
+  end
+  n := Gensym_counter
+  inc(Gensym_counter)
+  (* Convert number to string *)
+  if n = 0 then
+    buf[i] := '0'
+    inc(i)
+  else
+    start := i
+    while n > 0 do
+      buf[i] := chr((usig(n) mod 10) + ord('0'))
+      inc(i)
+      n := n div 10
+    end
+    (* Reverse the digits *)
+    j := start
+    dec(i)
+    while j < i do
+      tmp := buf[j]
+      buf[j] := buf[i]
+      buf[i] := tmp
+      inc(j)
+      dec(i)
+    end
+    inc(i)
+  end
+  buf[i] := 0X
+  return IO.symbol_ref(@buf)
+end gensym
+
+(* Make temporaries for letrec transformation *)
+procedure make_temporaries*(x: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+  v: S9Types.cell
+begin
+  n := S9Types._NIL
+  M.save(n)
+  while x # S9Types._NIL do
+    v := gensym("g")
+    n := M.cons(v, n)
+    G.Car[G.Stack] := n
+    x := G.cdr(x)
+  end
+  M.unsave(1)
+  return n
+end make_temporaries
+
+(* Make assignments for letrec transformation *)
+procedure make_assignments*(x: S9Types.cell; t: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+  asg: S9Types.cell
+begin
+  n := S9Types._NIL
+  M.save(n)
+  while x # S9Types._NIL do
+    asg := M.cons(G.car(t), S9Types._NIL)
+    asg := M.cons(G.car(x), asg)
+    asg := M.cons(G.S_set_b, asg)
+    n := M.cons(asg, n)
+    G.Car[G.Stack] := n
+    x := G.cdr(x)
+    t := G.cdr(t)
+  end
+  M.unsave(1)
+  return M.cons(G.S_begin, n)
+end make_assignments
+
+(* Make list of undefined values *)
+procedure make_undefineds*(x: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+begin
+  n := S9Types._NIL
+  while x # S9Types._NIL do
+    n := M.cons(S9Types._UNDEFINED, n)
+    x := G.cdr(x)
+  end
+  return n
+end make_undefineds
+
+(* Make recursive lambda for letrec transformation *)
+procedure make_recursive_lambda*(v: S9Types.cell; a: S9Types.cell; body: S9Types.cell): S9Types.cell
+var
+  t: S9Types.cell
+  n: S9Types.cell
+begin
+  t := make_temporaries(v)
+  M.save(t)
+  body := IO.append_b(make_assignments(v, t), body)
+  body := M.cons(body, S9Types._NIL)
+  n := M.cons(t, body)
+  n := M.cons(G.S_lambda, n)
+  n := M.cons(n, a)
+  n := M.cons(n, S9Types._NIL)
+  n := M.cons(v, n)
+  n := M.cons(G.S_lambda, n)
+  M.save(n)
+  n := M.cons(n, make_undefineds(v))
+  M.unsave(2)
+  return n
+end make_recursive_lambda
+
+const
+  VARS = 0
+  VALS = 1
+
+(* Extract variables or values from defines *)
+procedure extract_from_defines*(x: S9Types.cell; part: int32; restp: pointer to S9Types.cell): S9Types.cell
+var
+  a: S9Types.cell
+  n: S9Types.cell
+  new: S9Types.cell
+  k: int32
+begin
+  a := S9Types._NIL
+  loop
+    if x = S9Types._NIL then exit end
+    if G.atom_p(x) or G.atom_p(G.car(x)) or (G.caar(x) # G.S_define) then
+      exit
+    end
+    n := G.car(x)
+    k := IO.length(n)
+    if ~IO.proper_list_p(n) or (k < 3) or ~argument_list_p(G.cadr(n)) or
+       (G.symbol_p(G.cadr(n)) & (k > 3)) then
+      return G.error("define: invalid syntax", n)
+    end
+    if G.pair_p(G.cadr(n)) then
+      (* (define (proc vars) ...) *)
+      if part = VARS then
+        a := M.cons(G.caadr(n), a)
+      else
+        a := M.cons(S9Types._NIL, a)
+        M.save(a)
+        new := M.cons(G.cdadr(n), G.cddr(n))
+        new := M.cons(G.S_lambda, new)
+        G.Car[a] := new
+        M.unsave(1)
+      end
+    else
+      if part = VARS then
+        a := M.cons(G.cadr(n), a)
+      else
+        a := M.cons(G.caddr(n), a)
+      end
+    end
+    x := G.cdr(x)
+  end
+  restp^ := x
+  return a
+end extract_from_defines
+
+(* Resolve local defines using letrec transformation *)
+procedure resolve_local_defines*(x: S9Types.cell): S9Types.cell
+var
+  v: S9Types.cell
+  a: S9Types.cell
+  n: S9Types.cell
+  rest: S9Types.cell
+begin
+  a := extract_from_defines(x, VALS, @rest)
+  if G.Error_flag # 0 then
+    return S9Types._NIL
+  end
+  M.save(a)
+  v := extract_from_defines(x, VARS, @rest)
+  M.save(v)
+  if rest = S9Types._NIL then
+    rest := M.cons(S9Types._UNSPECIFIC, S9Types._NIL)
+  end
+  M.save(rest)
+  n := make_recursive_lambda(v, a, rest)
+  M.unsave(3)
+  return n
+end resolve_local_defines
+
+(* Handle (lambda ...) *)
+procedure sf_lambda*(x: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+  k: int32
+begin
+  k := IO.length(x)
+  if k < 3 then
+    return too_few_args(x)
+  end
+  if ~argument_list_p(G.cadr(x)) then
+    return G.error("malformed argument list", G.cadr(x))
+  end
+  if G.pair_p(G.caddr(x)) & (G.caaddr(x) = G.S_define) then
+    n := resolve_local_defines(G.cddr(x))
+  elsif k > 3 then
+    n := M.cons(G.S_begin, G.cddr(x))
+  else
+    n := G.caddr(x)
+  end
+  n := M.cons(n, G.Environment)
+  n := M.cons(G.cadr(x), n)
+  return M.new_atom(S9Types.T_PROCEDURE, n)
+end sf_lambda
+
+(* Handle (set! ...) *)
+procedure sf_set_b*(x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
+var
+  n: S9Types.cell
+  k: int32
+begin
+  k := IO.length(x)
+  if k < 3 then return too_few_args(x) end
+  if k > 3 then return too_many_args(x) end
+  if ~G.symbol_p(G.cadr(x)) then
+    return G.error("set!: expected symbol, got", G.cadr(x))
+  end
+  n := lookup(G.cadr(x), G.Environment, true)
+  if G.Error_flag # 0 then
+    return S9Types._NIL
+  end
+  M.save(n)
+  pc^ := 2
+  ps^ := sig(ord(S9Types.EV_SET_VAL))
+  return G.caddr(x)
+end sf_set_b
+
+(* Handle (define ...) and (define-syntax ...) *)
+procedure sf_define*(syntax: boolean; x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
+var
+  v: S9Types.cell
+  a: S9Types.cell
+  n: S9Types.cell
+  new: S9Types.cell
+  k: int32
+begin
+  if G.car(G.State_stack) = sig(ord(S9Types.EV_ARGS)) then
+    if syntax then
+      return G.error("define-syntax: invalid context", x)
+    else
+      return G.error("define: invalid context", x)
+    end
+  end
+  k := IO.length(x)
+  if k < 3 then
+    return too_few_args(x)
+  end
+  if G.symbol_p(G.cadr(x)) & (k > 3) then
+    return too_many_args(x)
+  end
+  if ~argument_list_p(G.cadr(x)) then
+    if syntax then
+      return G.error("define-syntax: expected argument list, got", G.cadr(x))
+    else
+      return G.error("define: expected argument list, got", G.cadr(x))
+    end
+  end
+  if ~G.symbol_p(G.cadr(x)) then
+    a := G.cddr(x)
+    a := M.cons(G.cdadr(x), a)
+    a := M.cons(G.S_lambda, a)
+    M.save(a)
+    n := G.caadr(x)
+  else
+    M.save(S9Types._NIL)
+    a := G.caddr(x)
+    n := G.cadr(x)
+  end
+  v := find_local_variable(n, G.car(G.Environment))
+  if v = S9Types._NIL then
+    new := extend(n, S9Types._UNDEFINED, G.car(G.Environment))
+    G.Car[G.Environment] := new
+    v := G.cadar(G.Environment)
+  end
+  G.Car[G.Stack] := G.binding_box(v)
+  pc^ := 2
+  if syntax then
+    ps^ := sig(ord(S9Types.EV_MACRO))
+  else
+    ps^ := sig(ord(S9Types.EV_SET_VAL))
+  end
+  return a
+end sf_define
+
+(* Apply a special form *)
+procedure apply_special*(x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
+var
+  sf: S9Types.cell
+begin
+  sf := G.car(x)
+  if sf = G.S_quote then return sf_quote(x)
+  elsif sf = G.S_if then return sf_if(x, pc, ps)
+  elsif sf = G.S_and then return sf_and(x, pc, ps)
+  elsif sf = G.S_or then return sf_or(x, pc, ps)
+  elsif sf = G.S_cond then return sf_cond(x, pc, ps)
+  elsif sf = G.S_begin then return sf_begin(x, pc, ps)
+  elsif sf = G.S_lambda then return sf_lambda(x)
+  elsif sf = G.S_set_b then return sf_set_b(x, pc, ps)
+  elsif sf = G.S_define then return sf_define(false, x, pc, ps)
+  elsif sf = G.S_define_syntax then return sf_define(true, x, pc, ps)
+  else
+    G.fatal("internal: unknown special form")
+    return S9Types._UNSPECIFIC
+  end
+end apply_special
+
+(* ============================================================
+ * Evaluator state management
+ * ============================================================ *)
+
+procedure save_state*(s: int32)
+begin
+  G.State_stack := M.cons3(s, G.State_stack, S9Types.AtomTag)
+end save_state
+
+procedure restore_state*(): int32
+var
+  s: int32
+begin
+  if G.State_stack = S9Types._NIL then
+    return sig(ord(S9Types.EV_ATOM))
+  end
+  s := val(int32, G.car(G.State_stack))
+  G.State_stack := G.cdr(G.State_stack)
+  return s
+end restore_state
+
+(* ============================================================
+ * Procedure application
+ * ============================================================ *)
+
+(* Bind arguments to parameters *)
+procedure bind_args*(v: S9Types.cell; a: S9Types.cell): S9Types.cell
+var
+  p: S9Types.cell
+  new: S9Types.cell
+begin
+  p := S9Types._NIL
+  M.save(p)
+  while G.pair_p(v) do
+    if a = S9Types._NIL then
+      M.unsave(1)
+      return G.error("too few arguments", S9Types._NOEXPR)
+    end
+    new := make_binding(G.car(v), G.car(a))
+    p := M.cons(new, p)
+    G.Car[G.Stack] := p
+    v := G.cdr(v)
+    a := G.cdr(a)
+  end
+  if v # S9Types._NIL then
+    (* Rest argument *)
+    new := make_binding(v, a)
+    p := M.cons(new, p)
+    G.Car[G.Stack] := p
+  elsif a # S9Types._NIL then
+    M.unsave(1)
+    return G.error("too many arguments", S9Types._NOEXPR)
+  end
+  M.unsave(1)
+  return p
+end bind_args
+
+(* ============================================================
+ * Main evaluator
+ * ============================================================ *)
+
+(* The main evaluation loop *)
+procedure xeval*(x: S9Types.cell; mcsf: int32): S9Types.cell
+var
+  s: int32
+  c: int32
+  m: S9Types.cell
+  n: S9Types.cell
+  p: S9Types.cell
+  rib: S9Types.cell
+begin
+  M.save(x)
+  M.save(G.State_stack)
+  M.save(G.Stack_bottom)
+  G.State_stack := S9Types._NIL
+  G.Stack_bottom := G.Stack
+  s := sig(ord(S9Types.EV_ATOM))
+  c := 0
+  
+  loop
+    if G.Error_flag # 0 then
+      G.Stack := G.Stack_bottom
+      G.Stack_bottom := M.unsave(1)
+      G.State_stack := M.unsave(1)
+      M.unsave(1)
+      return S9Types._UNDEFINED
+    end
+    
+    (* Evaluate current expression *)
+    c := 0
+    if G.special_value_p(x) then
+      G.Acc := x
+    elsif G.symbol_p(x) then
+      m := lookup(x, G.Environment, true)
+      if G.Error_flag # 0 then
+        G.Acc := S9Types._UNDEFINED
+      else
+        G.Acc := G.binding_value(m)
+        if G.Acc = S9Types._UNDEFINED then
+          G.error("symbol not bound", x)
+        end
+      end
+    elsif G.auto_quoting_p(x) then
+      G.Acc := x
+    elsif G.pair_p(x) then
+      (* Application or special form *)
+      m := G.car(x)
+      if G.special_p(m) then
+        (* Special form *)
+        M.save(x)
+        save_state(s)
+        x := apply_special(x, @c, @s)
+        if c = 0 then
+          G.Acc := x
+          M.unsave(1)
+          s := restore_state()
+        end
+      elsif G.syntax_p(m) then
+        (* Macro application *)
+        M.save(x)
+        save_state(s)
+        s := sig(ord(S9Types.EV_MACRO_EXPAND))
+        c := 1
+        x := M.cons(G.cadr(m), G.cdr(x))
+      else
+        (* Procedure application *)
+        M.save(x)
+        save_state(s)
+        s := sig(ord(S9Types.EV_ARGS))
+        M.save(G.cdr(x))  (* Save argument list *)
+        M.save(S9Types._NIL)  (* Evaluated args accumulator *)
+        c := 1
+        x := m  (* Evaluate operator *)
+      end
+    else
+      G.Acc := x
+    end
+    
+    (* Process evaluator state - only when evaluation is complete *)
+    if c # 0 then
+      (* Evaluation set continue flag, skip state processing *)
+    elsif s = sig(ord(S9Types.EV_ATOM)) then
+      if G.Stack = G.Stack_bottom then
+        exit
+      end
+    elsif s = sig(ord(S9Types.EV_ARGS)) then
+      (* Collecting arguments *)
+      m := G.car(G.Stack)  (* Evaluated args so far *)
+      m := M.cons(G.Acc, m)
+      G.Car[G.Stack] := m
+      n := G.cadr(G.Stack)  (* Remaining args *)
+      if n = S9Types._NIL then
+        (* All args evaluated, apply procedure *)
+        m := G.car(G.Stack)
+        (* Reverse the argument list *)
+        p := S9Types._NIL
+        while m # S9Types._NIL do
+          p := M.cons(G.car(m), p)
+          m := G.cdr(m)
+        end
+        M.unsave(2)  (* args accumulator, remaining args *)
+        x := M.unsave(1)  (* source expression *)
+        s := restore_state()
+        
+        (* p now contains (proc arg1 arg2 ...) *)
+        m := G.car(p)  (* The procedure *)
+        n := G.cdr(p)  (* The arguments *)
+        
+        if G.primitive_p(m) then
+          (* Call primitive *)
+          G.Acc := G.Primitives[val(int32, G.cadr(m))].handler(p)
+          c := 0
+        elsif G.procedure_p(m) then
+          (* Apply user procedure *)
+          rib := bind_args(G.cadr(m), n)
+          if G.Error_flag # 0 then
+            c := 0
+          else
+            M.save(G.Environment)
+            save_state(s)
+            s := sig(ord(S9Types.EV_ATOM))
+            G.Environment := make_env(rib, G.cdddr(m))
+            x := G.caddr(m)
+            c := 1
+          end
+        elsif G.continuation_p(m) then
+          (* Resume continuation *)
+          if n = S9Types._NIL then
+            too_few_args(p)
+          elsif G.cdr(n) # S9Types._NIL then
+            too_many_args(p)
+          else
+            m := G.cdr(m)
+            G.Environment := G.car(m)
+            G.State_stack := G.cadr(m)
+            G.Stack_bottom := G.caddr(m)
+            G.Stack := G.cadddr(m)
+            G.Acc := G.car(n)
+          end
+          c := 0
+        else
+          G.error("application of non-procedure", m)
+          c := 0
+        end
+      else
+        (* More args to evaluate *)
+        G.Car[G.cdr(G.Stack)] := G.cdr(n)
+        x := G.car(n)
+        c := 1
+      end
+    elsif s = sig(ord(S9Types.EV_IF_PRED)) then
+      m := M.unsave(1)  (* (pred conseq alt) *)
+      M.unsave(1)  (* source expression *)
+      s := restore_state()
+      if G.Acc # S9Types._FALSE then
+        x := G.cadr(m)
+      else
+        x := G.caddr(m)
+      end
+      c := 1
+    elsif s = sig(ord(S9Types.EV_AND)) then
+      m := G.car(G.Stack)
+      if G.Acc = S9Types._FALSE then
+        M.unsave(2)
+        s := restore_state()
+        c := 0
+      elsif G.cdr(m) = S9Types._NIL then
+        M.unsave(2)
+        s := restore_state()
+        c := 0
+      else
+        G.Car[G.Stack] := G.cdr(m)
+        x := G.cadr(m)
+        c := 1
+      end
+    elsif s = sig(ord(S9Types.EV_OR)) then
+      m := G.car(G.Stack)
+      if G.Acc # S9Types._FALSE then
+        M.unsave(2)
+        s := restore_state()
+        c := 0
+      elsif G.cdr(m) = S9Types._NIL then
+        M.unsave(2)
+        s := restore_state()
+        c := 0
+      else
+        G.Car[G.Stack] := G.cdr(m)
+        x := G.cadr(m)
+        c := 1
+      end
+    elsif s = sig(ord(S9Types.EV_COND)) then
+      if G.Acc # S9Types._FALSE then
+        x := G.cdaar(G.Stack)
+        if x = S9Types._NIL then
+          x := IO.quote(G.Acc, G.S_quote)
+        elsif G.pair_p(G.cdr(x)) then
+          if G.car(x) = G.S_arrow then
+            G.Acc := IO.quote(G.Acc, G.S_quote)
+            G.Acc := M.cons(G.Acc, S9Types._NIL)
+            G.Acc := M.cons(G.cadr(x), G.Acc)
+            x := G.Acc
+          else
+            x := M.cons(G.S_begin, x)
+            G.Acc := x
+          end
+        else
+          x := G.car(x)
+        end
+        M.unsave(2)
+        s := restore_state()
+      elsif G.cdar(G.Stack) = S9Types._NIL then
+        M.unsave(2)
+        s := restore_state()
+        x := S9Types._UNSPECIFIC
+      else
+        G.Stack := M.cons(G.cdar(G.Stack), G.cdr(G.Stack))
+        x := G.caaar(G.Stack)
+        if (x = G.S_else) & (G.cdar(G.Stack) = S9Types._NIL) then
+          x := S9Types._TRUE
+        end
+      end
+      c := 1
+    elsif s = sig(ord(S9Types.EV_BEGIN)) then
+      G.Stack := M.cons(G.cdar(G.Stack), G.cdr(G.Stack))
+      if G.cdar(G.Stack) = S9Types._NIL then
+        x := G.caar(G.Stack)
+        M.unsave(2)
+        s := restore_state()
+      else
+        x := G.caar(G.Stack)
+      end
+      c := 1
+    elsif (s = sig(ord(S9Types.EV_SET_VAL))) or (s = sig(ord(S9Types.EV_MACRO))) then
+      if s = sig(ord(S9Types.EV_MACRO)) then
+        if G.procedure_p(G.Acc) then
+          G.Acc := M.new_atom(S9Types.T_SYNTAX, G.Acc)
+        end
+        if ~G.syntax_p(G.Acc) then
+          G.error("define-syntax: expected procedure, got", G.Acc)
+        end
+      end
+      x := M.unsave(1)
+      M.unsave(1)
+      s := restore_state()
+      G.set_box_value(x, G.Acc)
+      G.Acc := S9Types._UNSPECIFIC
+      x := S9Types._UNSPECIFIC
+      c := 0
+    elsif s = sig(ord(S9Types.EV_MACRO_EXPAND)) then
+      (* Macro expansion complete, evaluate result *)
+      M.unsave(1)
+      s := restore_state()
+      x := G.Acc
+      c := 1
+    else
+      (* EV_ATOM or unknown state *)
+      if G.Stack = G.Stack_bottom then
+        exit
+      end
+    end
+    
+    if (c # 0) or (G.Stack # G.Stack_bottom) then
+      (* Continue evaluation *)
+    else
+      exit
+    end
+  end
+  
+  G.Stack := G.Stack_bottom
+  G.Stack_bottom := M.unsave(1)
+  G.State_stack := M.unsave(1)
+  M.unsave(1)
+  return G.Acc
+end xeval
+
+(* Expand syntax (macros) in an expression *)
+procedure expand_syntax*(x: S9Types.cell): S9Types.cell
+var
+  m: S9Types.cell
+  n: S9Types.cell
+  new: S9Types.cell
+begin
+  if G.atom_p(x) then
+    return x
+  end
+  m := G.car(x)
+  if G.symbol_p(m) then
+    n := lookup(m, G.Environment, false)
+    if (n # S9Types._NIL) & G.syntax_p(G.binding_value(n)) then
+      (* Macro - expand it *)
+      new := M.cons(G.cadr(G.binding_value(n)), G.cdr(x))
+      M.save(new)
+      new := xeval(new, 1)
+      M.unsave(1)
+      return expand_syntax(new)
+    end
+  end
+  (* Recursively expand in subexpressions *)
+  n := S9Types._NIL
+  M.save(n)
+  while G.pair_p(x) do
+    new := expand_syntax(G.car(x))
+    n := M.cons(new, n)
+    G.Car[G.Stack] := n
+    x := G.cdr(x)
+  end
+  M.unsave(1)
+  (* Reverse the list *)
+  m := S9Types._NIL
+  while n # S9Types._NIL do
+    m := M.cons(G.car(n), m)
+    n := G.cdr(n)
+  end
+  return m
+end expand_syntax
+
+(* Reset call trace *)
+procedure reset_calltrace*()
+var
+  i: int32
+begin
+  for i := 0 to S9Types.MaxCallTrace - 1 do
+    G.Called_procedures[i] := S9Types._NIL
+  end
+end reset_calltrace
+
+(* Main eval function *)
+procedure eval*(x: S9Types.cell): S9Types.cell
+begin
+  reset_calltrace()
+  M.save(x)
+  x := expand_syntax(x)
+  M.unsave(1)
+  x := xeval(x, 0)
+  return x
+end eval
+
+(* Initialize evaluator *)
+procedure init_eval*()
+begin
+  Gensym_counter := 0
+end init_eval
+
+end S9Eval.

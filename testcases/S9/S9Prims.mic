@@ -1,0 +1,1835 @@
+(* S9Prims - Primitive procedures for S9 Scheme interpreter
+ * Micron port of "Scheme 9 from Empty Space" by Nils M Holm, 2007-2014
+ * Migrated from C in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *)
+
+module S9Prims [level=3]
+
+import T := S9Types
+import G := S9Globals
+import M := S9Memory
+import B := S9Bignum
+import R := S9Real
+import IO := S9IO
+import E := S9Eval
+import Files
+
+
+(* ============================================================
+ * Helper functions
+ * ============================================================ *)
+
+procedure eqv_p*(a: T.cell; b: T.cell): boolean
+begin
+  if a = b then return true end
+  if G.char_p(a) & G.char_p(b) & (G.char_value(a) = G.char_value(b)) then
+    return true
+  end
+  if G.number_p(a) & G.number_p(b) then
+    if G.real_p(a) # G.real_p(b) then return false end
+    return R.real_equal_p(a, b)
+  end
+  return a = b
+end eqv_p
+
+(* ============================================================
+ * Predicates and Booleans
+ * ============================================================ *)
+
+procedure pp_eq_p*(x: T.cell): T.cell
+begin
+  if G.cadr(x) = G.caddr(x) then return T._TRUE else return T._FALSE end
+end pp_eq_p
+
+procedure pp_eqv_p*(x: T.cell): T.cell
+begin
+  if eqv_p(G.cadr(x), G.caddr(x)) then return T._TRUE else return T._FALSE end
+end pp_eqv_p
+
+procedure pp_not*(x: T.cell): T.cell
+begin
+  if G.cadr(x) = T._FALSE then return T._TRUE else return T._FALSE end
+end pp_not
+
+procedure pp_null_p*(x: T.cell): T.cell
+begin
+  if G.cadr(x) = T._NIL then return T._TRUE else return T._FALSE end
+end pp_null_p
+
+procedure pp_boolean_p*(x: T.cell): T.cell
+begin
+  if G.boolean_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_boolean_p
+
+(* ============================================================
+ * Type predicates
+ * ============================================================ *)
+
+procedure pp_char_p*(x: T.cell): T.cell
+begin
+  if G.char_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_char_p
+
+procedure pp_integer_p*(x: T.cell): T.cell
+begin
+  if R.real_integer_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_integer_p
+
+procedure pp_pair_p*(x: T.cell): T.cell
+begin
+  if G.pair_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_pair_p
+
+procedure pp_procedure_p*(x: T.cell): T.cell
+begin
+  if G.procedure_p(G.cadr(x)) or G.primitive_p(G.cadr(x)) or G.continuation_p(G.cadr(x)) then
+    return T._TRUE
+  else
+    return T._FALSE
+  end
+end pp_procedure_p
+
+procedure pp_string_p*(x: T.cell): T.cell
+begin
+  if G.string_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_string_p
+
+procedure pp_symbol_p*(x: T.cell): T.cell
+begin
+  if G.symbol_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_symbol_p
+
+procedure pp_vector_p*(x: T.cell): T.cell
+begin
+  if G.vector_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_vector_p
+
+procedure pp_input_port_p*(x: T.cell): T.cell
+begin
+  if G.input_port_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_input_port_p
+
+procedure pp_output_port_p*(x: T.cell): T.cell
+begin
+  if G.output_port_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_output_port_p
+
+procedure pp_eof_object_p*(x: T.cell): T.cell
+begin
+  if G.cadr(x) = T.END_OF_FILE then return T._TRUE else return T._FALSE end
+end pp_eof_object_p
+
+(* ============================================================
+ * Pairs and Lists
+ * ============================================================ *)
+
+procedure pp_car*(x: T.cell): T.cell
+begin
+  return G.caadr(x)
+end pp_car
+
+procedure pp_cdr*(x: T.cell): T.cell
+begin
+  return G.cdadr(x)
+end pp_cdr
+
+procedure pp_cons*(x: T.cell): T.cell
+begin
+  return M.cons(G.cadr(x), G.caddr(x))
+end pp_cons
+
+procedure pp_set_car_b*(x: T.cell): T.cell
+begin
+  if G.constant_p(G.cadr(x)) then
+    return G.error("set-car!: immutable object", G.cadr(x))
+  end
+  G.set_car(G.cadr(x), G.caddr(x))
+  return T._UNSPECIFIC
+end pp_set_car_b
+
+procedure pp_set_cdr_b*(x: T.cell): T.cell
+begin
+  if G.constant_p(G.cadr(x)) then
+    return G.error("set-cdr!: immutable object", G.cadr(x))
+  end
+  G.set_cdr(G.cadr(x), G.caddr(x))
+  return T._UNSPECIFIC
+end pp_set_cdr_b
+
+procedure pp_list*(x: T.cell): T.cell
+begin
+  return G.cdr(x)
+end pp_list
+
+procedure pp_length*(x: T.cell): T.cell
+var
+  k: int32
+  n: T.cell
+begin
+  k := 0
+  n := G.cadr(x)
+  while n # T._NIL do
+    if ~G.pair_p(n) then
+      return G.error("length: improper list", G.cadr(x))
+    end
+    inc(k)
+    n := G.cdr(n)
+  end
+  return B.make_integer(k)
+end pp_length
+
+procedure pp_reverse*(x: T.cell): T.cell
+var
+  n: T.cell
+  m: T.cell
+begin
+  m := T._NIL
+  n := G.cadr(x)
+  while n # T._NIL do
+    if ~G.pair_p(n) then
+      return G.error("reverse: improper list", G.cadr(x))
+    end
+    m := M.cons(G.car(n), m)
+    n := G.cdr(n)
+  end
+  return m
+end pp_reverse
+
+procedure pp_append2*(x: T.cell): T.cell
+var
+  new: T.cell
+  n: T.cell
+  p: T.cell
+  a: T.cell
+  pa: T.cell
+begin
+  if G.cadr(x) = T._NIL then return G.caddr(x) end
+  if G.caddr(x) = T._NIL then
+    if G.pair_p(G.cadr(x)) then
+      return G.cadr(x)
+    else
+      return G.error("append2: expected list, got", G.cadr(x))
+    end
+  end
+  n := M.cons(T._NIL, T._NIL)
+  a := n
+  M.save(n)
+  p := G.cadr(x)
+  while p # T._NIL do
+    if ~G.pair_p(p) then
+      M.unsave(1)
+      return G.error("append2: improper list", G.cadr(x))
+    end
+    G.set_car(a, G.car(p))
+    new := M.cons(T._NIL, T._NIL)
+    pa := a
+    G.set_cdr(a, new)
+    a := G.cdr(a)
+    p := G.cdr(p)
+  end
+  M.unsave(1)
+  G.set_cdr(pa, G.caddr(x))
+  return n
+end pp_append2
+
+procedure pp_list_tail*(x: T.cell): T.cell
+var
+  p: T.cell
+  k: T.cell
+begin
+  k := B.integer_value("list-tail", G.caddr(x))
+  p := G.cadr(x)
+  loop
+    if p = T._NIL then exit end
+    if ~G.pair_p(p) then
+      return G.error("list-tail: improper list", G.cadr(x))
+    end
+    if k <= 0 then exit end
+    dec(k)
+    p := G.cdr(p)
+  end
+  if k # 0 then
+    return G.error("list-tail: index out of range", G.caddr(x))
+  end
+  return p
+end pp_list_tail
+
+(* cxr helper *)
+procedure cxr(const op: pointer to array of char; x: T.cell): T.cell
+var
+  n: T.cell
+  i: int32
+begin
+  n := G.cadr(x)
+  i := 0
+  while op[i] # 0X do
+    if ~G.pair_p(n) then
+      return G.error("c...r: unsuitable type for operation", G.cadr(x))
+    end
+    if op[i] = 'a' then
+      n := G.car(n)
+    else
+      n := G.cdr(n)
+    end
+    inc(i)
+  end
+  return n
+end cxr
+
+procedure pp_caar*(x: T.cell): T.cell begin return cxr("aa", x) end pp_caar
+procedure pp_cadr*(x: T.cell): T.cell begin return cxr("da", x) end pp_cadr
+procedure pp_cdar*(x: T.cell): T.cell begin return cxr("ad", x) end pp_cdar
+procedure pp_cddr*(x: T.cell): T.cell begin return cxr("dd", x) end pp_cddr
+procedure pp_caaar*(x: T.cell): T.cell begin return cxr("aaa", x) end pp_caaar
+procedure pp_caadr*(x: T.cell): T.cell begin return cxr("daa", x) end pp_caadr
+procedure pp_cadar*(x: T.cell): T.cell begin return cxr("ada", x) end pp_cadar
+procedure pp_caddr*(x: T.cell): T.cell begin return cxr("dda", x) end pp_caddr
+procedure pp_cdaar*(x: T.cell): T.cell begin return cxr("aad", x) end pp_cdaar
+procedure pp_cdadr*(x: T.cell): T.cell begin return cxr("dad", x) end pp_cdadr
+procedure pp_cddar*(x: T.cell): T.cell begin return cxr("add", x) end pp_cddar
+procedure pp_cdddr*(x: T.cell): T.cell begin return cxr("ddd", x) end pp_cdddr
+procedure pp_caaaar*(x: T.cell): T.cell begin return cxr("aaaa", x) end pp_caaaar
+procedure pp_caaadr*(x: T.cell): T.cell begin return cxr("daaa", x) end pp_caaadr
+procedure pp_caadar*(x: T.cell): T.cell begin return cxr("adaa", x) end pp_caadar
+procedure pp_caaddr*(x: T.cell): T.cell begin return cxr("ddaa", x) end pp_caaddr
+procedure pp_cadaar*(x: T.cell): T.cell begin return cxr("aada", x) end pp_cadaar
+procedure pp_cadadr*(x: T.cell): T.cell begin return cxr("dada", x) end pp_cadadr
+procedure pp_caddar*(x: T.cell): T.cell begin return cxr("adda", x) end pp_caddar
+procedure pp_cadddr*(x: T.cell): T.cell begin return cxr("ddda", x) end pp_cadddr
+procedure pp_cdaaar*(x: T.cell): T.cell begin return cxr("aaad", x) end pp_cdaaar
+procedure pp_cdaadr*(x: T.cell): T.cell begin return cxr("daad", x) end pp_cdaadr
+procedure pp_cdadar*(x: T.cell): T.cell begin return cxr("adad", x) end pp_cdadar
+procedure pp_cdaddr*(x: T.cell): T.cell begin return cxr("ddad", x) end pp_cdaddr
+procedure pp_cddaar*(x: T.cell): T.cell begin return cxr("aadd", x) end pp_cddaar
+procedure pp_cddadr*(x: T.cell): T.cell begin return cxr("dadd", x) end pp_cddadr
+procedure pp_cdddar*(x: T.cell): T.cell begin return cxr("addd", x) end pp_cdddar
+procedure pp_cddddr*(x: T.cell): T.cell begin return cxr("dddd", x) end pp_cddddr
+
+(* assq/assv helper *)
+procedure assqv(const who: pointer to array of char; v: int32; key: T.cell; a: T.cell): T.cell
+var
+  p: T.cell
+begin
+  p := a
+  while p # T._NIL do
+    if ~G.pair_p(p) or ~G.pair_p(G.car(p)) then
+      return G.error("assq/assv: bad element in alist", p)
+    end
+    if (v = 0) & (key = G.caar(p)) then
+      return G.car(p)
+    end
+    if (v # 0) & eqv_p(key, G.caar(p)) then
+      return G.car(p)
+    end
+    p := G.cdr(p)
+  end
+  return T._FALSE
+end assqv
+
+procedure pp_assq*(x: T.cell): T.cell
+begin
+  return assqv("assq", 0, G.cadr(x), G.caddr(x))
+end pp_assq
+
+procedure pp_assv*(x: T.cell): T.cell
+begin
+  return assqv("assv", 1, G.cadr(x), G.caddr(x))
+end pp_assv
+
+(* memq/memv helper *)
+procedure memqv(const who: pointer to array of char; v: int32; key: T.cell; a: T.cell): T.cell
+var
+  p: T.cell
+begin
+  p := a
+  while p # T._NIL do
+    if ~G.pair_p(p) then
+      return G.error("memq/memv: improper list", a)
+    end
+    if (v = 0) & (key = G.car(p)) then
+      return p
+    end
+    if (v # 0) & eqv_p(key, G.car(p)) then
+      return p
+    end
+    p := G.cdr(p)
+  end
+  return T._FALSE
+end memqv
+
+procedure pp_memq*(x: T.cell): T.cell
+begin
+  return memqv("memq", 0, G.cadr(x), G.caddr(x))
+end pp_memq
+
+procedure pp_memv*(x: T.cell): T.cell
+begin
+  return memqv("memv", 1, G.cadr(x), G.caddr(x))
+end pp_memv
+
+(* ============================================================
+ * Arithmetic
+ * ============================================================ *)
+
+procedure pp_abs*(x: T.cell): T.cell
+begin
+  return R.real_abs(G.cadr(x))
+end pp_abs
+
+procedure pp_equal*(x: T.cell): T.cell
+var
+  n: T.cell
+begin
+  n := G.cdr(x)
+  while G.cdr(n) # T._NIL do
+    if ~G.number_p(G.cadr(n)) then
+      return G.error("=: expected number, got", G.cadr(n))
+    end
+    if ~R.real_equal_p(G.car(n), G.cadr(n)) then
+      return T._FALSE
+    end
+    n := G.cdr(n)
+  end
+  return T._TRUE
+end pp_equal
+
+procedure pp_less*(x: T.cell): T.cell
+var
+  n: T.cell
+begin
+  n := G.cdr(x)
+  while G.cdr(n) # T._NIL do
+    if ~G.number_p(G.cadr(n)) then
+      return G.error("<: expected number, got", G.cadr(n))
+    end
+    if ~R.real_less_p(G.car(n), G.cadr(n)) then
+      return T._FALSE
+    end
+    n := G.cdr(n)
+  end
+  return T._TRUE
+end pp_less
+
+procedure pp_greater*(x: T.cell): T.cell
+var
+  n: T.cell
+begin
+  n := G.cdr(x)
+  while G.cdr(n) # T._NIL do
+    if ~G.number_p(G.cadr(n)) then
+      return G.error(">: expected number, got", G.cadr(n))
+    end
+    if ~R.real_less_p(G.cadr(n), G.car(n)) then
+      return T._FALSE
+    end
+    n := G.cdr(n)
+  end
+  return T._TRUE
+end pp_greater
+
+procedure pp_less_equal*(x: T.cell): T.cell
+var
+  n: T.cell
+begin
+  n := G.cdr(x)
+  while G.cdr(n) # T._NIL do
+    if ~G.number_p(G.cadr(n)) then
+      return G.error("<=: expected number, got", G.cadr(n))
+    end
+    if R.real_less_p(G.cadr(n), G.car(n)) then
+      return T._FALSE
+    end
+    n := G.cdr(n)
+  end
+  return T._TRUE
+end pp_less_equal
+
+procedure pp_greater_equal*(x: T.cell): T.cell
+var
+  n: T.cell
+begin
+  n := G.cdr(x)
+  while G.cdr(n) # T._NIL do
+    if ~G.number_p(G.cadr(n)) then
+      return G.error(">=: expected number, got", G.cadr(n))
+    end
+    if R.real_less_p(G.car(n), G.cadr(n)) then
+      return T._FALSE
+    end
+    n := G.cdr(n)
+  end
+  return T._TRUE
+end pp_greater_equal
+
+procedure pp_plus*(x: T.cell): T.cell
+var
+  a: T.cell
+  n: T.cell
+begin
+  n := G.cdr(x)
+  if n = T._NIL then return B.make_integer(0) end
+  if G.cdr(n) = T._NIL then return G.car(n) end
+  a := B.make_integer(0)
+  M.save(a)
+  while n # T._NIL do
+    if ~G.number_p(G.car(n)) then
+      M.unsave(1)
+      return G.error("+: expected number, got", G.car(n))
+    end
+    a := R.real_add(a, G.car(n))
+    G.Car[G.Stack] := a
+    n := G.cdr(n)
+  end
+  M.unsave(1)
+  return a
+end pp_plus
+
+procedure pp_minus*(x: T.cell): T.cell
+var
+  a: T.cell
+  n: T.cell
+begin
+  n := G.cdr(x)
+  if G.cdr(n) = T._NIL then
+    return R.real_negate(G.car(n))
+  end
+  a := G.car(n)
+  n := G.cdr(n)
+  M.save(a)
+  while n # T._NIL do
+    if ~G.number_p(G.car(n)) then
+      M.unsave(1)
+      return G.error("-: expected number, got", G.car(n))
+    end
+    a := R.real_subtract(a, G.car(n))
+    G.Car[G.Stack] := a
+    n := G.cdr(n)
+  end
+  M.unsave(1)
+  return a
+end pp_minus
+
+procedure pp_times*(x: T.cell): T.cell
+var
+  a: T.cell
+  n: T.cell
+begin
+  n := G.cdr(x)
+  if n = T._NIL then return B.make_integer(1) end
+  if G.cdr(n) = T._NIL then return G.car(n) end
+  a := B.make_integer(1)
+  M.save(a)
+  while n # T._NIL do
+    if ~G.number_p(G.car(n)) then
+      M.unsave(1)
+      return G.error("*: expected number, got", G.car(n))
+    end
+    a := R.real_multiply(a, G.car(n))
+    G.Car[G.Stack] := a
+    n := G.cdr(n)
+  end
+  M.unsave(1)
+  return a
+end pp_times
+
+procedure pp_quotient*(x: T.cell): T.cell
+var
+  a: T.cell
+  b: T.cell
+begin
+  a := R.integer_argument("quotient", G.cadr(x))
+  M.save(a)
+  b := R.integer_argument("quotient", G.caddr(x))
+  M.unsave(1)
+  if (a = T._NIL) or (b = T._NIL) then
+    return T._UNDEFINED
+  end
+  return G.car(B.bignum_divide(x, a, b))
+end pp_quotient
+
+procedure pp_remainder*(x: T.cell): T.cell
+var
+  a: T.cell
+  b: T.cell
+begin
+  a := R.integer_argument("remainder", G.cadr(x))
+  M.save(a)
+  b := R.integer_argument("remainder", G.caddr(x))
+  M.unsave(1)
+  if (a = T._NIL) or (b = T._NIL) then
+    return T._UNDEFINED
+  end
+  return G.cdr(B.bignum_divide(x, a, b))
+end pp_remainder
+
+procedure pp_negative_p*(x: T.cell): T.cell
+begin
+  if R.real_negative_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_negative_p
+
+procedure pp_positive_p*(x: T.cell): T.cell
+begin
+  if R.real_positive_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_positive_p
+
+procedure pp_zero_p*(x: T.cell): T.cell
+begin
+  if R.real_zero_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_zero_p
+
+procedure even_p(const who: pointer to array of char; n: T.cell): int32
+var
+  m: T.cell
+begin
+  m := R.integer_argument(who, n)
+  if m = T._NIL then return -1 end
+  M.save(m)
+  m := B.reverse_segments(G.cdr(m))
+  M.unsave(1)
+  return val(int32, G.car(m)) mod 2
+end even_p
+
+procedure pp_even_p*(x: T.cell): T.cell
+var
+  r: int32
+begin
+  r := even_p("even?", G.cadr(x))
+  if r < 0 then return T._UNDEFINED end
+  if r = 0 then return T._TRUE else return T._FALSE end
+end pp_even_p
+
+procedure pp_odd_p*(x: T.cell): T.cell
+var
+  r: int32
+begin
+  r := even_p("odd?", G.cadr(x))
+  if r < 0 then return T._UNDEFINED end
+  if r # 0 then return T._TRUE else return T._FALSE end
+end pp_odd_p
+
+(* ============================================================
+ * Characters
+ * ============================================================ *)
+
+procedure pp_char_to_integer*(x: T.cell): T.cell
+begin
+  return B.make_integer(G.char_value(G.cadr(x)))
+end pp_char_to_integer
+
+procedure pp_integer_to_char*(x: T.cell): T.cell
+var
+  n: T.cell
+begin
+  n := B.integer_value("integer->char", G.cadr(x))
+  if (n < 0) or (n > 255) then
+    return G.error("integer->char: argument value out of range", G.cadr(x))
+  end
+  return IO.make_char(val(int32,n))
+end pp_integer_to_char
+
+procedure pp_char_alphabetic_p*(x: T.cell): T.cell
+var
+  c: int32
+begin
+  c := val(int32,G.char_value(G.cadr(x)))
+  if ((c >= +ord('A')) & (c <= +ord('Z'))) or ((c >= +ord('a')) & (c <= +ord('z'))) then
+    return T._TRUE
+  else
+    return T._FALSE
+  end
+end pp_char_alphabetic_p
+
+procedure pp_char_numeric_p*(x: T.cell): T.cell
+var
+  c: int32
+begin
+  c := val(int32,G.char_value(G.cadr(x)))
+  if (c >= +ord('0')) & (c <= +ord('9')) then
+    return T._TRUE
+  else
+    return T._FALSE
+  end
+end pp_char_numeric_p
+
+procedure pp_char_whitespace_p*(x: T.cell): T.cell
+var
+  c: int32
+begin
+  c := val(int32,G.char_value(G.cadr(x)))
+  if (c = +ord(' ')) or (c = 9) or (c = 10) or (c = 13) or (c = 12) then
+    return T._TRUE
+  else
+    return T._FALSE
+  end
+end pp_char_whitespace_p
+
+procedure pp_char_upper_case_p*(x: T.cell): T.cell
+var
+  c: int32
+begin
+  c := val(int32,G.char_value(G.cadr(x)))
+  if (c >= +ord('A')) & (c <= +ord('Z')) then
+    return T._TRUE
+  else
+    return T._FALSE
+  end
+end pp_char_upper_case_p
+
+procedure pp_char_lower_case_p*(x: T.cell): T.cell
+var
+  c: int32
+begin
+  c := val(int32,G.char_value(G.cadr(x)))
+  if (c >= +ord('a')) & (c <= +ord('z')) then
+    return T._TRUE
+  else
+    return T._FALSE
+  end
+end pp_char_lower_case_p
+
+procedure pp_char_upcase*(x: T.cell): T.cell
+var
+  c: int32
+begin
+  c := val(int32,G.char_value(G.cadr(x)))
+  if (c >= +ord('a')) & (c <= +ord('z')) then
+    c := c - sig(ord('a')) + sig(ord('A'))
+  end
+  return IO.make_char(c)
+end pp_char_upcase
+
+procedure pp_char_downcase*(x: T.cell): T.cell
+var
+  c: int32
+begin
+  c := val(int32,G.char_value(G.cadr(x)))
+  if (c >= +ord('A')) & (c <= +ord('Z')) then
+    c := c - sig(ord('A')) + sig(ord('a'))
+  end
+  return IO.make_char(c)
+end pp_char_downcase
+
+(* Character comparison helpers *)
+procedure char_cmp(x: T.cell; ci: boolean; op: int32): T.cell
+var
+  n: T.cell
+  c1: int32
+  c2: int32
+begin
+  n := G.cdr(x)
+  while G.cdr(n) # T._NIL do
+    if ~G.char_p(G.cadr(n)) then
+      return G.error("char comparison: expected char, got", G.cadr(n))
+    end
+    c1 := val(int32,G.char_value(G.car(n)))
+    c2 := val(int32, G.char_value(G.cadr(n)))
+    if ci then
+      if (c1 >= +ord('A')) & (c1 <= +ord('Z')) then c1 := c1 - sig(ord('A')) + sig(ord('a')) end
+      if (c2 >= +ord('A')) & (c2 <= +ord('Z')) then c2 := c2 - sig(ord('A')) + sig(ord('a')) end
+    end
+    case op of
+    | 0: if ~(c1 < c2) then return T._FALSE end
+    | 1: if ~(c1 <= c2) then return T._FALSE end
+    | 2: if ~(c1 = c2) then return T._FALSE end
+    | 3: if ~(c1 >= c2) then return T._FALSE end
+    | 4: if ~(c1 > c2) then return T._FALSE end
+    end
+    n := G.cdr(n)
+  end
+  return T._TRUE
+end char_cmp
+
+procedure pp_char_lt_p*(x: T.cell): T.cell begin return char_cmp(x, false, 0) end pp_char_lt_p
+procedure pp_char_le_p*(x: T.cell): T.cell begin return char_cmp(x, false, 1) end pp_char_le_p
+procedure pp_char_eq_p*(x: T.cell): T.cell begin return char_cmp(x, false, 2) end pp_char_eq_p
+procedure pp_char_ge_p*(x: T.cell): T.cell begin return char_cmp(x, false, 3) end pp_char_ge_p
+procedure pp_char_gt_p*(x: T.cell): T.cell begin return char_cmp(x, false, 4) end pp_char_gt_p
+procedure pp_char_ci_lt_p*(x: T.cell): T.cell begin return char_cmp(x, true, 0) end pp_char_ci_lt_p
+procedure pp_char_ci_le_p*(x: T.cell): T.cell begin return char_cmp(x, true, 1) end pp_char_ci_le_p
+procedure pp_char_ci_eq_p*(x: T.cell): T.cell begin return char_cmp(x, true, 2) end pp_char_ci_eq_p
+procedure pp_char_ci_ge_p*(x: T.cell): T.cell begin return char_cmp(x, true, 3) end pp_char_ci_ge_p
+procedure pp_char_ci_gt_p*(x: T.cell): T.cell begin return char_cmp(x, true, 4) end pp_char_ci_gt_p
+
+(* ============================================================
+ * Strings
+ * ============================================================ *)
+
+procedure pp_make_string*(x: T.cell): T.cell
+var
+  n: T.cell
+  k: int32
+  c: int32
+  s: pointer to char
+  i: int32
+begin
+  k := val(int32,B.integer_value("make-string", G.cadr(x)))
+  if k < 0 then
+    return G.error("make-string: got negative length", x)
+  end
+  n := IO.make_string("", k)
+  s := G.string(n)
+  if G.cddr(x) = T._NIL then
+    c := sig(ord(' '))
+  else
+    c := val(int32,G.char_value(G.caddr(x)))
+  end
+  for i := 0 to k - 1 do
+    s^ := chr(c)
+    inc(s)
+  end
+  s^ := 0X
+  return n
+end pp_make_string
+
+procedure pp_string_length*(x: T.cell): T.cell
+begin
+  return B.make_integer(G.string_len(G.cadr(x)) - 1)
+end pp_string_length
+
+procedure pp_string_ref*(x: T.cell): T.cell
+var
+  p: int32
+  k: int32
+  str: pointer to char
+begin
+  k := val(int32, G.string_len(G.cadr(x)) - 1)
+  p := val(int32, B.integer_value("string-ref", G.caddr(x)))
+  if (p < 0) or (p >= k) then
+    return G.error("string-ref: index out of range", G.caddr(x))
+  end
+  str := G.string(G.cadr(x))
+  inc(str,p)
+  return IO.make_char(sig(ord(str^)))
+end pp_string_ref
+
+procedure pp_string_set_b*(x: T.cell): T.cell
+var
+  p: int32
+  k: int32
+  sp: pointer to char
+begin
+  if G.constant_p(G.cadr(x)) then
+    return G.error("string-set!: immutable object", G.cadr(x))
+  end
+  k := val(int32,G.string_len(G.cadr(x)) - 1)
+  p := val(int32,B.integer_value("string-set!", G.caddr(x)))
+  if (p < 0) or (p >= k) then
+    return G.error("string-set!: index out of range", G.caddr(x))
+  end
+  
+  sp := G.string(G.cadr(x))
+  inc(sp, p)
+  sp^ := chr(G.char_value(G.cadddr(x)))
+  return T._UNSPECIFIC
+end pp_string_set_b
+
+procedure pp_string_copy*(x: T.cell): T.cell
+var
+  n: T.cell
+  k: int32
+  i: int32
+  dst: pointer to char
+  src: pointer to char
+begin
+  k := val(int32,G.string_len(G.cadr(x)))
+  n := IO.make_string("", k - 1)
+  dst := G.string(n)
+  src := G.string(G.cadr(x))
+  for i := 0 to k - 1 do
+    dst^ := src^
+    inc(dst)
+    inc(src)
+  end
+  return n
+end pp_string_copy
+
+procedure pp_string_fill_b*(x: T.cell): T.cell
+var
+  c: int32
+  k: int32
+  i: int32
+  s: pointer to char
+begin
+  if G.constant_p(G.cadr(x)) then
+    return G.error("string-fill!: immutable object", G.cadr(x))
+  end
+  c := val(int32,G.char_value(G.caddr(x)))
+  k := val(int32,G.string_len(G.cadr(x)) - 1)
+  s := G.string(G.cadr(x))
+  for i := 0 to k - 1 do
+    s^ := chr(c)
+    inc(s)
+  end
+  return T._UNSPECIFIC
+end pp_string_fill_b
+
+procedure pp_string_append*(x: T.cell): T.cell
+var
+  p: T.cell
+  n: T.cell
+  k: int32
+  m: int32
+  s: pointer to char
+  i: int32
+  srcp: pointer to char
+begin
+  k := 0
+  p := G.cdr(x)
+  while p # T._NIL do
+    if ~G.string_p(G.car(p)) then
+      return G.error("string-append: expected string, got", G.car(p))
+    end
+    k := val(int32, k + G.string_len(G.car(p)) - 1)
+    p := G.cdr(p)
+  end
+  n := IO.make_string("", k)
+  s := G.string(n)
+  p := G.cdr(x)
+  while p # T._NIL do
+    m := val(int32,G.string_len(G.car(p)) - 1)
+    srcp := G.string(G.car(p))
+    for i := 0 to m - 1 do
+      s^ := srcp^
+      inc(s)
+      inc(srcp)
+    end
+    p := G.cdr(p)
+  end
+  s^ := 0X
+  return n
+end pp_string_append
+
+procedure pp_substring*(x: T.cell): T.cell
+var
+  k: T.int
+  p0: T.int
+  pn: T.int
+  src: pointer to char
+  dst: pointer to char
+  n: T.cell
+  i: T.int
+begin
+  k := G.string_len(G.cadr(x)) - 1
+  p0 := B.integer_value("substring", G.caddr(x))
+  pn := B.integer_value("substring", G.cadddr(x))
+  if (p0 < 0) or (p0 > k) or (pn < 0) or (pn > k) or (pn < p0) then
+    return G.error("substring: invalid range", G.caddr(x))
+  end
+  n := IO.make_string("", pn - p0)
+  dst := G.string(n)
+  src := G.string(G.cadr(x))
+  inc(src, p0)
+  for i := 0 to pn - p0 - 1 do
+    dst^ := src^
+    inc(src)
+    inc(dst)
+  end
+  dst^ := 0X
+  return n
+end pp_substring
+
+(* String comparison helper *)
+procedure string_cmp(x: T.cell; ci: boolean; op: int32): T.cell
+var
+  n: T.cell
+  s1: pointer to char
+  s2: pointer to char
+  k1: T.int
+  k2: T.int
+  cmp: T.int
+  i: T.int
+  c1: T.int
+  c2: T.int
+begin
+  n := G.cdr(x)
+  while G.cdr(n) # T._NIL do
+    if ~G.string_p(G.cadr(n)) then
+      return G.error("string comparison: expected string, got", G.cadr(n))
+    end
+    s1 := G.string(G.car(n))
+    s2 := G.string(G.cadr(n))
+    k1 := G.string_len(G.car(n)) - 1
+    k2 := G.string_len(G.cadr(n)) - 1
+    
+    if (op = 2) & (k1 # k2) then
+      return T._FALSE
+    end
+    
+    cmp := 0
+    i := 0
+    while (i < k1) & (i < k2) & (cmp = 0) do
+      c1 := +ord(s1^)
+      c2 := +ord(s2^)
+      if ci then
+        if (c1 >= +ord('A')) & (c1 <= +ord('Z')) then c1 := c1 - sig(ord('A') + ord('a')) end
+        if (c2 >= +ord('A')) & (c2 <= +ord('Z')) then c2 := c2 - sig(ord('A') + ord('a')) end
+      end
+      if c1 < c2 then cmp := -1
+      elsif c1 > c2 then cmp := 1
+      end
+      inc(i)
+      inc(s1)
+      inc(s2)
+    end
+    if cmp = 0 then
+      if k1 < k2 then cmp := -1
+      elsif k1 > k2 then cmp := 1
+      end
+    end
+    
+    case op of
+    | 0: if ~(cmp < 0) then return T._FALSE end
+    | 1: if ~(cmp <= 0) then return T._FALSE end
+    | 2: if ~(cmp = 0) then return T._FALSE end
+    | 3: if ~(cmp >= 0) then return T._FALSE end
+    | 4: if ~(cmp > 0) then return T._FALSE end
+    end
+    n := G.cdr(n)
+  end
+  return T._TRUE
+end string_cmp
+
+procedure pp_string_lt_p*(x: T.cell): T.cell begin return string_cmp(x, false, 0) end pp_string_lt_p
+procedure pp_string_le_p*(x: T.cell): T.cell begin return string_cmp(x, false, 1) end pp_string_le_p
+procedure pp_string_eq_p*(x: T.cell): T.cell begin return string_cmp(x, false, 2) end pp_string_eq_p
+procedure pp_string_ge_p*(x: T.cell): T.cell begin return string_cmp(x, false, 3) end pp_string_ge_p
+procedure pp_string_gt_p*(x: T.cell): T.cell begin return string_cmp(x, false, 4) end pp_string_gt_p
+procedure pp_string_ci_lt_p*(x: T.cell): T.cell begin return string_cmp(x, true, 0) end pp_string_ci_lt_p
+procedure pp_string_ci_le_p*(x: T.cell): T.cell begin return string_cmp(x, true, 1) end pp_string_ci_le_p
+procedure pp_string_ci_eq_p*(x: T.cell): T.cell begin return string_cmp(x, true, 2) end pp_string_ci_eq_p
+procedure pp_string_ci_ge_p*(x: T.cell): T.cell begin return string_cmp(x, true, 3) end pp_string_ci_ge_p
+procedure pp_string_ci_gt_p*(x: T.cell): T.cell begin return string_cmp(x, true, 4) end pp_string_ci_gt_p
+
+procedure pp_string_to_list*(x: T.cell): T.cell
+var
+  s: pointer to char
+  n: T.cell
+  a: T.cell
+  new: T.cell
+  k: T.int
+  i: T.int
+begin
+  k := G.string_len(G.cadr(x)) - 1
+  n := T._NIL
+  a := T._NIL
+  for i := 0 to k - 1 do
+    s := G.string(G.cadr(x))
+    inc(s,i)
+    if n = T._NIL then
+      n := M.cons(IO.make_char(+ord(s^)), T._NIL)
+      a := n
+      M.save(n)
+    else
+      new := M.cons(IO.make_char(+ord(s^)), T._NIL)
+      G.set_cdr(a, new)
+      a := G.cdr(a)
+    end
+  end
+  if n # T._NIL then
+    M.unsave(1)
+  end
+  return n
+end pp_string_to_list
+
+procedure pp_list_to_string*(x: T.cell): T.cell
+var
+  n: T.cell
+  k: T.int
+  s: pointer to char
+  p: T.cell
+begin
+  k := IO.length(G.cadr(x))
+  n := IO.make_string("", k)
+  s := G.string(n)
+  p := G.cadr(x)
+  while p # T._NIL do
+    if G.atom_p(p) then
+      return G.error("list->string: improper list", G.cadr(x))
+    end
+    if ~G.char_p(G.car(p)) then
+      return G.error("list->string: expected list of char", G.car(p))
+    end
+    s^ := chr(G.char_value(G.car(p)))
+    inc(s)
+    p := G.cdr(p)
+  end
+  s^ := 0X
+  return n
+end pp_list_to_string
+
+procedure pp_string_to_symbol*(x: T.cell): T.cell
+type Str = array of char
+var
+  y: T.cell
+  n: T.cell
+  k: T.int
+begin
+  y := IO.find_symbol(G.string(G.cadr(x))(Str))
+  if y # T._NIL then return y end
+  k := G.string_len(G.cadr(x))
+  n := IO.make_symbol("", val(int32,k - 1))
+  G.StrCopy_p(G.symbol_name(n), G.string(G.cadr(x)))
+  G.Symbols := M.cons(n, G.Symbols)
+  return G.car(G.Symbols)
+end pp_string_to_symbol
+
+procedure pp_symbol_to_string*(x: T.cell): T.cell
+var
+  n: T.cell
+  k: T.int
+begin
+  k := G.symbol_len(G.cadr(x))
+  n := IO.make_string("", k - 1)
+  G.Tag[n] := chr(bor(G.Tag[n], T.ConstTag))
+  G.StrCopy_p(G.string(n), G.symbol_name(G.cadr(x)))
+  return n
+end pp_symbol_to_string
+
+(* ============================================================
+ * Vectors
+ * ============================================================ *)
+
+procedure pp_make_vector*(x: T.cell): T.cell
+var
+  i: int32
+  k: T.int
+  n: T.cell
+  v: pointer to T.cell
+  m: T.cell
+begin
+  k := B.integer_value("make-vector", G.cadr(x))
+  if k < 0 then
+    return G.error("make-vector: got negative length", G.cadr(x))
+  end
+  n := M.new_vec(T.T_VECTOR, k * sig(size(T.cell)))
+  v := G.vector(n)
+  if G.cddr(x) = T._NIL then
+    m := T._FALSE
+  else
+    m := G.caddr(x)
+  end
+  for i := 0 to k - 1 do
+    v^ := m
+    inc(v)
+  end
+  return n
+end pp_make_vector
+
+procedure pp_vector*(x: T.cell): T.cell
+begin
+  return IO.list_to_vector(G.cdr(x), "vector: improper list", 0)
+end pp_vector
+
+procedure pp_vector_length*(x: T.cell): T.cell
+begin
+  return B.make_integer(G.vector_len(G.cadr(x)))
+end pp_vector_length
+
+procedure pp_vector_ref*(x: T.cell): T.cell
+var
+  p: T.int
+  k: T.int
+  ptr: pointer to T.cell
+begin
+  k := G.vector_len(G.cadr(x))
+  p := B.integer_value("vector-ref", G.caddr(x))
+  if (p < 0) or (p >= k) then
+    return G.error("vector-ref: index out of range", G.caddr(x))
+  end
+  ptr := G.vector(G.cadr(x))
+  inc(ptr,p)
+  return ptr^
+end pp_vector_ref
+
+procedure pp_vector_set_b*(x: T.cell): T.cell
+var
+  p: T.int
+  k: T.int
+  ptr: pointer to T.cell
+begin
+  if G.constant_p(G.cadr(x)) then
+    return G.error("vector-set!: immutable object", G.cadr(x))
+  end
+  k := G.vector_len(G.cadr(x))
+  p := B.integer_value("vector-set!", G.caddr(x))
+  if (p < 0) or (p >= k) then
+    return G.error("vector-set!: index out of range", G.caddr(x))
+  end
+  ptr := G.vector(G.cadr(x))
+  inc(ptr,p)
+  ptr^ := G.cadddr(x)
+  return T._UNSPECIFIC
+end pp_vector_set_b
+
+procedure pp_vector_fill_b*(x: T.cell): T.cell
+var
+  fill: T.cell
+  i: T.int
+  k: T.int
+  v: pointer to T.cell
+begin
+  if G.constant_p(G.cadr(x)) then
+    return G.error("vector-fill!: immutable object", G.cadr(x))
+  end
+  fill := G.caddr(x)
+  k := G.vector_len(G.cadr(x))
+  v := G.vector(G.cadr(x))
+  for i := 0 to k - 1 do
+    v^ := fill
+    inc(v)
+  end
+  return T._UNSPECIFIC
+end pp_vector_fill_b
+
+procedure pp_vector_to_list*(x: T.cell): T.cell
+var
+  v: pointer to T.cell
+  n: T.cell
+  a: T.cell
+  new_: T.cell
+  k: T.int
+  i: int32
+begin
+  k := G.vector_len(G.cadr(x))
+  n := T._NIL
+  a := T._NIL
+  for i := 0 to k - 1 do
+    v := G.vector(G.cadr(x))
+    inc(v,i)
+    if n = T._NIL then
+      n := M.cons(v^, T._NIL)
+      a := n
+      M.save(n)
+    else
+      new_ := M.cons(v^, T._NIL)
+      G.set_cdr(a, new_)
+      a := G.cdr(a)
+    end
+  end
+  if n # T._NIL then
+    M.unsave(1)
+  end
+  return n
+end pp_vector_to_list
+
+procedure pp_list_to_vector*(x: T.cell): T.cell
+begin
+  return IO.list_to_vector(G.cadr(x), "list->vector: improper list", 0)
+end pp_list_to_vector
+
+(* ============================================================
+ * I/O Primitives
+ * ============================================================ *)
+
+procedure close_port*(port: int32)
+begin
+  if (port < 0) or (port >= T.MaxPorts) then return end
+  if G.Ports[port] = nil then
+    G.Port_flags[port] := 0x
+    return
+  end
+  Files.Close(G.Ports[port])
+  G.Ports[port] := nil
+  G.Port_flags[port] := 0x
+end close_port
+
+procedure pp_close_input_port*(x: T.cell): T.cell
+begin
+  if G.port_no(G.cadr(x)) < 2 then
+    return G.error("please do not close the standard input port", T._NOEXPR)
+  end
+  close_port(val(int32,G.port_no(G.cadr(x))))
+  return T._UNSPECIFIC
+end pp_close_input_port
+
+procedure pp_close_output_port*(x: T.cell): T.cell
+begin
+  if G.port_no(G.cadr(x)) < 2 then
+    return G.error("please do not close the standard output port", T._NOEXPR)
+  end
+  close_port(val(int32,G.port_no(G.cadr(x))))
+  return T._UNSPECIFIC
+end pp_close_output_port
+
+procedure make_port*(portno: int32; ptype: T.cell): T.cell
+var
+  n: T.cell
+  pf: int32
+begin
+  pf := sig(ord(G.Port_flags[portno]))
+  G.Port_flags[portno] := chr(bor(G.Port_flags[portno], T.LockTag))
+  n := M.new_atom(portno, T._NIL)
+  n := M.cons3(ptype, n, bor(T.AtomTag, T.PortTag))
+  G.Port_flags[portno] := chr(pf)
+  return n
+end make_port
+
+procedure pp_current_input_port*(x: T.cell): T.cell
+begin
+  return make_port(G.Input_port, T.T_INPUT_PORT)
+end pp_current_input_port
+
+procedure pp_current_output_port*(x: T.cell): T.cell
+begin
+  return make_port(G.Output_port, T.T_OUTPUT_PORT)
+end pp_current_output_port
+
+procedure new_port*(): int32
+var
+  i: int32
+  tries: int32
+begin
+  for tries := 0 to 1 do
+    for i := 0 to T.MaxPorts - 1 do
+      if G.Ports[i] = nil then
+        return i
+      end
+    end
+    if tries = 0 then
+      M.gc()
+    end
+  end
+  return -1
+end new_port
+
+procedure open_port*(const path: pointer to array of char; readOnly: boolean): int32
+var
+  i: int32
+  f: Files.File
+begin
+  i := new_port()
+  if i < 0 then return -1 end
+  if readOnly then
+    f := Files.Open(path, Files.ReadOnly) 
+  else
+    f := Files.Open(path, Files.Modify) 
+  end
+  if f = nil then return -1 end
+  G.Ports[i] := f
+  return i
+end open_port
+
+procedure pp_open_input_file*(x: T.cell): T.cell
+var
+  p: int32
+type Str = array of char
+begin
+  p := open_port(G.string(G.cadr(x))(Str), true)
+  if p < 0 then
+    return G.error("open-input-file: could not open file", G.cadr(x))
+  end
+  return make_port(p, T.T_INPUT_PORT)
+end pp_open_input_file
+
+procedure pp_open_output_file*(x: T.cell): T.cell
+var
+  p: int32
+  f: Files.File
+type Str = array of char
+begin
+  f := Files.Open(G.string(G.cadr(x))(Str), Files.ReadOnly) // Files.Open(G.string(G.cadr(x)), "r")
+  if f # nil then
+    Files.Close(f)
+    return G.error("open-output-file: file already exists", G.cadr(x))
+  end
+  p := open_port(G.string(G.cadr(x))(Str), false)
+  if p < 0 then
+    return G.error("open-output-file: could not open file", G.cadr(x))
+  end
+  return make_port(p, T.T_OUTPUT_PORT)
+end pp_open_output_file
+
+procedure pp_read*(x: T.cell): T.cell
+var
+  n: T.cell
+  new_port: T.int
+  old_port: T.int
+begin
+  if G.cdr(x) = T._NIL then
+    new_port := G.Input_port
+  else
+    new_port := G.port_no(G.cadr(x))
+  end
+  if (new_port < 0) or (new_port >= T.MaxPorts) then
+    return G.error("read: invalid input port", G.cadr(x))
+  end
+  old_port := G.Input_port
+  G.Input_port := val(int32,new_port)
+  n := IO.xread()
+  G.Input_port := val(int32,old_port)
+  return n
+end pp_read
+
+procedure read_char_internal(x: T.cell; unget: int32): T.cell
+var
+  c: int32
+  new_port: T.int
+  old_port: T.int
+begin
+  if G.cdr(x) = T._NIL then
+    new_port := G.Input_port
+  else
+    new_port := G.port_no(G.cadr(x))
+  end
+  if (new_port < 0) or (new_port >= T.MaxPorts) then
+    return G.error("read-char: invalid input port", G.cadr(x))
+  end
+  if G.Ports[new_port] = nil then
+    return G.error("read-char: input port is not open", T._NOEXPR)
+  end
+  old_port := G.Input_port
+  G.Input_port := val(int32,new_port)
+  c := IO.read_c()
+  if unget # 0 then
+    IO.reject(c)
+  end
+  G.Input_port := val(int32,old_port)
+  if c = -1 then
+    return T.END_OF_FILE
+  else
+    return IO.make_char(c)
+  end
+end read_char_internal
+
+procedure pp_read_char*(x: T.cell): T.cell
+begin
+  return read_char_internal(x, 0)
+end pp_read_char
+
+procedure pp_peek_char*(x: T.cell): T.cell
+begin
+  return read_char_internal(x, 1)
+end pp_peek_char
+
+procedure pp_write*(x: T.cell): T.cell
+var
+  new_port: T.int
+  old_port: T.int
+begin
+  if G.cddr(x) = T._NIL then
+    new_port := G.Output_port
+  else
+    new_port := G.port_no(G.caddr(x))
+  end
+  if (new_port < 0) or (new_port >= T.MaxPorts) then
+    return G.error("write: invalid output port", G.caddr(x))
+  end
+  old_port := G.Output_port
+  G.Output_port := val(int32,new_port)
+  IO.print_form(G.cadr(x))
+  G.Output_port := val(int32,old_port)
+  return T._UNSPECIFIC
+end pp_write
+
+procedure pp_display*(x: T.cell): T.cell
+begin
+  G.Displaying := 1
+  pp_write(x)
+  G.Displaying := 0
+  return T._UNSPECIFIC
+end pp_display
+
+procedure pp_write_char*(x: T.cell): T.cell
+begin
+  return pp_display(x)
+end pp_write_char
+
+procedure pp_set_input_port_b*(x: T.cell): T.cell
+begin
+  G.Input_port := val(int32,G.port_no(G.cadr(x)))
+  return T._UNSPECIFIC
+end pp_set_input_port_b
+
+procedure pp_set_output_port_b*(x: T.cell): T.cell
+begin
+  G.Output_port := val(int32,G.port_no(G.cadr(x)))
+  return T._UNSPECIFIC
+end pp_set_output_port_b
+
+(* ============================================================
+ * Special primitives
+ * ============================================================ *)
+
+procedure pp_apply*(x: T.cell): T.cell
+var
+  m: T.cell
+  p: T.cell
+  q: T.cell
+  last: T.cell
+begin
+  m := G.cdr(x)
+  p := G.cdr(m)
+  last := p
+  while p # T._NIL do
+    last := p
+    p := G.cdr(p)
+  end
+  p := G.car(last)
+  while p # T._NIL do
+    if G.atom_p(p) then
+      return G.error("apply: improper argument list", G.car(last))
+    end
+    p := G.cdr(p)
+  end
+  if G.cddr(m) = T._NIL then
+    p := G.cadr(m)
+  else
+    p := IO.flat_copy(G.cdr(m), @q)
+    q := p
+    while G.cddr(q) # T._NIL do
+      q := G.cdr(q)
+    end
+    G.set_cdr(q, G.car(last))
+  end
+  return M.cons(G.car(m), p)
+end pp_apply
+
+procedure pp_call_cc*(x: T.cell): T.cell
+var
+  cc: T.cell
+  n: T.cell
+begin
+  cc := M.cons(G.Stack, T._NIL)
+  cc := M.cons(G.Stack_bottom, cc)
+  cc := M.cons(G.State_stack, cc)
+  cc := M.cons(G.Environment, cc)
+  cc := M.new_atom(T.T_CONTINUATION, cc)
+  n := M.cons(cc, T._NIL)
+  n := M.cons(G.cadr(x), n)
+  return n
+end pp_call_cc
+
+procedure pp_eval*(x: T.cell): T.cell
+begin
+  return E.eval(G.cadr(x))
+end pp_eval
+
+procedure pp_unquote*(x: T.cell): T.cell
+begin
+  return G.error("unquote: not in quasiquote context", T._NOEXPR)
+end pp_unquote
+
+procedure pp_unquote_splicing*(x: T.cell): T.cell
+begin
+  return G.error("unquote-splicing: not in quasiquote context", T._NOEXPR)
+end pp_unquote_splicing
+
+procedure pp_error*(x: T.cell): T.cell
+type Str = pointer to array of char
+begin
+  if IO.length(x) > 2 then
+    return G.error(cast(Str,G.string(G.cadr(x))), G.caddr(x))
+  else
+    return G.error(cast(Str,G.string(G.cadr(x))), T._NOEXPR)
+  end
+end pp_error
+
+procedure pp_gensym*(x: T.cell): T.cell
+var
+  pre: array 101 of char
+  k: T.int
+begin
+  if G.cdr(x) = T._NIL then
+    pre[0] := 'g'
+    pre[1] := 0X
+  elsif G.string_p(G.cadr(x)) then
+    G.StrCopy_p(@pre[0], G.string(G.cadr(x)))
+    k := G.string_len(G.cadr(x))
+  elsif G.symbol_p(G.cadr(x)) then
+    G.StrCopy_p(@pre[0], G.symbol_name(G.cadr(x)))
+    k := G.symbol_len(G.cadr(x))
+  else
+    return G.error("gensym: expected string or symbol, got", G.cadr(x))
+  end
+  if k > 100 then
+    return G.error("gensym: prefix too long", G.cadr(x))
+  end
+  return E.gensym(@pre)
+end pp_gensym
+
+procedure pp_symbols*(x: T.cell): T.cell
+var
+  n: T.cell
+  a: T.cell
+  y: T.cell
+  new: T.cell
+begin
+  n := T._NIL
+  a := T._NIL
+  y := G.Symbols
+  while y # T._NIL do
+    if n = T._NIL then
+      n := M.cons(G.car(y), T._NIL)
+      a := n
+      M.save(n)
+    else
+      new := M.cons(G.car(y), T._NIL)
+      G.set_cdr(a, new)
+      a := G.cdr(a)
+    end
+    y := G.cdr(y)
+  end
+  if n # T._NIL then
+    M.unsave(1)
+  end
+  return n
+end pp_symbols
+
+procedure pp_reverse_b*(x: T.cell): T.cell
+var
+  n: T.cell
+  m: T.cell
+  h: T.cell
+begin
+  m := T._NIL
+  n := G.cadr(x)
+  while n # T._NIL do
+    if G.constant_p(n) then
+      return G.error("reverse!: immutable object", n)
+    end
+    if ~G.pair_p(n) then
+      return G.error("reverse!: expected list, got", G.cadr(x))
+    end
+    h := G.cdr(n)
+    G.set_cdr(n, m)
+    m := n
+    n := h
+  end
+  return m
+end pp_reverse_b
+
+procedure pp_file_exists_p*(x: T.cell): T.cell
+var
+  f: Files.File
+type Str = array of char
+begin
+  f := Files.Open(G.string(G.cadr(x))(Str), Files.ReadOnly) // Open(G.string(G.cadr(x)), "r")
+  if f = nil then
+    return T._FALSE
+  end
+  Files.Close(f)
+  return T._TRUE
+end pp_file_exists_p
+
+procedure pp_delete_file*(x: T.cell): T.cell
+type Str = array of char
+begin
+  if ~Files.Delete(G.string(G.cadr(x))(Str)) then
+    return G.error("delete-file: file does not exist", G.cadr(x))
+  end
+  return T._UNSPECIFIC
+end pp_delete_file
+
+(* ============================================================
+ * Real number primitives (when REALNUM is defined)
+ * ============================================================ *)
+
+procedure pp_real_p*(x: T.cell): T.cell
+begin
+  if G.number_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_real_p
+
+procedure pp_exact_p*(x: T.cell): T.cell
+begin
+  if G.integer_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_exact_p
+
+procedure pp_inexact_p*(x: T.cell): T.cell
+begin
+  if G.real_p(G.cadr(x)) then return T._TRUE else return T._FALSE end
+end pp_inexact_p
+
+procedure pp_exact_to_inexact*(x: T.cell): T.cell
+begin
+  if G.real_p(G.cadr(x)) then
+    return G.cadr(x)
+  end
+  return R.bignum_to_real(G.cadr(x))
+end pp_exact_to_inexact
+
+procedure pp_inexact_to_exact*(x: T.cell): T.cell
+begin
+  if G.integer_p(G.cadr(x)) then
+    return G.cadr(x)
+  end
+  return R.real_to_bignum(G.cadr(x))
+end pp_inexact_to_exact
+
+procedure pp_divide*(x: T.cell): T.cell
+var
+  a: T.cell
+  n: T.cell
+begin
+  n := G.cdr(x)
+  if G.cdr(n) = T._NIL then
+    a := B.make_integer(1)
+    M.save(a)
+    a := R.real_divide(x, a, G.car(n))
+    M.unsave(1)
+    return a
+  end
+  a := G.car(n)
+  n := G.cdr(n)
+  M.save(a)
+  while n # T._NIL do
+    if ~G.number_p(G.car(n)) then
+      M.unsave(1)
+      return G.error("/: expected number, got", G.car(n))
+    end
+    a := R.real_divide(x, a, G.car(n))
+    G.Car[G.Stack] := a
+    n := G.cdr(n)
+  end
+  M.unsave(1)
+  return a
+end pp_divide
+
+procedure pp_floor*(x: T.cell): T.cell
+begin
+  return R.real_floor(G.cadr(x))
+end pp_floor
+
+procedure pp_mantissa*(x: T.cell): T.cell
+begin
+  if G.integer_p(G.cadr(x)) then
+    return G.cadr(x)
+  end
+  return G.cddr(G.cadr(x))
+end pp_mantissa
+
+procedure pp_exponent*(x: T.cell): T.cell
+begin
+  if G.integer_p(G.cadr(x)) then
+    return B.make_integer(0)
+  end
+  return B.make_integer(G.real_exponent(G.cadr(x)))
+end pp_exponent
+
+(* ============================================================
+ * Bit operations
+ * ============================================================ *)
+
+procedure pp_bit_op*(x: T.cell): T.cell
+var
+  op: T.cell
+  a: T.cell
+  b: T.cell
+  mask: T.cell
+  n: T.cell
+begin
+  mask := T.IntSegLimit
+  op := B.integer_value("bit-op", G.cadr(x))
+  n := G.cddr(x)
+  a := B.integer_value("bit-op", G.car(n))
+  n := G.cdr(n)
+  while n # T._NIL do
+    b := B.integer_value("bit-op", G.car(n))
+    if (band(a, bnot(mask)) # 0) or (band(b, bnot(mask)) # 0) or (a < 0) or (b < 0) then
+      return T._FALSE
+    end
+    case op of
+    |  0: a := 0
+    |  1: a := band(a, b)
+    |  2: a := band(a, bnot(b))
+    |  3: (* a := a *)
+    |  4: a := band(bnot(a), b)
+    |  5: a := b
+    |  6: a := bxor(a, b)
+    |  7: a := bor(a, b)
+    |  8: a := bnot(bor(a, b))
+    |  9: a := bnot(bxor(a, b))
+    | 10: a := bnot(b)
+    | 11: a := bor(a, bnot(b))
+    | 12: a := bnot(a)
+    | 13: a := bor(bnot(a), b)
+    | 14: a := bnot(band(a, b))
+    | 15: a := bnot(0i)
+    | 16: a := shl(a, usig(b))
+    | 17: a := asr(a, usig(b))
+    else
+      return T._FALSE
+    end
+    a := band(a, mask)
+    n := G.cdr(n)
+  end
+  return B.make_integer(a)
+end pp_bit_op
+
+(* ============================================================
+ * Max/Min
+ * ============================================================ *)
+
+procedure pp_max*(x: T.cell): T.cell
+var
+  k: T.cell
+  p: T.cell
+  exact: int32
+begin
+  k := G.cadr(x)
+  if G.real_p(k) then exact := 0 else exact := 1 end
+  p := G.cddr(x)
+  while p # T._NIL do
+    if ~G.number_p(G.car(p)) then
+      return G.error("max: expected number, got", G.car(p))
+    end
+    if G.real_p(G.car(p)) then exact := 0 end
+    if R.real_less_p(k, G.car(p)) then
+      k := G.car(p)
+    end
+    p := G.cdr(p)
+  end
+  if exact = 0 then
+    if G.integer_p(k) then
+      return R.bignum_to_real(k)
+    end
+  end
+  return k
+end pp_max
+
+procedure pp_min*(x: T.cell): T.cell
+var
+  k: T.cell
+  p: T.cell
+  exact: int32
+begin
+  k := G.cadr(x)
+  if G.real_p(k) then exact := 0 else exact := 1 end
+  p := G.cddr(x)
+  while p # T._NIL do
+    if ~G.number_p(G.car(p)) then
+      return G.error("min: expected number, got", G.car(p))
+    end
+    if G.real_p(G.car(p)) then exact := 0 end
+    if R.real_less_p(G.car(p), k) then
+      k := G.car(p)
+    end
+    p := G.cdr(p)
+  end
+  if exact = 0 then
+    if G.integer_p(k) then
+      return R.bignum_to_real(k)
+    end
+  end
+  return k
+end pp_min
+
+(* ============================================================
+ * String primitive
+ * ============================================================ *)
+
+procedure pp_string*(x: T.cell): T.cell
+begin
+  return pp_list_to_string(M.cons(T._NIL, M.cons(G.cdr(x), T._NIL)))
+end pp_string
+
+(* ============================================================
+ * Primitive registration
+ * ============================================================ *)
+
+procedure init_prims*()
+begin
+  (* Primitives are registered in S9 main module *)
+end init_prims
+
+end S9Prims.

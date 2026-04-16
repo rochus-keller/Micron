@@ -1,0 +1,536 @@
+(* S9Bignum - Bignum arithmetic for S9 Scheme interpreter
+ * Micron port of "Scheme 9 from Empty Space" by Nils M Holm, 2007-2014
+ * Migrated from C in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *
+ * This module contains:
+ * - Bignum creation and manipulation
+ * - Bignum arithmetic (add, subtract, multiply, divide)
+ * - Bignum comparison
+ * - Bignum I/O (reading from strings)
+ *)
+
+module S9Bignum [level=3]
+
+import S9Types, G := S9Globals, M := S9Memory
+
+(* Forward declarations *)
+procedure ^bignum_add*(a: S9Types.cell; b: S9Types.cell): S9Types.cell;
+procedure ^bignum_subtract*(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+
+procedure length*(n: S9Types.cell): int32
+var
+  k: int32
+begin
+  k := 0
+  while n # S9Types._NIL do
+    inc(k)
+    n := G.cdr(n)
+  end
+  return k
+end length
+
+(* Create a bignum integer from a single cell value *)
+procedure make_integer*(i: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+begin
+  n := M.new_atom(i, S9Types._NIL)
+  return M.new_atom(S9Types.T_INTEGER, n)
+end make_integer
+
+(* Get the integer value from a bignum, with range check *)
+procedure integer_value*(const src: pointer to array of char; x: S9Types.cell): S9Types.cell
+begin
+  (* For REALNUM support, would need integer_argument call here *)
+  if G.cddr(x) # S9Types._NIL then
+    G.error("integer argument too big", x)
+    return 0
+  end
+  return G.cadr(x)
+end integer_value
+
+(* Return absolute value of bignum *)
+procedure bignum_abs*(a: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+  v: S9Types.cell
+begin
+  v := G.cadr(a)
+  if v < 0 then
+    v := -v
+  end
+  n := M.new_atom(v, G.cddr(a))
+  return M.new_atom(S9Types.T_INTEGER, n)
+end bignum_abs
+
+(* Negate a bignum *)
+procedure bignum_negate*(a: S9Types.cell): S9Types.cell
+var
+  n: S9Types.cell
+begin
+  n := M.new_atom(-G.cadr(a), G.cddr(a))
+  return M.new_atom(S9Types.T_INTEGER, n)
+end bignum_negate
+
+(* Reverse the segments of a bignum (for arithmetic operations) *)
+procedure reverse_segments*(n: S9Types.cell): S9Types.cell
+var
+  m: S9Types.cell
+begin
+  m := S9Types._NIL
+  while n # S9Types._NIL do
+    m := M.new_atom(G.car(n), m)
+    n := G.cdr(n)
+  end
+  return m
+end reverse_segments
+
+(* Internal addition - assumes GC protection is handled by caller *)
+procedure x_bignum_add(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+var
+  fa: S9Types.cell
+  fb: S9Types.cell
+  result: S9Types.cell
+  r: S9Types.cell
+  carry: int32
+begin
+  if G.x_bignum_negative_p(a) then
+    if G.x_bignum_negative_p(b) then
+      (* -A+-B --> -(|A|+|B|) *)
+      a := bignum_abs(a)
+      M.save(a)
+      a := bignum_add(a, bignum_abs(b))
+      M.unsave(1)
+      return bignum_negate(a)
+    else
+      (* -A+B --> B-|A| *)
+      return bignum_subtract(b, bignum_abs(a))
+    end
+  elsif G.x_bignum_negative_p(b) then
+    (* A+-B --> A-|B| *)
+    return bignum_subtract(a, bignum_abs(b))
+  end
+  
+  (* A+B - both positive *)
+  a := reverse_segments(G.cdr(a))
+  M.save(a)
+  b := reverse_segments(G.cdr(b))
+  M.save(b)
+  carry := 0
+  result := S9Types._NIL
+  M.save(result)
+  
+  while (a # S9Types._NIL) or (b # S9Types._NIL) or (carry # 0) do
+    if a = S9Types._NIL then fa := 0 else fa := G.car(a) end
+    if b = S9Types._NIL then fb := 0 else fb := G.car(b) end
+    r := fa + fb + carry
+    carry := 0
+    if r >= S9Types.IntSegLimit then
+      r := r - S9Types.IntSegLimit
+      carry := 1
+    end
+    result := M.new_atom(r, result)
+    G.Car[G.Stack] := result
+    if a # S9Types._NIL then a := G.cdr(a) end
+    if b # S9Types._NIL then b := G.cdr(b) end
+  end
+  
+  M.unsave(3)
+  return M.new_atom(S9Types.T_INTEGER, result)
+end x_bignum_add
+
+(* Add two bignums *)
+procedure bignum_add*(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+begin
+  G.Tmp := b
+  M.save(a)
+  M.save(b)
+  G.Tmp := S9Types._NIL
+  a := x_bignum_add(a, b)
+  M.unsave(2)
+  return a
+end bignum_add
+
+(* Compare bignums: return true if a < b *)
+procedure bignum_less_p*(a: S9Types.cell; b: S9Types.cell): boolean
+var
+  ka: int32
+  kb: int32
+  neg_a: boolean
+  neg_b: boolean
+begin
+  neg_a := G.x_bignum_negative_p(a)
+  neg_b := G.x_bignum_negative_p(b)
+  if neg_a & ~neg_b then return true end
+  if ~neg_a & neg_b then return false end
+  
+  ka := length(a)
+  kb := length(b)
+  if ka < kb then
+    if neg_a then return false else return true end
+  end
+  if ka > kb then
+    if neg_a then return true else return false end
+  end
+  
+  G.Tmp := b
+  a := bignum_abs(a)
+  M.save(a)
+  b := bignum_abs(b)
+  M.unsave(1)
+  G.Tmp := S9Types._NIL
+  
+  a := G.cdr(a)
+  b := G.cdr(b)
+  while a # S9Types._NIL do
+    if G.car(a) < G.car(b) then
+      if neg_a then return false else return true end
+    end
+    if G.car(a) > G.car(b) then
+      if neg_a then return true else return false end
+    end
+    a := G.cdr(a)
+    b := G.cdr(b)
+  end
+  return false
+end bignum_less_p
+
+(* Compare bignums for equality *)
+procedure bignum_equal_p*(a: S9Types.cell; b: S9Types.cell): boolean
+begin
+  a := G.cdr(a)
+  b := G.cdr(b)
+  while (a # S9Types._NIL) & (b # S9Types._NIL) do
+    if G.car(a) # G.car(b) then
+      return false
+    end
+    a := G.cdr(a)
+    b := G.cdr(b)
+  end
+  return (a = S9Types._NIL) & (b = S9Types._NIL)
+end bignum_equal_p
+
+(* Internal subtraction *)
+procedure x_bignum_subtract(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+var
+  fa: S9Types.cell
+  fb: S9Types.cell
+  result: S9Types.cell
+  r: S9Types.cell
+  borrow: int32
+begin
+  if G.x_bignum_negative_p(a) then
+    if G.x_bignum_negative_p(b) then
+      (* -A--B --> -A+|B| --> |B|-|A| *)
+      a := bignum_abs(a)
+      M.save(a)
+      a := bignum_subtract(bignum_abs(b), a)
+      M.unsave(1)
+      return a
+    else
+      (* -A-B --> -(|A|+B) *)
+      return bignum_negate(bignum_add(bignum_abs(a), b))
+    end
+  elsif G.x_bignum_negative_p(b) then
+    (* A--B --> A+|B| *)
+    return bignum_add(a, bignum_abs(b))
+  end
+  
+  (* A-B, A<B --> -(B-A) *)
+  if bignum_less_p(a, b) then
+    return bignum_negate(bignum_subtract(b, a))
+  end
+  
+  (* A-B, A>=B *)
+  a := reverse_segments(G.cdr(a))
+  M.save(a)
+  b := reverse_segments(G.cdr(b))
+  M.save(b)
+  borrow := 0
+  result := S9Types._NIL
+  M.save(result)
+  
+  while (a # S9Types._NIL) or (b # S9Types._NIL) or (borrow # 0) do
+    if a = S9Types._NIL then fa := 0 else fa := G.car(a) end
+    if b = S9Types._NIL then fb := 0 else fb := G.car(b) end
+    r := fa - fb - borrow
+    borrow := 0
+    if r < 0 then
+      r := r + S9Types.IntSegLimit
+      borrow := 1
+    end
+    result := M.new_atom(r, result)
+    G.Car[G.Stack] := result
+    if a # S9Types._NIL then a := G.cdr(a) end
+    if b # S9Types._NIL then b := G.cdr(b) end
+  end
+  
+  M.unsave(3)
+  
+  (* Remove leading zeros *)
+  while (G.car(result) = 0) & (G.cdr(result) # S9Types._NIL) do
+    result := G.cdr(result)
+  end
+  
+  return M.new_atom(S9Types.T_INTEGER, result)
+end x_bignum_subtract
+
+(* Subtract two bignums *)
+procedure bignum_subtract*(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+begin
+  G.Tmp := b
+  M.save(a)
+  M.save(b)
+  G.Tmp := S9Types._NIL
+  a := x_bignum_subtract(a, b)
+  M.unsave(2)
+  return a
+end bignum_subtract
+
+(* Shift bignum left by one decimal digit (multiply by 10) *)
+procedure bignum_shift_left*(a: S9Types.cell; fill: int32): S9Types.cell
+var
+  r: S9Types.cell
+  c: S9Types.cell
+  result: S9Types.cell
+  carry: S9Types.cell
+begin
+  a := reverse_segments(G.cdr(a))
+  M.save(a)
+  carry := fill
+  result := S9Types._NIL
+  M.save(result)
+  
+  while a # S9Types._NIL do
+    if G.car(a) >= (S9Types.IntSegLimit div 10i4) then
+      c := G.car(a) div (S9Types.IntSegLimit div 10i4)
+      r := (G.car(a) mod (S9Types.IntSegLimit div 10i4)) * 10
+      r := r + carry
+      carry := c
+    else
+      r := G.car(a) * 10 + carry
+      carry := 0
+    end
+    result := M.new_atom(r, result)
+    G.Car[G.Stack] := result
+    a := G.cdr(a)
+  end
+  
+  if carry # 0 then
+    result := M.new_atom(carry, result)
+  end
+  
+  M.unsave(2)
+  return M.new_atom(S9Types.T_INTEGER, result)
+end bignum_shift_left
+
+(* Shift bignum right by one decimal digit (divide by 10)
+ * Result: (a/10 . a%10) *)
+procedure bignum_shift_right*(a: S9Types.cell): S9Types.cell
+var
+  r: S9Types.cell
+  c: S9Types.cell
+  result: S9Types.cell
+  carry: S9Types.cell
+begin
+  a := G.cdr(a)
+  M.save(a)
+  carry := 0
+  result := S9Types._NIL
+  M.save(result)
+  
+  while a # S9Types._NIL do
+    c := G.car(a) mod 10
+    r := G.car(a) div 10
+    r := r + carry * (S9Types.IntSegLimit div 10i)
+    carry := c
+    result := M.new_atom(r, result)
+    G.Car[G.Stack] := result
+    a := G.cdr(a)
+  end
+  
+  result := reverse_segments(result)
+  if (G.car(result) = 0) & (G.cdr(result) # S9Types._NIL) then
+    result := G.cdr(result)
+  end
+  result := M.new_atom(S9Types.T_INTEGER, result)
+  G.Car[G.Stack] := result
+  carry := make_integer(carry)
+  M.unsave(2)
+  return M.cons(result, carry)
+end bignum_shift_right
+
+(* Multiply two bignums *)
+procedure bignum_multiply*(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+var
+  neg: boolean
+  r: S9Types.cell
+  i: S9Types.cell
+  result: S9Types.cell
+begin
+  neg := G.x_bignum_negative_p(a) # G.x_bignum_negative_p(b)
+  a := bignum_abs(a)
+  M.save(a)
+  b := bignum_abs(b)
+  M.save(b)
+  result := make_integer(0)
+  M.save(result)
+  
+  loop
+    if G.x_bignum_zero_p(a) then exit end
+    if G.Error_flag # 0 then
+      exit
+    end
+    r := bignum_shift_right(a)
+    i := G.caddr(r)
+    a := G.car(r)
+    G.Car[G.cddr(G.Stack)] := a
+    while i # 0 do
+      result := bignum_add(result, b)
+      G.Car[G.Stack] := result
+      dec(i)
+    end
+    b := bignum_shift_left(b, 0)
+    G.Car[G.cdr(G.Stack)] := b
+  end
+  
+  if neg then
+    result := bignum_negate(result)
+  end
+  M.unsave(3)
+  return result
+end bignum_multiply
+
+(* Equalize A and B for division
+ * e.g.: A=123, B=12345 ---> 12300, 100
+ * Return (scaled-a . scaling-factor) *)
+procedure bignum_equalize(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+var
+  r: S9Types.cell
+  f: S9Types.cell
+  r0: S9Types.cell
+  f0: S9Types.cell
+begin
+  r0 := a
+  M.save(r0)
+  f0 := make_integer(1)
+  M.save(f0)
+  r := r0
+  M.save(r)
+  f := f0
+  M.save(f)
+  
+  while bignum_less_p(r, b) do
+    r0 := r
+    f0 := f
+    G.Car[G.cdddr(G.Stack)] := r0
+    G.Car[G.cddr(G.Stack)] := f0 
+    r := bignum_shift_left(r, 0)
+    G.Car[G.cdr(G.Stack)] := r
+    f := bignum_shift_left(f, 0)
+    G.Car[G.Stack] := f
+  end
+  
+  M.unsave(4)
+  return M.cons(r0, f0)
+end bignum_equalize
+
+(* Internal division: Result: (a/b . a%b) *)
+procedure x_bignum_divide(a: S9Types.cell; b: S9Types.cell): S9Types.cell
+var
+  neg: boolean
+  neg_a: boolean
+  result: S9Types.cell
+  f: S9Types.cell
+  i: int32
+  c: S9Types.cell
+  c0: S9Types.cell
+begin
+  neg_a := G.x_bignum_negative_p(a)
+  neg := neg_a # G.x_bignum_negative_p(b)
+  a := bignum_abs(a)
+  M.save(a)
+  b := bignum_abs(b)
+  M.save(b)
+  
+  if bignum_less_p(a, b) then
+    if neg_a then
+      a := bignum_negate(a)
+    end
+    f := make_integer(0)
+    M.unsave(2)
+    return M.cons(f, a)
+  end
+  
+  b := bignum_equalize(b, a)
+  G.Car[G.cdr(G.Stack)] := b
+  G.Car[G.Stack] := a
+  c := S9Types._NIL
+  M.save(c)
+  c0 := S9Types._NIL
+  M.save(c0)
+  f := G.cdr(b)
+  b := G.car(b)
+  G.Car[G.cdddr(G.Stack)] := b
+  M.save(f)
+  result := make_integer(0)
+  M.save(result)
+  
+  loop
+    if G.x_bignum_zero_p(f) then exit end
+    if G.Error_flag # 0 then
+      exit
+    end
+    c := make_integer(0)
+    G.Car[G.cdddr(G.Stack)] := c
+    c0 := c
+    G.Car[G.cddr(G.Stack)] := c
+    i := 0
+    while ~bignum_less_p(a, c) do
+      if G.Error_flag # 0 then
+        exit
+      end
+      c0 := c
+      G.Car[G.cddr(G.Stack)] := c
+      c := bignum_add(c, b)
+      G.Car[G.cdddr(G.Stack)] := c
+      inc(i)
+    end
+    result := bignum_shift_left(result, i - 1)
+    G.Car[G.Stack] := result
+    a := bignum_subtract(a, c0)
+    G.Car[G.cddddr(G.cddddr(G.Stack))] := a
+    f := G.car(bignum_shift_right(f))
+    G.Car[G.cdr(G.Stack)] := f
+    b := G.car(bignum_shift_right(b))
+    G.Car[G.cdr(G.cddddr(G.Stack))] := b
+  end
+  
+  if neg then
+    result := bignum_negate(result)
+  end
+  G.Car[G.Stack] := result
+  if neg_a then
+    a := bignum_negate(a)
+  end
+  M.unsave(6)
+  return M.cons(result, a)
+end x_bignum_divide
+
+(* Divide two bignums: Result: (a/b . a%b) *)
+procedure bignum_divide*(x: S9Types.cell; a: S9Types.cell; b: S9Types.cell): S9Types.cell
+begin
+  if G.x_bignum_zero_p(b) then
+    return G.error("divide by zero", x)
+  end
+  G.Tmp := b
+  M.save(a)
+  M.save(b)
+  G.Tmp := S9Types._NIL
+  a := x_bignum_divide(a, b)
+  M.unsave(2)
+  return a
+end bignum_divide
+
+end S9Bignum.
