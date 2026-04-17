@@ -23,7 +23,7 @@ NOTE that this project is work-in-progress and not yet released for general use.
 - [x] Complete language and add explicit language levels
 - [x] Implement a MIL interpreter for the full language scope (WIP)
 - [x] Implement a native backend (WIP)
-- [ ] Migrate some notable C and Oberon projects to Micron as a proof-of-concept and to optimize the language
+- [x] Migrate some notable C and Oberon projects to Micron as a proof-of-concept and to optimize the language (WIP)
 
 
 #### Status on February 4, 2024

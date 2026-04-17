@@ -807,6 +807,7 @@ bool Project2::interpret(const QString& outDir)
         return true;
     foreach( Mil::Declaration* module, mods )
     {
+        // each run gets its freshly initialized module variables
         if( !r.run(module) )
             return false; // TODO: error handling
     }

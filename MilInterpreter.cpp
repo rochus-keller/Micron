@@ -381,6 +381,7 @@ struct Interpreter::Imp
     bool run(Declaration* proc)
     {
         const int i = code.findProc(proc);
+        // if proc is a module, i represents the (true or synthetic) begin
         if( i >= 0 )
             return run(i);
         // proc not found
@@ -514,7 +515,7 @@ bool Interpreter::run(Declaration* proc)
     if( !module->translated && !precompile(module) )
         return false;
 
-    // init module variables
+    // allocate and init module variables
     imp->moduleData.resize(imp->mdl->getVarMemSize());
     DeclList modules = imp->mdl->getModules();
     foreach(Declaration* module, modules)
@@ -530,13 +531,11 @@ bool Interpreter::run(Declaration* proc)
     try
     {
         if( proc->kind == Declaration::Module )
+            // if proc is a module, nothing else than begin has to be called
             return imp->run(proc);
-
-        if( !proc->entryPoint )
-        {
-            if( !imp->run(module) )
-                return false;
-        }
+        else if( !proc->entryPoint && !imp->run(module) )
+            // if proc is a true proc, assure that the begin of the module the proc belongs is called first
+            return false;
 
         return imp->run(proc);
     }catch( const QString& err )
@@ -1740,11 +1739,11 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
         res = ffiProcs[proc->id](args, retval);
     }else
     {
-        if( proc->init )
+        if( proc->decl->entryPoint || proc->decl->kind == Declaration::Module )
         {
-            if( proc->called )
-                return true; // already called
-            proc->called = true;
+            if( proc->beginGuard )
+                return true; // begin$ already called
+            proc->beginGuard = true;
         }
         newframe.locals.init(local,PreAllocSize);
 

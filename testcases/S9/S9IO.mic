@@ -181,10 +181,23 @@ end ntoa
 procedure find_symbol*(s: pointer to array of char): S9Types.cell
 var
   y: S9Types.cell
+  p: pointer to char
+  q: pointer to char
+  match: boolean
 begin
   y := G.Symbols
   while y # S9Types._NIL do
-    if G.symbol_name(G.car(y)) = s then
+    p := G.symbol_name(G.car(y))
+    q := @s[0]
+    match := true
+    while match & (p^ # 0X) & (q^ # 0X) do
+      if p^ # q^ then
+        match := false
+      end
+      inc(p)
+      inc(q)
+    end
+    if match & (p^ = 0X) & (q^ = 0X) then
       return G.car(y)
     end
     y := G.cdr(y)
@@ -383,7 +396,7 @@ end read_character
 (* Read a string literal *)
 procedure read_string*(): S9Types.cell
 var
-  s: array S9Types.TokenLength + 1 of char
+  s: array 129 of char (* TODO: S9Types.TokenLength + 1 *)
   n: S9Types.cell
   c: int32
   i: int32
@@ -403,7 +416,7 @@ begin
     if G.Error_flag # 0 then
       exit
     end
-    if i >= S9Types.TokenLength - 2i then
+    if i >= 128 - 2i4 then (* TODO: i >= S9Types.TokenLength - 2i *)
       G.error("string literal too long", S9Types._NOEXPR)
       dec(i)
     end
@@ -515,7 +528,7 @@ end string_to_bignum
 (* Read a symbol or number *)
 procedure read_symbol_or_number*(c: int32): S9Types.cell
 var
-  s: array S9Types.TokenLength of char
+  s: array 128 of char (* TODO S9Types.TokenLength *)
   i: int32
   funny: int32
 begin
@@ -526,7 +539,7 @@ begin
     if ~is_symbolic(c) then
       funny := c
     end
-    if i >= S9Types.TokenLength - 2i then
+    if i >= 128 - 2i4 then (* TODO i >= S9Types.TokenLength - 2i *)
       G.error("symbol too long", S9Types._NOEXPR)
       dec(i)
     end

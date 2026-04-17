@@ -257,7 +257,7 @@ void CeeGen::visitProcedure(Declaration* proc)
                     emitSoapInit(bout, qualident(sub), sub->getType(), 1 );
                 sub = sub->next;
             }
-            bout << ws(0) << "}" << endl;
+            bout << ws(0) << "} else return;" << endl;
         }
         bout << ws(0) << "void* _ptr$;" << endl;
         bout << ws(0) << "unsigned int _len$;" << endl;
@@ -560,9 +560,12 @@ void CeeGen::constValue(QTextStream& out, Constant* c, Type* hint)
     case Constant::I:
         out << c->i;
         break;
-    case Constant::S:
-        out << "\"" << c->s << "\"";
-        break;
+    case Constant::S: {
+            QByteArray tmp = c->s;
+            tmp.replace("\\", "\\\\");
+            tmp.replace("\"", "\\\"");
+            out << "\"" << tmp << "\"";
+        } break;
     case Constant::B:
         {
             const ByteString* ba = c->b;

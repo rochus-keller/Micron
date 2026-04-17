@@ -78,19 +78,19 @@ bool Code::compile(Declaration* procOrModule)
 
 bool Code::compileProc(Declaration *proc)
 {
-    return translateProc(proc);
+    return translateProcDecl(proc);
 }
 
-bool Code::translateModule(Declaration* m)
+bool Code::translateModule(Declaration* module)
 {
-    Q_ASSERT(m && m->kind == Declaration::Module);
+    Q_ASSERT(module && module->kind == Declaration::Module);
 
-    if( m->translated )
+    if( module->translated )
         return true; // the module was already translated
 
-    m->translated = true; // re/misuse this flag to indicate that we already translated
+    module->translated = true; // re/misuse this flag to indicate that we already translated
 
-    Declaration* sub = m->subs;
+    Declaration* sub = module->subs;
     while(sub)
     {
         if( sub->kind == Declaration::TypeDecl && sub->getType() &&
@@ -111,27 +111,27 @@ bool Code::translateModule(Declaration* m)
     }
 
     // look for the init procedure or synthesize one
-    Declaration* init = m->findInitProc();
+    Declaration* init = module->findInitProc();
     if(init == 0)
     {
         // no init proc was found, so we synthesize a minimal one
         Procedure* cur = new Procedure();
         procs.push_back(cur);
-        cur->decl = m;
-        if( !translateInit(*cur, procs.size()-1) )
+        cur->decl = module; // synthetic begin$ points to the module instead of the proc decl
+        if( !renderImportCalls(*cur, procs.size()-1) )
             return false;
-    }else if( !translateProc(init) )
+    }else if( !translateProcDecl(init) )
         return false;
     return true;
 }
 
-bool Code::translateProc(Declaration* proc)
+bool Code::translateProcDecl(Declaration* proc)
 {
     if( proc->validated )
         return true; // the proc was already translated
     proc->validated = true;
     if( proc->forward )
-        return translateProc(proc->forwardTo);
+        return translateProcDecl(proc->forwardTo);
 
     Q_ASSERT( proc->kind == Declaration::Procedure );
 
@@ -139,8 +139,9 @@ bool Code::translateProc(Declaration* proc)
     procs.push_back(cur);
     cur->decl = proc;
 
-    if( proc->entryPoint && !translateInit(*cur, procs.size()-1) )
+    if( proc->entryPoint && !renderImportCalls(*cur, procs.size()-1) )
         // add a prefix which calls imports if not already called
+        // only check for entryPoint here becode the synthetic begin$ were already handled in translateModule
         return false;
     if( proc->typebound )
     {
@@ -160,15 +161,15 @@ bool Code::translateProc(Declaration* proc)
                 if( baseproc )
                 {
                     Q_ASSERT(proc->getPd()->slot == baseproc->getPd()->slot );
-                    translateProc(baseproc);
+                    translateProcDecl(baseproc);
                 }
             }
         }
     }
-    return translateProc(*cur);
+    return translateProcSlot(*cur);
 }
 
-bool Code::translateProc(Procedure& proc)
+bool Code::translateProcSlot(Procedure& proc)
 {
     Q_ASSERT( proc.decl && proc.decl->kind == Declaration::Procedure );
     const DeclList locals = proc.decl->getLocals();
@@ -544,8 +545,10 @@ bool Code::translateStat(Procedure &proc, Statement *& s)
     case IL_loop:
         {
             ctxStack.back().loopStack.push_back(QList<int>());
+            const int start = proc.ops.size();
             if( !translateStatSeq(proc, s->body) )
                 return false;
+            emitOp(proc, LL_br, proc.ops.size()-start+1, true);
             foreach( int pc, ctxStack.back().loopStack.back() )
                 branch_here(proc,pc);
             ctxStack.back().loopStack.pop_back();
@@ -901,7 +904,7 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         emitOp(proc, LL_ldobj, addObject(e->c) );
         break;
     case IL_ldproc:
-        if( !translateProc(e->d) )
+        if( !translateProcDecl(e->d) )
             return false;
         emitOp(proc, LL_ldproc, findProc(e->d));
         break;
@@ -911,7 +914,7 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
             emitOp(proc, LL_ldmeth_iface, e->d->getPd()->slot);
         else
         {
-            if( !translateProc(e->d) )
+            if( !translateProcDecl(e->d) )
                 return false;
             if( t->kind == Type::Pointer )
                 t = deref(t->getType());
@@ -1498,7 +1501,7 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
     case IL_callvirt:
     case IL_callinst:
     {
-        if( !translateProc(e->d) )
+        if( !translateProcDecl(e->d) )
             return false;
         const int id = findProc(e->d);
         if( id < 0 )
@@ -1625,7 +1628,7 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
             {
                 for( int j = 0; j < clsmeths.size(); j++ )
                 {
-                    if( !translateProc(clsmeths[j]) )
+                    if( !translateProcDecl(clsmeths[j]) )
                         return false;
                     if( clsmeths[j]->name.constData() == imethods[i]->name.constData() )
                     {
@@ -1680,11 +1683,13 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
     return true;
 }
 
-bool Code::translateInit(Procedure& proc, quint32 id)
+bool Code::renderImportCalls(Procedure& proc, quint32 id)
 {
     Q_ASSERT( proc.decl && (proc.decl->kind == Declaration::Module || proc.decl->kind == Declaration::Procedure) );
 
-    Declaration* d = proc.decl->subs;
+    Declaration* module = proc.decl->getModule();
+
+    Declaration* d = module->subs;
     while(d)
     {
         if( d->kind == Declaration::Import )
@@ -1934,7 +1939,7 @@ void Code::initMemory(char* mem, Type* t, bool doPointerInit )
             foreach( Declaration* d, t->subs )
             {
                 if( d->kind == Declaration::Procedure )
-                    translateProc(d);
+                    translateProcDecl(d);
             }
         }
 

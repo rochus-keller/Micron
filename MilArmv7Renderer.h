@@ -70,6 +70,7 @@ namespace Arm
         bool useAapcs() const { return d_useAapcs; }
 
         // Render a complete module to an ELF relocatable object.
+        // TODO assure TestSymChars
         bool renderModule(Declaration* module);
 
         // Generate a standalone main.o that calls each module's $begin$ in order,

@@ -63,6 +63,7 @@ namespace X86
         bool cdeclReturns() const { return d_cdeclReturns; }
 
         // Render a complete module to an ELF relocatable object.
+        // TODO assure TestSymChars
         bool renderModule(Declaration* module);
 
         // Write the generated ELF to a file.

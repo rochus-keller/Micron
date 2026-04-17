@@ -72,14 +72,13 @@ struct Procedure
 {
     std::vector<Operation> ops; // std::vector because QVector.detach() is very expensive
     Declaration* decl;
-    uint init : 1;
-    uint called : 1;
+    uint beginGuard : 1;
     uint external : 1;
-    uint id: 29;
+    uint id: 30;
     quint32 localsSize;
     quint32 argsSize, returnSize;
     std::vector<std::pair<int,Template> > locals;
-    Procedure():decl(0),init(0), called(0), external(0), id(0),
+    Procedure():decl(0),beginGuard(0), external(0), id(0),
         localsSize(0),argsSize(0),returnSize(0),ops(0){}
 };
 
@@ -149,12 +148,16 @@ public:
         return -1;
     }
 
+    // find the procs implementation of proc, which can be a true proc or the begin of the module
+    // in case proc points to a module
     int findProc(Declaration* proc) const
     {
         while( proc->kind == Declaration::Procedure && proc->forward )
             proc = proc->forwardTo;
         if( proc->kind == Declaration::Module )
         {
+            // if proc is a module, see whether there is an explicit begin, otherwhise
+            // assume that proc is the synthesized begin of the module
             Declaration* init = proc->findInitProc();
             if( init )
                 proc = init;
@@ -181,15 +184,15 @@ public:
     static const char* op_names[];
 
 protected:
-    bool translateProc(Declaration* proc);
     bool translateModule(Declaration* m);
-    bool translateProc(Procedure& proc);
+    bool translateProcDecl(Declaration* proc);
+    bool translateProcSlot(Procedure& proc);
     bool translateStat(Procedure& proc, Statement*& s);
     virtual bool translateStatSeq(Procedure& proc, Statement* s);
     virtual bool translateStatExpr(Procedure& proc, Statement* s);
     bool translateExpr(Procedure& proc, Expression* e);
     bool translateExprSeq(Procedure& proc, Expression* e);
-    bool translateInit(Procedure& proc, quint32 id);
+    bool renderImportCalls(Procedure& proc, quint32 id);
     void render(char* data, quint32 off, Type* t, Constant* c);
     void render(char* data, quint32 start, ComponentList* cl );
     void handleLines(Procedure& proc,Node *n);
@@ -296,7 +299,6 @@ protected:
         }
         return -1;
     }
-
 
 protected:
     const quint8 pointerWidth;
