@@ -63,7 +63,6 @@ namespace X86
         bool cdeclReturns() const { return d_cdeclReturns; }
 
         // Render a complete module to an ELF relocatable object.
-        // TODO assure TestSymChars
         bool renderModule(Declaration* module);
 
         // Write the generated ELF to a file.
@@ -122,6 +121,8 @@ namespace X86
         void emitVtableFixups(X86::Register destReg, const Vm::Template& tmpl);
         void initDataVtable(Type* t, quint32 baseOff);
         void initGlobalVarVtables(Declaration* module);
+        void emitRuntimeVtableInit(Type* t, quint32 baseOff);
+        void emitGlobalVarVtableInits(Declaration* module);
 
         AstModel* d_mdl;
         Vm::Code2 d_code;
@@ -140,6 +141,7 @@ namespace X86
         quint32 d_textSymIdx;
         quint32 d_dataSymIdx;
         quint32 d_rodataSymIdx;
+        quint32 d_globalsSymIdx; // COMMON symbol for shared module variable memory
 
         QMap<int,quint32> d_procTextOffsets;
         QMap<int,quint32> d_procSymbols;

@@ -70,7 +70,6 @@ namespace Arm
         bool useAapcs() const { return d_useAapcs; }
 
         // Render a complete module to an ELF relocatable object.
-        // TODO assure TestSymChars
         bool renderModule(Declaration* module);
 
         // Generate a standalone main.o that calls each module's $begin$ in order,
@@ -151,6 +150,7 @@ namespace Arm
         quint32 d_textSymIdx;
         quint32 d_dataSymIdx;
         quint32 d_rodataSymIdx;
+        quint32 d_globalsSymIdx; // COMMON symbol for shared module variable memory
 
         QMap<int,quint32> d_procTextOffsets; // proc index -> byte offset in .text
         QMap<int,quint32> d_procSymbols; // proc index -> ELF symbol index
@@ -174,6 +174,8 @@ namespace Arm
         void emitVtableFixups(Arm::Register destReg, const Vm::Template& tmpl);
         void initDataVtable(Type* t, quint32 baseOff);
         void initGlobalVarVtables(Declaration* module);
+        void emitRuntimeVtableInit(Type* t, quint32 baseOff);
+        void emitGlobalVarVtableInits(Declaration* module);
 
         quint32 getOrEmitTemplate(quint32 templateIdx);
 

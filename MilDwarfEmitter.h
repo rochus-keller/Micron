@@ -73,7 +73,9 @@ namespace Mil
 
         // Write all DWARF sections (.debug_info, .debug_abbrev, .debug_line,
         // .debug_frame, .debug_str) to the ElfWriter.
-        void finalize(quint32 textSymIdx, quint32 dataSymIdx);
+        // globalsSymIdx: if non-zero, module variable addresses are relocated
+        // against this symbol (COMMON MIC$GLOBALS) instead of the .data section.
+        void finalize(quint32 textSymIdx, quint32 dataSymIdx, quint32 globalsSymIdx = 0);
 
         // Get or create a DWARF type DIE for a MIL Type.
         quint32 getOrCreateType(Type* t);

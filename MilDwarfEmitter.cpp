@@ -953,11 +953,13 @@ void DwarfEmitter::buildDebugLine()
     patchLE32(d_line, headerStart, unitLen);
 }
 
-void DwarfEmitter::finalize(quint32 textSymIdx, quint32 dataSymIdx)
+void DwarfEmitter::finalize(quint32 textSymIdx, quint32 dataSymIdx, quint32 globalsSymIdx)
 {
     // Must be called after all DIEs and line entries have been added.
     // textSymIdx and dataSymIdx are the ELF section symbol indices for .text
     // and .data, used to generate relocations in .rel.debug_info and .rel.debug_line.
+    // globalsSymIdx (optional): if non-zero, RELOC_DATA entries (module variable
+    // addresses) are relocated against this COMMON symbol instead of .data.
     //
     // The debug sections and their section symbols were already created in the
     // constructor (to avoid shifting global symbol indices).  Here we just
@@ -980,7 +982,7 @@ void DwarfEmitter::finalize(quint32 textSymIdx, quint32 dataSymIdx)
             const DwarfReloc& r = d_infoRelocs[i];
             quint32 symIdx = 0;
             if (r.target == RELOC_TEXT) symIdx = textSymIdx;
-            else if (r.target == RELOC_DATA) symIdx = dataSymIdx;
+            else if (r.target == RELOC_DATA) symIdx = globalsSymIdx ? globalsSymIdx : dataSymIdx;
             else if (r.target == RELOC_STR) symIdx = d_strSymIdx;
             else if (r.target == RELOC_ABBREV) symIdx = d_abbrevSymIdx;
             else if (r.target == RELOC_LINE) symIdx = d_lineSymIdx;

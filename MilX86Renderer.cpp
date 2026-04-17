@@ -47,7 +47,7 @@ static const quint8 R_386_PC32 = 2;  // S + A - P (PC-relative 32-bit)
 Renderer::Renderer(AstModel* mdl)
     : d_mdl(mdl), d_code(mdl, 4, 4), d_emitDwarf(false), d_cdeclReturns(false),
       d_dwarf(0), d_localsSize(0), d_argsSize(0),
-      d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0),
+      d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0), d_globalsSymIdx(0),
       d_elf(ElfWriter::ArchX86)
 {
     d_code.setReverseArguments(true);
@@ -271,6 +271,80 @@ void Renderer::initGlobalVarVtables(Declaration* module)
     }
 }
 
+// Emit runtime x86 code to store a vtable pointer for an object (or nested
+// objects/arrays) at 'baseOff' within the MIC$GLOBALS COMMON area.
+// Called during $begin$ rendering so that global object variables get their
+// vtable pointers initialized at runtime (they live in BSS, not .data).
+void Renderer::emitRuntimeVtableInit(Type* t, quint32 baseOff)
+{
+    using namespace X86;
+    while (t && t->kind == Type::NameRef)
+        t = t->getType();
+    if (!t)
+        return;
+
+    if (t->kind == Type::Object) {
+        int vtIdx = d_code.findVtableIdx(t);
+        if (vtIdx >= 0) {
+            quint32 vtOff = getOrEmitVtable(vtIdx);
+            // mov eax, baseOff          ; addr of object in MIC$GLOBALS
+            d_emitter.mov_ri(EAX, baseOff);
+            quint32 immOff = d_emitter.currentPosition() - 4;
+            d_elf.addRelocation(d_sections.relText, immOff, d_globalsSymIdx, R_386_32);
+            // mov ecx, vtOff            ; addr of vtable in .data
+            d_emitter.mov_ri(ECX, vtOff);
+            immOff = d_emitter.currentPosition() - 4;
+            d_elf.addRelocation(d_sections.relText, immOff, d_dataSymIdx, R_386_32);
+            // mov [eax], ecx            ; store vtable pointer
+            d_emitter.mov_mr(EAX, 0, ECX);
+        }
+        foreach (Declaration* field, t->subs) {
+            if (field->kind == Declaration::Field) {
+                Type* ft = field->getType();
+                while (ft && ft->kind == Type::NameRef)
+                    ft = ft->getType();
+                if (ft && ft->objectInit)
+                    emitRuntimeVtableInit(ft, baseOff + field->f.off);
+            }
+        }
+    } else if (t->kind == Type::Struct) {
+        foreach (Declaration* field, t->subs) {
+            if (field->kind == Declaration::Field) {
+                Type* ft = field->getType();
+                while (ft && ft->kind == Type::NameRef)
+                    ft = ft->getType();
+                if (ft && ft->objectInit)
+                    emitRuntimeVtableInit(ft, baseOff + field->f.off);
+            }
+        }
+    } else if (t->kind == Type::Array && t->len != 0) {
+        Type* et = t->getType();
+        while (et && et->kind == Type::NameRef)
+            et = et->getType();
+        if (et && et->objectInit) {
+            quint32 elemSize = et->getByteSize(4);
+            for (int i = 0; i < t->len; i++) {
+                emitRuntimeVtableInit(et, baseOff + i * elemSize);
+            }
+        }
+    }
+}
+
+// Emit runtime vtable initialization for all global object variables of a module.
+// This replaces the static initGlobalVarVtables when variables live in COMMON/BSS.
+void Renderer::emitGlobalVarVtableInits(Declaration* module)
+{
+    QList<Declaration*> vars = module->getVars();
+    for (int v = 0; v < vars.size(); v++) {
+        Declaration* var = vars[v];
+        Type* t = var->getType();
+        while (t && t->kind == Type::NameRef)
+            t = t->getType();
+        if (t && t->objectInit)
+            emitRuntimeVtableInit(t, var->off);
+    }
+}
+
 Renderer::~Renderer()
 {
     clearLabels();
@@ -321,13 +395,15 @@ bool Renderer::renderModule(Declaration* module)
     d_dataSymIdx = d_elf.addSectionSymbol(d_sections.data);
     d_rodataSymIdx = d_elf.addSectionSymbol(d_sections.rodata);
 
-    // Reserve space in .data for module global variables
-    // Variables use offsets from .data base via loadVarAddr, so vtables
-    // must be placed after this reserved space.
+    // Create a COMMON symbol for the shared module variable memory.
+    // Each module's .o defines the same COMMON symbol; the linker merges them
+    // into a single BSS allocation so all modules reference the same addresses.
     quint32 varMemSize = d_mdl->getVarMemSize();
     if (varMemSize > 0) {
-        QByteArray zeros(varMemSize, '\0');
-        d_elf.appendToSection(d_sections.data, zeros.constData(), varMemSize);
+        static const quint16 SHN_COMMON = 0xFFF2;
+        d_globalsSymIdx = d_elf.addSymbol("MIC$GLOBALS", SHN_COMMON,
+                                           4 /*alignment*/, varMemSize,
+                                           STB_GLOBAL, STT_OBJECT);
     }
 
     // Reserve a 4-byte guard word in .data for the module init (once-only) check.
@@ -445,6 +521,24 @@ bool Renderer::renderModule(Declaration* module)
             d_emitter.jcc(CC_NE, initSkipLabel);
             //   mov [ecx], 1            ; mark as initialized
             d_emitter.mov_mi(ECX, 0, 1);
+
+            // Emit runtime vtable initialization for global object variables.
+            // Must happen before the module body runs so that virtual calls work.
+            if (d_globalsSymIdx)
+                emitGlobalVarVtableInits(allProcs[i].decl);
+
+            // Emit calls to imported modules' $begin$ procedures.
+            // Each module must initialize its imports before running its own body.
+            // (Mirrors the C code generator's pattern in MilCeeGen.cpp.)
+            Declaration* modDecl = allProcs[i].decl;
+            for (Declaration* sub = modDecl->subs; sub; sub = sub->next) {
+                if (sub->kind == Declaration::Import && sub->imported && !sub->imported->nobody) {
+                    QByteArray importBeginSym = elfSymName(sub->imported->name + QByteArray("$begin$"));
+                    quint32 importSymIdx = d_elf.addSymbol(importBeginSym, 0, 0, 0, STB_GLOBAL, STT_FUNC);
+                    quint32 callOff = d_emitter.call_rel32(-4);
+                    d_elf.addRelocation(d_sections.relText, callOff, importSymIdx, 2 /*R_386_PC32*/);
+                }
+            }
         }
 
         // Record where the actual prologue (push ebp; mov ebp, esp) begins.
@@ -509,8 +603,9 @@ bool Renderer::renderModule(Declaration* module)
     // Copy machine code to .text
     d_elf.appendToSection(d_sections.text, d_emitter.code());
 
-    // Initialize vtable pointers for global Object-type variables in .data
-    initGlobalVarVtables(module);
+    // Static initGlobalVarVtables is no longer needed: global variables live in
+    // COMMON/BSS (MIC$GLOBALS), so vtable pointers are initialized at runtime
+    // via emitGlobalVarVtableInits() emitted in the $begin$ guard block above.
 
     // Write .micron.mod
     QByteArray modContent = "module " + module->name + "\n";
@@ -528,7 +623,7 @@ bool Renderer::renderModule(Declaration* module)
 
     if (d_dwarf) {
         d_dwarf->endCompilationUnit();
-        d_dwarf->finalize(d_textSymIdx, d_dataSymIdx);
+        d_dwarf->finalize(d_textSymIdx, d_dataSymIdx, d_globalsSymIdx);
     }
 
     return true;
@@ -709,12 +804,14 @@ void Renderer::loadArgAddr(Register rd, quint32 milOffset)
 
 void Renderer::loadVarAddr(Register rd, quint32 milOffset)
 {
-    // MOV rd, imm32 with R_386_32 relocation against .data section
-    // The immediate is the offset within .data; linker adds section base.
+    // MOV rd, imm32 with R_386_32 relocation against the shared MIC$GLOBALS
+    // COMMON symbol.  The immediate is the variable's offset within the shared
+    // global area; the linker resolves S + A where S = MIC$GLOBALS base and
+    // A = milOffset.
     d_emitter.mov_ri(rd, milOffset);
     // The relocation patches the imm32 at (currentPosition - 4)
     quint32 immOffset = d_emitter.currentPosition() - 4;
-    d_elf.addRelocation(d_sections.relText, immOffset, d_dataSymIdx, R_386_32);
+    d_elf.addRelocation(d_sections.relText, immOffset, d_globalsSymIdx, R_386_32);
 }
 
 void Renderer::scanBranchTargets(Procedure& proc)
@@ -1790,7 +1887,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         em.mov_rm(EAX, ESP, 0); // a_lo
         em.cmp_rr(EAX, ECX);
         em.bind(highDiff);
-        em.add_ri(ESP, 8); // pop a
+        em.lea(ESP, ESP, 8); // pop a (lea preserves EFLAGS, add would clobber them)
         Condition cc;
         if (opcode == LL_cgt_i8) cc = CC_G;
         else if (opcode == LL_clt_i8) cc = CC_L;
