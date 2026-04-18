@@ -9,6 +9,7 @@ SOURCES += \
     $$PWD/MilDwarfEmitter.cpp \
     $$PWD/MilElfReader.cpp \
     $$PWD/MilElfWriter.cpp \
+    $$PWD/MilRv32Emitter.cpp \
     $$PWD/MilVmCode2.cpp \
     $$PWD/MilX86Emitter.cpp \
     $$PWD/MilX86Renderer.cpp \
@@ -41,6 +42,7 @@ HEADERS += \
     $$PWD/MilDwarfEmitter.h \
     $$PWD/MilElfReader.h \
     $$PWD/MilElfWriter.h \
+    $$PWD/MilRv32Emitter.h \
     $$PWD/MilVmCode2.h \
     $$PWD/MilX86Emitter.h \
     $$PWD/MilX86Renderer.h \
