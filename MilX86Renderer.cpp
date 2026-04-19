@@ -395,6 +395,26 @@ bool Renderer::renderModule(Declaration* module)
     d_dataSymIdx = d_elf.addSectionSymbol(d_sections.data);
     d_rodataSymIdx = d_elf.addSectionSymbol(d_sections.rodata);
 
+    // Create DWARF debug sections and their LOCAL section symbols BEFORE any
+    // GLOBAL symbols are added.  ElfWriter::addSymbol inserts LOCAL symbols
+    // before globals, which shifts global indices.  By creating debug section
+    // symbols here, we ensure no already-emitted relocations are invalidated.
+    if (d_emitDwarf) {
+        delete d_dwarf;
+        d_dwarf = new DwarfEmitter(d_elf, ElfWriter::ArchX86);
+        QByteArray srcFile;
+        QByteArray srcDir;
+        if (module->md && !module->md->source.isEmpty()) {
+            QFileInfo info(module->md->source);
+            srcDir = info.absolutePath().toUtf8();
+            srcFile = info.fileName().toUtf8();
+        }else {
+            srcFile = module->name + ".mic";
+            qWarning() << "X86::Renderer::renderModule: incomplete source file information for " << module->name;
+        }
+        d_dwarf->beginCompilationUnit(srcFile, srcDir);
+    }
+
     // Create a COMMON symbol for the shared module variable memory.
     // Each module's .o defines the same COMMON symbol; the linker merges them
     // into a single BSS allocation so all modules reference the same addresses.
@@ -412,22 +432,6 @@ bool Renderer::renderModule(Declaration* module)
     {
         quint32 zero = 0;
         d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
-    }
-
-    if (d_emitDwarf) {
-        delete d_dwarf;
-        d_dwarf = new DwarfEmitter(d_elf, ElfWriter::ArchX86);
-        QByteArray srcFile;
-        QByteArray srcDir;
-        if (module->md && !module->md->source.isEmpty()) {
-            QFileInfo info(module->md->source);
-            srcDir = info.absolutePath().toUtf8();
-            srcFile = info.fileName().toUtf8();
-        }else {
-            srcFile = module->name + ".mic";
-            qWarning() << "X86::Renderer::renderModule: incomplete source file information for " << module->name;
-        }
-        d_dwarf->beginCompilationUnit(srcFile, srcDir);
     }
 
     // Collect all procedures

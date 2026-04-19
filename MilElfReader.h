@@ -52,6 +52,7 @@ namespace Mil
         bool isValid() const { return d_valid; }
 
         Architecture machine() const { return d_arch; }
+        quint32 elfFlags() const { return d_elfFlags; }
 
         QString errorMessage() const { return d_error; }
 
@@ -130,6 +131,7 @@ namespace Mil
         bool d_valid;
         QString d_error;
         Architecture d_arch;
+        quint32 d_elfFlags;
     };
 
 } // namespace Mil

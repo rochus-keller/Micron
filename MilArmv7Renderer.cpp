@@ -424,6 +424,20 @@ bool Renderer::renderModule(Declaration* module)
     d_dataSymIdx = d_elf.addSectionSymbol(d_sections.data);
     d_rodataSymIdx = d_elf.addSectionSymbol(d_sections.rodata);
 
+    // Create DWARF debug sections and their LOCAL section symbols BEFORE any
+    // GLOBAL symbols are added.  ElfWriter::addSymbol inserts LOCAL symbols
+    // before globals, which shifts global indices.  By creating debug section
+    // symbols here, we ensure no already-emitted relocations are invalidated.
+    if (d_emitDwarf) {
+        delete d_dwarf;
+        d_dwarf = new DwarfEmitter(d_elf);
+        QByteArray srcFile = module->name + ".mic";
+        QByteArray srcDir;
+        if (module->md && !module->md->source.isEmpty())
+            srcDir = module->md->source.toUtf8();
+        d_dwarf->beginCompilationUnit(srcFile, srcDir);
+    }
+
     // Create a COMMON symbol for the shared module variable memory.
     // Each module's .o defines the same COMMON symbol; the linker merges them
     // into a single BSS allocation so all modules reference the same addresses.
@@ -440,17 +454,6 @@ bool Renderer::renderModule(Declaration* module)
     {
         quint32 zero = 0;
         d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
-    }
-
-    // Initialize DWARF emitter if enabled
-    if (d_emitDwarf) {
-        delete d_dwarf;
-        d_dwarf = new DwarfEmitter(d_elf);
-        QByteArray srcFile = module->name + ".mic";
-        QByteArray srcDir;
-        if (module->md && !module->md->source.isEmpty())
-            srcDir = module->md->source.toUtf8();
-        d_dwarf->beginCompilationUnit(srcFile, srcDir);
     }
 
     // Collect all procedure declarations

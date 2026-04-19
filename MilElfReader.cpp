@@ -62,7 +62,7 @@ inline quint16 ElfReader::readLE16(const char* buf)
     return quint16(p[0]) | (quint16(p[1]) << 8);
 }
 
-ElfReader::ElfReader(): d_valid(false),d_arch(ArchUnknown)
+ElfReader::ElfReader(): d_valid(false),d_arch(ArchUnknown),d_elfFlags(0)
 {
 }
 
@@ -148,6 +148,9 @@ bool ElfReader::parse(const QByteArray& data)
         return false;
     }
 
+    // Read ELF flags (e.g. RV32 ISA+ABI flags)
+    d_elfFlags = readLE32(raw + 36);
+
     // Read section header table info
     quint32 e_shoff = readLE32(raw + 32);      // Section header table offset
     quint16 e_shentsize = readLE16(raw + 46);   // Size of each section header
@@ -216,15 +219,13 @@ bool ElfReader::parse(const QByteArray& data)
         }
     }
 
-    // Find and parse .rel.* sections
+    // Find and parse .rel.* / .rela.* sections
     for (int i = 0; i < d_sections.size(); i++) {
-        if (d_sections[i].type == SHT_REL) {
-            quint32 type = d_sections[i].type;
-            if (type == SHT_REL || type == SHT_RELA) {
-                parseRelocations(data, i,
-                                 d_sections[i].offset, d_sections[i].size,
-                                 d_sections[i].info, type);
-            }
+        quint32 type = d_sections[i].type;
+        if (type == SHT_REL || type == SHT_RELA) {
+            parseRelocations(data, i,
+                             d_sections[i].offset, d_sections[i].size,
+                             d_sections[i].info, type);
         }
     }
 
