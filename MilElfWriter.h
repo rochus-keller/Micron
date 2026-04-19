@@ -73,6 +73,10 @@ namespace Mil
 
         ElfWriter(Architecture);
 
+        // Set processor-specific ELF flags (e_flags in the ELF header).
+        // For RISC-V: 0x0 = soft-float, 0x2 = single-float, 0x4 = double-float, 0x1 = RVC.
+        void setElfFlags(quint32 flags) { d_elfFlags = flags; }
+
         // Section management
         // Returns 1-based section index (0 is always SHN_UNDEF)
         quint32 addSection(const QByteArray& name, quint32 type, quint32 flags,

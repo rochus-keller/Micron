@@ -250,3 +250,40 @@ int64_t __mic$rem_i8(int64_t a, int64_t b)
     }
     return (int64_t)r;
 }
+
+// get rid of libgcc.a dependency:
+
+#ifdef __GNUC__
+
+uint64_t __udivdi3(uint64_t a, uint64_t b) {
+    return __mic$div_un_i8(a, b);
+}
+
+uint64_t __umoddi3(uint64_t a, uint64_t b) {
+    return __mic$rem_un_i8(a, b);
+}
+
+int64_t __divdi3(int64_t a, int64_t b) {
+    return __mic$div_i8(a, b);
+}
+
+int64_t __moddi3(int64_t a, int64_t b) {
+    return __mic$rem_i8(a, b);
+}
+
+uint64_t __udivmoddi4(uint64_t num, uint64_t den, uint64_t *rem_p) {
+    if (rem_p) {
+        *rem_p = __mic$rem_un_i8(num, den);
+    }
+    return __mic$div_un_i8(num, den);
+}
+
+int64_t __divmoddi4(int64_t num, int64_t den, int64_t *rem_p) {
+    if (rem_p) {
+        *rem_p = __mic$rem_i8(num, den);
+    }
+    return __mic$div_i8(num, den);
+}
+
+#endif /* __GNUC__ */
+

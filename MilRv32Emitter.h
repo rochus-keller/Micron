@@ -144,6 +144,11 @@ namespace Rv32
         void fcvts_w(FRegister rd, Register rs1); // Int32 to Float
         void fmvw_x(FRegister rd, Register rs1);  // Move bits directly
         void fmvx_w(Register rd, FRegister rs1);
+        void fsgnj_s(FRegister rd, FRegister rs1, FRegister rs2);
+        void fsgnjn_s(FRegister rd, FRegister rs1, FRegister rs2);
+        void fsgnjx_s(FRegister rd, FRegister rs1, FRegister rs2);
+        void fcvtwu_s(Register rd, FRegister rs1); // Float to Uint32
+        void fcvts_wu(FRegister rd, Register rs1);  // Uint32 to Float
         void feq_s(Register rd, FRegister rs1, FRegister rs2);
         void flt_s(Register rd, FRegister rs1, FRegister rs2);
         void fle_s(Register rd, FRegister rs1, FRegister rs2);
@@ -172,8 +177,14 @@ namespace Rv32
         inline void seqz(Register rd, Register rs) { sltiu(rd, rs, 1); }
         inline void snez(Register rd, Register rs) { sltu(rd, Zero, rs); }
 
-        // Generates LUI + ADDI appropriately
+        inline void fneg_s(FRegister rd, FRegister rs) { fsgnjn_s(rd, rs, rs); }
+        inline void fabs_s(FRegister rd, FRegister rs) { fsgnjx_s(rd, rs, rs); }
+        inline void fmv_s(FRegister rd, FRegister rs) { fsgnj_s(rd, rs, rs); }
+
         void li(Register rd, quint32 value);
+
+        void emitWord(quint32 word);
+        void patchWord(int offset, quint32 word);
 
         inline void j(Label& label) { jal(Zero, label); }
         inline void call(Label& label) { jal(Ra, label); }
@@ -191,7 +202,6 @@ namespace Rv32
         void emit32(quint32 inst);
         void patchBranch(int offset, int targetPosition);
 
-        // RISC-V Instruction Format Emitters
         void emitR(quint8 opcode, quint8 funct3, quint8 funct7, quint8 rd, quint8 rs1, quint8 rs2);
         void emitI(quint8 opcode, quint8 funct3, quint8 rd, quint8 rs1, qint32 imm12);
         void emitS(quint8 opcode, quint8 funct3, quint8 rs1, quint8 rs2, qint32 imm12);

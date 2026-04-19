@@ -83,7 +83,11 @@ quint32 Renderer::getOrCreateExtSymbol(int procIdx)
     Vm::Procedure* proc = d_code.getProc(procIdx);
     Q_ASSERT(proc && proc->decl);
 
-    QByteArray name = elfSymName(proc->decl->toPath());
+    QByteArray name;
+    if (proc->decl->kind == Declaration::Module)
+        name = elfSymName(proc->decl->name + QByteArray("$begin$"));
+    else
+        name = elfSymName(proc->decl->toPath());
     // Create an UNDEF GLOBAL symbol (section=0 means SHN_UNDEF)
     quint32 symIdx = d_elf.addSymbol(name, 0 /*SHN_UNDEF*/, 0, 0, STB_GLOBAL, STT_FUNC);
     d_extProcSymbols[procIdx] = symIdx;
@@ -467,7 +471,7 @@ bool Renderer::renderModule(Declaration* module)
     }
 
     for (Declaration* d = module->subs; d; d = d->next) {
-        if (d->kind == Declaration::Procedure && !d->forward) {
+        if (d->kind == Declaration::Procedure && !d->forward && !d->entryPoint) {
             int idx = d_code.findProc(d);
             if (idx >= 0) {
                 ProcInfo pi;
@@ -505,7 +509,9 @@ bool Renderer::renderModule(Declaration* module)
 
         // Module init symbols must be GLOBAL (they're called by dependent modules).
         // Exported procedures (public_) are also GLOBAL. Everything else is LOCAL.
-        bool isExported = (d->kind == Declaration::Module) || d->public_;
+        // In AAPCS mode (C-compatible linking), all procedures must be GLOBAL
+        // so the linker can resolve cross-module references (analogous to x86 cdeclReturns).
+        bool isExported = (d->kind == Declaration::Module) || d->public_ || d_useAapcs;
         quint8 binding = isExported ? STB_GLOBAL : STB_LOCAL;
 
         quint32 symIdx = d_elf.addSymbol(name, d_sections.text, 0, 0, binding, STT_FUNC);
@@ -551,19 +557,12 @@ bool Renderer::renderModule(Declaration* module)
             if (d_globalsSymIdx)
                 emitGlobalVarVtableInits(allProcs[i].decl);
 
-            // Emit calls to imported modules' $begin$ procedures.
-            // Each module must initialize its imports before running its own body.
-            // (Mirrors the C code generator's pattern in MilCeeGen.cpp.)
-            Declaration* modDecl = allProcs[i].decl;
-            for (Declaration* sub = modDecl->subs; sub; sub = sub->next) {
-                if (sub->kind == Declaration::Import && sub->imported && !sub->imported->nobody) {
-                    QByteArray importBeginSym = elfSymName(sub->imported->name + QByteArray("$begin$"));
-                    quint32 importSymIdx = d_elf.addSymbol(importBeginSym, 0, 0, 0, STB_GLOBAL, STT_FUNC);
-                    quint32 blOff = d_emitter.currentPosition();
-                    d_emitter.emitWord(0xEBFFFFFE); // BL placeholder, linker resolves
-                    d_fixups.recordExternalCall(blOff, importSymIdx);
-                }
-            }
+            // NOTE: Import $begin$ calls are NOT emitted here because ARM's BL
+            // clobbers LR before the procedure prologue (emitted by renderProcedure)
+            // has a chance to save it. The MIL bytecode body already contains
+            // the import init calls, so they are emitted by renderProcedure instead.
+            // (On x86, the wrapper calls are harmless since CALL pushes the return
+            // address on the stack, but on ARM they cause an infinite loop.)
         }
 
         if (!renderProcedure(*proc, procIdx))
@@ -2834,15 +2833,15 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 em.str_(AL, R12, MemOp(SP, -4, MemOp::PreIndexed));
                 em.str_(AL, R1, MemOp(SP, -4, MemOp::PreIndexed));
                 emitVtableFixups(R12, tmpl);
-                em.ldr_(AL, R1, MemOp(SP, 0, MemOp::PostIndexed));
-                em.ldr_(AL, R12, MemOp(SP, 0, MemOp::PostIndexed));
-                em.ldr_(AL, R3, MemOp(SP, 0, MemOp::PostIndexed));
+                em.ldr_(AL, R1, MemOp(SP, 4, MemOp::PostIndexed));
+                em.ldr_(AL, R12, MemOp(SP, 4, MemOp::PostIndexed));
+                em.ldr_(AL, R3, MemOp(SP, 4, MemOp::PostIndexed));
                 loadImm32(R2, tmplSize);
                 em.add(R12, R12, Operand2(R2)); // dest += tmplSize
                 em.b_(AL, loopLbl);
                 em.bind(doneLbl);
                 // Restore base pointer
-                em.ldr_(AL, R0, MemOp(SP, 0, MemOp::PostIndexed)); // pop base
+                em.ldr_(AL, R0, MemOp(SP, 4, MemOp::PostIndexed)); // pop base
             }
         }
         pushReg(R0); // push allocated pointer
@@ -3354,7 +3353,7 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
 
         // Emit _start:
         em.mov(R11, Operand2((quint32)0));  // clear frame pointer
-        em.ldr_(AL, R0, MemOp(SP, 0, MemOp::PostIndexed)); // R0 = argc (pop from kernel stack)
+        em.ldr_(AL, R0, MemOp(SP, 4, MemOp::PostIndexed)); // R0 = argc (pop from kernel stack)
         em.mov(R1, Operand2(SP));           // R1 = argv (SP now points to argv[0])
         // BL __mic$init (call never returns)
         quint32 blOffset = em.currentPosition();
@@ -3379,8 +3378,8 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
 
         em.mov(R0, Operand2((quint32)0));   // return 0
         em.mov(SP, Operand2(R11));          // SP = FP
-        em.ldr_(AL, R11, MemOp(SP, 0, MemOp::PostIndexed)); // pop FP
-        em.ldr_(AL, PC, MemOp(SP, 0, MemOp::PostIndexed));  // pop PC (= return)
+        em.ldr_(AL, R11, MemOp(SP, 4, MemOp::PostIndexed)); // pop FP, SP += 4
+        em.ldr_(AL, PC, MemOp(SP, 4, MemOp::PostIndexed));  // pop PC (= LR), SP += 4
 
         elf.appendToSection(sec.text, em.machineCode());
 

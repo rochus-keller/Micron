@@ -157,248 +157,279 @@ void Emitter::patchBranch(int codeOffset, int targetPosition) {
 }
 
 void Emitter::addi(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_OP_IMM, 0, rd, rs1, imm12);
+    emitI(OPC_OP_IMM, 0, rd, rs1, imm12);
 }
 void Emitter::slti(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_OP_IMM, 2, rd, rs1, imm12);
+    emitI(OPC_OP_IMM, 2, rd, rs1, imm12);
 }
 void Emitter::sltiu(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_OP_IMM, 3, rd, rs1, imm12);
+    emitI(OPC_OP_IMM, 3, rd, rs1, imm12);
 }
 void Emitter::xori(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_OP_IMM, 4, rd, rs1, imm12);
+    emitI(OPC_OP_IMM, 4, rd, rs1, imm12);
 }
 void Emitter::ori(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_OP_IMM, 6, rd, rs1, imm12);
+    emitI(OPC_OP_IMM, 6, rd, rs1, imm12);
 }
 void Emitter::andi(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_OP_IMM, 7, rd, rs1, imm12);
+    emitI(OPC_OP_IMM, 7, rd, rs1, imm12);
 }
 
 void Emitter::slli(Register rd, Register rs1, quint8 shamt) {
-  emitI(OPC_OP_IMM, 1, rd, rs1, shamt & 0x1F);
+    emitI(OPC_OP_IMM, 1, rd, rs1, shamt & 0x1F);
 }
 void Emitter::srli(Register rd, Register rs1, quint8 shamt) {
-  emitI(OPC_OP_IMM, 5, rd, rs1, shamt & 0x1F);
+    emitI(OPC_OP_IMM, 5, rd, rs1, shamt & 0x1F);
 }
 void Emitter::srai(Register rd, Register rs1, quint8 shamt) {
-  emitI(OPC_OP_IMM, 5, rd, rs1, (shamt & 0x1F) | 0x400); // 0x400 sets the arithmetic flag
+    emitI(OPC_OP_IMM, 5, rd, rs1, (shamt & 0x1F) | 0x400); // 0x400 sets the arithmetic flag
 }
 
 void Emitter::add(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 0, 0x00, rd, rs1, rs2);
+    emitR(OPC_OP, 0, 0x00, rd, rs1, rs2);
 }
 void Emitter::sub(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 0, 0x20, rd, rs1, rs2);
+    emitR(OPC_OP, 0, 0x20, rd, rs1, rs2);
 }
 void Emitter::sll(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 1, 0x00, rd, rs1, rs2);
+    emitR(OPC_OP, 1, 0x00, rd, rs1, rs2);
 }
 void Emitter::slt(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 2, 0x00, rd, rs1, rs2);
+    emitR(OPC_OP, 2, 0x00, rd, rs1, rs2);
 }
 void Emitter::sltu(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 3, 0x00, rd, rs1, rs2);
+    emitR(OPC_OP, 3, 0x00, rd, rs1, rs2);
 }
 void Emitter::xor_(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 4, 0x00, rd, rs1, rs2);
+    emitR(OPC_OP, 4, 0x00, rd, rs1, rs2);
 }
 void Emitter::srl(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 5, 0x00, rd, rs1, rs2);
+    emitR(OPC_OP, 5, 0x00, rd, rs1, rs2);
 }
 void Emitter::sra(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 5, 0x20, rd, rs1, rs2);
+    emitR(OPC_OP, 5, 0x20, rd, rs1, rs2);
 }
 void Emitter::or_(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 6, 0x00, rd, rs1, rs2);
+    emitR(OPC_OP, 6, 0x00, rd, rs1, rs2);
 }
 void Emitter::and_(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 7, 0x00, rd, rs1, rs2);
+    emitR(OPC_OP, 7, 0x00, rd, rs1, rs2);
 }
 
 void Emitter::lui(Register rd, qint32 imm20) {
-  emitU(OPC_LUI, rd, imm20);
+    emitU(OPC_LUI, rd, imm20);
 }
 void Emitter::auipc(Register rd, qint32 imm20) {
-  emitU(OPC_AUIPC, rd, imm20);
+    emitU(OPC_AUIPC, rd, imm20);
 }
 
 void Emitter::lb(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_LOAD, 0, rd, rs1, imm12);
+    emitI(OPC_LOAD, 0, rd, rs1, imm12);
 }
 void Emitter::lh(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_LOAD, 1, rd, rs1, imm12);
+    emitI(OPC_LOAD, 1, rd, rs1, imm12);
 }
 void Emitter::lw(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_LOAD, 2, rd, rs1, imm12);
+    emitI(OPC_LOAD, 2, rd, rs1, imm12);
 }
 void Emitter::lbu(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_LOAD, 4, rd, rs1, imm12);
+    emitI(OPC_LOAD, 4, rd, rs1, imm12);
 }
 void Emitter::lhu(Register rd, Register rs1, qint32 imm12) {
-  emitI(OPC_LOAD, 5, rd, rs1, imm12);
+    emitI(OPC_LOAD, 5, rd, rs1, imm12);
 }
 void Emitter::sb(Register rs2, Register rs1, qint32 imm12) {
-  emitS(OPC_STORE, 0, rs1, rs2, imm12);
+    emitS(OPC_STORE, 0, rs1, rs2, imm12);
 }
 void Emitter::sh(Register rs2, Register rs1, qint32 imm12) {
-  emitS(OPC_STORE, 1, rs1, rs2, imm12);
+    emitS(OPC_STORE, 1, rs1, rs2, imm12);
 }
 void Emitter::sw(Register rs2, Register rs1, qint32 imm12) {
-  emitS(OPC_STORE, 2, rs1, rs2, imm12);
+    emitS(OPC_STORE, 2, rs1, rs2, imm12);
 }
 
 void Emitter::beq(Register rs1, Register rs2, Label & l) {
-  emitB(OPC_BRANCH, 0, rs1, rs2, l);
+    emitB(OPC_BRANCH, 0, rs1, rs2, l);
 }
 void Emitter::bne(Register rs1, Register rs2, Label & l) {
-  emitB(OPC_BRANCH, 1, rs1, rs2, l);
+    emitB(OPC_BRANCH, 1, rs1, rs2, l);
 }
 void Emitter::blt(Register rs1, Register rs2, Label & l) {
-  emitB(OPC_BRANCH, 4, rs1, rs2, l);
+    emitB(OPC_BRANCH, 4, rs1, rs2, l);
 }
 void Emitter::bge(Register rs1, Register rs2, Label & l) {
-  emitB(OPC_BRANCH, 5, rs1, rs2, l);
+    emitB(OPC_BRANCH, 5, rs1, rs2, l);
 }
 void Emitter::bltu(Register rs1, Register rs2, Label & l) {
-  emitB(OPC_BRANCH, 6, rs1, rs2, l);
+    emitB(OPC_BRANCH, 6, rs1, rs2, l);
 }
 void Emitter::bgeu(Register rs1, Register rs2, Label & l) {
-  emitB(OPC_BRANCH, 7, rs1, rs2, l);
+    emitB(OPC_BRANCH, 7, rs1, rs2, l);
 }
 
 void Emitter::jal(Register rd, Label & label) {
-  emitJ(OPC_JAL, rd, label);
+    emitJ(OPC_JAL, rd, label);
 }
 void Emitter::jalr(Register rd, Register rs1, qint32 imm) {
-  emitI(OPC_JALR, 0, rd, rs1, imm);
+    emitI(OPC_JALR, 0, rd, rs1, imm);
 }
 
 void Emitter::mul(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 0, 0x01, rd, rs1, rs2);
+    emitR(OPC_OP, 0, 0x01, rd, rs1, rs2);
 }
 void Emitter::mulh(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 1, 0x01, rd, rs1, rs2);
+    emitR(OPC_OP, 1, 0x01, rd, rs1, rs2);
 }
 void Emitter::mulhsu(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 2, 0x01, rd, rs1, rs2);
+    emitR(OPC_OP, 2, 0x01, rd, rs1, rs2);
 }
 void Emitter::mulhu(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 3, 0x01, rd, rs1, rs2);
+    emitR(OPC_OP, 3, 0x01, rd, rs1, rs2);
 }
 void Emitter::div(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 4, 0x01, rd, rs1, rs2);
+    emitR(OPC_OP, 4, 0x01, rd, rs1, rs2);
 }
 void Emitter::divu(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 5, 0x01, rd, rs1, rs2);
+    emitR(OPC_OP, 5, 0x01, rd, rs1, rs2);
 }
 void Emitter::rem(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 6, 0x01, rd, rs1, rs2);
+    emitR(OPC_OP, 6, 0x01, rd, rs1, rs2);
 }
 void Emitter::remu(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_OP, 7, 0x01, rd, rs1, rs2);
+    emitR(OPC_OP, 7, 0x01, rd, rs1, rs2);
 }
 
 void Emitter::lr_w(Register rd, Register rs1) {
-  emitR(OPC_AMO, 2, 0x08, rd, rs1, Zero);
+    emitR(OPC_AMO, 2, 0x08, rd, rs1, Zero);
 }
 void Emitter::sc_w(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_AMO, 2, 0x0C, rd, rs1, rs2);
+    emitR(OPC_AMO, 2, 0x0C, rd, rs1, rs2);
 }
 void Emitter::amoswap_w(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_AMO, 2, 0x04, rd, rs1, rs2);
+    emitR(OPC_AMO, 2, 0x04, rd, rs1, rs2);
 }
 void Emitter::amoadd_w(Register rd, Register rs1, Register rs2) {
-  emitR(OPC_AMO, 2, 0x00, rd, rs1, rs2);
+    emitR(OPC_AMO, 2, 0x00, rd, rs1, rs2);
 }
 
 void Emitter::flw(FRegister rd, Register rs1, qint32 imm12) {
-  emitI(OPC_LOAD_FP, 2, rd, rs1, imm12);
+    emitI(OPC_LOAD_FP, 2, rd, rs1, imm12);
 }
 void Emitter::fsw(FRegister rs2, Register rs1, qint32 imm12) {
-  emitS(OPC_STORE_FP, 2, rs1, rs2, imm12);
+    emitS(OPC_STORE_FP, 2, rs1, rs2, imm12);
 }
 
 void Emitter::fadd_s(FRegister rd, FRegister rs1, FRegister rs2) {
-  emitR(OPC_OP_FP, 7, 0x00, rd, rs1, rs2);
+    emitR(OPC_OP_FP, 7, 0x00, rd, rs1, rs2);
 }
 void Emitter::fsub_s(FRegister rd, FRegister rs1, FRegister rs2) {
-  emitR(OPC_OP_FP, 7, 0x04, rd, rs1, rs2);
+    emitR(OPC_OP_FP, 7, 0x04, rd, rs1, rs2);
 }
 void Emitter::fmul_s(FRegister rd, FRegister rs1, FRegister rs2) {
-  emitR(OPC_OP_FP, 7, 0x08, rd, rs1, rs2);
+    emitR(OPC_OP_FP, 7, 0x08, rd, rs1, rs2);
 }
 void Emitter::fdiv_s(FRegister rd, FRegister rs1, FRegister rs2) {
-  emitR(OPC_OP_FP, 7, 0x0C, rd, rs1, rs2);
+    emitR(OPC_OP_FP, 7, 0x0C, rd, rs1, rs2);
 }
 void Emitter::fsqrt_s(FRegister rd, FRegister rs1) {
-  emitR(OPC_OP_FP, 7, 0x2C, rd, rs1, 0);
+    emitR(OPC_OP_FP, 7, 0x2C, rd, rs1, 0);
 }
 
 void Emitter::fcvtw_s(Register rd, FRegister rs1) {
-  emitR(OPC_OP_FP, 7, 0x60, rd, rs1, 0); // Float to int
+    emitR(OPC_OP_FP, 7, 0x60, rd, rs1, 0); // Float to int
 }
 void Emitter::fcvts_w(FRegister rd, Register rs1) {
-  emitR(OPC_OP_FP, 7, 0x68, rd, rs1, 0); // Int to float
+    emitR(OPC_OP_FP, 7, 0x68, rd, rs1, 0); // Int to float
 }
 
 void Emitter::fmvw_x(FRegister rd, Register rs1) {
-  emitR(OPC_OP_FP, 0, 0x78, rd, rs1, 0); // Move bits directly
+    emitR(OPC_OP_FP, 0, 0x78, rd, rs1, 0); // Move bits directly
 }
 void Emitter::fmvx_w(Register rd, FRegister rs1) {
-  emitR(OPC_OP_FP, 0, 0x70, rd, rs1, 0);
+    emitR(OPC_OP_FP, 0, 0x70, rd, rs1, 0);
 }
 
+void Emitter::fsgnj_s(FRegister rd, FRegister rs1, FRegister rs2) {
+    emitR(OPC_OP_FP, 0, 0x10, rd, rs1, rs2);
+}
+void Emitter::fsgnjn_s(FRegister rd, FRegister rs1, FRegister rs2) {
+    emitR(OPC_OP_FP, 1, 0x10, rd, rs1, rs2);
+}
+void Emitter::fsgnjx_s(FRegister rd, FRegister rs1, FRegister rs2) {
+    emitR(OPC_OP_FP, 2, 0x10, rd, rs1, rs2);
+}
+void Emitter::fcvtwu_s(Register rd, FRegister rs1) {
+    // FCVT.WU.S: rs2 field = 1 (unsigned), rounding mode RTZ (funct3=1)
+    emitR(OPC_OP_FP, 1, 0x60, rd, rs1, 1);
+}
+void Emitter::fcvts_wu(FRegister rd, Register rs1) {
+    // FCVT.S.WU: rs2 field = 1 (unsigned), rounding mode RNE (funct3=7)
+    emitR(OPC_OP_FP, 7, 0x68, rd, rs1, 1);
+}
 void Emitter::feq_s(Register rd, FRegister rs1, FRegister rs2) {
-  emitR(OPC_OP_FP, 2, 0x50, rd, rs1, rs2);
+    emitR(OPC_OP_FP, 2, 0x50, rd, rs1, rs2);
 }
 void Emitter::flt_s(Register rd, FRegister rs1, FRegister rs2) {
-  emitR(OPC_OP_FP, 1, 0x50, rd, rs1, rs2);
+    emitR(OPC_OP_FP, 1, 0x50, rd, rs1, rs2);
 }
 void Emitter::fle_s(Register rd, FRegister rs1, FRegister rs2) {
-  emitR(OPC_OP_FP, 0, 0x50, rd, rs1, rs2);
+    emitR(OPC_OP_FP, 0, 0x50, rd, rs1, rs2);
 }
 
 void Emitter::ecall() {
-  emitI(OPC_SYSTEM, 0, Zero, Zero, 0);
+    emitI(OPC_SYSTEM, 0, Zero, Zero, 0);
 }
 void Emitter::ebreak() {
-  emitI(OPC_SYSTEM, 0, Zero, Zero, 1);
+    emitI(OPC_SYSTEM, 0, Zero, Zero, 1);
 }
 void Emitter::mret() {
-  emitI(OPC_SYSTEM, 0, Zero, Zero, 0x302);
+    emitI(OPC_SYSTEM, 0, Zero, Zero, 0x302);
 }
 void Emitter::sret() {
-  emitI(OPC_SYSTEM, 0, Zero, Zero, 0x102);
+    emitI(OPC_SYSTEM, 0, Zero, Zero, 0x102);
 }
 void Emitter::wfi() {
-  emitI(OPC_SYSTEM, 0, Zero, Zero, 0x105);
+    emitI(OPC_SYSTEM, 0, Zero, Zero, 0x105);
 }
 
 void Emitter::fence() {
-  emitI(OPC_MISC_MEM, 0, Zero, Zero, 0x0FF); // Full barrier
+    emitI(OPC_MISC_MEM, 0, Zero, Zero, 0x0FF); // Full barrier
 }
 void Emitter::fence_i() {
-  emitI(OPC_MISC_MEM, 1, Zero, Zero, 0); // Instruction cache flush
+    emitI(OPC_MISC_MEM, 1, Zero, Zero, 0); // Instruction cache flush
 }
 
 void Emitter::csrrw(Register rd, CSR csr, Register rs1) {
-  emitI(OPC_SYSTEM, 1, rd, rs1, csr);
+    emitI(OPC_SYSTEM, 1, rd, rs1, csr);
 }
 void Emitter::csrrs(Register rd, CSR csr, Register rs1) {
-  emitI(OPC_SYSTEM, 2, rd, rs1, csr);
+    // Generates LUI + ADDI appropriately
+    emitI(OPC_SYSTEM, 2, rd, rs1, csr);
 }
 void Emitter::csrrc(Register rd, CSR csr, Register rs1) {
-  emitI(OPC_SYSTEM, 3, rd, rs1, csr);
+    emitI(OPC_SYSTEM, 3, rd, rs1, csr);
 }
 void Emitter::csrrwi(Register rd, CSR csr, quint8 zimm) {
-  emitI(OPC_SYSTEM, 5, rd, zimm & 0x1F, csr); // rs1 acts as 5-bit zero-extended immediate
+    emitI(OPC_SYSTEM, 5, rd, zimm & 0x1F, csr); // rs1 acts as 5-bit zero-extended immediate
 }
 void Emitter::csrrsi(Register rd, CSR csr, quint8 zimm) {
-  emitI(OPC_SYSTEM, 6, rd, zimm & 0x1F, csr);
+    emitI(OPC_SYSTEM, 6, rd, zimm & 0x1F, csr);
 }
 void Emitter::csrrci(Register rd, CSR csr, quint8 zimm) {
-  emitI(OPC_SYSTEM, 7, rd, zimm & 0x1F, csr);
+    emitI(OPC_SYSTEM, 7, rd, zimm & 0x1F, csr);
+}
+
+void Emitter::emitWord(quint32 word) {
+    emit32(word);
+}
+
+void Emitter::patchWord(int offset, quint32 word) {
+    // Patch a 32-bit word at a given offset in the code buffer
+    Q_ASSERT(offset >= 0 && offset + 3 < d_buffer.size());
+    d_buffer[offset]     = char(word & 0xFF);
+    d_buffer[offset + 1] = char((word >> 8) & 0xFF);
+    d_buffer[offset + 2] = char((word >> 16) & 0xFF);
+    d_buffer[offset + 3] = char((word >> 24) & 0xFF);
 }
 
 void Emitter::li(Register rd, quint32 value) {
