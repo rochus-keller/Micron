@@ -48,5 +48,6 @@
         <file>oakwood/Args.mic</file>
         <file>oakwood/Args+.c</file>
         <file>oakwood/Args.h</file>
+        <file>runtime/libmicron_i386.a</file>
     </qresource>
 </RCC>

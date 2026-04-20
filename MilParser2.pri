@@ -7,6 +7,7 @@ SOURCES += \
     $$PWD/MilAstSerializer.cpp \
     $$PWD/MilCilAsmGen.cpp \
     $$PWD/MilDwarfEmitter.cpp \
+    $$PWD/MilElfLinker.cpp \
     $$PWD/MilElfReader.cpp \
     $$PWD/MilElfWriter.cpp \
     $$PWD/MilRv32Emitter.cpp \
@@ -40,6 +41,7 @@ HEADERS += \
     $$PWD/MilAstSerializer.h \
     $$PWD/MilCilAsmGen.h \
     $$PWD/MilDwarfEmitter.h \
+    $$PWD/MilElfLinker.h \
     $$PWD/MilElfReader.h \
     $$PWD/MilElfWriter.h \
     $$PWD/MilRv32Emitter.h \

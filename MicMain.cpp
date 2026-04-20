@@ -28,6 +28,7 @@
 #include "MilAstSerializer.h"
 #include "MilArmv7Renderer.h"
 #include "MilX86Renderer.h"
+#include "MilElfLinker.h"
 #include <QCoreApplication>
 #include <QFile>
 #include <QStringList>
@@ -37,6 +38,7 @@
 #include <QElapsedTimer>
 #include <QTemporaryFile>
 #include <QCommandLineParser>
+#include <QDirIterator>
 
 class Lex2 : public Mic::Scanner2
 {
@@ -286,7 +288,14 @@ static void compileEigen(Manager& mgr, const QString& outPath, bool dbg = false 
 #endif
 }
 
-static void compileArm(Manager& mgr, const QString& outPath, bool dbg = false, bool useAapcs = true, bool hasHwDiv = true)
+static bool linkExecutable(const QStringList& objFiles, const QStringList& libDirs,
+                           const QStringList& linkLibs, const QStringList& linkObjs,
+                           const QString& outPath, const QString& exeName,
+                           bool esp32 = false);
+
+static void compileArm(Manager& mgr, const QString& outPath, const QStringList& libDirs,
+                       const QStringList& linkLibs, const QStringList& linkObjs,
+                       const QString& exeName, bool dbg = false, bool useAapcs = true, bool hasHwDiv = true)
 {
     // ARMv7 backend: generate ELF relocatable objects for each module
     mgr.loader.getModel().calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
@@ -361,9 +370,90 @@ static void compileArm(Manager& mgr, const QString& outPath, bool dbg = false, b
         else
             qCritical() << "cannot generate main+.o";
     }
+
+    if( !hasErrors && (!libDirs.isEmpty() || !linkLibs.isEmpty() || !linkObjs.isEmpty()) )
+    {
+        if( !linkExecutable(objFiles, libDirs, linkLibs, linkObjs, outPath, exeName) )
+            hasErrors = true;
+    }
 }
 
-static void compileX86(Manager& mgr, const QString& outPath, bool dbg = false, bool cdeclRet = true)
+static bool linkExecutable(const QStringList& objFiles, const QStringList& libDirs,
+                           const QStringList& linkLibs, const QStringList& linkObjs,
+                           const QString& outPath, const QString& exeName,
+                           bool esp32)
+{
+    if( libDirs.isEmpty() && linkLibs.isEmpty() && linkObjs.isEmpty() )
+    {
+        qDebug() << "#### no link options given, skipping link step";
+        return true;
+    }
+
+    Mil::ElfLinker linker;
+
+    // Add all compiler-generated object files
+    for( int i = 0; i < objFiles.size(); i++ )
+    {
+        if( !linker.addFile(objFiles[i]) )
+        {
+            qCritical() << "link error:" << linker.errorMessage();
+            return false;
+        }
+    }
+
+    // Add explicitly specified additional object files (-f)
+    for( int i = 0; i < linkObjs.size(); i++ )
+    {
+        qDebug() << "  linking" << linkObjs[i];
+        if( !linker.addFile(linkObjs[i]) )
+        {
+            qCritical() << "link error:" << linker.errorMessage();
+            return false;
+        }
+    }
+
+    // Add archive libraries specified by -l, searching in -L directories
+    for( int i = 0; i < linkLibs.size(); i++ )
+    {
+        const QString libName = "lib" + linkLibs[i] + ".a";
+        bool found = false;
+        for( int j = 0; j < libDirs.size(); j++ )
+        {
+            const QString path = QDir(libDirs[j]).absoluteFilePath(libName);
+            if( QFile::exists(path) )
+            {
+                qDebug() << "  linking archive" << path;
+                if( !linker.addArchive(path) )
+                {
+                    qCritical() << "link error:" << linker.errorMessage();
+                    return false;
+                }
+                found = true;
+                break;
+            }
+        }
+        if( !found )
+        {
+            qCritical() << "cannot find library -l" + linkLibs[i]
+                        << "(searched:" << libDirs.join(", ") << ")";
+            return false;
+        }
+    }
+
+    const QString exePath = QDir(outPath).absoluteFilePath(exeName);
+    qDebug() << "#### linking" << exePath;
+    if( !linker.link(exePath) )
+    {
+        qCritical() << "link error:" << linker.errorMessage();
+        return false;
+    }
+    qDebug() << "#### successfully linked" << exePath;
+    return true;
+}
+
+static void compileX86(Manager& mgr, const QString& outPath, const QStringList& libDirs,
+                       const QStringList& linkLibs, const QStringList& linkObjs,
+                       const QString& exeName, bool dbg = false, bool cdeclRet = true)
 {
     // x86 backend: generate ELF32 relocatable objects for each module
     mgr.loader.getModel().calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
@@ -437,11 +527,18 @@ static void compileX86(Manager& mgr, const QString& outPath, bool dbg = false, b
         else
             qCritical() << "cannot generate main+.o";
     }
+
+    if( !hasErrors && (!libDirs.isEmpty() || !linkLibs.isEmpty() || !linkObjs.isEmpty()) )
+    {
+        if( !linkExecutable(objFiles, libDirs, linkLibs, linkObjs, outPath, exeName) )
+            hasErrors = true;
+    }
 }
 
 static void process(const QString& file, const QStringList& searchPaths,
                     bool run, bool dumpIL, bool dumpLL, bool eigen, const QString& arch, bool dbg, bool cdeclRet, bool useAapcs,
-                    QString outPath, const QStringList& rtLibs)
+                    QString outPath, const QStringList& libDirs, const QStringList& linkLibs, const QStringList& linkObjs,
+                    bool esp32 = false)
 {
     int ok = 0;
     int all = 0;
@@ -502,11 +599,11 @@ static void process(const QString& file, const QStringList& searchPaths,
 #endif
     if( all == ok && (arch == "arm7" || arch == "armv7") )
     {
-        compileArm(mgr, outPath, dbg, useAapcs);
+        compileArm(mgr, outPath, libDirs, linkLibs, linkObjs, info.baseName(), dbg, useAapcs);
     }
     if( all == ok && (arch == "x86" || arch == "i386") )
     {
-        compileX86(mgr, outPath, dbg, cdeclRet);
+        compileX86(mgr, outPath, libDirs, linkLibs, linkObjs, info.baseName(), dbg, cdeclRet);
     }
 
     if( all == ok && run )
@@ -564,9 +661,15 @@ int main(int argc, char *argv[])
     QCommandLineOption cdeclRet("cdecl", "use cdecl-compatible return values (EAX/EAX:EDX for <=8 bytes, x86 only)");
     cp.addOption(cdeclRet);
     QCommandLineOption aapcs("aapcs", "use AAPCS32 calling convention (args in R0-R3, return in R0/R0-R1, ARM only)");
+    QCommandLineOption esp32opt("esp32", "generate ESP32-P4 Harvard architecture ELF (split Flash/SRAM memory map)");
     cp.addOption(aapcs);
-    QCommandLineOption libs("L", "add a directory where the compiler looks for the runtime libraries", "path");
+    cp.addOption(esp32opt);
+    QCommandLineOption libs("L", "add a library search directory for the linker", "path");
     cp.addOption(libs);
+    QCommandLineOption linkLib("n", "link with archive library lib<name>.a (searched in -L dirs)", "name");
+    cp.addOption(linkLib);
+    QCommandLineOption linkObj("f", "add an object file (.o) to the linker input", "file");
+    cp.addOption(linkObj);
 
     cp.process(a);
     const QStringList args = cp.positionalArguments();
@@ -587,7 +690,8 @@ int main(int argc, char *argv[])
         outPath = outPaths.first();
 
     process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2),
-            cp.isSet(eigen) || cp.isSet(arch), cp.value(arch), cp.isSet(dbg), cp.isSet(cdeclRet), cp.isSet(aapcs), outPath, cp.values(libs) );
+            cp.isSet(eigen) || cp.isSet(arch), cp.value(arch), cp.isSet(dbg), cp.isSet(cdeclRet), cp.isSet(aapcs), outPath,
+            cp.values(libs), cp.values(linkLib), cp.values(linkObj), cp.isSet(esp32opt) );
 
     return 0;
 }

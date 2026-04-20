@@ -751,7 +751,7 @@ bool Project2::generateX86(const QString &outDir, QStringList& objFiles)
          QString mainObj;
          mainObj = QDir(outDir).absoluteFilePath("main+.o");
 
-         if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj) )
+         if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj, true) )
          {
              qDebug() << "  generated" << mainObj;
              objFiles << mainObj;

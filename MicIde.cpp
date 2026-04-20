@@ -23,6 +23,7 @@
 #include "MicLexer.h"
 #include "MicProject2.h"
 #include "MilCeeGen.h"
+#include "MilElfLinker.h"
 #include <QtDebug>
 #include <QDockWidget>
 #include <QApplication>
@@ -1625,6 +1626,7 @@ bool Ide::generate(bool forceAll)
         return false;
     }
 
+#if 0
     QStringList cFiles;
     if( !d_pro->copyCResources(buildPath, cFiles) )
     {
@@ -1670,6 +1672,41 @@ bool Ide::generate(bool forceAll)
         QMessageBox::critical(this, tr("Generating X86"), tr("error linking application"));
         return false;
     }
+#else
+    const QTime start = QTime::currentTime();
+    QStringList objFiles;
+    d_pro->setDbg(d_debugging);
+    if( !d_pro->generateX86(buildPath, objFiles) )
+        return false;
+    const QString name = d_pro->getProjectPath().isEmpty()? QString("a.out"): QFileInfo(d_pro->getProjectPath()).baseName();
+
+    Mil::ElfLinker linker;
+
+    // Add all compiler-generated object files
+    for( int i = 0; i < objFiles.size(); i++ )
+    {
+        if( !linker.addFile(objFiles[i]) )
+        {
+            QMessageBox::critical(this, tr("Linking"), tr("error adding object file %1: %2").arg(objFiles[i]).arg(linker.errorMessage()));
+            return false;
+        }
+    }
+
+    // QFile::copy(QString(":/runtime/libmicron_i386.a"), QDir(buildPath).absoluteFilePath("libmicron_i386.a"));
+    if( !linker.addArchive(":/runtime/libmicron_i386.a") )
+    {
+        QMessageBox::critical(this, tr("Linking"), tr("error adding libmicron: %1").arg(linker.errorMessage()));
+        return false;
+    }
+
+    const QString exePath = QDir(buildPath).absoluteFilePath(name);
+    qDebug() << "#### linking" << exePath;
+    if( !linker.link(exePath) )
+    {
+        QMessageBox::critical(this, tr("Linking"), tr("error linking: %1").arg(linker.errorMessage()));
+        return false;
+    }
+#endif
 
     qDebug() << "generated and built in" << start.msecsTo(QTime::currentTime()) << "[ms]";
 
@@ -3049,7 +3086,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.10");
+    a.setApplicationVersion("0.4.11");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 
