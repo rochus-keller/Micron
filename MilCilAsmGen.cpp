@@ -1583,6 +1583,9 @@ void CilAsmGen::constValue(Constant* c)
     case Constant::I:
         out << "int32(" << c->i << ")";
         break;
+    case Constant::P:
+        out << "TODO " << QByteArray::number(quint8(c->p), 16);
+        break;
     case Constant::S:
         out << "\"" << c->s << "\"";
         break;

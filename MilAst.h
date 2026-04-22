@@ -249,6 +249,7 @@ namespace Mil
         // of the union can be initialized in the constructor.
         // If NamedType is an array type, then there is an anonymous componend for each element of the array. The array type may be an open array in
         // which case the number of elements is determined by the number of components.
+        // If NamedType is a pointer type, then there is exactly one anonymous component representing the pointer literal.
         Component():c(0){}
         ~Component();
     };
@@ -274,10 +275,11 @@ namespace Mil
 
     struct Constant
     {
-        enum Kind { Invalid, D, I, S, B, R, C } kind;
+        enum Kind { Invalid, D, I, P, S, B, R, C } kind;
         union {
             double d;
             qint64 i;
+            quint64 p; // pointer literal
             char* s;    // string
             ByteString* b; // hexstring
             Declaration* r; // reference to const decl

@@ -2305,11 +2305,15 @@ bool Evaluator::recurseConstConstructor(Expression* e)
             stack.push_back(v);
             break;
         }
-    case Type::Pointer: {
+    case Type::Pointer:
+    case Type::Proc: {
             Q_ASSERT(e->rhs);
+            Q_ASSERT(!e->getType()->typebound);
+            if( !evaluate(e->rhs) )
+                return false;
             Value v;
             v.mode = Value::Const;
-            v.val = e->rhs->val; // v.val = quint64
+            v.val = QVariant::fromValue(Mil::PointerLiteral(stack.takeLast().val.toULongLong()));
             v.type = e->getType();
             stack.push_back(v);
             break;

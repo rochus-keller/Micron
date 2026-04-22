@@ -240,6 +240,14 @@ static void renderComponents( QTextStream& out, const QVariant& data )
         out << "}";
         return;
     }
+    if( data.canConvert<PointerLiteral>() )
+    {
+        out << "{";
+        PointerLiteral p = data.value<PointerLiteral>();
+        out << QByteArray::number(p.ptr,16) << "h";
+        out << "}";
+        return;
+    }
     switch( data.type() )
     {
     case QVariant::List:
@@ -1614,6 +1622,8 @@ QVariant ConstrLiteral::toVariant(Constant* c, Type* t)
         return c->d;
     case Constant::I:
         return c->i;
+    case Constant::P:
+        return QVariant::fromValue(PointerLiteral(c->p));
     case Constant::S:
         return QByteArray(c->s);
     case Constant::B:
@@ -1629,6 +1639,9 @@ QVariant ConstrLiteral::toVariant(Constant* c, Type* t)
                 for( int i = 0; i < cl->c.size(); i++ )
                     r.append(FieldData(cl->c[i].name, toVariant(cl->c[i].c, 0 )));
                 return QVariant::fromValue(r);
+            }else if( !cl->c.isEmpty() && cl->c.first().c->kind == Constant::P )
+            {
+                return toVariant(cl->c.first().c, 0);
             }else
             {
                 // anonymous
@@ -1665,6 +1678,21 @@ Constant * ConstrLiteral::toConst(const QVariant & data)
             c->c->c.back().name = m[i].first;
             c->c->c.back().c = toConst(m[i].second);
         }
+        return c;
+    }
+    if( data.canConvert<PointerLiteral>() )
+    {
+        // this is a bit overkill, but consequent
+        // Constant(C)->ComponentList->Constant(P) instead of just Constant(P), but we need the
+        // type field of ComponenList
+        c->c = new ComponentList();
+        c->kind = Constant::C;
+        c->c = new ComponentList();
+        c->c->c.append(Component());
+        Constant* ptr = new Constant();
+        ptr->kind = Constant::P;
+        ptr->p = data.value<PointerLiteral>().ptr;
+        c->c->c.back().c = ptr;
         return c;
     }
     const QVariant::Type t = data.type();

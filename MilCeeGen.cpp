@@ -560,6 +560,9 @@ void CeeGen::constValue(QTextStream& out, Constant* c, Type* hint)
     case Constant::I:
         out << c->i;
         break;
+    case Constant::P:
+        out << "0x" << QByteArray::number(c->p,16);
+        break;
     case Constant::S: {
             QByteArray tmp = c->s;
             tmp.replace("\\", "\\\\");

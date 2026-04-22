@@ -528,7 +528,7 @@ void Builtins::doDefault()
     else if( v.type->isReal() )
         v.val = 0.0;
     else if( v.type->kind == Type::Nil || v.type->kind == Type::Pointer || (v.type->kind == Type::Proc && !v.type->typebound) )
-        v.val = 0;
+        v.val = 0; // TODO Pointer/Proc
     else if( v.type->kind == Type::Interface || (v.type->kind == Type::Proc && v.type->typebound) )
     {
         Mil::RecordLiteral rec;

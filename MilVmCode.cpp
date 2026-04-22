@@ -1292,7 +1292,7 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         emitOp(proc, LL_ldind_u2);
         break;
     case IL_ldind_u4:
-        emitOp(proc, LL_ldind_u2);
+        emitOp(proc, LL_ldind_u4);
         break;
     case IL_ldind_u8:
         emitOp(proc, LL_ldind_u8);
@@ -1711,6 +1711,8 @@ bool Code::renderImportCalls(Procedure& proc, quint32 id)
 
 void Code::render(char* data, quint32 off, Type* t, Constant* c)
 {
+    // RISK: this method assumes the same endinanness of the target as the host; if more control is needed
+    // replace memcpy by
     switch(c->kind)
     {
     case Constant::D:
@@ -1755,6 +1757,9 @@ void Code::render(char* data, quint32 off, Type* t, Constant* c)
             Q_ASSERT(false);
         }
         break;
+    case Constant::P:
+        memcpy(data+off, &c->p, pointerWidth);
+        break;
     case Constant::S:
         Q_ASSERT(t->kind == Type::Array && deref(t->getType())->kind == Type::CHAR && t->len);
         strncpy(data+off, c->s, t->len-1);
@@ -1792,6 +1797,11 @@ void Code::render(char* data, quint32 start, ComponentList* cl)
             off += et->getByteSize(pointerWidth);
         }
 
+    }else if( t->kind == Type::Pointer || t->kind == Type::Proc )
+    {
+        Q_ASSERT(!cl->c.isEmpty());
+        Q_ASSERT(!t->typebound);
+        render(data, start, t, cl->c[0].c);
     }else
     {
         qWarning() << "TODO record literals not yet implemented";

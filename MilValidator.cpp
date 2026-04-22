@@ -1604,6 +1604,8 @@ Type*Validator::toType(Constant* c)
         return mdl->getBasicType(Type::StringLit);
     case Constant::B:
         return mdl->getBasicType(Type::ByteArrayLit);
+    case Constant::P:
+        return mdl->getBasicType(Type::INTPTR);
     case Constant::R:
         return deref(c->r->getType());
     case Constant::C:

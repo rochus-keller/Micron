@@ -2920,9 +2920,9 @@ Expression* Parser2::constructor(Type* hint) {
         return 0;
     }else if( res->getType()->kind != Type::Record && res->getType()->kind != Type::Object &&
               res->getType()->kind != Type::Array &&
-              res->getType()->kind != Type::SET && res->getType()->kind != Type::Pointer )
+              res->getType()->kind != Type::SET && !res->getType()->isPointerProcType() )
     {
-        error(t,"constructors only supported for record, object, array, set and pointer types");
+        error(t,"constructors only supported for record, object, array, set, pointer and procedure types");
         return 0;
     }
 
@@ -2999,10 +2999,10 @@ Expression* Parser2::constructor(Type* hint) {
         }
         Type* a = addHelperType(Type::Array, maxIndex + 1, res->getType()->getType(), res->pos);
         res->setType(a);
-    }else if( res->getType()->kind == Type::Pointer )
+    }else if( res->getType()->isPointerProcType() )
     {
         if( res->rhs == 0 || res->rhs->next != 0 )
-            error(res->pos, "pointer constructor requires exactly one component");
+            error(res->pos, "pointer and procedure type constructors require exactly one component");
     }
     return res;
 }
@@ -3061,16 +3061,11 @@ Expression* Parser2::component(Type* constrType, int& index) {
         if( !assigCompat(constrType->getType(), rhs, rhs->pos ) )
             error(rhs->pos, "incompatible value");
     } else if( FIRST_expression(la.d_type) ) {
-        if( constrType->kind == Type::Pointer )
+        if( constrType->isPointerProcType() )
         {
             res = ConstExpression(0);
             if( res )
-            {
-                if( !ev->evaluate(res) )
-                    errorEv();
-                else
-                    res->val = ev->pop().val;
-            }
+                ev->bindUniInt(res, false);
         }else
             res = expression(0);
         if( res == 0 )
@@ -3142,10 +3137,10 @@ Expression* Parser2::component(Type* constrType, int& index) {
             if( !assigCompat(constrType->getType(), res, res->pos ) )
                 error(res->pos, "incompatible value");
             res = res2;
-        }else if( constrType->kind == Type::Pointer)
+        }else if( constrType->isPointerProcType())
         {
             if( !res->getType()->isUInt() )
-                error(res->pos, "expecting unsigned integer to initialize pointer");
+                error(res->pos, "expecting unsigned integer to initialize pointer or procedure type");
         }
         index++;
     } else
@@ -3285,6 +3280,8 @@ void Parser2::assignmentOrProcedureCall() {
             Expression* decl = lhs;
             if( lhs->kind == Expression::Super )
                 decl = lhs->lhs;
+
+            decl->setByVal(); // designator was called with true, but here we only need a value, not an address
 
             // add the missing call expression "()"
             const DeclList formals = decl->getFormals();

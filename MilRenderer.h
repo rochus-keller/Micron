@@ -90,6 +90,11 @@ namespace Mil
     };
     typedef QPair<QByteArray,QVariant> FieldData;
     typedef QList<FieldData> RecordLiteral;
+    struct PointerLiteral // used for both regular pointers and procedure types
+    {
+        quint64 ptr;
+        PointerLiteral(quint64 p=0):ptr(p){}
+    };
 
     typedef QList<qint64> CaseLabelList;
 
@@ -263,6 +268,6 @@ Q_DECLARE_METATYPE(Mil::ConstrLiteral)
 Q_DECLARE_METATYPE(Mil::CaseLabelList)
 Q_DECLARE_METATYPE(Mil::Trident)
 Q_DECLARE_METATYPE(Mil::RecordLiteral)
-
+Q_DECLARE_METATYPE(Mil::PointerLiteral)
 
 #endif // _MILRENDERER_H

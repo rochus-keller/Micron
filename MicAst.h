@@ -143,6 +143,7 @@ namespace Mic
         bool isCharArray() const { return kind == Array && getType() && getType()->kind == CHAR; }
         bool isByteArray() const { return kind == Array && getType() && getType()->kind == UINT8; }
         bool isObjectOrObjectPointer() const;
+        bool isPointerProcType() const { return kind == Pointer || (kind == Proc && !typebound); }
 
         Declaration* findSub(const QByteArray& name) const;
         Declaration* findMember(const QByteArray& name, bool recurseSuper = false) const;

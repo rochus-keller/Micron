@@ -326,6 +326,7 @@ static inline bool checkDecNumber( QByteArray str, bool oneOff = false )
 
 Token Lexer::number()
 {
+    // TODO: this representation doesn't correspond to the spec!
     // integer      ::=  digit {digit} ['I' | 'L'] | digit {hexDigit} 'H' ['I' | 'L']
     // real         ::=  digit {digit} '.' {digit} [ScaleFactor]
     // ScaleFactor  ::=  ('E'|'D'|'S') ['+' | '-'] digit {digit}
