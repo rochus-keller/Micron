@@ -1,0 +1,30 @@
+module PointerIncDec
+
+var
+  str: array 32 of char
+  p: pointer to char
+  i: int32
+  
+begin
+
+  str := "alle meine entchen"
+  
+  println("**** forward")
+  p := @str[0]
+  for i := 0 to len(str)-1 do
+  //while p^ # 0x do
+    print(i); print(" = ")
+    println(p^)
+    inc(p)
+  end
+  
+  println("**** backwards")
+  p := @str[len(str)-1]
+  for i := len(str)-1 to 0 by -1 do
+    print(i); print(" = ")
+    println(p^)
+    dec(p)
+  end
+
+
+end PointerIncDec

@@ -24,6 +24,8 @@ TEMPLATE = app
 
 INCLUDEPATH += .. 
 
+#DEFINES += _MIC_IDE_USE_ELFLINKER_MUSL_
+
 SOURCES +=  MicProject2.cpp \
     MicHighlighter.cpp \
     MicIde.cpp \

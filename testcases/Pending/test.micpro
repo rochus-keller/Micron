@@ -8,8 +8,8 @@ Suffixes=@Invalid()
 WorkingDir=
 
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/CaseRec1.mic
-1\RelPath=CaseRec1.mic
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/PointerIncDec.mic
+1\RelPath=PointerIncDec.mic
 size=1
 
 [Packages]

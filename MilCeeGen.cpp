@@ -177,6 +177,7 @@ void CeeGen::visitModule()
    bout << "        if( cls == super ) return 1;" << endl;
    bout << "        cls = cls->super;" << endl;
    bout << "    }" << endl;
+   bout << "    return 0;" << endl;
    bout << "}" << endl << endl;
 
    bool initFound = false;
@@ -1440,10 +1441,20 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         } break;
 
     case IL_castptr:
-        out << "((" << typeRef(e->d->getType()) << "*)";
-        expression(out, e->lhs );
-        out << ")";
-        break;
+        {
+            Type* tt = deref(e->d->getType());
+            if( tt->kind == Type::Array && tt->len == 0 )
+            {
+                // TODO: if e->d->getType() is an open array, qualident(t->decl) is not declared.
+                // despite this fix, there are still crashes in S9
+                expression(out, e->lhs );
+            }else
+            {
+                out << "((" << typeRef(e->d->getType()) << "*)";
+                expression(out, e->lhs );
+                out << ")";
+            }
+        } break;
 
     case IL_call:
     case IL_callinst:
@@ -1605,10 +1616,11 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         break;
 
     case IL_ptroff:
+        out << "(";
         expression(out, e->lhs);
         out << " += ";
         expression(out, e->rhs);
-        out << " * sizeof(" << typeRef(e->d->getType()) << ")";
+        out << ")";
         break;
 
     case IL_iif: {

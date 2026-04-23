@@ -1399,6 +1399,7 @@ void Ide::onNewModule()
         return;
     }
     QDir dir;
+    d_pro->addPackagePath(path);
     const Project2::FileGroup* fg = d_pro->findFileGroup(path);
     for( int i = 0; i < fg->d_files.size(); i++ )
     {
@@ -1626,7 +1627,7 @@ bool Ide::generate(bool forceAll)
         return false;
     }
 
-#if 0
+#ifndef _MIC_IDE_USE_ELFLINKER_MUSL_
     QStringList cFiles;
     if( !d_pro->copyCResources(buildPath, cFiles) )
     {

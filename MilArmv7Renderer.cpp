@@ -3300,8 +3300,6 @@ int Renderer::emitOp(Procedure& proc, int pc)
         Q_ASSERT(false);
         return 1;
 
-    case LL_sizeof:
-    case LL_ptroff:
     case LL_newvla:
         qWarning() << "Armv7Renderer: not yet implemented:" << Code::op_names[opcode];
         em.nop_();

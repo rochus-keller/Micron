@@ -18,6 +18,7 @@
 #include "MicEvaluator.h"
 #include "MilEmitter.h"
 #include "MicToken.h"
+#include <QtDebug>
 using namespace Mic;
 
 static inline Mil::Quali coreName(const QByteArray& proc)
@@ -925,6 +926,7 @@ void Builtins::ASSERT(int nArgs,const RowCol& pos)
 
 void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
 {
+    // inc(lhs,rhs) or inc(lhs)
     Value step;
     int tmp = -1;
     if( nArgs == 2 )
@@ -1008,18 +1010,30 @@ void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
         // TODO: do we expect more enums than fit in I4?
     }else if( what.type->kind == Type::Pointer )
     {
+        // the address of the variable hosting the pointer is already on the stack
         ev->out->dup_();
-        ev->out->ldind_(Mil::EmiTypes::IntPtr);
+        ev->out->ldind_(Mil::EmiTypes::IntPtr); // fetch the pointer value
         if( nArgs == 2 )
         {
             if( step.isConst() )
-                ev->out->ldc_i4(step.val.toInt());
-            else
+            {
+                if( step.type->is64() )
+                    qWarning() << "ptroff_ with int64 offset not yet supported";
+                qint64 off = step.val.toInt();
+                if( !inc )
+                    off *= -1;
+                ev->out->ldc_i4(off);
+            }else
+            {
                 ev->out->ldloc_(tmp);
+                if( !inc )
+                    ev->out->neg_();
+            }
         }else
-            ev->out->ldc_i4(1);
-        ev->out->ptroff_(ev->toQuali(what.type->getType()));
-        ev->out->stind_(Mil::EmiTypes::IntPtr);
+            ev->out->ldc_i4(inc ? 1 : -1);
+        // ptroff is just a glorified addition automatically considering the base type size, thus avoiding full pointer arithmetic support
+        ev->out->ptroff_(ev->toQuali(what.type->getType())); // …, pointer value, offset -> …, pointer value
+        ev->out->stind_(Mil::EmiTypes::IntPtr); // store the new pointer value in the variable
     }else
         ev->error("invalid argument types",pos);
 }

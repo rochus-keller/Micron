@@ -1581,7 +1581,6 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             }vmbreak;
         vmcase(sizeof)
-        vmcase(ptroff)
                 qWarning() << "TODO not yet implemented" << Code::op_names[frame->proc->ops[pc].op];
                 pc++;
                 vmbreak;

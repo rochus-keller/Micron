@@ -751,7 +751,13 @@ bool Project2::generateX86(const QString &outDir, QStringList& objFiles)
          QString mainObj;
          mainObj = QDir(outDir).absoluteFilePath("main+.o");
 
-         if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj, true) )
+         if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj,
+                                           #ifdef _MIC_IDE_USE_ELFLINKER_MUSL_
+                                                    true
+                                           #else
+                                                    false
+                                           #endif
+                                                    ) )
          {
              qDebug() << "  generated" << mainObj;
              objFiles << mainObj;
