@@ -1022,45 +1022,96 @@ begin
   return G.Acc
 end xeval
 
-(* Expand syntax (macros) in an expression *)
-procedure expand_syntax*(x: S9Types.cell): S9Types.cell
+(* Check if expression uses any syntax transformers *)
+procedure uses_transformer_p(x: S9Types.cell): boolean
 var
-  m: S9Types.cell
-  n: S9Types.cell
-  new: S9Types.cell
+  y: S9Types.cell
 begin
-  if G.atom_p(x) then
-    return x
+  if G.atom_p(x) or (G.car(x) = G.S_quote) then
+    return false
   end
-  m := G.car(x)
-  if G.symbol_p(m) then
-    n := lookup(m, G.Environment, false)
-    if (n # S9Types._NIL) & G.syntax_p(G.binding_value(n)) then
-      (* Macro - expand it *)
-      new := M.cons(G.cadr(G.binding_value(n)), G.cdr(x))
-      M.save(new)
-      new := xeval(new, 1)
-      M.unsave(1)
-      return expand_syntax(new)
+  if G.pair_p(x) & G.symbol_p(G.car(x)) then
+    y := lookup(G.car(x), G.Environment, false)
+    if (y # S9Types._NIL) & G.syntax_p(G.binding_value(y)) then
+      return true
     end
   end
-  (* Recursively expand in subexpressions *)
-  n := S9Types._NIL
-  M.save(n)
   while G.pair_p(x) do
-    new := expand_syntax(G.car(x))
-    n := M.cons(new, n)
-    G.Car[G.Stack] := n
+    if uses_transformer_p(G.car(x)) then
+      return true
+    end
     x := G.cdr(x)
   end
-  M.unsave(1)
-  (* Reverse the list *)
-  m := S9Types._NIL
-  while n # S9Types._NIL do
-    m := M.cons(G.car(n), m)
-    n := G.cdr(n)
+  return false
+end uses_transformer_p
+
+(* Single-pass syntax expansion *)
+procedure expand_syntax_1(x: S9Types.cell): S9Types.cell
+var
+  y: S9Types.cell
+  m: S9Types.cell
+  n: S9Types.cell
+  a: S9Types.cell
+  app: S9Types.cell
+begin
+  if (G.Error_flag # 0) or G.atom_p(x) or (G.car(x) = G.S_quote) then
+    return x
   end
-  return m
+  if G.symbol_p(G.car(x)) then
+    y := lookup(G.car(x), G.Environment, false)
+    if (y # S9Types._NIL) & G.syntax_p(G.binding_value(y)) then
+      M.save(x)
+      app := M.cons(G.cdr(G.binding_value(y)), G.cdr(x))
+      M.unsave(1)
+      return xeval(app, 1)
+    end
+  end
+  (*
+   * If DEFINE-SYNTAX is followed by (MACRO-NAME ...)
+   * unbind the MACRO-NAME first to avoid erroneous expansion.
+   *)
+  if (G.car(x) = G.S_define_syntax) & (G.cdr(x) # S9Types._NIL)
+     & G.pair_p(G.cadr(x)) then
+    m := lookup(G.caadr(x), G.Environment, false)
+    if m # S9Types._NIL then
+      G.Cdr[m] := S9Types._UNDEFINED
+    end
+  end
+  n := S9Types._NIL
+  a := S9Types._NIL
+  M.save(n)
+  while G.pair_p(x) do
+    m := M.cons(expand_syntax_1(G.car(x)), S9Types._NIL)
+    if n = S9Types._NIL then
+      n := m
+      G.Car[G.Stack] := n
+      a := n
+    else
+      G.Cdr[a] := m
+      a := G.cdr(a)
+    end
+    x := G.cdr(x)
+  end
+  G.Cdr[a] := x
+  M.unsave(1)
+  return n
+end expand_syntax_1
+
+(* Expand syntax (macros) in an expression - outer loop *)
+procedure expand_syntax*(x: S9Types.cell): S9Types.cell
+begin
+  if (G.Error_flag # 0) or G.atom_p(x) or (G.car(x) = G.S_quote) then
+    return x
+  end
+  M.save(x)
+  loop
+    if G.Error_flag # 0 then exit end
+    if ~uses_transformer_p(x) then exit end
+    x := expand_syntax_1(x)
+    G.Car[G.Stack] := x
+  end
+  M.unsave(1)
+  return x
 end expand_syntax
 
 (* Reset call trace *)

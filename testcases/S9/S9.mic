@@ -89,6 +89,24 @@ begin
 end fatal
 
 (* ============================================================
+ * Load primitive (pp_load)
+ * ============================================================ *)
+
+procedure ^load*(file: pointer to array of char): int32
+
+procedure pp_load(x: T.cell): T.cell
+type Str = array of char
+begin
+  if val(int32, G.string_len(G.cadr(x))) > T.TokenLength then
+    return G.error("load: path too long", G.cadr(x))
+  end
+  if load(G.string(G.cadr(x))(Str)) < 0 then
+    return G.error("load: cannot open file", G.cadr(x))
+  end
+  return T._UNSPECIFIC
+end pp_load
+
+(* ============================================================
  * Primitive registration
  * ============================================================ *)
 
@@ -316,6 +334,9 @@ begin
   add_primitive("file-exists?", P.pp_file_exists_p, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
   add_primitive("delete-file", P.pp_delete_file, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
   add_primitive("bit-op", P.pp_bit_op, 3, -1, T.T_INTEGER, T.T_INTEGER, T.T_INTEGER)
+  
+  (* Load primitive - registered here because load() is in this module *)
+  add_primitive("load", pp_load, 1, 1, T.T_STRING, T.T_NONE, T.T_NONE)
   
   (* Real number primitives *)
   add_primitive("real?", P.pp_real_p, 1, 1, T.T_NONE, T.T_NONE, T.T_NONE)
@@ -636,9 +657,88 @@ end version_info
  * Main entry point
  * ============================================================ *)
 
+procedure load_library()
+type Str = array of char
+var
+  path: array 512 of char
+  libdir: array 256 of char
+  libfile: array 512 of char
+  sp: pointer to array of char
+  i: int32
+  j: int32
+  k: int32
+  start: int32
+  ch: char
+begin
+  sp := G.string(G.box_value(G.S_library_path))(Str)
+  i := 0
+  while sp[i] # 0X do
+    if i >= 511 then
+      fatal("load_library: library path too long")
+    end
+    path[i] := sp[i]
+    inc(i)
+  end
+  path[i] := 0X
+  
+  start := 0
+  i := 0
+  loop
+    ch := path[i]
+    if (ch = ':') or (ch = 0X) then
+      (* Extract directory from start..i-1 *)
+      k := 0
+      if (i > start) & (path[start] = '~') then
+        (* Expand ~ to current directory as fallback *)
+        libdir[0] := '.'
+        k := 1
+        j := start + 1
+      else
+        j := start
+      end
+      while j < i do
+        if k >= 255 then
+          fatal("load_library: path component too long")
+        end
+        libdir[k] := path[j]
+        inc(k)
+        inc(j)
+      end
+      libdir[k] := 0X
+      
+      (* Build libfile = libdir + "/s9.scm" *)
+      j := 0
+      while libdir[j] # 0X do
+        libfile[j] := libdir[j]
+        inc(j)
+      end
+      libfile[j] := '/'; inc(j)
+      libfile[j] := 's'; inc(j)
+      libfile[j] := '9'; inc(j)
+      libfile[j] := '.'; inc(j)
+      libfile[j] := 's'; inc(j)
+      libfile[j] := 'c'; inc(j)
+      libfile[j] := 'm'; inc(j)
+      libfile[j] := 0X
+      
+      if load(@libfile) = 0 then
+        return
+      end
+      
+      start := i + 1
+    end
+    if ch = 0X then
+      exit
+    end
+    inc(i)
+  end
+  error("load_library: cannot find s9.scm in library path", T._NOEXPR)
+end load_library
+
 procedure main*()
 begin
   init()
+  load_library()
   
   if G.Quiet_mode = 0 then
     IO.pr("Scheme 9 from Empty Space")
