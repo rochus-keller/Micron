@@ -546,6 +546,7 @@ var
   new_port: int32
   old_port: int32
   outer_loading: T.cell
+  root_env: T.cell
 begin
   new_port := P.open_port(file, true)
   if new_port = -1 then
@@ -557,6 +558,7 @@ begin
   while G.cdr(G.Environment) # T._NIL do
     G.Environment := G.cdr(G.Environment)
   end
+  root_env := G.Environment
   outer_loading := G.box_value(G.S_loading)
   G.set_box_value(G.S_loading, T._TRUE)
   old_port := G.Input_port
@@ -573,6 +575,8 @@ begin
     end
     if G.Error_flag = 0 then
       n := E.eval(n)
+      (* Restore root env in case xeval changed G.Environment *)
+      G.Environment := root_env
     end
   end
   
@@ -657,81 +661,31 @@ end version_info
  * Main entry point
  * ============================================================ *)
 
-procedure load_library()
-type Str = array of char
+procedure try_load_s9(const dir: pointer to array of char): boolean
 var
-  path: array 512 of char
-  libdir: array 256 of char
-  libfile: array 512 of char
-  sp: pointer to array of char
-  i: int32
+  libfile: array 256 of char
   j: int32
-  k: int32
-  start: int32
-  ch: char
 begin
-  sp := G.string(G.box_value(G.S_library_path))(Str)
-  i := 0
-  while sp[i] # 0X do
-    if i >= 511 then
-      fatal("load_library: library path too long")
-    end
-    path[i] := sp[i]
-    inc(i)
+  j := 0
+  while dir[j] # 0X do
+    libfile[j] := dir[j]
+    inc(j)
   end
-  path[i] := 0X
-  
-  start := 0
-  i := 0
-  loop
-    ch := path[i]
-    if (ch = ':') or (ch = 0X) then
-      (* Extract directory from start..i-1 *)
-      k := 0
-      if (i > start) & (path[start] = '~') then
-        (* Expand ~ to current directory as fallback *)
-        libdir[0] := '.'
-        k := 1
-        j := start + 1
-      else
-        j := start
-      end
-      while j < i do
-        if k >= 255 then
-          fatal("load_library: path component too long")
-        end
-        libdir[k] := path[j]
-        inc(k)
-        inc(j)
-      end
-      libdir[k] := 0X
-      
-      (* Build libfile = libdir + "/s9.scm" *)
-      j := 0
-      while libdir[j] # 0X do
-        libfile[j] := libdir[j]
-        inc(j)
-      end
-      libfile[j] := '/'; inc(j)
-      libfile[j] := 's'; inc(j)
-      libfile[j] := '9'; inc(j)
-      libfile[j] := '.'; inc(j)
-      libfile[j] := 's'; inc(j)
-      libfile[j] := 'c'; inc(j)
-      libfile[j] := 'm'; inc(j)
-      libfile[j] := 0X
-      
-      if load(@libfile) = 0 then
-        return
-      end
-      
-      start := i + 1
-    end
-    if ch = 0X then
-      exit
-    end
-    inc(i)
-  end
+  libfile[j] := '/'; inc(j)
+  libfile[j] := 's'; inc(j)
+  libfile[j] := '9'; inc(j)
+  libfile[j] := '.'; inc(j)
+  libfile[j] := 's'; inc(j)
+  libfile[j] := 'c'; inc(j)
+  libfile[j] := 'm'; inc(j)
+  libfile[j] := 0X
+  return load(@libfile) = 0
+end try_load_s9
+
+procedure load_library()
+begin
+  (* Try "." first - the first entry of DefaultLibraryPath *)
+  if try_load_s9(".") then return end
   error("load_library: cannot find s9.scm in library path", T._NOEXPR)
 end load_library
 

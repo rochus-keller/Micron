@@ -70,7 +70,8 @@ begin
     inc(i)
     inc(s)
   end
-  return h
+  (* Ensure non-negative result: mask off sign bit *)
+  return band(h, 7FFFFFFFh)
 end hash
 
 (* Get hash table size for n elements *)
@@ -119,6 +120,7 @@ begin
     inc(v, h mod k)
     new_ := M.cons(G.car(p), v^)
     v := G.vector(G.car(e))
+    inc(v, h mod k)
     v^ := new_
     p := G.cdr(p)
   end

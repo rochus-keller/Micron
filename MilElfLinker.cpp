@@ -21,6 +21,9 @@
 #include <QFile>
 #include <QSet>
 #include <QStringList>
+#include <QDateTime>
+#include <QFileInfo>
+#include <QCryptographicHash>
 using namespace Mil;
 
 // ELF Section flags 
@@ -266,6 +269,23 @@ bool ElfLinker::link(const QString& outPath) {
         }
     }
 
+    // Generate ESP-IDF App Descriptor as a separate .rodata_desc section
+    QByteArray espAppDesc;
+    if (d_isEsp32) {
+        espAppDesc = generateEspAppDescriptor(outPath);
+#if 0 // unnecessary
+        // Shift all .rodata section offsets by descriptor size so they follow .rodata_desc
+        const quint32 descSize = espAppDesc.size();
+        for (int i = 0; i < d_files.size(); ++i) {
+            InputFile* file = d_files[i];
+            for (int sec = 0; sec < file->secBucket.size(); ++sec) {
+                if (file->secBucket[sec] == 1)
+                    file->secOffset[sec] += descSize;
+            }
+        }
+#endif
+    }
+
     // Reserve GOT space, scan relocations for GOT-referencing types
     d_got.clear();
     d_gotEntries.clear();
@@ -296,24 +316,44 @@ bool ElfLinker::link(const QString& outPath) {
     }
 
     // Compute Memory Map
-    const quint16 phnum = 2;
+    const quint16 phnum = d_isEsp32 ? 3 : 2;
     const quint32 headerSize = 52 + phnum * 32; // Ehdr + N * Phdr
 
     quint32 textFileOffset, rodataFileOffset, dataFileOffset;
-    quint32 dataLmaAddr; // physical address
+    quint32 dataLmaAddr; // physical address (differs from VMA on ESP32)
     quint32 rxFileSize;
 
-    // Standard x86/ARM-Linux layout: Headers -> .text -> .rodata -> .data -> .bss
-    textFileOffset = headerSize;
-    d_textAddr = d_baseAddress + headerSize;
-    rodataFileOffset = headerSize + d_text.size();
-    d_rodataAddr = d_textAddr + d_text.size();
-    rxFileSize = headerSize + d_text.size() + d_rodata.size();
+    quint32 rodataDescFileOffset = 0;
+    quint32 rodataDescAddr = 0;
 
-    dataFileOffset = alignTo(rxFileSize, 0x1000);
-    d_dataAddr = d_baseAddress + dataFileOffset;
-    dataLmaAddr = d_dataAddr;
-    d_bssAddr = d_dataAddr + d_data.size();
+    if (d_isEsp32) {
+        // ESP32 Harvard: Headers -> .rodata_desc -> .rodata (DROM) -> .text (IROM) -> .data (SRAM VMA / Flash LMA)
+        rodataDescFileOffset = headerSize;
+        rodataDescAddr = d_dromAddress + headerSize;
+        rodataFileOffset = rodataDescFileOffset + espAppDesc.size();
+        d_rodataAddr = rodataDescAddr + espAppDesc.size();
+
+        textFileOffset = alignTo(rodataFileOffset + d_rodata.size(), 4);
+        d_textAddr = d_iromAddress;
+
+        dataFileOffset = alignTo(textFileOffset + d_text.size(), 0x1000);
+        dataLmaAddr = d_dromAddress + dataFileOffset;
+        d_dataAddr = d_dataAddress;
+        d_bssAddr = d_dataAddr + d_data.size();
+        rxFileSize = textFileOffset + d_text.size(); // not used for ESP32 PT_LOAD
+    } else {
+        // Standard x86/ARM/RV32-Linux layout: Headers -> .text -> .rodata -> .data -> .bss
+        textFileOffset = headerSize;
+        d_textAddr = d_baseAddress + headerSize;
+        rodataFileOffset = headerSize + d_text.size();
+        d_rodataAddr = d_textAddr + d_text.size();
+        rxFileSize = headerSize + d_text.size() + d_rodata.size();
+
+        dataFileOffset = alignTo(rxFileSize, 0x1000);
+        d_dataAddr = d_baseAddress + dataFileOffset;
+        dataLmaAddr = d_dataAddr;
+        d_bssAddr = d_dataAddr + d_data.size();
+    }
 
     // Convert GOT data-relative offset to virtual address
     if (d_gotAddr != 0)
@@ -390,6 +430,8 @@ bool ElfLinker::link(const QString& outPath) {
     defineSym("__preinit_array_end", 0);
     defineSym("_init", 0);
     defineSym("_fini", 0);
+    defineSym("__heap_start", d_bssAddr + d_bssSize);
+    defineSym("__heap_end", d_bssAddr + d_bssSize);
 
     // Bind undefined symbols and override weak definitions with strong ones
     QSet<QByteArray> missing;
@@ -446,6 +488,7 @@ bool ElfLinker::link(const QString& outPath) {
 
     const quint32 n_text = addStr(".text"), n_rodata = addStr(".rodata");
     const quint32 n_data = addStr(".data"), n_bss = addStr(".bss");
+    const quint32 n_rodata_desc = d_isEsp32 ? addStr(".rodata_desc") : 0;
     QVector<quint32> debugNames;
     for (int i=0; i < d_debugSecs.size(); ++i) debugNames.append(addStr(d_debugSecs[i].name));
     quint32 n_shstrtab = addStr(".shstrtab");
@@ -461,7 +504,7 @@ bool ElfLinker::link(const QString& outPath) {
     currentFileOff += shstrtab.size();
     quint32 shtOff = alignTo(currentFileOff, 4);
 
-    const quint16 shnum = 6 + d_debugSecs.size(); // null, text, rodata, data, bss, shstrtab + debugs
+    const quint16 shnum = 6 + d_debugSecs.size() + (d_isEsp32 ? 1 : 0); // null, text, rodata, data, bss, shstrtab + debugs + rodata_desc
     const quint16 shstrndx = shnum - 1; // shstrtab is the last section
 
     // Write ELF Header
@@ -482,17 +525,39 @@ bool ElfLinker::link(const QString& outPath) {
     emit16(elf, 52); emit16(elf, 32); emit16(elf, phnum);
     emit16(elf, 40); emit16(elf, shnum); emit16(elf, shstrndx);
 
-    // PT_LOAD RX Segment (.text + .rodata)
-    emit32(elf, 1); emit32(elf, 0); emit32(elf, d_baseAddress); emit32(elf, d_baseAddress);
-    emit32(elf, rxFileSize); emit32(elf, rxFileSize); emit32(elf, 5); emit32(elf, 0x1000);
+    if (d_isEsp32) {
+        // PT_LOAD 1: DROM (.rodata_desc + .rodata) — Read-only data in Flash
+        quint32 dromSize = rodataFileOffset + d_rodata.size();
+        emit32(elf, 1); emit32(elf, 0); emit32(elf, d_dromAddress); emit32(elf, d_dromAddress);
+        emit32(elf, dromSize); emit32(elf, dromSize); emit32(elf, 4); emit32(elf, 0x1000);
 
-    // PT_LOAD RW Segment (.data + .bss)
-    emit32(elf, 1); emit32(elf, dataFileOffset); emit32(elf, d_dataAddr); emit32(elf, d_dataAddr);
-    emit32(elf, d_data.size()); emit32(elf, d_data.size() + d_bssSize); emit32(elf, 6); emit32(elf, 0x1000);
+        // PT_LOAD 2: IROM (.text) — Executable code in Flash
+        emit32(elf, 1); emit32(elf, textFileOffset); emit32(elf, d_textAddr); emit32(elf, d_textAddr);
+        emit32(elf, d_text.size()); emit32(elf, d_text.size()); emit32(elf, 5); emit32(elf, 0x1000);
+
+        // PT_LOAD 3: SRAM (.data+.bss) — VMA in SRAM, LMA in Flash
+        emit32(elf, 1); emit32(elf, dataFileOffset); emit32(elf, d_dataAddr); emit32(elf, dataLmaAddr);
+        emit32(elf, d_data.size()); emit32(elf, d_data.size() + d_bssSize); emit32(elf, 6); emit32(elf, 0x1000);
+    } else {
+        // PT_LOAD RX Segment (.text + .rodata)
+        emit32(elf, 1); emit32(elf, 0); emit32(elf, d_baseAddress); emit32(elf, d_baseAddress);
+        emit32(elf, rxFileSize); emit32(elf, rxFileSize); emit32(elf, 5); emit32(elf, 0x1000);
+
+        // PT_LOAD RW Segment (.data + .bss)
+        emit32(elf, 1); emit32(elf, dataFileOffset); emit32(elf, d_dataAddr); emit32(elf, d_dataAddr);
+        emit32(elf, d_data.size()); emit32(elf, d_data.size() + d_bssSize); emit32(elf, 6); emit32(elf, 0x1000);
+    }
 
     // Write Segments to file buffer in physical order
-    elf.append(d_text);
-    elf.append(d_rodata);
+    if (d_isEsp32) {
+        elf.append(espAppDesc);
+        elf.append(d_rodata);
+        elf.append(QByteArray(textFileOffset - elf.size(), '\0')); // align
+        elf.append(d_text);
+    } else {
+        elf.append(d_text);
+        elf.append(d_rodata);
+    }
     elf.append(QByteArray(dataFileOffset - elf.size(), '\0')); // align
     elf.append(d_data);
 
@@ -508,6 +573,8 @@ bool ElfLinker::link(const QString& outPath) {
     // Build Section Header Table (SHT) for debuggers
     emitShdr(elf, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); // Null section
     emitShdr(elf, n_text, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, d_textAddr, textFileOffset, d_text.size(), 0, 0, 4, 0);
+    if (d_isEsp32)
+        emitShdr(elf, n_rodata_desc, SHT_PROGBITS, SHF_ALLOC, rodataDescAddr, rodataDescFileOffset, espAppDesc.size(), 0, 0, 4, 0);
     emitShdr(elf, n_rodata, SHT_PROGBITS, SHF_ALLOC, d_rodataAddr, rodataFileOffset, d_rodata.size(), 0, 0, 4, 0);
     emitShdr(elf, n_data, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, d_dataAddr, dataFileOffset, d_data.size(), 0, 0, 4, 0);
     emitShdr(elf, n_bss, SHT_NOBITS, SHF_ALLOC | SHF_WRITE, d_bssAddr, dataFileOffset + d_data.size(), d_bssSize, 0, 0, 4, 0);
@@ -518,6 +585,13 @@ bool ElfLinker::link(const QString& outPath) {
     }
 
     emitShdr(elf, n_shstrtab, SHT_STRTAB, 0, 0, shstrtabOff, shstrtab.size(), 0, 0, 1, 0);
+
+    // Patch the ESP-IDF App Descriptor SHA256 hash with the hash of the final ELF
+    if (d_isEsp32) {
+        QByteArray hash = QCryptographicHash::hash(elf, QCryptographicHash::Sha256);
+        const int sha256Offset = rodataDescFileOffset + 144; // app_elf_sha256 is at byte 144 in the descriptor
+        memcpy(elf.data() + sha256Offset, hash.constData(), 32);
+    }
 
     QFile outFile(outPath);
     if (!outFile.open(QIODevice::WriteOnly))
@@ -683,6 +757,164 @@ bool ElfLinker::applyRelocations() {
                     return false;
                 }
             }
+            else if (d_arch == ElfReader::ArchRISCV) {
+                if (rel.type == 1) {
+                    // R_RISCV_32
+                    writeLE32(p, symAddr + rel.addend);
+                } else if (rel.type == 18 || rel.type == 19) {
+                    // R_RISCV_CALL / R_RISCV_CALL_PLT (auipc + jalr)
+                    const qint32 offset = symAddr - patchVAddr;
+                    const qint32 hi20 = (offset + 0x800) & 0xFFFFF000;
+                    const qint32 lo12 = offset - hi20;
+
+                    quint32 auipc = readLE32(p);
+                    quint32 jalr = readLE32(p + 4);
+                    auipc = (auipc & 0x00000FFF) | hi20;
+                    jalr  = (jalr & 0x000FFFFF) | ((lo12 & 0xFFF) << 20);
+
+                    writeLE32(p, auipc);
+                    writeLE32(p + 4, jalr);
+                } else if (rel.type == 23) {
+                    // R_RISCV_PCREL_HI20 (AUIPC)
+                    const qint32 offset = (symAddr + rel.addend) - patchVAddr;
+                    const quint32 hi = (offset + 0x800) & 0xFFFFF000;
+                    insn = (insn & 0x00000FFF) | hi;
+                    writeLE32(p, insn);
+                } else if (rel.type == 24 || rel.type == 25) { // R_RISCV_PCREL_LO12_I / _S
+                    // The symbol+addend of a PCREL_LO12 points to the AUIPC instruction
+                    // (a local label). We find the PCREL_HI20 reloc at that offset to
+                    // compute the actual low 12 bits of the PC-relative address.
+                    const quint32 hiVAddr = symAddr + rel.addend; // VMA of the AUIPC
+                    qint32 lo12 = 0;
+                    bool found = false;
+                    for (int rr2 = 0; rr2 < rels.size(); ++rr2) {
+                        const ElfReader::Relocation& r2 = rels[rr2];
+                        if (r2.type != 23)
+                            continue; // only PCREL_HI20
+                        if (r2.targetSection != rel.targetSection)
+                            continue;
+                        const quint32 r2VAddr = targetBaseAddr + file->secOffset[r2.targetSection] + r2.offset;
+                        if (r2VAddr != hiVAddr)
+                            continue;
+                        quint32 hiSym = 0;
+                        if (r2.symbolIdx < file->symAddr.size())
+                            hiSym = file->symAddr[r2.symbolIdx];
+                        const qint32 fullOffset = (hiSym + r2.addend) - r2VAddr;
+                        lo12 = fullOffset - ((fullOffset + 0x800) & 0xFFFFF000);
+                        found = true;
+                        break;
+                    }
+                    if (!found) {
+                        d_error = QString("Cannot find paired PCREL_HI20 for PCREL_LO12 at offset 0x%1 in %2")
+                                    .arg(rel.offset, 0, 16).arg(file->filename);
+                        return false;
+                    }
+                    if (rel.type == 24) {
+                        // I-type
+                        insn = (insn & 0x000FFFFF) | ((lo12 & 0xFFF) << 20);
+                    } else {
+                        // S-type
+                        insn = (insn & 0x01FFF07F) | ((lo12 & 0x1F) << 7) | (((lo12 >> 5) & 0x7F) << 25);
+                    }
+                    writeLE32(p, insn);
+                } else if (rel.type == 26) {
+                    // R_RISCV_HI20 (LUI)
+                    const quint32 val = symAddr + rel.addend;
+                    const quint32 hi = (val + 0x800) & 0xFFFFF000;
+                    insn = (insn & 0x00000FFF) | hi;
+                    writeLE32(p, insn);
+                } else if (rel.type == 27) {
+                    // R_RISCV_LO12_I (ADDI, LW, etc.)
+                    const quint32 val = symAddr + rel.addend;
+                    const quint32 lo = val & 0xFFF;
+                    insn = (insn & 0x000FFFFF) | (lo << 20);
+                    writeLE32(p, insn);
+                } else if (rel.type == 28) {
+                    // R_RISCV_LO12_S (SW, SB, etc.)
+                    const quint32 val = symAddr + rel.addend;
+                    const quint32 lo = val & 0xFFF;
+                    insn = (insn & 0x01FFF07F) | ((lo & 0x1F) << 7) | ((lo >> 5) << 25);
+                    writeLE32(p, insn);
+                } else if (rel.type == 16) {
+                    // R_RISCV_BRANCH
+                    qint32 offset = symAddr - patchVAddr;
+                    quint32 b_imm = ((offset >> 12) & 1) << 31 | ((offset >> 5) & 0x3f) << 25 |
+                                    ((offset >> 1) & 0xf) << 8 | ((offset >> 11) & 1) << 7;
+                    writeLE32(p, (insn & 0x1FFF07F) | b_imm);
+                } else if (rel.type == 17) {
+                    // R_RISCV_JAL
+                    const qint32 offset = symAddr - patchVAddr;
+                    const quint32 j_imm = ((offset >> 20) & 1) << 31 | ((offset >> 1) & 0x3ff) << 21 |
+                                    ((offset >> 11) & 1) << 20 | ((offset >> 12) & 0xff) << 12;
+                    writeLE32(p, (insn & 0xFFF) | j_imm);
+                } else if (rel.type == 29) {
+                    // R_RISCV_TPREL_HI20 (LUI for TLS)
+                    const quint32 val = symAddr + rel.addend;
+                    const quint32 hi = (val + 0x800) & 0xFFFFF000;
+                    insn = (insn & 0x00000FFF) | hi;
+                    writeLE32(p, insn);
+                } else if (rel.type == 30) {
+                    // R_RISCV_TPREL_LO12_I (TLS I-type)
+                    const quint32 val = symAddr + rel.addend;
+                    const quint32 lo = val & 0xFFF;
+                    insn = (insn & 0x000FFFFF) | (lo << 20);
+                    writeLE32(p, insn);
+                } else if (rel.type == 31) {
+                    // R_RISCV_TPREL_LO12_S (TLS S-type)
+                    const quint32 val = symAddr + rel.addend;
+                    const quint32 lo = val & 0xFFF;
+                    insn = (insn & 0x01FFF07F) | ((lo & 0x1F) << 7) | ((lo >> 5) << 25);
+                    writeLE32(p, insn);
+                } else if (rel.type == 32) {
+                    // R_RISCV_TPREL_ADD — hint, ignore
+                } else if (rel.type == 51) {
+                    // R_RISCV_RELAX — linker relaxation hint, ignore
+                } else if (rel.type == 35 || rel.type == 39) {
+                    // R_RISCV_ADD32 / R_RISCV_SUB32
+                    quint32 cur = readLE32(p);
+                    if (rel.type == 35)
+                        cur += symAddr + rel.addend;
+                    else
+                        cur -= symAddr + rel.addend;
+                    writeLE32(p, cur);
+                } else if (rel.type == 34 || rel.type == 38) {
+                    // R_RISCV_ADD16 / R_RISCV_SUB16
+                    quint16 cur = readLE16(p);
+                    if (rel.type == 34)
+                        cur += (quint16)(symAddr + rel.addend);
+                    else
+                        cur -= (quint16)(symAddr + rel.addend);
+                    writeLE16(p, cur);
+                } else if (rel.type == 33 || rel.type == 37) {
+                    // R_RISCV_ADD8 / R_RISCV_SUB8
+                    quint8 cur = (quint8)(*p);
+                    if (rel.type == 33)
+                        cur += (quint8)(symAddr + rel.addend);
+                    else
+                        cur -= (quint8)(symAddr + rel.addend);
+                    *p = (char)cur;
+                } else if (rel.type == 53 || rel.type == 52) {
+                    // R_RISCV_SET6 (53) / R_RISCV_SUB6 (52)
+                    quint8 cur = (quint8)(*p);
+                    if (rel.type == 53)
+                        cur = (cur & 0xC0) | ((symAddr + rel.addend) & 0x3F);
+                    else
+                        cur = (cur & 0xC0) | (((cur & 0x3F) - (symAddr + rel.addend)) & 0x3F);
+                    *p = (char)cur;
+                } else if (rel.type == 54) {
+                    // R_RISCV_SET8
+                    *p = (char)(quint8)(symAddr + rel.addend);
+                } else if (rel.type == 55) {
+                    // R_RISCV_SET16
+                    writeLE16(p, (quint16)(symAddr + rel.addend));
+                } else if (rel.type == 56) {
+                    // R_RISCV_SET32
+                    writeLE32(p, symAddr + rel.addend);
+                } else {
+                    d_error = QString("Unsupported RISC-V relocation type %1 in %2").arg(rel.type).arg(file->filename);
+                    return false;
+                }
+            }
         }
     }
     return true;
@@ -702,4 +934,45 @@ void ElfLinker::emitShdr(QByteArray& out, quint32 name, quint32 type, quint32 fl
     emit32(out, name); emit32(out, type); emit32(out, flags); emit32(out, addr);
     emit32(out, off);  emit32(out, size); emit32(out, link);  emit32(out, info);
     emit32(out, align); emit32(out, entsize);
+}
+
+QByteArray ElfLinker::generateEspAppDescriptor(const QString& outPath) {
+    // ESP-IDF esp_app_desc_t: 256-byte structure expected by espflash/bootloader
+    // See https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html
+    QByteArray desc(256, '\0');
+    quint8* p = reinterpret_cast<quint8*>(desc.data());
+
+    // magic_word (offset 0, 4 bytes)
+    writeLE32(p + 0, 0xABCD5432);
+
+    // secure_version (offset 4, 4 bytes) — 0 for bare-metal
+    writeLE32(p + 4, 0);
+
+    // reserv1[2] (offset 8, 8 bytes) — zeroed
+
+    // version[32] (offset 16, 32 bytes)
+    QByteArray version = "1.0.0";
+    memcpy(p + 16, version.constData(), qMin(version.size(), 31));
+
+    // project_name[32] (offset 48, 32 bytes) — derived from output filename
+    QByteArray projName = QFileInfo(outPath).baseName().toUtf8();
+    memcpy(p + 48, projName.constData(), qMin(projName.size(), 31));
+
+    // time[16] (offset 80, 16 bytes) — current compile time
+    QByteArray timeStr = QDateTime::currentDateTime().toString("hh:mm:ss").toUtf8();
+    memcpy(p + 80, timeStr.constData(), qMin(timeStr.size(), 15));
+
+    // date[16] (offset 96, 16 bytes) — current compile date
+    QByteArray dateStr = QDateTime::currentDateTime().toString("MMM dd yyyy").toUtf8();
+    memcpy(p + 96, dateStr.constData(), qMin(dateStr.size(), 15));
+
+    // idf_ver[32] (offset 112, 32 bytes)
+    QByteArray idfVer = "standalone";
+    memcpy(p + 112, idfVer.constData(), qMin(idfVer.size(), 31));
+
+    // app_elf_sha256[32] (offset 144, 32 bytes) — zeroed now, patched after ELF assembly
+
+    // Remaining fields (offset 176..255) — zeroed (min/max efuse, mmu_page_size, reserv2/3)
+
+    return desc;
 }

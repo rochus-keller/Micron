@@ -39,6 +39,17 @@ namespace Mil
         // Configure the base virtual load address (e.g., 0x08048000 for Linux, 0x8000 for Raspi bare-metal)
         void setBaseAddress(quint32 addr) { d_baseAddress = addr; }
 
+        // Configure ESP32 Harvard Architecture memory map (opt-in)
+        // dromAddr: Flash base for .rodata (e.g. 0x40000000)
+        // iromAddr: Flash base for .text   (e.g. 0x40010000)
+        // sramAddr: SRAM base for .data/.bss (e.g. 0x4FF20000)
+        void setEsp32MemoryMap(quint32 dromAddr, quint32 iromAddr, quint32 sramAddr) {
+            d_dromAddress = dromAddr;
+            d_iromAddress = iromAddr;
+            d_dataAddress = sramAddr;
+            d_isEsp32 = true;
+        }
+
         bool addFile(const QString& filename);
         bool addArchive(const QString& filename);
         bool link(const QString& outPath);
@@ -74,6 +85,12 @@ namespace Mil
         ElfReader::Architecture d_arch;
         quint32 d_baseAddress;
 
+        // ESP32 Harvard architecture fields (only used when d_isEsp32 == true)
+        quint32 d_dromAddress = 0;
+        quint32 d_iromAddress = 0;
+        quint32 d_dataAddress = 0;
+        bool d_isEsp32 = false;
+
         // Computed segment virtual addresses (set during link())
         quint32 d_textAddr = 0;
         quint32 d_rodataAddr = 0;
@@ -99,6 +116,7 @@ namespace Mil
         bool extractFromArchives();
         bool buildGot();
         bool applyRelocations();
+        QByteArray generateEspAppDescriptor(const QString& outPath);
 
         static inline quint32 alignTo(quint32 val, quint32 align) {
             return (val + align - 1) & ~(align - 1);
