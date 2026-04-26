@@ -593,6 +593,21 @@ int Declaration::getIndexOf(Declaration* ref) const
     return -1;
 }
 
+Declaration *Declaration::getByIndex(int i, int kind) const
+{
+    int idx = -1;
+    Declaration* d = link;
+    while( d )
+    {
+        if( d->kind == kind )
+            idx++;
+        if( idx == i )
+            return d;
+        d = d->next;
+    }
+    return 0;
+}
+
 Declaration*Declaration::find(const QByteArray& name, bool recursive)
 {
     Declaration* d = link;
@@ -810,6 +825,27 @@ void Expression::setType(Type * t)
 const char *Expression::getName() const
 {
     return getName(kind);
+}
+
+Declaration *Expression::getDecl(Declaration *curProc)
+{
+    switch(kind)
+    {
+    case ModuleVar:
+    case ProcDecl:
+    case ConstDecl:
+    case TypeDecl:
+    case FieldSelect:
+    case MethSelect:
+    case IntfSelect:
+        return val.value<Declaration*>();
+    case LocalVar:
+    case Param:
+        if( curProc )
+            return curProc->getByIndex(val.toInt(), kind);
+        break;
+    }
+    return 0;
 }
 
 const char *Expression::getName(quint8 kind)

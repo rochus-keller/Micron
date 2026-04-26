@@ -203,6 +203,7 @@ namespace Mic {
         void replaceAll(Type* what, Type* by);
         void replaceAll(Declaration*,Type* what, Type* by);
         Expression* createSelector(Declaration* field, Expression* prev, bool needsLvalue, const RowCol& pos);
+        Type* getGuardedType(Declaration* d);
 
     private:
         AstModel* mdl;
@@ -239,6 +240,7 @@ namespace Mic {
         Symbol* last;
         QHash<Declaration*,SymList> xref;
         QHash<Declaration*,DeclList> subs;
+        QList< QPair<Declaration*, Type*> > typeOverrides;
         DeclList forwards;
         QList<Type*> allTypes;
         Token importer;

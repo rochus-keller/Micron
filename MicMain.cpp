@@ -27,6 +27,7 @@
 #include "MilEmitter.h"
 #include "MilAstSerializer.h"
 #include "MilArmv7Renderer.h"
+#include "MilRv32Renderer.h"
 #include "MilX86Renderer.h"
 #include "MilElfLinker.h"
 #include <QCoreApplication>
@@ -378,6 +379,93 @@ static void compileArm(Manager& mgr, const QString& outPath, const QStringList& 
     }
 }
 
+static void compileRv32(Manager& mgr, const QString& outPath, const QStringList& libDirs,
+                       const QStringList& linkLibs, const QStringList& linkObjs,
+                       const QString& exeName, bool dbg = false, bool useRvAbi = true,
+                       bool hasFloat = true, bool hasHwDiv = true, bool esp32 = false)
+{
+    // RV32 backend: generate ELF relocatable objects for each module
+    mgr.loader.getModel().calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
+
+    QStringList objFiles;
+    bool hasErrors = false;
+
+    foreach( Mil::Declaration* module, mgr.loader.getModulesInDependencyOrder() )
+    {
+        if( module->name == "MIC$" )
+            continue;
+
+        // Reset all flags for this module's compile pass
+        foreach( Mil::Declaration* m, mgr.loader.getModel().getModules() )
+        {
+            m->translated = false;
+            for (Mil::Declaration* sub = m->subs; sub; sub = sub->next) {
+                if (sub->kind == Mil::Declaration::Procedure)
+                    sub->validated = false;
+                if (sub->kind == Mil::Declaration::TypeDecl && sub->getType()) {
+                    foreach (Mil::Declaration* msub, sub->getType()->subs) {
+                        if (msub->kind == Mil::Declaration::Procedure)
+                            msub->validated = false;
+                    }
+                }
+            }
+        }
+
+        Mil::Rv32::Renderer renderer(&mgr.loader.getModel());
+        renderer.setEmitDwarf(dbg);
+        renderer.setUseRvAbi(useRvAbi);
+        renderer.setHasFloat(hasFloat);
+        renderer.setHardwareDivide(hasHwDiv);
+
+        if( !renderer.renderModule(module) )
+        {
+            qCritical() << "error generating RV32 code for module" << module->name
+                        << ":" << renderer.errorMessage();
+            hasErrors = true;
+            break;
+        }
+
+        const QString objFile = QDir(outPath).absoluteFilePath(module->name + ".o");
+
+        if( !renderer.writeToFile(objFile) )
+        {
+            qCritical() << "cannot write object file" << objFile;
+            hasErrors = true;
+            break;
+        }
+        qDebug() << "  generated" << objFile;
+        objFiles << objFile;
+    }
+
+    if( !hasErrors )
+    {
+        qDebug() << "#### generated" << objFiles.size() << "RV32 ELF relocatable object files";
+
+        // Generate main.o that calls all module inits in dependency order
+        QByteArrayList moduleNames;
+        foreach( Mil::Declaration* module, mgr.loader.getModel().getRootModules() )
+        {
+            if( module->name == "MIC$" )
+                continue;
+            moduleNames << module->name;
+        }
+        const QString mainObj = QDir(outPath).absoluteFilePath("main+.o");
+        if( Mil::Rv32::Renderer::generateMainObject(moduleNames, mainObj, false )) // TODO: configurable useRvAbi) )
+        {
+            qDebug() << "  generated" << mainObj;
+            objFiles << mainObj;
+        }
+        else
+            qCritical() << "cannot generate main+.o";
+    }
+
+    if( !hasErrors && (!libDirs.isEmpty() || !linkLibs.isEmpty() || !linkObjs.isEmpty()) )
+    {
+        if( !linkExecutable(objFiles, libDirs, linkLibs, linkObjs, outPath, exeName, esp32) )
+            hasErrors = true;
+    }
+}
+
 static bool linkExecutable(const QStringList& objFiles, const QStringList& libDirs,
                            const QStringList& linkLibs, const QStringList& linkObjs,
                            const QString& outPath, const QString& exeName,
@@ -390,6 +478,11 @@ static bool linkExecutable(const QStringList& objFiles, const QStringList& libDi
     }
 
     Mil::ElfLinker linker;
+    if( esp32 )
+        linker.setEsp32MemoryMap(0x40020000, 0x40010000, 0x4FF20000); // intentionally using 0x40020000 and not 0x40000000
+            // we simply move .rodata higher up in the cache window, out of the Mask ROM's shadow.
+            // 0x40020000 is safely inside the Flash Cache MMU window. The bootloader will correctly map it.
+            // It is far above the Internal ROM. When the CPU reads 0x40020194, it will fetch the actual 0x50118000 literal from the Flash.
 
     // Add all compiler-generated object files
     for( int i = 0; i < objFiles.size(); i++ )
@@ -600,6 +693,11 @@ static void process(const QString& file, const QStringList& searchPaths,
     if( all == ok && (arch == "arm7" || arch == "armv7") )
     {
         compileArm(mgr, outPath, libDirs, linkLibs, linkObjs, info.baseName(), dbg, useAapcs);
+    }
+    if( all == ok && (arch == "rv32" || arch == "riscv32") )
+    {
+        compileRv32(mgr, outPath, libDirs, linkLibs, linkObjs, info.baseName(), dbg, useAapcs,
+                    /*hasFloat*/true, /*hasHwDiv*/true, esp32);
     }
     if( all == ok && (arch == "x86" || arch == "i386") )
     {

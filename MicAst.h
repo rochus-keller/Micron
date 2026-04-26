@@ -186,6 +186,7 @@ namespace Mic
 
         QList<Declaration*> getParams(bool includeReceiver = false) const;
         int getIndexOf(Declaration*) const;
+        Declaration* getByIndex(int i, int kind) const;
         bool isLvalue() const { return kind == VarDecl || kind == LocalDecl || kind == ParamDecl; }
         bool isPublic() const { return visi >= ReadOnly; }
         Declaration* getModule();
@@ -221,7 +222,7 @@ namespace Mic
 #ifdef _DEBUG
         Kind kind;
 #endif
-        QVariant val; // set elements and call args are ExpList embedded in val
+        QVariant val; // set elements and call args are ExpList embedded in val, also decl for ModuleVar, XDecl, and XSelect
         Expression* lhs; // for unary and binary ops
         Expression* rhs; // for binary ops
         Expression* next; // for args, set elems, and caselabellist
@@ -238,6 +239,7 @@ namespace Mic
         void appendRhs(Expression*);
         void setType(Type*);
         const char *getName() const;
+        Declaration* getDecl(Declaration* curProc);
         static const char *getName(quint8);
         static Expression* createFromToken(quint16,const RowCol&);
         static Expression* create(Kind k = Invalid, const RowCol& rc = RowCol());

@@ -1,0 +1,60 @@
+module EspTest
+
+// Prints the a text to the espflash monitor.
+
+// compile with: ./micc EspTest.mic -a rv32  --aapcs --esp32 -L .
+// flash with: ./espflash flash --chip esp32p4 --monitor EspTest3
+
+const 
+  DR_REG_HPPERIPH1_BASE = 500C0000h
+  DR_REG_USB_SERIAL_JTAG_BASE = DR_REG_HPPERIPH1_BASE + 12000h
+
+proc usb_putchar(ch: char)
+var 
+  EP1_REG: pointer to uint32
+  CONF_REG: pointer to uint32
+begin
+  EP1_REG := { DR_REG_USB_SERIAL_JTAG_BASE }
+  CONF_REG := { DR_REG_USB_SERIAL_JTAG_BASE + 4 }
+  
+  // Wait until the hardware FIFO is free 
+  while band(CONF_REG^, 02h) = 0 do
+  end
+  
+  EP1_REG^ := ord(ch)
+  CONF_REG^ := 01h // Commit byte to host
+end usb_putchar
+
+proc usb_flush()
+var 
+  CONF_REG: pointer to uint32
+begin
+  CONF_REG := { DR_REG_USB_SERIAL_JTAG_BASE + 4 }
+  CONF_REG^ := 01h
+end usb_flush
+
+proc delay_loop(n: uint32)
+var i: uint32
+begin
+  for i := 0 to n-1 do
+  end
+end delay_loop
+
+begin
+ loop
+    usb_putchar('P');
+    usb_putchar('4');
+    usb_putchar('_');
+    usb_putchar('A');
+    usb_putchar('L');
+    usb_putchar('I');
+    usb_putchar('V');
+    usb_putchar('E');
+    usb_putchar(0dx); // \r 
+    usb_putchar(0ax); // \n 
+    
+    usb_flush();
+    
+    delay_loop(2000000); // ~100ms
+ end
+end EspTest

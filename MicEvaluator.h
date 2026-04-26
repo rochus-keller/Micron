@@ -33,6 +33,7 @@ public:
 
     void pushCurProc(Declaration*d) { curProcs.push_back(d); }
     void popCurProc() { curProcs.pop_back(); }
+    Declaration* getCurProc() const { return curProcs.isEmpty() ? 0 : curProcs.back(); }
 
     bool isStackEmpty() const { return stack.empty(); }
 

@@ -778,8 +778,18 @@ Expression *Parser2::createSelector(Declaration *field, Expression *prev, bool n
     Expression* tmp = Expression::create(k, pos );
     tmp->val = QVariant::fromValue(field);
     tmp->lhs = prev;
-    tmp->setType(field->getType());
+    tmp->setType(getGuardedType(field));
     return tmp;
+}
+
+Type *Parser2::getGuardedType(Declaration *d)
+{
+    for (int i = typeOverrides.size() - 1; i >= 0; --i) {
+        if (typeOverrides[i].first == d) {
+            return typeOverrides[i].second;
+        }
+    }
+    return d->getType();
 }
 
 void Parser2::next() {
@@ -1884,7 +1894,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
     }
     Expression* res = Expression::create(k,rc);
     res->val = val;
-    res->setType(d->getType());
+    res->setType(getGuardedType(d));
     res->visi = d->visi;
     return res;
 }
@@ -3529,8 +3539,16 @@ void Parser2::TypeCase(Expression* e)
     }
     expect(Tok_Colon, false, "Case");
     line(e->pos).then_();
-    // TODO: take care that e is a variable or field, and that the type of it is t during the sequence
+
+    // override the type of the guarded variable
+    // NOTE that we cannot simply replace the type of the existing symbol (this fails e.g. in a recursive procedure
+    // calling itself in a type case of one of its parameters), but likely need a new temporary symbol and then fix to the correct symbol
+    Declaration* d = e->getDecl(ev->getCurProc());
+    if( d )
+        typeOverrides.push_back(qMakePair(d, tyname->getType()));
     StatementSequence();
+    if (d)
+        typeOverrides.pop_back();
 }
 
 Value Parser2::label(Type* t) {
