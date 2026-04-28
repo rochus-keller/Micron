@@ -146,7 +146,7 @@ var
 begin
   flags := val(int32, G.x_real_flags(a))
   if band(flags, S9Types.RealNegative) # 0 then
-    flags := val(int32,band(flags, bnot(S9Types.RealNegative)))
+    flags := band(flags, bnot(+S9Types.RealNegative))
   else
     flags := bor(flags, S9Types.RealNegative)
   end

@@ -946,11 +946,13 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs, const RowCol& pos)
 
 bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
 {
+#if 0
     if( rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == Type::UniInt )
     {
         Type* t = lhs && lhs->isInt() ? ev->smallestIntType(rhs->data) : ev->smallestUIntType(rhs->data);
         rhs->setType(t);
     }
+#endif
 
     // Tv is a procedure type and e is the name of a procedure whose formal parameters match those of Tv.
     if( rhs->kind == Declaration::Procedure )
@@ -976,7 +978,11 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
             rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == Type::ByteArrayLit )
         return rhs->data.toByteArray().size() == lhs->len;
 
-    return assigCompat(lhs, rhs->getType(), pos);
+    Type* rhsT = rhs->getType();
+    if( rhs->kind == Declaration::ConstDecl && rhsT->kind == Type::UniInt )
+        rhsT = lhs && lhs->isInt() ? ev->smallestIntType(rhs->data) : ev->smallestUIntType(rhs->data);
+
+    return assigCompat(lhs, rhsT, pos);
 }
 
 bool Parser2::assigCompat(Type* lhs, Expression* rhs, const RowCol& pos)
@@ -994,7 +1000,16 @@ bool Parser2::assigCompat(Type* lhs, Expression* rhs, const RowCol& pos)
 
     if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl ||
             rhs->kind == Expression::MethSelect || rhs->kind == Expression::IntfSelect )
-        return assigCompat(lhs, rhs->val.value<Declaration*>(), pos );
+    {
+        Declaration* d = rhs->val.value<Declaration*>();
+        if( d->kind == Declaration::ConstDecl && d->getType()->kind == Type::UniInt )
+        {
+            Type* rhsT = lhs && lhs->isInt() ? ev->smallestIntType(d->data) : ev->smallestUIntType(d->data);
+            rhs->setType(rhsT);
+            return assigCompat(lhs, rhsT, pos);
+        }else
+            return assigCompat(lhs, d, pos );
+    }
 
     // Tv is a non-open array of CHAR, Te is a string literal
     if( lhs->isCharArray() && lhs->len > 0 && rhs->getType()->kind == Type::StrLit)
@@ -2091,23 +2106,13 @@ void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
     }
 }
 
-static void bindUniInt(Expression* lhs, Expression* rhs, Evaluator* ev)
-{
-    // TODO: currently UniInt is bound in any case, even if both lhs and rhs are UniInt
-    // actually it should be possible to pass UniInt along in the latter case
-    if( lhs )
-        ev->bindUniInt(lhs, rhs && rhs->getType() ? rhs->getType()->isInt() : false);
-    if( rhs )
-        ev->bindUniInt(rhs, lhs && lhs->getType() ? lhs->getType()->isInt() : false);
-}
-
 bool Parser2::checkArithOp(Expression* e)
 {
     if( e->lhs == 0 || e->lhs->getType() == 0 || e->rhs == 0 || e->rhs->getType() == 0 )
         return false; // already reported?
     if( e->lhs->getType()->isNumber() && e->rhs->getType()->isNumber() )
     {
-        bindUniInt(e->lhs, e->rhs, ev);
+        Evaluator::bindUniInt(e->lhs, e->rhs, ev);
         if( e->lhs->getType()->isInt() && e->rhs->getType()->isInt() ||
                 e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt() )
             switch(e->kind)
@@ -2221,7 +2226,7 @@ bool Parser2::checkRelOp(Expression* e)
 
     if( e->lhs->getType()->isNumber() && e->rhs->getType()->isNumber() )
     {
-        bindUniInt(e->lhs, e->rhs, ev);
+        Evaluator::bindUniInt(e->lhs, e->rhs, ev);
         if( e->lhs->getType()->isInt() && e->rhs->getType()->isInt() ||
                 e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt() ||
                 e->lhs->getType()->isReal() && e->rhs->getType()->isReal() )
@@ -3353,7 +3358,7 @@ void Parser2::IfStatement() {
     Token t = la;
     Expression* cond = expression(0);
     if( cond )
-        bindUniInt(cond->lhs, cond->rhs, ev);
+        Evaluator::bindUniInt(cond->lhs, cond->rhs, ev);
     if( cond != 0 && !ev->evaluate(cond, true) )
         errorEv();
     Expression::deleteAllExpressions();

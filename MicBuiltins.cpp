@@ -45,44 +45,24 @@ static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* m
 {
     expectingNArgs(args,2);
 
+    // operand types and result type follow standard integer binary operator rules
+
+    Evaluator::bindUniInt(args[0], args[1], ev);
+
     Type* lhs = args[0]->getType();
     Type* rhs = args[1]->getType();
 
     if( lhs == 0 || rhs == 0 )
         return;
 
-    bool signed_ = false;
-    if( lhs->kind == Type::UniInt && rhs->kind == Type::UniInt )
-        ;
-    else if( lhs->kind == Type::UniInt )
-        signed_ = rhs->isInt();
-    else if( rhs->kind == Type::UniInt )
-        signed_ = lhs->isInt();
+    if( !(lhs->isInt() && rhs->isInt() || lhs->isUInt() && rhs->isUInt()) )
+        throw QString("operands are not of the same type (%1, %2)").arg(lhs->getName()).arg(rhs->getName());
 
-    ev->bindUniInt(args[0], signed_);
-    ev->bindUniInt(args[1], signed_);
-
-    lhs = args[0]->getType();
-    rhs = args[1]->getType();
-
-    if( lhs->isInt() && rhs->isInt() )
-        *ret = lhs->is64() || rhs->is64() ? mdl->getType(Type::INT64) : mdl->getType(Type::INT32);
-    else
-        *ret = lhs->is64() || rhs->is64() ? mdl->getType(Type::UINT64) : mdl->getType(Type::UINT32);
-
-    if( lhs->kind >= Type::UINT8 && lhs->kind < Type::UINT32 )
-        lhs = mdl->getType(Type::UINT32);
-    if( lhs->kind >= Type::INT8 && lhs->kind < Type::INT32 )
-        lhs = mdl->getType(Type::INT32);
-
-    if( rhs->kind >= Type::UINT8 && rhs->kind < Type::UINT32 )
-        rhs = mdl->getType(Type::UINT32);
-    if( rhs->kind >= Type::INT8 && rhs->kind < Type::INT32 )
-        rhs = mdl->getType(Type::INT32);
-
-    if( *ret != args[0]->getType() )
+    // this is Evaluator::convArithOp
+    *ret = Evaluator::maxType(lhs,rhs);
+    if( *ret != lhs )
         args[0] = Evaluator::createAutoConv(args[0], *ret);
-    if( *ret != args[1]->getType() )
+    if( *ret != rhs )
         args[1] = Evaluator::createAutoConv(args[1], *ret);
 }
 
@@ -93,29 +73,42 @@ static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* m
     {
         ev->bindUniInt(args[0], true);
         if( !args[0]->getType()->isInt() )
-            throw QString("expecing unsigned first argument");
+            throw QString("expecing signed integer first argument");
+        // the result type corresponds to the type of x
+        *ret = args[0]->getType();
     }else
     {
         ev->bindUniInt(args[0], false);
-        // accept both signed and unsigned
+        if( !args[0]->getType()->isInteger() )
+            throw QString("expecing integer first argument");
+        // result type is the unsigned integer type corresponding to the size of x
+        switch(args[0]->getType()->kind)
+        {
+        case Type::UINT8:
+        case Type::INT8:
+            *ret = mdl->getType(Type::UINT8);
+            break;
+        case Type::UINT16:
+        case Type::INT16:
+            *ret = mdl->getType(Type::UINT16);
+            break;
+        case Type::UINT32:
+        case Type::INT32:
+            *ret = mdl->getType(Type::UINT32);
+            break;
+        case Type::UINT64:
+        case Type::INT64:
+            *ret = mdl->getType(Type::UINT64);
+            break;
+        }
+        if( *ret != args[0]->getType() && (*ret)->getByteSize() < 4 )
+            args[0] = Evaluator::createAutoConv(args[0], *ret);
     }
+
+
     ev->bindUniInt(args[1], false);
     if( !args[1]->getType()->isUInt() )
-        throw QString("expecing unsigned second argument");
-
-    if( builtin == Builtin::ASR )
-    {
-        if( args[0]->getType()->kind < Type::INT32 )
-            args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::INT32) );
-    }else
-    {
-        if( args[0]->getType()->kind < Type::UINT32 )
-            args[0] = Evaluator::createAutoConv(args[0], mdl->getType(Type::UINT32) );
-    }
-    if( args[1]->getType()->kind < Type::UINT32 )
-        args[1] = Evaluator::createAutoConv(args[1], mdl->getType(Type::UINT32) );
-
-    *ret = args[0]->getType();
+        throw QString("expecing unsigned integer second argument");
 }
 
 QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl)
@@ -146,16 +139,12 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::BNOT: {
         expectingNArgs(args,1);
-        ev->bindUniInt(args.first(), false);
-        Type* t = args.first()->getType();
-        if( t->kind >= Type::UINT8 && t->kind < Type::UINT32 )
-            *ret = mdl->getType(Type::UINT32);
-        else if( t->kind >= Type::INT8 && t->kind < Type::INT32 )
-            *ret = mdl->getType(Type::INT32);
-        else
-            *ret = t;
-        if( t != *ret )
-            args[0] = Evaluator::createAutoConv(args[0], *ret );
+        if( args.first()->getType()->kind == Type::UniInt )
+        {
+            Type* t = ev->smallestUIntType(args.first()->val);
+            args.first()->setType(t);
+        }
+        *ret = args.first()->getType();
         } break;
     case Builtin::BOR:
         checkBitArith(builtin, args, ret, mdl, ev);
@@ -726,6 +715,10 @@ void Builtins::doOrd(const RowCol& pos)
         case Type::Pointer:
         case Type::Proc:
             v.type = ev->mdl->getType(Type::UINT64); // TODO: target byte width
+            break;
+        case Type::INT32:
+        case Type::UINT32:
+            // identity, enums
             break;
         default:
             Q_ASSERT(false);

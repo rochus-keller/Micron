@@ -1081,7 +1081,7 @@ var
 begin
   k := G.symbol_len(G.cadr(x))
   n := IO.make_string("", k - 1)
-  G.Tag[n] := chr(bor(G.Tag[n], T.ConstTag))
+  G.Tag[n] := chr(bor(ord(G.Tag[n]), T.ConstTag))
   G.StrCopy_p(G.string(n), G.symbol_name(G.cadr(x)))
   return n
 end pp_symbol_to_string
@@ -1258,9 +1258,9 @@ var
   pf: int32
 begin
   pf := sig(ord(G.Port_flags[portno]))
-  G.Port_flags[portno] := chr(bor(G.Port_flags[portno], T.LockTag))
+  G.Port_flags[portno] := chr(bor(ord(G.Port_flags[portno]), T.LockTag))
   n := M.new_atom(portno, T._NIL)
-  n := M.cons3(ptype, n, bor(T.AtomTag, T.PortTag))
+  n := M.cons3(ptype, n, sig(bor(T.AtomTag, T.PortTag)))
   G.Port_flags[portno] := chr(pf)
   return n
 end make_port
@@ -1745,7 +1745,7 @@ begin
     | 13: a := bor(bnot(a), b)
     | 14: a := bnot(band(a, b))
     | 15: a := bnot(0i)
-    | 16: a := shl(a, usig(b))
+    | 16: a := sig(shl(a, usig(b)))
     | 17: a := asr(a, usig(b))
     else
       return T._FALSE

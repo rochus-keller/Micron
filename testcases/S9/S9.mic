@@ -552,7 +552,7 @@ begin
   if new_port = -1 then
     return -1
   end
-  G.Port_flags[new_port] := chr(bor(G.Port_flags[new_port], T.LockTag))
+  G.Port_flags[new_port] := chr(bor(ord(G.Port_flags[new_port]), T.LockTag))
   G.File_list := M.cons(IO.make_string(file, sig(strlen(file))), G.File_list)
   M.save(G.Environment)
   while G.cdr(G.Environment) # T._NIL do

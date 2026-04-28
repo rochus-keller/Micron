@@ -86,6 +86,16 @@ public:
             e->rhs = Evaluator::createAutoConv(e->rhs,e->getType());
     }
 
+    static void bindUniInt(Expression* lhs, Expression* rhs, Evaluator* ev)
+    {
+        // TODO: currently UniInt is bound in any case, even if both lhs and rhs are UniInt
+        // actually it should be possible to pass UniInt along in the latter case
+        if( lhs )
+            ev->bindUniInt(lhs, rhs && rhs->getType() ? rhs->getType()->isInt() : false);
+        if( rhs )
+            ev->bindUniInt(rhs, lhs && lhs->getType() ? lhs->getType()->isInt() : false);
+    }
+
 protected:
     bool recursiveRun(Expression*);
     void constructor(Expression*);

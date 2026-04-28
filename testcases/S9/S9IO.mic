@@ -669,7 +669,7 @@ begin
     n := G.cdr(n)
   end
   vec := M.new_vec(S9Types.T_VECTOR, k * sig(size(S9Types.cell)))
-  G.Tag[vec] := chr(bor(ord(G.Tag[vec]), flags))
+  G.Tag[vec] := chr(bor(ord(G.Tag[vec]), usig(flags)))
   p := G.vector(vec)
   n := m
   while n # S9Types._NIL do
@@ -871,7 +871,7 @@ end xread
 procedure print_integer*(n: S9Types.cell): boolean
 var
   first: boolean
-  buf: array usig(S9Types.DigitsPerWord + 2) of char
+  buf: array S9Types.DigitsPerWord + 2 of char
 begin
   if ~G.integer_p(n) then
     return false
