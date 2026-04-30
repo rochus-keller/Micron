@@ -337,6 +337,9 @@ bool Evaluator::assign(const RowCol& pos)
 
 bool Evaluator::assign(Expression* lhs, Expression* rhs, const RowCol& pos)
 {
+    if( rhs == 0 )
+        return true; // reported elswhere
+
     if( lhs->getType() && lhs->getType()->isCharArray() && lhs->getType()->len != 0  &&
             ( (rhs->getType() && rhs->getType()->isCharArray() && rhs->getType()->len == 0) ||
                rhs->getType()->kind == Type::StrLit ) )
@@ -2166,30 +2169,41 @@ bool Evaluator::recursiveRun(Expression* e)
             const DeclList formals = e->lhs->kind == Expression::Super && e->lhs->lhs
                     ? e->lhs->lhs->getFormals()
                     : e->lhs->getFormals(); // no receiver here because args doesn't include it
-            const bool isBuiltIn = e->lhs->kind == Expression::Builtin;
-            int nonConsts = 0;
+            const int bi = e->lhs->kind == Expression::Builtin ? e->lhs->val.toInt() : 0;
+
+            bool allConst = true;
+            for(int i = 0; i < args.size(); i++ )
+            {
+                if( !args[i]->isConst() && args[i]->kind != Expression::TypeDecl )
+                {
+                    allConst = false;
+                    break;
+                }
+            }
+
             for(int i = 0; i < args.size(); i++ )
             {
                 bindUniInt(args[i], i < formals.size() ? formals[i]->getType()->isInt() : false);
 
-                if( !recursiveRun(args[i]) )
+                if( bi == Builtin::LEN && i == 0 )
+                {
+                    // we need a special treatment of LEN because we have to avoid that in case of LEN(variable) anything is pushed to MIL stack.
+                    // we cannot get rid of the unused stack element because pop is a statement, not an expression
+                    stack.push_back(Value(args[0]->getType(), QVariant::fromValue(toQuali(args[0]->getType())), Value::TypeDecl));
+                }else if( !recursiveRun(args[i]) )
                     return false;
-                if(!top().isConst() && top().mode != Value::TypeDecl)
-                    nonConsts++;
 
                 if( i < formals.size() )
                 {
-                    Q_ASSERT( !isBuiltIn );
+                    Q_ASSERT( bi == Builtin::Invalid );
                     prepareRhs(formals[i]->getType(), false, args[i]->pos);
-                }else if( isBuiltIn )
+                }else if( bi != Builtin::Invalid )
                 {
                     // in case of built-ins, either all args or none are pushed to MIL-stack.
-                    // if recursiveRun has already pushed at least on to MIL-stack, also all others have to be pushed,
                     // otherwise we get in trouble with the order. If none is pushed, Builtins::callBuiltin will do so
-                    Q_ASSERT( isBuiltIn );
-                    if( nonConsts > 0 )
+                    if( !allConst )
                     {
-                        if( i == 0 && isBuiltIn && e->lhs->val.toInt() == Builtin::ORD && args[i]->getType()->kind == Type::StrLit )
+                        if( i == 0 && bi == Builtin::ORD && args[i]->getType()->kind == Type::StrLit )
                         {
                             // this is a fix because we need the first char of the string literal here, not a string
                             stack.back().val = (char)stack.back().val.toByteArray()[0];
@@ -2198,7 +2212,7 @@ bool Evaluator::recursiveRun(Expression* e)
                         assureTopOnMilStack(false, args[i]->pos); // effects builtin args and variable args
                     }
                 }else
-                    Q_ASSERT(false);
+                    return error("more actual than formal arguments", e->pos);
             }
             if( !recursiveRun(e->lhs) ) // here 'b' of "a.b()" is evaluated in case of proc type calls;
                 return false;

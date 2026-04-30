@@ -28,6 +28,7 @@ namespace Mic
     struct Builtin
     {
         enum Type {
+            Invalid,
             // functions
             ABS, CAP, BAND, ASR, BNOT, BOR, BSET, SHL, SHR,
             BXOR, CAST, CHR, DEFAULT, FLOOR, FLT, GETENV, LEN, MAX,
@@ -272,8 +273,7 @@ namespace Mic
             type(t),val(v),mode(m),ref(false),visi(0){}
 
         bool isConst() const { return mode == Const; }
-        bool isLvalue() const { return mode == Declaration::VarDecl || mode == Declaration::LocalDecl ||
-                    mode == Declaration::ParamDecl; }
+        bool isLvalue() const { return mode == VarDecl || mode == LocalDecl || mode == ParamDecl; }
         bool isCallable() const;
     };
     typedef QList<Value> MetaActualList;

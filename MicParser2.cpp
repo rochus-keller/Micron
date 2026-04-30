@@ -3273,7 +3273,7 @@ void Parser2::assignmentOrProcedureCall() {
         Expression* rhs = expression(lhs->getType());
         if( rhs && !assigCompat( lhs->getType(), rhs, tok.toRowCol() ) )
         {
-            //assigCompat( lhs->getType(), rhs, tok.toRowCol() ); // TEST
+            // assigCompat( lhs->getType(), rhs, tok.toRowCol() ); // TEST
             error(tok, "right side is not assignment compatible with left side");
         }
         if( !lhs->isAssignable() )
@@ -3641,7 +3641,7 @@ void Parser2::ForStatement() {
         Expression* lhs = toExpr(to, to->pos);
         Expression* end = expression(idxvar->getType());
         ev->bindUniInt(end, idxvar->getType()->isInt());
-        if( end->getType()->kind != idxvar->getType()->kind )
+        if( end && end->getType()->kind != idxvar->getType()->kind )
             end = ev->createAutoConv(end, idxvar->getType());
         ev->assign(lhs, end, to->pos);
         Expression::deleteAllExpressions();

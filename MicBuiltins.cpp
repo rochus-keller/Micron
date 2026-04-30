@@ -1045,8 +1045,12 @@ void Builtins::LEN(int nArgs,const RowCol& pos)
 {
     Value what = ev->stack.takeLast();
 
-    if( !what.isConst() )
-        ev->out->pop_();
+    Q_ASSERT(what.mode == Value::TypeDecl); // Evaluator Expression::Call makes sure every expression is properly converted
+#if 0
+    if( !what.isConst() && what.mode != Value::TypeDecl )
+        ev->out->pop_(); // we cannot use pop in the LEN implementation because pop is a statement, not an expression
+#endif
+
     Type* arr = what.type;
     if( arr->kind == Type::Pointer )
         arr = arr->getType();

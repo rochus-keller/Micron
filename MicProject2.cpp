@@ -852,9 +852,14 @@ Declaration *Project2::loadModule(const Import &imp)
     modules.append(ModuleSlot(fixedImp,file,0));
     ms = &modules.back();
 
-//#define _NO_MIL_ // TEST
-#ifdef _NO_MIL_
-    Mil::RenderSplitter imr;
+//#define _SPLITTER_ // TEST
+#ifdef _SPLITTER_
+    Mil::IlAstRenderer ast(&loader.getModel());
+    QFile out("test.mil");
+    out.open(QIODevice::WriteOnly);
+    Mil::IlAsmRenderer asm_(&out,false);
+    Mil::RenderSplitter imr(QList<Mil::AbstractRenderer*>() << &ast << &asm_);
+
 #else
     Mil::IlAstRenderer imr(&loader.getModel());
 #endif

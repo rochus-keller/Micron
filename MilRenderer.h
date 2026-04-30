@@ -174,6 +174,8 @@ namespace Mil
         bool renderLineInfo;
     };
 
+    class Declaration;
+
     class RenderSplitter : public AbstractRenderer
     {
     public:
@@ -197,11 +199,12 @@ namespace Mil
                        const Quali& typeRef,
                        bool isPublic = true, quint8 bits = 0 );
         void line(quint32);
+
+        Declaration* getModule() const { return 0; }
     private:
         QList<AbstractRenderer*> renderer;
     };
 
-    class Declaration;
     class Statement;
     class Expression;
 

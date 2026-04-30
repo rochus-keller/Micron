@@ -24,6 +24,7 @@ Declaration AstModel::globalScope;
 Type* AstModel::types[Type::MaxBasicType] = {0};
 
 const char* Builtin::name[] = {
+    "?",
     "ABS", "CAP", "BAND", "ASR", "BNOT", "BOR", "BSET", "SHL", "SHR",
     "BXOR", "CAST", "CHR", "DEFAULT", "FLOOR", "FLT", "GETENV", "LEN", "MAX",
     "MIN", "ODD", "ORD", "SIZE", "STRLEN", "VAL", "SIG", "USIG",
