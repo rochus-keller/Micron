@@ -1885,12 +1885,15 @@ Expression* Parser2::ExpInstr() {
     } else if( la.d_code == Tok_DUP ) {
         expect(Tok_DUP, true, "ExpInstr");
         res->kind = IL_dup;
+#if 0
+        // obsolete
     } else if( la.d_code == Tok_INITOBJ ) {
         expect(Tok_INITOBJ, true, "ExpInstr");
         res->kind = IL_initobj;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl )
             error(cur, "expecting a type declaration");
+#endif
     } else if( la.d_code == Tok_ISINST ) {
         expect(Tok_ISINST, true, "ExpInstr");
         res->kind = IL_isinst;

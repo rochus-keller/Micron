@@ -382,7 +382,10 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,2);
         break;
     case Builtin::NEW:
+    case Builtin::NEWGC:
+    case Builtin::NEWINIT:
         expectingNMArgs(args,1,2);
+        break;
         if( args[0]->getType()->kind != Type::Pointer )
             throw "expecting a pointer as the first argument";
         break;
@@ -402,6 +405,21 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::SETENV:
         expectingNArgs(args,2);
         break;
+    case Builtin::CLI:
+        expectingNArgs(args,0);
+        break;
+    case Builtin::GETREG:
+        expectingNArgs(args,2);
+        break;
+    case Builtin::NOP:
+        expectingNArgs(args,0);
+        break;
+    case Builtin::PUTREG:
+        expectingNArgs(args,2);
+        break;
+    case Builtin::STI:
+        expectingNArgs(args,0);
+        break;
     }
     }catch( const QString& err )
     {
@@ -419,6 +437,8 @@ bool Builtins::requiresLvalue(quint8 builtin, quint8 arg)
     switch( builtin )
     {
     case Builtin::NEW:
+    case Builtin::NEWGC:
+    case Builtin::NEWINIT:
     case Builtin::INC:
     case Builtin::DEC:
     case Builtin::EXCL:
@@ -428,6 +448,11 @@ bool Builtins::requiresLvalue(quint8 builtin, quint8 arg)
     case Builtin::PRINT: // because we need a pointer to array of chars
     case Builtin::PRINTLN:
         if( arg == 0 )
+            return true;
+        break;
+
+    case Builtin::GETREG:
+        if( arg == 1 )
             return true;
         break;
     }
@@ -1041,6 +1066,87 @@ void Builtins::DEC(int nArgs,const RowCol& pos)
     incdec(nArgs,false,pos);
 }
 
+static Mil::EmiTypes::Basic toBasic(Type* t)
+{
+    switch(t->kind)
+    {
+    case Type::Pointer:
+    case Type::Proc:
+    case Type::Nil:
+        return Mil::EmiTypes::IntPtr;
+    case Type::BOOL:
+    case Type::CHAR:
+    case Type::UINT8:
+        return Mil::EmiTypes::U1;
+    case Type::UINT16:
+        return Mil::EmiTypes::U2;
+    case Type::UINT32:
+    case Type::SET:
+        return Mil::EmiTypes::U4;
+    case Type::UINT64:
+        return Mil::EmiTypes::U8;
+    case Type::INT8:
+        return Mil::EmiTypes::I1;
+    case Type::INT16:
+        return Mil::EmiTypes::I2;
+    case Type::INT32:
+        return Mil::EmiTypes::I4;
+    case Type::INT64:
+        return Mil::EmiTypes::I8;
+    case Type::FLT32:
+        return Mil::EmiTypes::R4;
+    case Type::FLT64:
+        return Mil::EmiTypes::R8;
+    default:
+        Q_ASSERT(false);
+    }
+}
+void Builtins::GETREG(const RowCol &pos)
+{
+    Value to = ev->stack.takeLast();
+    Value reg = ev->stack.takeLast();
+
+    if( !reg.isConst() || !reg.type->isUInt() || reg.val.toUInt() > 0xff )
+    {
+        ev->error("expecting a constant between 0 and 255 as the first argument",pos);
+        return;
+    }
+
+    if( !to.isLvalue() && !to.ref )
+    {
+        ev->error("cannot write to second argument",pos);
+        return;
+    }
+
+    if( !to.type->isUInt() )
+    {
+        ev->error("expecting second argument of unsigned integer type",pos);
+        return;
+    }
+
+    ev->out->getreg_(reg.val.toUInt(), toBasic(to.type));
+}
+
+void Builtins::PUTREG(const RowCol &pos)
+{
+    Value from = ev->stack.takeLast();
+    Value reg = ev->stack.takeLast();
+
+    if( !reg.isConst() || !reg.type->isUInt() || reg.val.toUInt() > 0xff )
+    {
+        ev->error("expecting a constant between 0 and 255 as the first argument",pos);
+        return;
+    }
+
+    if( !from.type->isUInt() )
+    {
+        ev->error("expecting second argument of unsigned integer type",pos);
+        return;
+    }
+
+    ev->out->putreg_(reg.val.toUInt(), toBasic(from.type));
+}
+
 void Builtins::LEN(int nArgs,const RowCol& pos)
 {
     Value what = ev->stack.takeLast();
@@ -1119,7 +1225,7 @@ void Builtins::PRINT(int nArgs, bool ln, const RowCol& pos)
     }
 }
 
-void Builtins::NEW(int nArgs,const RowCol& pos)
+void Builtins::NEW(int nArgs,const RowCol& pos, int bi)
 {
     Value len;
     if( nArgs == 2 )
@@ -1143,7 +1249,20 @@ void Builtins::NEW(int nArgs,const RowCol& pos)
     }
     if( what.type->getType()->kind == Type::Record || what.type->getType()->kind == Type::Object )
     {
-        ev->out->newobj_(ev->toQuali(what.type->getType()));
+        switch(bi)
+        {
+        case Builtin::NEW:
+            ev->out->newobj_(ev->toQuali(what.type->getType()));
+            break;
+        case Builtin::NEWINIT:
+            ev->out->newobj0_(ev->toQuali(what.type->getType()));
+            break;
+        case Builtin::NEWGC:
+            ev->out->newobjgc_(ev->toQuali(what.type->getType()));
+            break;
+        default:
+            Q_ASSERT(false);
+        }
         ev->out->stind_(Mil::EmiTypes::IntPtr);
     }else if( what.type->getType()->len > 0 ) // fixed size array
     {
@@ -1152,7 +1271,20 @@ void Builtins::NEW(int nArgs,const RowCol& pos)
             ev->error("cannot dynamically set array length for non-open array",pos);
             return;
         }
-        ev->out->newobj_(ev->toQuali(what.type->getType())); // don't use newarr for fixed size arrays
+        switch(bi)
+        {
+        case Builtin::NEW:
+            ev->out->newobj_(ev->toQuali(what.type->getType())); // don't use newarr for fixed size arrays
+            break;
+        case Builtin::NEWINIT:
+            ev->out->newobj0_(ev->toQuali(what.type->getType())); // don't use newarr for fixed size arrays
+            break;
+        case Builtin::NEWGC:
+            ev->out->newobjgc_(ev->toQuali(what.type->getType())); // don't use newarr for fixed size arrays
+            break;
+        default:
+            Q_ASSERT(false);
+        }
         ev->out->stind_(Mil::EmiTypes::IntPtr);
     }else // open array
     {
@@ -1161,7 +1293,20 @@ void Builtins::NEW(int nArgs,const RowCol& pos)
             ev->error("expecting two arguments, the second as the explicit length",pos);
             return;
         }
-        ev->out->newarr_(ev->toQuali(what.type->getType()->getType()));
+        switch(bi)
+        {
+        case Builtin::NEW:
+            ev->out->newarr_(ev->toQuali(what.type->getType()->getType()));
+            break;
+        case Builtin::NEWINIT:
+            ev->out->newarr0_(ev->toQuali(what.type->getType()->getType()));
+            break;
+        case Builtin::NEWGC:
+            ev->out->newarrgc_(ev->toQuali(what.type->getType()->getType()));
+            break;
+        default:
+            Q_ASSERT(false);
+        }
         ev->out->stind_(Mil::EmiTypes::IntPtr);
     }
 }
@@ -1200,9 +1345,11 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         PRINT(nArgs,builtin == Builtin::PRINTLN,pos);
         break;
     case Builtin::NEW:
+    case Builtin::NEWINIT:
+    case Builtin::NEWGC:
         checkNumOfActuals(nArgs, 1, 2);
         pushActualsToMilStack(nArgs,pos);
-        NEW(nArgs,pos);
+        NEW(nArgs,pos, builtin);
         handleStack = false;
         break;
     case Builtin::DISPOSE:
@@ -1322,7 +1469,30 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         doUsig(pos);
         handleStack = false;
         break;
-
+    case Builtin::NOP:
+        checkNumOfActuals(nArgs, 0);
+        ev->out->nop_();
+        break;
+    case Builtin::CLI:
+        checkNumOfActuals(nArgs, 0);
+        ev->out->cli_();
+        break;
+    case Builtin::STI:
+        checkNumOfActuals(nArgs, 0);
+        ev->out->sti_();
+        break;
+    case Builtin::GETREG:
+        checkNumOfActuals(nArgs, 2);
+        pushActualsToMilStack(nArgs,pos);
+        GETREG(pos);
+        handleStack = false;
+        break;
+    case Builtin::PUTREG:
+        checkNumOfActuals(nArgs, 2);
+        pushActualsToMilStack(nArgs,pos);
+        PUTREG(pos);
+        handleStack = false;
+        break;
 
     default:
         throw QString("built-in not yet implemented");

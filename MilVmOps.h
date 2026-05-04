@@ -124,6 +124,8 @@ OPDEF(pop, SizeArg), OPDEF(dup, SizeArg),
 OPDEF(ret, SizeArg), OPDEF(ret_void, NoOpArgs),
 OPDEF(call, ProcArg), OPDEF(calli, NoOpArgs),
 OPDEF(alloc1, SizeArg), OPDEF(allocN, SizeArg), OPDEF(free, NoOpArgs),
+OPDEF(calloc1, SizeArg), OPDEF(callocN, SizeArg),
+OPDEF(gcalloc1, SizeArg), OPDEF(gcallocN, SizeArg),
 OPDEF(initobj, SizeArg),
 
 OPDEF(vt_size, SizeArg), // suffix of ldarg_vt, starg_vt, ldloc_vt, stloc_vt, ldfld_vt, stfld_vt,
@@ -132,11 +134,18 @@ OPDEF(callvirt, ProcArg), OPDEF(isinst, VtableArg),
 OPDEF(callmi, NoOpArgs),
 OPDEF(callinst, ProcArg),
 OPDEF(line, IntArg),
+OPDEF(nop, NoOpArgs),
+OPDEF(cli, NoOpArgs),
+OPDEF(sti, NoOpArgs),
+OPDEF(putreg, RegWidthArg),
+OPDEF(getreg, RegWidthArg),
+
+// obsolete
+OPDEF(sizeof,NoOpArgs),
 
 // TODO:
 OPDEF(newvla, NoOpArgs),
 // plus low-level ops: GETREG, PUTREG, CLI, STI, NOP
-// plus managed GCNEW
 
 
 

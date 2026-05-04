@@ -58,8 +58,8 @@ namespace Mil
         uint subsborrowed : 1; // Type
 
         // Type
-        uint objectInit : 1; // this or enclosed type need object initialization (vtbl)
-        uint pointerInit : 1; // this or enclosed type need pointer initialization
+        uint objectInit : 1; // this or enclosed type need object initialization (set vtbl pointer)
+        uint pointerInit : 1; // this or enclosed type need pointer nulling (to make the GC happy)
         uint owned : 1;
 
         // Declaration:

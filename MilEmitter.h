@@ -71,6 +71,7 @@ namespace Mil
         static bool equals(const QByteArray&, EmiTypes::Basic);
         static QByteArray toString(const Quali&);
         static QByteArray toString(const Trident&);
+        static quint8 regwidth(EmiTypes::Basic);
 
         void add_();
         void abs_();
@@ -86,6 +87,7 @@ namespace Mil
         void castptr_(const Quali& typeRef);
         void ceq_();
         void cgt_(bool withUnsigned = false);
+        void cli_();
         void clt_(bool withUnsigned = false);
         void conv_(EmiTypes::Basic);
         void div_(bool withUnsigned = false);
@@ -95,10 +97,10 @@ namespace Mil
         void else_();
         void end_();
         void exit_();
+        void getreg_(quint16 reg, EmiTypes::Basic);
         void goto_(const QByteArray& label);
         void if_();
         void iif_();
-        void initobj(const Quali& typeRef);
         void isinst_(const Quali& typeRef);
         void label_(const QByteArray& name);
         void ldarg_(quint16 arg);
@@ -131,11 +133,16 @@ namespace Mil
         void newarr_(const Quali& typeRef);
         void newvla_(const Quali& typeRef); // not in CIL
         void newobj_(const Quali& typeRef);
+        void newarr0_(const Quali& typeRef);
+        void newobj0_(const Quali& typeRef);
+        void newarrgc_(const Quali& typeRef);
+        void newobjgc_(const Quali& typeRef);
         void nop_();
         void not_();
         void or_();
         void pop_();
         void ptroff_(const Quali& typeRef);
+        void putreg_(quint16 reg, EmiTypes::Basic);
         void rem_(bool withUnsigned = false);
         void repeat_();
         void ret_(bool pop);
@@ -145,6 +152,7 @@ namespace Mil
         void starg_(quint16);
         void stelem_(const Quali& typeRef);
         void stfld_(const Trident& fieldRef);
+        void sti_();
         void stind_( EmiTypes::Basic );
         void stind_(const Quali& typeRef); // was CIL stobj
         void stloc_(quint16);

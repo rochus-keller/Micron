@@ -36,6 +36,7 @@ namespace Mic
             // procedures
             ASSERT, DEC, DISPOSE, EXCL, HALT, INC,
             INCL, NEW, PCALL, PRINT, PRINTLN, RAISE, SETENV,
+            CLI, GETREG, NEWGC, NEWINIT, NOP, PUTREG, STI,
             // end
             Max
         };

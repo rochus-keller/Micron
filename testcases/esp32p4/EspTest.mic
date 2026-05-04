@@ -3,7 +3,7 @@ module EspTest
 // Prints the a text to the espflash monitor.
 
 // compile with: ./micc EspTest.mic -a rv32  --aapcs --esp32 -L .
-// flash with: ./espflash flash --chip esp32p4 --monitor EspTest3
+// flash with: ./espflash flash --chip esp32p4 --monitor EspTest
 
 const 
   DR_REG_HPPERIPH1_BASE = 500C0000h

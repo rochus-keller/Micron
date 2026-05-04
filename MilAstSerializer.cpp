@@ -173,7 +173,6 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
         case IL_call:
         case IL_calli:
         case IL_castptr:
-        case IL_initobj:
         case IL_isinst:
         case IL_ldelema:
         case IL_ldelem:
@@ -183,8 +182,12 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
         case IL_ldvar:
         case IL_ldvara:
         case IL_newobj:
+        case IL_newobj0:
+        case IL_newobjgc:
         case IL_newvla:
         case IL_newarr:
+        case IL_newarr0:
+        case IL_newarrgc:
         case IL_ptroff:
         case IL_sizeof: {
                 Quali q;

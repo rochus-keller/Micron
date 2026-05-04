@@ -24,7 +24,7 @@
 #include <QtDebug>
 using namespace Mil;
 
-CeeGen::CeeGen(AstModel* mdl):mdl(mdl)
+CeeGen::CeeGen(AstModel* mdl):mdl(mdl),haveGc(false)
 {
     Q_ASSERT(mdl);
 }
@@ -91,6 +91,8 @@ bool CeeGen::generate(Declaration* module, QIODevice* header, QIODevice* body)
     bout << "#include \"MIC+.h\"" << endl;
     bout << "#include <stdlib.h>" << endl;
     bout << "#include <string.h>" << endl;
+    if( haveGc )
+        bout << "#include <gc.h>" << endl;
     bout << "#include <math.h>" << endl << endl;
 
     visitModule();
@@ -1551,11 +1553,16 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
 
 
     case IL_newobj:
+    case IL_newobj0:
+    case IL_newobjgc:
         Q_ASSERT(e->getType()->kind == Type::Pointer);
         if( deref(e->getType())->objectInit )
         {
             const QByteArray name = typeRef(e->d->getType());
-            out << "(_ptr$ = calloc(1, sizeof(";
+            if( haveGc && e->kind == IL_newobjgc )
+                out << "(_ptr$ = GC_MALLOC(sizeof(";
+            else
+                out << "(_ptr$ = calloc(1, sizeof(";
             out << name;
             out << ")),\n\t\t";
             out << name << "$init$(" << "((" + name + "*)_ptr$)" << ", 1), (";
@@ -1565,20 +1572,28 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         {
             out << "(";
             out << typeRef(e->getType());
-            out << ")calloc(1, sizeof(";
+            if( haveGc && e->kind == IL_newobjgc )
+                out << ")GC_MALLOC(sizeof(";
+            else
+                out << ")calloc(1, sizeof(";
             out << typeRef(e->getType()->getType());
             out << "))";
         }
         break;
 
     case IL_newarr:
+    case IL_newarr0:
+    case IL_newarrgc:
         if( deref(e->getType())->objectInit )
         {
             Type* et = deref(e->d->getType());
             const QByteArray name = typeRef(et);
             out << "(_len$ = ";
             expression(out, e->lhs);
-            out << ", _ptr$ = calloc(_len$,sizeof(";
+            if( haveGc && e->kind == IL_newarrgc )
+                out << ", _ptr$ = GC_MALLOC(_len$ * sizeof(";
+            else
+                out << ", _ptr$ = calloc(_len$,sizeof(";
             out << name << ")),\n\t\t";
             out << name << "$init$(" << "((" << name << "*)_ptr$)" << ", _len$), (";
             out << typeRef(et);
@@ -1588,16 +1603,24 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             Type* et = deref(e->d->getType());
             out << "(";
             out << typeRef(et);
-            out << "*)calloc(";
-            expression(out, e->lhs);
-            out << ",sizeof(";
+            if( haveGc && e->kind == IL_newarrgc )
+            {
+                out << "*)GC_MALLOC(";
+                expression(out, e->lhs);
+                out << " * sizeof(";
+            }else {
+                out << "*)calloc(";
+                expression(out, e->lhs);
+                out << ",sizeof(";
+            }
             out << typeRef(et) << "))";
         }
         break;
 
-
+#if 0
     case IL_initobj:
         {
+        // obsolete
             Type* t = deref(e->d->getType());
             const QByteArray name = typeRef(t);
             out << "_ptr$ = ";
@@ -1606,6 +1629,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             emitSoaInit(out, "((" + name + "*)_ptr$)", true, t, curLevel );
         }
         break;
+#endif
 
     case IL_dup:
         expression(out, e->lhs);

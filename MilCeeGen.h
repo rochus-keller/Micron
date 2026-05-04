@@ -42,6 +42,7 @@ namespace Mil
             res.replace('$','+');
             return res;
         }
+        void setHaveGc(bool b){ haveGc = b; }
     protected:
         void visitModule();
         void visitProcedure(Declaration*);
@@ -82,6 +83,7 @@ namespace Mil
         QSet<Declaration*> done;
         QSet<QPair<Type*,Type*> > itabs;
         int curLevel;
+        bool haveGc;
     };
 }
 

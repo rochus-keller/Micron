@@ -55,7 +55,10 @@ unsigned char Files$Delete(char* name)
 
 unsigned char Files$Eof(struct Files$Handle* f)
 {
-    return feof(f->f);
+    if( f )
+        return feof(f->f);
+    else
+        return 1;
 }
 
 unsigned char Files$Read(struct Files$Handle* f, unsigned char* x)

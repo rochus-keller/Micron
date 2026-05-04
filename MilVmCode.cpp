@@ -653,6 +653,16 @@ bool Code::translateStat(Procedure &proc, Statement *& s)
         } break;
     case IL_line:
         break; // NOP
+    case IL_cli:
+        emitOp(proc, LL_cli);
+        break;
+    case IL_sti:
+        emitOp(proc, LL_sti);
+        break;
+    case IL_putreg:
+        emitOp(proc, LL_putreg, s->id);
+        break;
+
     default:
         Q_ASSERT(false);
     }
@@ -1467,13 +1477,36 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         break;
     case IL_newobj:
     case IL_newarr:
-    case IL_initobj: {
+    case IL_newobj0:
+    case IL_newarr0:
+    case IL_newobjgc:
+    case IL_newarrgc:{
         Type* tt = deref(e->d->getType());
         const int len = tt->getByteSize(pointerWidth);
-        const LL_op op = e->kind == IL_newobj ? LL_alloc1 :
-                                                e->kind == IL_newarr ?
-                                                    LL_allocN : // N is on stack
-                                                    LL_initobj;
+        LL_op op = LL_invalid;
+
+        switch( e->kind )
+        {
+        case IL_newobj:
+            op = LL_alloc1;
+            break;
+        case IL_newarr:
+            op = LL_allocN;
+            break;
+        case IL_newobj0:
+            op = LL_calloc1;
+            break;
+        case IL_newarr0:
+            op = LL_callocN;
+            break;
+        case IL_newobjgc:
+            op = LL_gcalloc1;
+            break;
+        case IL_newarrgc:
+            op = LL_gcallocN;
+            break;
+        }
+
         if( tt->objectInit || tt->pointerInit )
         {
             int id = findTemplate(tt);
@@ -1671,6 +1704,10 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         emitOp(proc, LL_add_i4);
         break;
     }
+
+    case IL_getreg:
+        emitOp(proc, LL_getreg, e->id);
+        break;
 
     case IL_sizeof:
     case IL_newvla:
@@ -1893,6 +1930,9 @@ bool Code::dumpProc(QTextStream& out, Declaration* proc)
                 out << " " << vtables[p->ops[pc].val]->type->decl->toPath();
             else
                 out << " invalid vtable " << p->ops[pc].val;
+            break;
+        case RegWidthArg:
+            out << " " << (p->ops[pc].val & 0xffff) << ":" << (p->ops[pc].val >> 16 & 0xff);
             break;
 
         default:

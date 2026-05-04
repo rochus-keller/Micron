@@ -23,6 +23,8 @@ static int my_printf(const char *fmt, ...) {
 
 unsigned int MIC$$relop1(const char* l, const char* r, int op)
 {
+    if( l == 0 || r == 0 )
+        return 0;
 	switch( op )
 	{
 	case 1: // EQ

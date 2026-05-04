@@ -38,10 +38,12 @@ protected:
 
     // builtin implementations
     void PRINT(int nArgs, bool ln, const RowCol &pos);
-    void NEW(int nArgs, const RowCol &pos);
+    void NEW(int nArgs, const RowCol &pos, int bi);
     void DISPOSE(int nArgs, const RowCol &pos);
     void INC(int nArgs, const RowCol &pos);
     void DEC(int nArgs, const RowCol &pos);
+    void GETREG(const RowCol& pos);
+    void PUTREG(const RowCol& pos);
     void LEN(int nArgs, const RowCol &pos);
     void incdec(int nArgs, bool inc, const RowCol &pos);
     void ASSERT(int nArgs, const RowCol &pos);

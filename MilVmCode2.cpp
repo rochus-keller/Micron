@@ -26,7 +26,7 @@ using namespace Mil;
 using namespace Vm;
 
 Code2::Code2(AstModel* mdl, quint8 pointerWidth, quint8 stackAlignment):Code(mdl, pointerWidth, stackAlignment),
-    reverseArguments(false)
+    reverseArguments(false),haveNop(false)
 {
 }
 
@@ -48,6 +48,7 @@ bool Code2::translateStatSeq(Procedure &proc, Statement *s)
         case IL_stloc_2:
         case IL_stloc_3:
         case IL_stvar:
+        case IL_putreg:
         case IL_ret:
         case IL_free:
             expression(proc, s->args);
@@ -416,19 +417,31 @@ bool Code2::expression(Procedure &proc, Expression* e)
 
 
     case IL_newobj:
+    case IL_newobj0:
+    case IL_newobjgc:
         translateExpr(proc, e);
         break;
 
     case IL_newarr:
+    case IL_newarr0:
+    case IL_newarrgc:
+        expression(proc, e->lhs);
+        translateExpr(proc, e);
+        break;
+
+    case IL_getreg:
         expression(proc, e->lhs);
         translateExpr(proc, e);
         break;
 
 
+#if 0
+        // obsolete
     case IL_initobj:
         expression(proc, e->lhs );
         translateExpr(proc, e);
         break;
+#endif
 
     case IL_dup:
         // No expression(proc, e->lhs);
@@ -436,6 +449,8 @@ bool Code2::expression(Procedure &proc, Expression* e)
         break;
 
     case IL_nop:
+        if( haveNop )
+            emitOp(proc, LL_nop);
         break;
 
     case IL_ptroff:

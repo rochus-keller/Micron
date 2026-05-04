@@ -167,6 +167,7 @@ namespace Mic
         void onRowColMode();
         void onSetInputFile();
         void onSetOptions();
+        // TODO: setAppArgs for command line arguments
         void onNoWarnings();
         void onConvertAllToUtf8();
         void onIncremental();

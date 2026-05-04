@@ -1423,7 +1423,7 @@ void CilAsmGen::expression(Expression* e)
         }
         break;
         
-    case IL_newobj:
+    case IL_newobj: // TODO: 0 and gc
         {
             Type* t = deref(e->getType()->getType());
             out << indent(1) << "sizeof " << typeRef(t) << endl;
@@ -1438,7 +1438,7 @@ void CilAsmGen::expression(Expression* e)
         }
         break;
         
-    case IL_newarr:
+    case IL_newarr: // TODO: 0 and gc
         {
             Type* et = deref(e->d->getType());
             expression(e->lhs);  // Array size
@@ -1456,6 +1456,8 @@ void CilAsmGen::expression(Expression* e)
         }
         break;
         
+#if 0
+        // obsolete
     case IL_initobj:
         {
             expression(e->lhs);  // Address
@@ -1470,6 +1472,7 @@ void CilAsmGen::expression(Expression* e)
             }
         }
         break;
+#endif
         
     case IL_dup:
         expression(e->lhs);

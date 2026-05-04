@@ -2870,6 +2870,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
     }
     case LL_initobj: {
+        // obsolete
         // Pop pointer, optionally copy template data into it.
         // If op.minus is set, val = template index; copy template memory.
         // Otherwise, val = byte size; zero-fill.

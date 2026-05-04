@@ -36,6 +36,7 @@ namespace Vm
         Code2(AstModel*, quint8 pointerWidth, quint8 stackAlignment);
 
         void setReverseArguments(bool b) { reverseArguments = b; }
+        void setHaveNop(bool b) { haveNop = b; }
     protected:
         bool translateStatSeq(Procedure& proc, Statement* s);
         bool translateStatExpr(Procedure &proc, Statement *s);
@@ -43,6 +44,7 @@ namespace Vm
         void pushArgs(Procedure& proc, const QList<Expression*>& args);
     private:
         bool reverseArguments; // only true arguments, not the function or methref in calli and callmi
+        bool haveNop;
     };
 }
 }

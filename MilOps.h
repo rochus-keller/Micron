@@ -33,7 +33,7 @@ enum IL_op
     IL_cast_i4, IL_cast_i8, IL_cast_r4, IL_cast_r8,
     IL_conv_i1, IL_conv_i2, IL_conv_i4, IL_conv_i8, IL_conv_r4, IL_conv_r8,
     IL_conv_u1, IL_conv_u2, IL_conv_u4, IL_conv_u8,
-    IL_div, IL_div_un, IL_dup, IL_iif, IL_initobj, IL_isinst, IL_ldarg, IL_ldarg_s,
+    IL_div, IL_div_un, IL_dup, IL_iif, IL_isinst, IL_ldarg, IL_ldarg_s,
     IL_ldarg_0, IL_ldarg_1, IL_ldarg_2, IL_ldarg_3,
     IL_ldarga, IL_ldarga_s,
     IL_ldc_i4, IL_ldc_i8, IL_ldc_i4_s, IL_ldc_r4, IL_ldc_r8,
@@ -51,8 +51,10 @@ enum IL_op
     IL_ldind, IL_ldproc, IL_ldmeth, IL_ldstr,
     IL_ldvar, IL_ldvara, IL_mul, IL_neg,
     IL_newarr, IL_newvla, IL_newobj,
+    IL_newarr0, IL_newobj0,
+    IL_newarrgc, IL_newobjgc,
     IL_not, IL_or, IL_rem, IL_rem_un, IL_shl, IL_shr, IL_shr_un,
-    IL_sizeof, IL_sub, IL_xor, IL_ptroff, IL_nop,
+    IL_sizeof, IL_sub, IL_xor, IL_ptroff, IL_nop, IL_getreg,
     // statements
     IL_STATEMENTS,
     IL_free, IL_repeat, IL_until,
@@ -64,10 +66,8 @@ enum IL_op
     IL_stind_i1, IL_stind_i2, IL_stind_i4, IL_stind_i8, IL_stind_r4, IL_stind_r8, IL_stind_ip, IL_stind_ipp,
     IL_stloc, IL_stloc_s, IL_stloc_0, IL_stloc_1, IL_stloc_2, IL_stloc_3,
     IL_stind, IL_strcpy, IL_stvar, IL_switch, IL_case, IL_while, IL_do,
+    IL_cli, IL_sti, IL_putreg,
     IL_NUM_OF_OPS
-
-    // TODO low-level ops: GETREG, PUTREG, CLI, STI, NOP
-    // TODO managed GCNEW
 
 }; // Update s_opName !!!
 

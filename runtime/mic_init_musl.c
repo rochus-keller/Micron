@@ -26,5 +26,6 @@ static int __mic$main_wrapper(int argc, char** argv, char** envp)
 
 void __mic$init(int argc, char** argv)
 {
+    // TODO: call Args_setArgcArgv(argc, argv)
     __libc_start_main(__mic$main_wrapper, argc, argv);
 }

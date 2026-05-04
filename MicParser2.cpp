@@ -2486,8 +2486,9 @@ Expression* Parser2::designator(bool needsLvalue) {
             {
                 Builtins bi(ev);
                 const quint8 id = proc->val.toInt();
-                if( (langLevel < 3 && (id == Builtin::NEW || id == Builtin::DISPOSE)) ||
-                    ((langLevel < 2 || !haveExceptions) && (id == Builtin::PCALL || id == Builtin::RAISE)))
+                if( (langLevel < 3 && (id == Builtin::NEW || id == Builtin::DISPOSE || id == Builtin::NEWGC || id == Builtin::NEWINIT)) ||
+                    ((langLevel < 2 || !haveExceptions) && (id == Builtin::PCALL || id == Builtin::RAISE)) ||
+                    (langLevel > 1 && (id == Builtin::CLI || id == Builtin::GETREG || id == Builtin::NOP || id == Builtin::PUTREG || id == Builtin::STI)) )
                     error(lpar, QString("operation not supported on language level %1").arg(langLevel));
 
                 const QString err = bi.checkArgs(id, args, &retType, mdl);
@@ -2998,6 +2999,11 @@ Expression* Parser2::constructor(Type* hint) {
             while(c)
             {
                 Q_ASSERT( c->kind == Expression::IndexValue);
+                if( !c->isConst() )
+                {
+                    error(res->pos, "open array constructor only supported for contant expression components");
+                    return 0;
+                }
                 const qint64 index = c->val.toLongLong();
                 if( test.contains(index) )
                     error(c->pos, "value at array index was already defined");
@@ -3274,7 +3280,8 @@ void Parser2::assignmentOrProcedureCall() {
         if( rhs && !assigCompat( lhs->getType(), rhs, tok.toRowCol() ) )
         {
             // assigCompat( lhs->getType(), rhs, tok.toRowCol() ); // TEST
-            error(tok, "right side is not assignment compatible with left side");
+            error(tok, QString("right side is not assignment compatible with left side (%1, %2)")
+                  .arg(lhs->getType()->getName()).arg(rhs->getType()->getName()));
         }
         if( !lhs->isAssignable() )
             error(t, "cannot assign to lhs" );

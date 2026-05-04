@@ -266,6 +266,33 @@ QByteArray Emitter::toString(const Trident& td)
     return toString(td.first) + "." + td.second;
 }
 
+quint8 Emitter::regwidth(EmiTypes::Basic t)
+{
+    switch(t)
+    {
+    case EmiTypes::Unknown:
+    case EmiTypes::IntPtr:
+    case EmiTypes::IPP:
+        return 0;
+    case EmiTypes::I1:
+    case EmiTypes::U1:
+        return 1;
+    case EmiTypes::I2:
+    case EmiTypes::U2:
+        return 2;
+    case EmiTypes::I4:
+    case EmiTypes::U4:
+    case EmiTypes::R4:
+        return 4;
+    case EmiTypes::I8:
+    case EmiTypes::R8:
+    case EmiTypes::U8:
+        return 8;
+    default:
+        Q_ASSERT(false);
+    }
+}
+
 void Emitter::add_()
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
@@ -403,6 +430,13 @@ void Emitter::cgt_(bool withUnsigned)
     delta(-2+1);
 }
 
+void Emitter::cli_()
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_cli) );
+    delta(0);
+}
+
 void Emitter::clt_(bool withUnsigned)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
@@ -508,6 +542,13 @@ void Emitter::exit_()
     delta(0);
 }
 
+void Emitter::getreg_(quint16 reg, EmiTypes::Basic t)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_getreg, reg | regwidth(t) << 16));
+    delta(+1);
+}
+
 void Emitter::goto_(const QByteArray& label)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
@@ -526,13 +567,6 @@ void Emitter::iif_()
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
     ops->append(ProcData::Op(IL_iif) );
-    delta(0);
-}
-
-void Emitter::initobj(const Quali& typeRef)
-{
-    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    ops->append(ProcData::Op(IL_initobj,QVariant::fromValue(typeRef)));
     delta(0);
 }
 
@@ -918,6 +952,34 @@ void Emitter::newobj_(const Quali& typeRef)
     delta(-0+1);
 }
 
+void Emitter::newarr0_(const Quali& typeRef)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_newarr0,QVariant::fromValue(typeRef)));
+    delta(-1+1);
+}
+
+void Emitter::newobj0_(const Quali& typeRef)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_newobj0,QVariant::fromValue(typeRef)));
+    delta(-0+1);
+}
+
+void Emitter::newarrgc_(const Quali& typeRef)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_newarrgc,QVariant::fromValue(typeRef)));
+    delta(-1+1);
+}
+
+void Emitter::newobjgc_(const Quali& typeRef)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_newobjgc,QVariant::fromValue(typeRef)));
+    delta(-0+1);
+}
+
 void Emitter::nop_()
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
@@ -950,6 +1012,13 @@ void Emitter::ptroff_(const Quali& typeRef)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
     ops->append(ProcData::Op(IL_ptroff,QVariant::fromValue(typeRef)));
+    delta(-1);
+}
+
+void Emitter::putreg_(quint16 reg, EmiTypes::Basic t)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_putreg,reg | regwidth(t) << 16) );
     delta(-1);
 }
 
@@ -1047,6 +1116,13 @@ void Emitter::stfld_(const Trident& fieldRef)
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
     ops->append(ProcData::Op(IL_stfld,QVariant::fromValue(fieldRef) ) );
     delta(-2);
+}
+
+void Emitter::sti_()
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_sti));
+    delta(0);
 }
 
 void Emitter::stind_(EmiTypes::Basic t)

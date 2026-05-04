@@ -39,7 +39,8 @@ enum OpArgCode {
     ProcArg,
     JumpArg,
     VtableArg,
-    OffSizeArgs
+    OffSizeArgs,
+    RegWidthArg
 };
 
 enum LL_op
@@ -249,6 +250,7 @@ protected:
         const quint32 id = objects.size();
         objects.push_back(std::vector<char>());
         std::vector<char>& obj = objects.back();
+        // NOTE: obj.resize initializes new elements with 0
         if( c->kind == Constant::B )
         {
             obj.resize(c->b->len);

@@ -438,6 +438,31 @@ void Validator::visitStatSeq(Statement* stat)
             expectN(0, stat);
             visitWhile(stat);
             break;
+        case IL_sti:
+        case IL_cli:
+            expectN(0, stat);
+            break;
+        case IL_putreg:
+            if( expectN(1, stat) )
+            {
+                const int lhs = stat->id >> 16 | 0xff;
+
+                Type* rhsT = stat->args->getType();
+                if( !rhsT->isInteger() && !rhsT->isPointer() )
+                    error(stat, "expecting an integer or pointer value on stack");
+                else if( rhsT->isInteger() )
+                {
+                    const int width = stat->args->getType()->getByteSize(8);
+                    if( lhs != width )
+                        error(stat, "the integer on the stack is incompatible with the register");
+                }else // is pointer
+                {
+                    if( lhs != 0 )
+                        error(stat, "the value on the stack is incompatible with the pointer register");
+                }
+            }
+            break;
+
         default:
             error(stat, QString("unexpected statement operator '%1'").arg(s_opName[stat->kind]));
             break;
@@ -854,6 +879,8 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.back() = e;
             }
             break;
+#if 0
+            // obsolete
         case IL_initobj:
             if( expectN(1,e) )
             {
@@ -877,6 +904,7 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.pop_back();
             }
             break;
+#endif
         case IL_ceq:
         case IL_cgt_un:
         case IL_cgt:
@@ -905,6 +933,30 @@ Expression* Validator::visitExpr(Expression* e)
                 stack.pop_back();
                 stack.last() = e;
             }
+            break;
+        case IL_getreg:
+            switch( e->id >> 16 | 0xff )
+            {
+            case 0:
+                e->setType(mdl->getBasicType(Type::INTPTR));
+                break;
+            case 1:
+                e->setType(mdl->getBasicType(Type::UINT8));
+                break;
+            case 2:
+                e->setType(mdl->getBasicType(Type::UINT16));
+                break;
+            case 4:
+                e->setType(mdl->getBasicType(Type::UINT32));
+                break;
+            case 8:
+                e->setType(mdl->getBasicType(Type::UINT64));
+                break;
+            default:
+                error(e, QString("operation '%1' has invalid argument %2").arg(s_opName[e->kind]).arg(e->id));
+                break;
+            }
+            stack.push_back(e);
             break;
         case IL_ldarg_0:
         case IL_ldarg_1:
@@ -1117,6 +1169,8 @@ Expression* Validator::visitExpr(Expression* e)
             }
             break;
         case IL_newobj:
+        case IL_newobj0:
+        case IL_newobjgc:
             {
                 Type* t = deref(e->d);
                 Type* ptr = new Type();
@@ -1132,6 +1186,8 @@ Expression* Validator::visitExpr(Expression* e)
             }
             break;
         case IL_newarr:
+        case IL_newarr0:
+        case IL_newarrgc:
         case IL_newvla:
             if( expectN(1,e) )
             {
@@ -1715,7 +1771,6 @@ bool Validator::assigCompat(Type* lhs, Expression* rhs)
     case IL_callvirt:
     case IL_callinst:
     case IL_callmi:
-    case IL_initobj:
     case IL_isinst:
     case IL_ldelem:
     case IL_ldelema:
@@ -1725,8 +1780,12 @@ bool Validator::assigCompat(Type* lhs, Expression* rhs)
     case IL_ldvar:
     case IL_ldvara:
     case IL_newarr:
+    case IL_newarr0:
+    case IL_newarrgc:
     case IL_newvla:
     case IL_newobj:
+    case IL_newobj0:
+    case IL_newobjgc:
     case IL_sizeof:
     case IL_ptroff:
     default:

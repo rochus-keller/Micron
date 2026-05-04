@@ -84,7 +84,7 @@ namespace Mil
     {
         Quali typeRef;
         QVariant data; // note that array of byte can be either QByteArray or QVariantList
-        // expected values: QByteArray, QVariantList, RecordLiteral, quint64 (pointer), quint32 (set or pointer)
+        // expected values: QByteArray, QVariantList, RecordLiteral, PointerLiteral, quint32 (set)
         static Constant* toConst(const QVariant & data);
         static QVariant toVariant(Constant*, Type *t);
     };

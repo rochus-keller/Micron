@@ -30,7 +30,7 @@ const char* s_opName[] =
     "cast_i4", "cast_i8", "cast_r4", "cast_r8",
     "conv_i1", "conv_i2", "conv_i4", "conv_i8", "conv_r4", "conv_r8",
     "conv_u1", "conv_u2", "conv_u4", "conv_u8",
-    "div", "div_un", "dup", "iif", "initobj", "isinst", "ldarg", "ldarg_s",
+    "div", "div_un", "dup", "iif", "isinst", "ldarg", "ldarg_s",
     "ldarg_0", "ldarg_1", "ldarg_2", "ldarg_3",
     "ldarga", "ldarga_s",
     "ldc_i4", "ldc_i8", "ldc_i4_s", "ldc_r4", "ldc_r8",
@@ -48,8 +48,10 @@ const char* s_opName[] =
     "ldind", "ldproc", "ldmeth", "ldstr",
     "ldvar", "ldvara", "mul", "neg",
     "newarr", "newvla", "newobj",
+    "newarr0", "newobj0",
+    "newarrgc", "newobjgc",
     "not", "or", "rem", "rem_un", "shl", "shr", "shr_un",
-    "sizeof", "sub", "xor", "ptroff", "nop",
+    "sizeof", "sub", "xor", "ptroff", "nop", "getreg",
     // statements
     "",
     "free", "repeat", "until",
@@ -60,7 +62,7 @@ const char* s_opName[] =
     "stelem_r4", "stelem_r8", "stelem_ip", "stelem_ipp", "stfld",
     "stind_i1", "stind_i2", "stind_i4", "stind_i8", "stind_r4", "stind_r8", "stind_ip", "stind_ipp",
     "stloc", "stloc_s", "stloc_0", "stloc_1", "stloc_2", "stloc_3",
-    "stind", "strcpy", "stvar", "switch", "case", "while", "do",
+    "stind", "strcpy", "stvar", "switch", "case", "while", "do", "cli", "sti", "putreg"
     ""
 };
 }

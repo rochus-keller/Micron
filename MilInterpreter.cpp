@@ -25,11 +25,13 @@ extern "C" {
 }
 #include <QVector>
 #include <QtDebug>
+#ifdef _HAVE_BOEHM_GC_
+#include <gc.h>
+#endif
 using namespace Mil;
 using namespace Vm;
 
 #define _USE_JUMP_TABLE // instead of a big switch
-//#define _CHECK_HEAP_ADDRESSES
 
 enum { PreAllocSize = 1024 };
 
@@ -599,10 +601,6 @@ bool Interpreter::Imp::run(quint32 proc)
 
 #define VM_STIND(totype, fromtype) { totype v = (totype)frame->pop##fromtype(); \
     totype* p = (totype*)frame->popP(); *p = v; pc++; }
-
-#ifdef _CHECK_HEAP_ADDRESSES
-static QSet<void*> dynamics;
-#endif
 
 bool Interpreter::Imp::execute(Frame* frame)
 {
@@ -1635,6 +1633,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 pc++;
             } vmbreak;
         vmcase(initobj) {
+            // obsolete
                 void* ptr = frame->popP();
                 if( frame->proc->ops[pc].minus )
                 {
@@ -1652,13 +1651,38 @@ bool Interpreter::Imp::execute(Frame* frame)
                     memcpy(ptr, tt.mem.data(), tt.mem.size());
                 }else
                     ptr = malloc(frame->proc->ops[pc].val);
-#ifdef _CHECK_HEAP_ADDRESSES
-                dynamics.insert(ptr);
-#endif
                 frame->pushP(ptr);
                 pc++;
             } vmbreak;
         vmcase(allocN) {
+                void* ptr;
+                const quint32 len = (quint32)frame->popI4();
+                if( frame->proc->ops[pc].minus )
+                {
+                    const Template& tt = code.getTemplate(frame->proc->ops[pc].val);
+                    ptr = malloc(tt.mem.size() * len);
+                    for(int i = 0; i < len; i++ )
+                    {
+                        memcpy(ptr + i * tt.mem.size(), tt.mem.data(), tt.mem.size());
+                    }
+                }else
+                    ptr = malloc(frame->proc->ops[pc].val * len);
+                    frame->pushP(ptr);
+                    pc++;
+            } vmbreak;
+        vmcase(calloc1) {
+                void* ptr;
+                if( frame->proc->ops[pc].minus )
+                {
+                    const Template& tt = code.getTemplate(frame->proc->ops[pc].val);
+                    ptr = malloc(tt.mem.size());
+                    memcpy(ptr, tt.mem.data(), tt.mem.size());
+                }else
+                    ptr = calloc(1, frame->proc->ops[pc].val);
+                frame->pushP(ptr);
+                pc++;
+            } vmbreak;
+        vmcase(callocN) {
             void* ptr;
             const quint32 len = (quint32)frame->popI4();
             if( frame->proc->ops[pc].minus )
@@ -1670,19 +1694,52 @@ bool Interpreter::Imp::execute(Frame* frame)
                     memcpy(ptr + i * tt.mem.size(), tt.mem.data(), tt.mem.size());
                 }
             }else
-                ptr = malloc(frame->proc->ops[pc].val * len);
-#ifdef _CHECK_HEAP_ADDRESSES
-                dynamics.insert(ptr);
-#endif
+                ptr = calloc(len, frame->proc->ops[pc].val);
                 frame->pushP(ptr);
                 pc++;
             } vmbreak;
+        vmcase(gcalloc1) {
+                void* ptr;
+                if( frame->proc->ops[pc].minus )
+                {
+                    const Template& tt = code.getTemplate(frame->proc->ops[pc].val);
+#ifdef _HAVE_BOEHM_GC_
+                    ptr = GC_MALLOC(tt.mem.size());
+#else
+                    ptr = malloc(tt.mem.size());
+#endif
+                    memcpy(ptr, tt.mem.data(), tt.mem.size());
+                }else
+                    ptr = calloc(1, frame->proc->ops[pc].val);
+                frame->pushP(ptr);
+                pc++;
+            } vmbreak;
+        vmcase(gcallocN) {
+                void* ptr;
+                const quint32 len = (quint32)frame->popI4();
+                if( frame->proc->ops[pc].minus )
+                {
+                    const Template& tt = code.getTemplate(frame->proc->ops[pc].val);
+#ifdef _HAVE_BOEHM_GC_
+                    ptr = GC_MALLOC(tt.mem.size() * len);
+#else
+                    ptr = malloc(tt.mem.size() * len);
+#endif
+                    for(int i = 0; i < len; i++ )
+                    {
+                        memcpy(ptr + i * tt.mem.size(), tt.mem.data(), tt.mem.size());
+                    }
+                }else
+#ifdef _HAVE_BOEHM_GC_
+                    ptr = GC_MALLOC(tt.mem.size() * len);
+#else
+                    ptr = calloc(len, frame->proc->ops[pc].val);
+#endif
+                    frame->pushP(ptr);
+                    pc++;
+            } vmbreak;
         vmcase(free) {
                 void* ptr = frame->popP();
-#ifdef _CHECK_HEAP_ADDRESSES
-                Q_ASSERT(dynamics.contains(ptr));
-                dynamics.remove(ptr);
-#endif
                 free(ptr);
                 pc++;
             } vmbreak;
@@ -1708,10 +1765,50 @@ bool Interpreter::Imp::execute(Frame* frame)
                     frame->pushI4(0);
                 pc++;
             } vmbreak;
+        vmcase(nop)
+        vmcase(sti)
+        vmcase(cli)
+            vmbreak;
+        vmcase(putreg) {
+                const int w = frame->proc->ops[pc].val >> 16 & 0xff;
+                switch(w)
+                {
+                case 0:
+                    frame->popP();
+                    break;
+                case 1:
+                case 2:
+                case 4:
+                    frame->popI4();
+                    break;
+                case 8:
+                    frame->popI8();
+                    break;
+                }
+                pc++;
+            } vmbreak;
+        vmcase(getreg) {
+                const int w = frame->proc->ops[pc].val >> 16 & 0xff;
+                switch(w)
+                {
+                case 0:
+                    frame->pushP(0);
+                    break;
+                case 1:
+                case 2:
+                case 4:
+                    frame->pushI4(0);
+                    break;
+                case 8:
+                    frame->pushI8(0);
+                    break;
+                }
+                pc++;
+            } vmbreak;
         vmcase(newvla)
         vmcase(line)
-                qWarning() << "TODO not yet implemented" << Code::op_names[frame->proc->ops[pc].op];
-                pc++;
+            qWarning() << "TODO not implemented" << Code::op_names[frame->proc->ops[pc].op];
+            pc++;
             vmbreak;
         }
     }

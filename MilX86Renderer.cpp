@@ -2704,6 +2704,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
     }
     case LL_initobj: {
+        // obsolete
         popReg(EAX); // destination pointer
         if (op.minus) {
             const Template& tmpl = d_code.getTemplate(val);
