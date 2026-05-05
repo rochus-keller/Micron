@@ -1014,6 +1014,38 @@ bool Renderer::setError(const QString& msg)
     return false;
 }
 
+static X86::Register x86RegFromNum(quint16 regNum)
+{
+    switch (regNum) {
+    case 0: return EAX;
+    case 1: return ECX;
+    case 2: return EDX;
+    case 3: return EBX;
+    case 4: return ESP;
+    case 5: return EBP;
+    case 6: return ESI;
+    case 7: return EDI;
+    default: return EAX;
+    }
+}
+
+static inline const char* allocator(LL_op opcode)
+{
+    switch(opcode)
+    {
+    case LL_alloc1:
+    case LL_allocN:
+        return "MIC$$alloc";
+    case LL_calloc1:
+    case LL_callocN:
+        return "MIC$$calloc";
+    case LL_gcalloc1:
+    case LL_gcallocN:
+        return "MIC$$gcalloc";
+    }
+    return "???";
+}
+
 int Renderer::emitOp(Procedure& proc, int pc)
 {
     const Operation& op = proc.ops[pc];
@@ -2566,7 +2598,9 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
     }
 
-    case LL_alloc1: {
+    case LL_alloc1:
+    case LL_calloc1:
+    case LL_gcalloc1: {
         // alloc1: allocate single object of 'val' bytes (or template size if minus)
         // If op.minus, val is a template index; otherwise val is the byte size.
         quint32 allocSize;
@@ -2578,7 +2612,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         }
         em.push_i(allocSize);
         // CALL MIC$$alloc (external symbol)
-        quint32 allocSym = d_elf.addSymbol("MIC$$alloc", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+        quint32 allocSym = d_elf.addSymbol(allocator(opcode), 0, 0, 0, STB_GLOBAL, STT_FUNC);
         quint32 callOff = em.call_rel32(-4);
         d_elf.addRelocation(d_sections.relText, callOff, allocSym, R_386_PC32);
         em.add_ri(ESP, 4); // clean up arg
@@ -2619,7 +2653,9 @@ int Renderer::emitOp(Procedure& proc, int pc)
         pushReg(EAX); // push allocated pointer
         return 1;
     }
-    case LL_allocN: {
+    case LL_allocN:
+    case LL_callocN:
+    case LL_gcallocN: {
         // allocN: stack has count (i4); val is element size (or template index if minus)
         quint32 elemSize;
         if (op.minus) {
@@ -2637,7 +2673,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         em.push_r(ECX); // save totalSize on stack
         // Push size argument and call MIC$$alloc
         em.push_r(EAX);
-        quint32 allocSym = d_elf.addSymbol("MIC$$alloc", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+        quint32 allocSym = d_elf.addSymbol(allocator(opcode), 0, 0, 0, STB_GLOBAL, STT_FUNC);
         quint32 callOff = em.call_rel32(-4);
         d_elf.addRelocation(d_sections.relText, callOff, allocSym, R_386_PC32);
         em.add_ri(ESP, 4); // clean up arg
@@ -2884,6 +2920,40 @@ int Renderer::emitOp(Procedure& proc, int pc)
         Q_ASSERT(false);
         return 1;
 
+    case LL_cli:
+        em.emitByte(0xFA);
+        return 1;
+
+    case LL_sti:
+        em.emitByte(0xFB);
+        return 1;
+
+    case LL_getreg: {
+        const quint16 regNum = val & 0xffff;
+        const quint8 byteWidth = (val >> 16) & 0xff;
+        X86::Register hwReg = x86RegFromNum(regNum);
+        if (byteWidth == 8) {
+            X86::Register hwRegHi = x86RegFromNum(regNum + 1);
+            pushRegPair(hwReg, hwRegHi);
+        } else {
+            pushReg(hwReg);
+        }
+        return 1;
+    }
+
+    case LL_putreg: {
+        const quint16 regNum = val & 0xffff;
+        const quint8 byteWidth = (val >> 16) & 0xff;
+        X86::Register hwReg = x86RegFromNum(regNum);
+        if (byteWidth == 8) {
+            X86::Register hwRegHi = x86RegFromNum(regNum + 1);
+            popRegPair(hwReg, hwRegHi);
+        } else {
+            popReg(hwReg);
+        }
+        return 1;
+    }
+
     case LL_newvla:
         qWarning() << "X86Renderer: not yet implemented:" << Code::op_names[opcode];
         em.nop();
@@ -2898,6 +2968,10 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
 
     case LL_invalid:
+        return 1;
+
+    case LL_nop:
+        em.nop();
         return 1;
 
     default:

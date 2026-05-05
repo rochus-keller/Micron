@@ -628,6 +628,10 @@ static void compileX86(Manager& mgr, const QString& outPath, const QStringList& 
     }
 }
 
+extern "C" {
+void Args_setArgcArgv(unsigned int c, char** v);
+}
+
 static void process(const QString& file, const QStringList& searchPaths,
                     bool run, bool dumpIL, bool dumpLL, bool eigen, const QString& arch, bool dbg, bool cdeclRet, bool useAapcs,
                     QString outPath, const QStringList& libDirs, const QStringList& linkLibs, const QStringList& linkObjs,
@@ -722,6 +726,27 @@ static void process(const QString& file, const QStringList& searchPaths,
             QTextStream out(stdout);
             r.dumpAll(out);
         }
+
+        QByteArrayList args;
+        QVector<char*> argv;
+        argv.reserve(10);
+        argv.append("Micron Interpreter");
+
+        const int start = qApp->arguments().indexOf("--");
+        if( start != -1 )
+        {
+            for( int i = start+1; i < qApp->arguments().size(); i++ )
+                args.append( qApp->arguments()[i].toUtf8() );
+
+            for( int i = 0; i < args.size(); i++ )
+            {
+                if( !args[i].isEmpty() )
+                    argv.append(args[i].data());
+            }
+        }
+
+        Args_setArgcArgv( argv.size(), argv.data() );
+
         foreach( Mil::Declaration* module, mgr.loader.getModel().getModules() )
         {
             if( !r.run(module) )
@@ -769,7 +794,14 @@ int main(int argc, char *argv[])
     QCommandLineOption linkObj("f", "add an object file (.o) to the linker input", "file");
     cp.addOption(linkObj);
 
-    cp.process(a);
+    QStringList allArgs = a.arguments();
+
+    // cut away all arguments starting from "--"; they are sent to the interpreter instead
+    const int doubledash = allArgs.indexOf("--");
+    if( doubledash != -1 )
+        allArgs = allArgs.mid(0, doubledash);
+
+    cp.process(allArgs);
     const QStringList args = cp.positionalArguments();
     if( args.size() != 1 )
     {

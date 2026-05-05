@@ -1493,6 +1493,7 @@ Type* Parser2::ArrayType() {
 
     if(vla)
         error(tok,"VLA not yet supported"); // TODO
+    arr->vla = vla;
 
     openArrayError(tok2,etype);
     invalidTypeError(tok2,etype);

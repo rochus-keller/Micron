@@ -1072,6 +1072,46 @@ bool Renderer::setError(const QString& msg)
 #define STORE_ARG_I4(reg, off) \
     d_emitter.str_(AL, reg, MemOp(R11, FP_TO_ARGS + (qint32)(off)))
 
+static Arm::Register armRegFromNum(quint16 regNum)
+{
+    switch (regNum) {
+    case 0:  return R0;
+    case 1:  return R1;
+    case 2:  return R2;
+    case 3:  return R3;
+    case 4:  return R4;
+    case 5:  return R5;
+    case 6:  return R6;
+    case 7:  return R7;
+    case 8:  return R8;
+    case 9:  return R9;
+    case 10: return R10;
+    case 11: return R11;
+    case 12: return R12;
+    case 13: return SP;
+    case 14: return LR;
+    case 15: return PC;
+    default: return R0;
+    }
+}
+
+static inline const char* allocator(LL_op opcode)
+{
+    switch(opcode)
+    {
+    case LL_alloc1:
+    case LL_allocN:
+        return "MIC$$alloc";
+    case LL_calloc1:
+    case LL_callocN:
+        return "MIC$$calloc";
+    case LL_gcalloc1:
+    case LL_gcallocN:
+        return "MIC$$gcalloc";
+    }
+    return "???";
+}
+
 int Renderer::emitOp(Procedure& proc, int pc)
 {
     // Emit a single LL_op. Returns the number of ops consumed (usually 1, 2 for OffSizeArgs).
@@ -2709,7 +2749,9 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
     }
 
-    case LL_alloc1: {
+    case LL_alloc1:
+    case LL_calloc1:
+    case LL_gcalloc1:{
         // alloc1: allocate single object of 'val' bytes (or template size if minus)
         quint32 allocSize;
         if (op.minus) {
@@ -2718,10 +2760,10 @@ int Renderer::emitOp(Procedure& proc, int pc)
         } else {
             allocSize = val;
         }
+        quint32 allocSym = d_elf.addSymbol(allocator(opcode), 0, 0, 0, STB_GLOBAL, STT_FUNC);
         if (d_useAapcs) {
             // AAPCS mode: R0 = size, BL MIC$$alloc, result in R0
             loadImm32(R0, allocSize);
-            quint32 allocSym = d_elf.addSymbol("MIC$$alloc", 0, 0, 0, STB_GLOBAL, STT_FUNC);
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, allocSym);
@@ -2730,7 +2772,6 @@ int Renderer::emitOp(Procedure& proc, int pc)
             em.sub(SP, SP, Operand2((quint32)4));
             loadImm32(R0, allocSize);
             em.str_(AL, R0, MemOp(SP, 0));
-            quint32 allocSym = d_elf.addSymbol("MIC$$alloc", 0, 0, 0, STB_GLOBAL, STT_FUNC);
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, allocSym);
@@ -2762,7 +2803,9 @@ int Renderer::emitOp(Procedure& proc, int pc)
         pushReg(R0); // push allocated pointer
         return 1;
     }
-    case LL_allocN: {
+    case LL_allocN:
+    case LL_callocN:
+    case LL_gcallocN: {
         // allocN: stack has count (i4); val is element size (or template index if minus)
         quint32 elemSize;
         if (op.minus) {
@@ -2775,13 +2818,13 @@ int Renderer::emitOp(Procedure& proc, int pc)
         // total = count * elemSize
         loadImm32(R1, elemSize);
         em.mul_(AL, false, R0, R0, R1); // R0 = count * elemSize
+        quint32 allocSym = d_elf.addSymbol(allocator(opcode), 0, 0, 0, STB_GLOBAL, STT_FUNC);
         if (d_useAapcs) {
             // AAPCS mode: R0 = totalSize, BL MIC$$alloc.
             // Save totalSize for later template copy.
             em.str_(AL, R0, MemOp(SP, -4, MemOp::PreIndexed)); // push totalSize
             // MIC$$alloc(size=totalSize): R0=totalSize
             em.ldr_(AL, R0, MemOp(SP, 0)); // R0 = totalSize
-            quint32 allocSym = d_elf.addSymbol("MIC$$alloc", 0, 0, 0, STB_GLOBAL, STT_FUNC);
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, allocSym);
@@ -2793,7 +2836,6 @@ int Renderer::emitOp(Procedure& proc, int pc)
             // Old convention: push size on stack, call MIC$$alloc
             em.str_(AL, R0, MemOp(SP, -4, MemOp::PreIndexed)); // push totalSize
             em.str_(AL, R0, MemOp(SP, -4, MemOp::PreIndexed)); // push size arg
-            quint32 allocSym = d_elf.addSymbol("MIC$$alloc", 0, 0, 0, STB_GLOBAL, STT_FUNC);
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, allocSym);
@@ -3301,6 +3343,40 @@ int Renderer::emitOp(Procedure& proc, int pc)
         Q_ASSERT(false);
         return 1;
 
+    case LL_cli:
+        em.cpsid_(IRQ_Bit);
+        return 1;
+
+    case LL_sti:
+        em.cpsie_(IRQ_Bit);
+        return 1;
+
+    case LL_getreg: {
+        const quint16 regNum = val & 0xffff;
+        const quint8 byteWidth = (val >> 16) & 0xff;
+        Arm::Register hwReg = armRegFromNum(regNum);
+        if (byteWidth == 8) {
+            Arm::Register hwRegHi = armRegFromNum(regNum + 1);
+            pushRegPair(hwReg, hwRegHi);
+        } else {
+            pushReg(hwReg);
+        }
+        return 1;
+    }
+
+    case LL_putreg: {
+        const quint16 regNum = val & 0xffff;
+        const quint8 byteWidth = (val >> 16) & 0xff;
+        Arm::Register hwReg = armRegFromNum(regNum);
+        if (byteWidth == 8) {
+            Arm::Register hwRegHi = armRegFromNum(regNum + 1);
+            popRegPair(hwReg, hwRegHi);
+        } else {
+            popReg(hwReg);
+        }
+        return 1;
+    }
+
     case LL_newvla:
         qWarning() << "Armv7Renderer: not yet implemented:" << Code::op_names[opcode];
         em.nop_();
@@ -3311,6 +3387,10 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
 
     case LL_invalid:
+        return 1;
+
+    case LL_nop:
+        em.nop();
         return 1;
 
     default:

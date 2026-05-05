@@ -111,6 +111,8 @@ namespace Mic
         void setBuildDir( const QString& );
         QByteArrayList getOptions() const { return d_options; }
         void setOptions( const QByteArrayList& );
+        QByteArray getArgs() const { return d_args; }
+        void setArgs( const QByteArray&);
         void setDbg(bool on) { d_dbg = on; }
 
         bool addFile(const QString& filePath, const VirtualPath& package = QByteArrayList() );
@@ -124,7 +126,7 @@ namespace Mic
         bool generateCil(const QString& outDir);
         bool generateLlvm(const QString& outDir);
         bool generateMil(const QString& outDir);
-        bool generateX86(const QString& outDir, QStringList &objFiles);
+        bool generateX86(const QString& outDir, QStringList &objFiles, bool indirectMain);
         bool copyCResources(const QString& outDir, QStringList& cFiles);
 
         bool interpret(const QString &outDir = QString());
@@ -204,6 +206,7 @@ namespace Mic
         QString d_filePath; // path where the project file was loaded from or saved to
         QStringList d_suffixes;
         QByteArrayList d_options;
+        QByteArray d_args;
         QString d_workingDir, d_buildDir;
         ModProc d_main;
         qint16 d_level;

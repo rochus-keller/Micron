@@ -1099,6 +1099,7 @@ static Mil::EmiTypes::Basic toBasic(Type* t)
         return Mil::EmiTypes::R8;
     default:
         Q_ASSERT(false);
+        return Mil::EmiTypes::Unknown;
     }
 }
 void Builtins::GETREG(const RowCol &pos)

@@ -441,6 +441,12 @@ void Project2::setOptions(const QByteArrayList& o)
     touch();
 }
 
+void Project2::setArgs(const QByteArray & a)
+{
+    d_args = a;
+    touch();
+}
+
 static inline QByteArray escapeDot(QByteArray name)
 {
     return "\"" + name + "\"";
@@ -684,7 +690,7 @@ bool Project2::generateMil(const QString &outDir)
     return true;
 }
 
-bool Project2::generateX86(const QString &outDir, QStringList& objFiles)
+bool Project2::generateX86(const QString &outDir, QStringList& objFiles, bool indirectMain)
 {
     // x86 backend: generate ELF32 relocatable objects for each module
      loader.getModel().calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
@@ -751,13 +757,7 @@ bool Project2::generateX86(const QString &outDir, QStringList& objFiles)
          QString mainObj;
          mainObj = QDir(outDir).absoluteFilePath("main+.o");
 
-         if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj,
-                                           #ifdef _MIC_IDE_USE_ELFLINKER_MUSL_
-                                                    true
-                                           #else
-                                                    false
-                                           #endif
-                                                    ) )
+         if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj, indirectMain) )
          {
              qDebug() << "  generated" << mainObj;
              objFiles << mainObj;
@@ -772,6 +772,10 @@ bool Project2::copyCResources(const QString &outDir, QStringList &cFiles)
 {
     cFiles << writeC("runtime", "MIC+", outDir);
 
+    const QString to = QDir(outDir).absoluteFilePath("mic_init_glibc.c");
+    QFile::copy(":/runtime/mic_init_glibc.c", to);
+    cFiles << to;
+
     if( useBuiltInOakwood() )
     {
         cFiles << writeC("oakwood", "Args", outDir);
@@ -782,8 +786,18 @@ bool Project2::copyCResources(const QString &outDir, QStringList &cFiles)
         cFiles << writeC("oakwood", "Math", outDir);
         cFiles << writeC("oakwood", "MathL", outDir);
         cFiles << writeC("oakwood", "Strings", outDir);
+    }else
+    {
+        QFile f(QDir(outDir).absoluteFilePath("mic_args_dummy+.c"));
+        f.open(QIODevice::WriteOnly);
+        f.write("void Args_setArgcArgv(unsigned int c, char** v){}");
+        cFiles << f.fileName();
     }
     return !cFiles.contains(QString());
+}
+
+extern "C" {
+void Args_setArgcArgv(unsigned int c, char** v);
 }
 
 bool Project2::interpret(const QString& outDir)
@@ -809,8 +823,24 @@ bool Project2::interpret(const QString& outDir)
             r.dumpModule(out, module);
         }
     }
+
     if( !outDir.isEmpty() )
-        return true;
+        return true; // just write ll and return
+
+    QByteArrayList args = d_args.simplified().split(' ');
+    QVector<char*> argv;
+    argv.reserve(10);
+    argv.append("Micron Interpreter");
+    if( !args.isEmpty() )
+    {
+        for( int i = 0; i < args.size(); i++ )
+        {
+            if( !args[i].isEmpty() )
+                argv.append(args[i].data());
+        }
+    }
+    Args_setArgcArgv( argv.size(), argv.data() );
+
     foreach( Mil::Declaration* module, mods )
     {
         // each run gets its freshly initialized module variables
@@ -1085,6 +1115,7 @@ bool Project2::save()
     out.setValue("WorkingDir", d_workingDir );
     out.setValue("BuildDir", d_buildDir );
     out.setValue("Options", d_options.join(' ') );
+    out.setValue("Arguments", d_args );
 
     const FileGroup* root = getRootFileGroup();
     out.beginWriteArray("Modules", root->d_files.size() ); // nested arrays don't work
@@ -1144,6 +1175,7 @@ bool Project2::loadFrom(const QString& filePath)
     d_workingDir = in.value("WorkingDir").toString();
     d_buildDir = in.value("BuildDir").toString();
     d_options = in.value("Options").toByteArray().split(' ');
+    d_args = in.value("Arguments").toByteArray();
 
     int count = in.beginReadArray("Modules");
     for( int i = 0; i < count; i++ )

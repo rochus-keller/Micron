@@ -28,6 +28,8 @@ extern unsigned int MIC$$strlen(char* str);
 
 extern void* MIC$$alloc(unsigned int size);
 extern void MIC$$free(void* ptr);
+extern void* MIC$$calloc(unsigned int size);
+extern void* MIC$$gcalloc(unsigned int size);
 
 #endif // __MIC$_INCLUDED__
 

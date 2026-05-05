@@ -25,6 +25,7 @@ extern "C" {
 #include "oakwood/Math.h"
 #include "oakwood/Out.h"
 #include "oakwood/Files.h"
+#include "oakwood/Args.h"
 }
 using namespace Mil;
 
@@ -282,6 +283,20 @@ static bool Files_Write(void* args, void* ret)
     return true;
 }
 
+// unsigned int Args$Count()
+static bool Args_Count(void* args, void* ret)
+{
+    Interpreter::retI4(ret,Args$Count());
+    return true;
+}
+
+// char* Args$Arg(unsigned int i)
+static bool Args_Arg(void* args, void* ret)
+{
+    Interpreter::retP(ret,Args$Arg(Interpreter::toI4(args,0)));
+    return true;
+}
+
 void VmOakwood::addTo(Interpreter* ip)
 {
     ip->registerProc("Input", "Time", Input_Time);
@@ -320,4 +335,7 @@ void VmOakwood::addTo(Interpreter* ip)
     ip->registerProc("Files", "Eof", Files_Eof);
     ip->registerProc("Files", "Read", Files_Read);
     ip->registerProc("Files", "Write", Files_Write);
+    ip->registerProc("Args", "Count", Args_Count);
+    ip->registerProc("Args", "Arg", Args_Arg);
+
 }

@@ -3,7 +3,9 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <stdlib.h>
-
+#ifdef _HAVE_BOEHM_GC_
+#include <gc.h>
+#endif
 #include <stdarg.h>
 
 typedef int (*MIC$$PRINTF)(const char *fmt, va_list ap);
@@ -143,6 +145,19 @@ void MIC$$free(void* ptr)
     free(ptr);
 }
 
+void* MIC$$calloc(unsigned int size)
+{
+    return calloc(1, size);
+}
+
+void* MIC$$gcalloc(unsigned int size)
+{
+#ifdef _HAVE_BOEHM_GC_
+    return GC_MALLOC(size);
+#else
+    return calloc(1, size);
+#endif
+}
 
 // intrinsics
 

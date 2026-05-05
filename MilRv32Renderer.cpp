@@ -1086,6 +1086,62 @@ void Renderer::emitExternCall(quint32 symbolIdx, quint32 argsSize, quint32 retur
          if (_fo >= -2048 && _fo <= 2047) d_emitter.sw(reg, Fp, _fo); \
          else { loadArgAddr(T6, off); d_emitter.sw(reg, T6, 0); } } while(0)
 
+static Rv32::Register rv32RegFromNum(quint16 regNum)
+{
+    switch (regNum) {
+    case 0:  return Zero;
+    case 1:  return Ra;
+    case 2:  return Sp;
+    case 3:  return Gp;
+    case 4:  return Tp;
+    case 5:  return T0;
+    case 6:  return T1;
+    case 7:  return T2;
+    case 8:  return S0;
+    case 9:  return S1;
+    case 10: return A0;
+    case 11: return A1;
+    case 12: return A2;
+    case 13: return A3;
+    case 14: return A4;
+    case 15: return A5;
+    case 16: return A6;
+    case 17: return A7;
+    case 18: return S2;
+    case 19: return S3;
+    case 20: return S4;
+    case 21: return S5;
+    case 22: return S6;
+    case 23: return S7;
+    case 24: return S8;
+    case 25: return S9;
+    case 26: return S10;
+    case 27: return S11;
+    case 28: return T3;
+    case 29: return T4;
+    case 30: return T5;
+    case 31: return T6;
+    default: return Zero;
+    }
+}
+
+static inline const char* allocator(LL_op opcode)
+{
+    switch(opcode)
+    {
+    case LL_alloc1:
+    case LL_allocN:
+        return "MIC$$alloc";
+    case LL_calloc1:
+    case LL_callocN:
+        return "MIC$$calloc";
+    case LL_gcalloc1:
+    case LL_gcallocN:
+        return "MIC$$gcalloc";
+    }
+    return "???";
+}
+
 int Renderer::emitOp(Procedure& proc, int pc)
 {
     const Operation& op = proc.ops[pc];
@@ -3121,7 +3177,9 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
     }
 
-    case LL_alloc1: {
+    case LL_alloc1:
+    case LL_calloc1:
+    case LL_gcalloc1: {
         quint32 allocSize;
         if (op.minus) {
             const Template& tmpl = d_code.getTemplate(val);
@@ -3129,7 +3187,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         } else {
             allocSize = val;
         }
-        quint32 allocSym = d_elf.addSymbol("MIC$$alloc", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+        quint32 allocSym = d_elf.addSymbol(allocator(opcode), 0, 0, 0, STB_GLOBAL, STT_FUNC);
         if (d_useRvAbi) {
             // RV-ABI: arg in a0, return in a0
             loadImm32(A0, allocSize);
@@ -3163,7 +3221,9 @@ int Renderer::emitOp(Procedure& proc, int pc)
         }
         return 1;
     }
-    case LL_allocN: {
+    case LL_allocN:
+    case LL_callocN:
+    case LL_gcallocN: {
         quint32 elemSize;
         if (op.minus) {
             const Template& tmpl = d_code.getTemplate(val);
@@ -3175,7 +3235,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         loadImm32(T1, elemSize);
         em.mul(T0, T0, T1); // T0 = totalSize
 
-        quint32 allocSym = d_elf.addSymbol("MIC$$alloc", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+        quint32 allocSym = d_elf.addSymbol(allocator(opcode), 0, 0, 0, STB_GLOBAL, STT_FUNC);
         if (d_useRvAbi) {
             // RV-ABI: arg in a0, return in a0
             pushReg(T0);    // save totalSize on stack
@@ -3616,15 +3676,53 @@ int Renderer::emitOp(Procedure& proc, int pc)
         Q_ASSERT(false);
         return 1;
 
-    case LL_newvla:
-        qWarning() << "Rv32Renderer: not yet implemented:" << Code::op_names[opcode];
-        em.nop();
-        return 1;
-
     case LL_line:
         return 1;
 
     case LL_invalid:
+        return 1;
+
+    case LL_nop:
+        em.nop();
+        return 1;
+
+    case LL_cli:
+        em.cli_macro();
+        return 1;
+
+    case LL_sti:
+        em.sti_macro();
+        return 1;
+
+    case LL_getreg: {
+        const quint16 regNum = val & 0xffff;
+        const quint8 byteWidth = (val >> 16) & 0xff;
+        Rv32::Register hwReg = rv32RegFromNum(regNum);
+        if (byteWidth == 8) {
+            Rv32::Register hwRegHi = rv32RegFromNum(regNum + 1);
+            pushRegPair(hwReg, hwRegHi);
+        } else {
+            pushReg(hwReg);
+        }
+        return 1;
+    }
+
+    case LL_putreg: {
+        const quint16 regNum = val & 0xffff;
+        const quint8 byteWidth = (val >> 16) & 0xff;
+        Rv32::Register hwReg = rv32RegFromNum(regNum);
+        if (byteWidth == 8) {
+            Rv32::Register hwRegHi = rv32RegFromNum(regNum + 1);
+            popRegPair(hwReg, hwRegHi);
+        } else {
+            popReg(hwReg);
+        }
+        return 1;
+    }
+
+    case LL_newvla:
+        qWarning() << "Rv32Renderer: not yet implemented:" << Code::op_names[opcode];
+        em.nop();
         return 1;
 
     default:

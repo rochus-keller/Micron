@@ -12,6 +12,7 @@
  */
 
 extern int __mic$main(void);
+extern void Args_setArgcArgv(int argc, char** argv);
 
 /* musl's entry point for C runtime initialization */
 int __libc_start_main(int (*)(int, char**, char**), int, char**);
@@ -26,6 +27,6 @@ static int __mic$main_wrapper(int argc, char** argv, char** envp)
 
 void __mic$init(int argc, char** argv)
 {
-    // TODO: call Args_setArgcArgv(argc, argv)
+    Args_setArgcArgv(argc, argv);
     __libc_start_main(__mic$main_wrapper, argc, argv);
 }

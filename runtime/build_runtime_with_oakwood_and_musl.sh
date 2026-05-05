@@ -15,7 +15,7 @@ SOURCES=(
 )
 
 MUSL_ROOT="/home/me/Entwicklung/Libraries/musl_i386"
-OUT_NAME="libmicron.a"
+OUT_NAME="libmicron_linux_i386.a"
 BUILD_DIR="${BUILD_DIR:-./build-mic-mustatic}"
 
 CC="${CC:-gcc}"

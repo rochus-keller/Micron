@@ -290,6 +290,7 @@ quint8 Emitter::regwidth(EmiTypes::Basic t)
         return 8;
     default:
         Q_ASSERT(false);
+        return 0;
     }
 }
 

@@ -81,8 +81,8 @@ namespace Mic
         void createMenuBar();
         void closeEvent(QCloseEvent* event);
         bool checkSaved( const QString& title );
-        bool compile(bool all = true, bool doGenerate = false);
-        bool generate(bool forceAll);
+        bool compile(bool useGnu = true, bool doGenerate = false);
+        bool generate(bool useGnu);
         bool run();
         void fillMods();
         void showDocument( const QString& filePath );
@@ -112,6 +112,7 @@ namespace Mic
         void onInterpret();
         void onAbort();
         void onCompile();
+        void onCompile2();
         void onNewPro();
         void onOpenPro();
         void onSavePro();
@@ -165,7 +166,7 @@ namespace Mic
         void onRemoveAllBreakpoints();
         void onBreakOnExceptions();
         void onRowColMode();
-        void onSetInputFile();
+        void onSetArguments();
         void onSetOptions();
         // TODO: setAppArgs for command line arguments
         void onNoWarnings();

@@ -1,0 +1,15 @@
+module TestArgs
+
+import Args
+
+var i: uint32
+
+begin
+  println("Args received:")
+
+  for i := 0 to Args.Count() - 1 do
+    print(i)
+    print(": ")
+    println(Args.Arg(i))
+  end
+end TestArgs
