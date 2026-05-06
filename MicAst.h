@@ -139,9 +139,9 @@ namespace Mic
         bool isSet() const { return kind == Type::SET; }
         bool isBoolean() const { return kind == Type::BOOL; }
         bool isSimple() const { return kind >= Type::StrLit && kind < Type::MaxBasicType; }
-        bool isText() const { return kind == Type::StrLit || kind == Type::CHAR ||
+        bool isText(bool includePointerToCharArray = false) const { return kind == Type::StrLit || kind == Type::CHAR ||
                     ( kind == Array && type && type->kind == Type::CHAR ) ||
-                    ( kind == Pointer && type && type->kind == Array && type->type && type->type->kind == Type::CHAR ); }
+                    ( includePointerToCharArray && kind == Pointer && type && type->kind == Array && type->type && type->type->kind == Type::CHAR ); }
         bool isStructured() const { return kind == Array || kind == Record || kind == Object; }
         bool isCharArray() const { return kind == Array && getType() && getType()->kind == CHAR; }
         bool isByteArray() const { return kind == Array && getType() && getType()->kind == UINT8; }

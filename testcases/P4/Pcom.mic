@@ -1,0 +1,3858 @@
+(* Micron port of the 1976 P4 Pascal Compiler
+ * pcom.pas and pint.pas were originally written by Urs Ammann, Kesav Nori, Christian Jacobi.
+ * We used the version of the 1982 book: "Pascal Implementation" by Pemberton & Daniels
+ *   https://homepages.cwi.nl/~steven/pascal/book/pascalimplementation.html
+ * This file includes references to the Pascal pcom.pas version in the
+ *   form of "// pcom.pas lines from-to" comments; use them to look up the 
+ *   original comments  and the corresponding explanation in the book.
+ * Migrated from Pascal in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *)
+ 
+module Pcom
+
+import T := PcomTypes
+import F := Files
+import O := Out
+import A := Args
+
+// pcom.pas lines 193-298: global variables
+
+var
+  prr: F.File
+
+  // pcom.pas lines 199-206: returned by scanner insymbol
+  sy: T.Symbol
+  op: T.Operator
+  val: T.Valu
+  lgth: integer
+  id: T.Alpha
+  kk: integer
+  ch: char
+  eol: boolean
+  hasLookAhead: boolean  // peek-ahead buffer for '..' vs real number
+  lookAheadCh: char
+
+  // pcom.pas lines 212-215: counters
+  chcnt: integer
+  lc: integer
+  ic: integer
+  linecount: integer
+
+  // pcom.pas lines 220-228: switches
+  dp: boolean
+  prterr: boolean
+  list: boolean
+  prcode: boolean
+  prtables: boolean
+  debug: boolean
+
+  // pcom.pas lines 233-240: pointers to standard type entries
+  parmptr: T.Stp
+  intptr: T.Stp
+  realptr: T.Stp
+  charptr: T.Stp
+  boolptr: T.Stp
+  nilptr: T.Stp
+  textptr: T.Stp
+  utypptr: T.Ctp
+  ucstptr: T.Ctp
+  uvarptr: T.Ctp
+  ufldptr: T.Ctp
+  uprcptr: T.Ctp
+  ufctptr: T.Ctp
+  fwptr: T.Ctp
+  fextfilep: T.ExtFileP
+  globtestp: T.Testp
+
+  // pcom.pas lines 246-248: bookkeeping of declaration levels
+  level: integer
+  disx: integer
+  top: integer
+
+  // pcom.pas lines 250-258: display
+  display: array T.displimit + 1 of T.DispRec
+
+  // pcom.pas lines 264-269: error messages
+  errinx: integer
+  errlist: array 10 of T.ErrRec
+
+  // pcom.pas line 276: expression compilation
+  gattr: T.Attr
+
+  // pcom.pas lines 282-283: structured constants (symbol sets)
+  constbegsys: T.SetOfSys
+  simptypebegsys: T.SetOfSys
+  typebegsys: T.SetOfSys
+  blockbegsys: T.SetOfSys
+  selectsys: T.SetOfSys
+  facbegsys: T.SetOfSys
+  statbegsys: T.SetOfSys
+  typedels: T.SetOfSys
+
+  // pcom.pas lines 284-296: tables
+  chartp: array 128 of T.CharType
+  rw: array 36 of T.Alpha
+  frw: array 10 of integer
+  rsy: array 36 of T.Symbol
+  ssy: array 128 of T.Symbol
+  rop: array 36 of T.Operator
+  sop: array 128 of T.Operator
+  na: array 36 of T.Alpha
+  mn: array 61 of array 5 of char
+  sna: array 24 of array 5 of char
+  cdx: array 61 of integer
+  pdx: array 24 of integer
+  ordint: array 128 of integer
+
+  intlabel: integer
+  mxint10: integer
+  digmax: integer
+  prrname: array 4 of char
+  srcfile: F.File  // input source file (replaces stdin for testing)
+  srcname: array 256 of char
+  argptr: A.String
+  argidx: integer
+
+  // body-local vars promoted to module level (needed by nested procs)
+  // pcom.pas lines 1809-1822
+  cstoccmax: integer  // = 65
+  bCixmax: integer    // = 1000 (body's cixmax)
+  llcp: T.Ctp
+  saveid: T.Alpha
+  cstptr: array 66 of T.Csp
+  cstptrix: integer
+  entname: integer
+  segsize: integer
+  stacktop: integer
+  topnew: integer
+  topmax: integer
+  lcmax: integer
+  llc1: integer
+
+  // fprocp: current procedure being compiled (passed to body originally)
+  fprocp: T.Ctp
+
+  // test variable used for repeat-until loops (was local in Pascal)
+  test: boolean
+
+// pcom.pas lines 300-301: mark/release stubs
+proc mark()
+begin
+end mark
+
+proc release()
+begin
+end release
+
+// File I/O helper procedures
+proc fWriteString(f: F.File; const s: pointer to array of char)
+  var i: integer; dummy: boolean
+begin
+  i := 0
+  while s[i] <> 0X do
+    dummy := F.Write(f, ord(s[i])); inc(i)
+  end
+end fWriteString
+
+// The Files module API differs from Pascal's; these helpers bridge the gap.
+
+proc fWriteChar(f: F.File; c: char)
+  var dummy: boolean
+begin
+  dummy := F.Write(f, ord(c))
+end fWriteChar
+
+proc fWriteLn(f: F.File)
+  var dummy: boolean
+begin
+  dummy := F.Write(f, 0AH)
+end fWriteLn
+
+proc fWriteInt(f: F.File; v: integer; w: integer)
+  // Write integer v right-justified in field of width w
+  var buf: array 20 of char; i, n, neg: integer; d: integer
+begin
+  neg := 0
+  n := v
+  if n < 0 then neg := 1; n := -n end
+  i := 0
+  if n = 0 then buf[0] := "0"; i := 1
+  else
+    while n > 0 do
+      d := n mod 10; buf[i] := chr(+ord("0") + d); inc(i); n := n div 10
+    end
+  end
+  // pad with spaces
+  while i + neg < w do fWriteChar(f, " "); dec(w) end
+  if neg = 1 then fWriteChar(f, "-") end
+  while i > 0 do dec(i); fWriteChar(f, buf[i]) end
+end fWriteInt
+
+proc fWriteArr4(f: F.File; const a: array 5 of char)
+  var i: integer
+begin
+  for i := 0 to 3 do
+    fWriteChar(f, a[i])
+  end
+end fWriteArr4
+
+proc printAlpha(const a: T.Alpha)
+  var i: integer
+begin
+  for i := 0 to T.alfalength - 1 do
+    if a[i] <> 0X then O.Char(a[i]) end
+  end
+end printAlpha
+
+// MIC interpreter had issue on direct array comparison (a = b, a < b).
+(* obsolete
+proc alphaEq(x, y: ^T.Alpha): boolean
+  var i: integer
+begin
+  i := 0
+  while i < T.alfalength do
+    if x[i] <> y[i] then return false end
+    inc(i)
+  end
+  return true
+end alphaEq 
+
+proc alphaLt(x, y: ^T.Alpha): boolean
+  var i: integer
+begin
+  i := 0
+  while (i < T.alfalength) and (x[i] = y[i]) do inc(i) end
+  if i = T.alfalength then return false end
+  return x[i] < y[i]
+end alphaLt *)
+
+
+// pcom.pas lines 303-336: endofline
+proc endofline()
+  var lastpos, freepos, currpos, currnmr, f, k: integer
+begin
+  if errinx > 0 then
+    O.Int(linecount, 6); O.String(" ****  ")
+    lastpos := 0; freepos := 1
+    for k := 0 to errinx - 1 do
+      currpos := errlist[k].pos; currnmr := errlist[k].nmr
+      if currpos = lastpos then O.Char(",")
+      else
+        while freepos < currpos do O.Char(" "); inc(freepos) end
+        O.Char("^")
+        lastpos := currpos
+      end
+      if currnmr < 10 then f := 1
+      elsif currnmr < 100 then f := 2
+      else f := 3 end
+      O.Int(currnmr, f)
+      freepos := freepos + f + 1
+    end
+    O.Ln; errinx := 0
+  end
+  inc(linecount)
+  if list then
+    O.Int(linecount, 6); O.String("  ")
+    if dp then O.Int(lc, 7) else O.Int(ic, 7) end
+    O.Char(" ")
+  end
+  chcnt := 0
+end endofline
+
+// pcom.pas lines 338-347: error
+proc error(ferrnr: integer)
+begin
+  if errinx >= 9 then
+    errlist[9].nmr := 255; errinx := 10
+  else
+    errlist[errinx].nmr := ferrnr
+    inc(errinx)
+  end
+  if errinx > 0 then
+    errlist[errinx - 1].pos := chcnt
+  end
+end error
+
+
+// Forward declarations for mutually recursive procedures
+procedure^ insymbol()
+procedure^ block(fsys: T.SetOfSys; fsy: T.Symbol; fprocp_: T.Ctp)
+
+
+// pcom.pas lines 358-371: nextch - read next character from input
+proc nextch()
+  var b: byte
+begin
+  if eol then
+    if list then O.Ln end
+    endofline()
+  end
+  if hasLookAhead then
+    hasLookAhead := false
+    ch := lookAheadCh
+    if ch = 0AX then eol := true else eol := false end
+    if list then O.Char(ch) end
+    inc(chcnt)
+  elsif not F.Eof(srcfile) then
+    eol := false
+    if F.Read(srcfile, @b) then
+      ch := chr(b)
+      if ch = 0AX then eol := true end
+      if list then O.Char(ch) end
+      inc(chcnt)
+    else
+      eol := true
+    end
+  else
+    O.String("   *** eof encountered"); O.Ln
+    test := false
+  end
+end nextch
+
+// peekNextCh - peek at next char without consuming it
+proc peekNextCh(): char
+  var b: byte
+begin
+  if hasLookAhead then return lookAheadCh end
+  if not F.Eof(srcfile) then
+    if F.Read(srcfile, @b) then
+      lookAheadCh := chr(b)
+      hasLookAhead := true
+      return lookAheadCh
+    end
+  end
+  return " "
+end peekNextCh
+
+// pcom.pas lines 373-394: options
+proc options()
+begin
+  loop
+    nextch()
+    if ch <> "*" then
+      if ch = "t" then
+        nextch(); prtables := (ch = "+")
+      elsif ch = "l" then
+        nextch(); list := (ch = "+")
+        if not list then O.Ln end
+      elsif ch = "d" then
+        nextch(); debug := (ch = "+")
+      elsif ch = "c" then
+        nextch(); prcode := (ch = "+")
+      end
+      nextch()
+    end
+    if ch <> "," then return end
+  end
+end options
+
+// pcom.pas lines 396-549: insymbol main body
+proc insymbol()
+  var i, k: integer
+      digit: array T.strglgth of char
+      string_: array T.strglgth of char
+      lvp: T.Csp
+begin
+  restart:
+  // skip blanks and newlines
+  loop
+    while ((ch = " ") or (ch = 9X)) and not eol do nextch() end
+    test := eol
+    if test then
+      if F.Eof(srcfile) then
+        sy := T.period  // treat as end
+        return
+      end
+      nextch()
+    end
+    if not test then goto done_skip end
+  end
+  done_skip:
+
+  if chartp[ord(ch)] = T.illegal then
+    sy := T.othersy; op := T.noop
+    error(399); nextch()
+    return
+  end
+
+  // pcom.pas lines 407-548: case chartp[ch]
+  if chartp[ord(ch)] = T.letter then
+    // pcom.pas lines 409-424: identifier or reserved word
+    k := 0
+    loop
+      if k < 8 then id[k] := ch; inc(k) end
+      nextch()
+      if (chartp[ord(ch)] = T.special) or (chartp[ord(ch)] = T.illegal)
+         or (chartp[ord(ch)] = T.chstrquo) or (chartp[ord(ch)] = T.chcolon)
+         or (chartp[ord(ch)] = T.chperiod) or (chartp[ord(ch)] = T.chlt)
+         or (chartp[ord(ch)] = T.chgt) or (chartp[ord(ch)] = T.chlparen)
+         or (chartp[ord(ch)] = T.chspace) then
+        goto id_done
+      end
+    end
+    id_done:
+    if k >= kk then kk := k
+    else
+      while kk > k do dec(kk); id[kk] := " " end
+    end
+    // search reserved words
+    i := frw[k]
+    while i < frw[k + 1] do
+      if rw[i] = id then // alphaEq(@rw[i], @id)
+        sy := rsy[i]; op := rop[i]; return
+      end
+      inc(i)
+    end
+    sy := T.ident; op := T.noop
+
+  elsif chartp[ord(ch)] = T.number then
+    // pcom.pas lines 425-480: number
+    op := T.noop; i := 0
+    loop
+      inc(i); if i <= digmax then digit[i - 1] := ch end
+      nextch()
+      if chartp[ord(ch)] <> T.number then goto num_done end
+    end
+    num_done:
+    if ((ch = ".") and (peekNextCh() <> "."))
+       or (ch = "e") then
+      // real constant
+      k := i
+      if ch = "." then
+        inc(k); if k <= digmax then digit[k - 1] := ch end
+        nextch()
+        if chartp[ord(ch)] <> T.number then error(201)
+        else
+          loop
+            inc(k); if k <= digmax then digit[k - 1] := ch end
+            nextch()
+            if chartp[ord(ch)] <> T.number then goto real_frac_done end
+          end
+          real_frac_done:
+        end
+      end
+      if ch = "e" then
+        inc(k); if k <= digmax then digit[k - 1] := ch end
+        nextch()
+        if (ch = "+") or (ch = "-") then
+          inc(k); if k <= digmax then digit[k - 1] := ch end
+          nextch()
+        end
+        if chartp[ord(ch)] <> T.number then error(201)
+        else
+          loop
+            inc(k); if k <= digmax then digit[k - 1] := ch end
+            nextch()
+            if chartp[ord(ch)] <> T.number then goto real_exp_done end
+          end
+          real_exp_done:
+        end
+      end
+      new(lvp); sy := T.realconst; lvp.cclass := T.reel
+      for i := 0 to T.strglgth - 1 do lvp.rval[i] := " " end
+      if k <= digmax then
+        for i := 1 to k do lvp.rval[i] := digit[i - 1] end
+      else
+        error(203)
+        lvp.rval[1] := "0"; lvp.rval[2] := "."
+        lvp.rval[3] := "0"
+      end
+      val.intval := false; val.valp := lvp
+    else
+      // integer constant
+      if i > digmax then error(203); val.ival := 0
+      else
+        val.ival := 0
+        for k := 0 to i - 1 do
+          if val.ival <= mxint10 then
+            val.ival := val.ival * 10 + ordint[ord(digit[k])]
+          else error(203); val.ival := 0 end
+        end
+        sy := T.intconst
+      end
+      val.intval := true
+    end
+
+  elsif chartp[ord(ch)] = T.chstrquo then
+    // pcom.pas lines 481-502: string constant
+    lgth := 0; sy := T.stringconst; op := T.noop
+    loop
+      loop
+        nextch(); inc(lgth)
+        if lgth <= T.strglgth then string_[lgth - 1] := ch end
+        if eol or (ch = "'") then goto str_inner_done end
+      end
+      str_inner_done:
+      if eol then error(202) else nextch() end
+      if ch <> "'" then goto str_done end
+    end
+    str_done:
+    dec(lgth)  // now lgth = nr of chars in string
+    if lgth = 0 then error(205)
+    elsif lgth = 1 then val.intval := true; val.ival := +ord(string_[0])
+    else
+      new(lvp); lvp.cclass := T.strg
+      if lgth > T.strglgth then error(399); lgth := T.strglgth end
+      lvp.slgth := lgth
+      for i := 0 to lgth - 1 do lvp.sval[i] := string_[i] end
+      val.intval := false; val.valp := lvp
+    end
+
+  elsif chartp[ord(ch)] = T.chcolon then
+    // pcom.pas lines 503-508
+    op := T.noop; nextch()
+    if ch = "=" then sy := T.becomes; nextch()
+    else sy := T.colon end
+
+  elsif chartp[ord(ch)] = T.chperiod then
+    // pcom.pas lines 509-514
+    op := T.noop; nextch()
+    if ch = "." then sy := T.colon; nextch()
+    else sy := T.period end
+
+  elsif chartp[ord(ch)] = T.chlt then
+    // pcom.pas lines 515-523
+    nextch(); sy := T.relop
+    if ch = "=" then op := T.leop; nextch()
+    elsif ch = ">" then op := T.neop; nextch()
+    else op := T.ltop end
+
+  elsif chartp[ord(ch)] = T.chgt then
+    // pcom.pas lines 524-529
+    nextch(); sy := T.relop
+    if ch = "=" then op := T.geop; nextch()
+    else op := T.gtop end
+
+  elsif chartp[ord(ch)] = T.chlparen then
+    // pcom.pas lines 530-542: comment or left paren
+    nextch()
+    if ch = "*" then
+      nextch()
+      if ch = "$" then options() end
+      loop
+        while (ch <> "*") and not F.Eof(srcfile) do nextch() end
+        nextch()
+        if (ch = ")") or F.Eof(srcfile) then goto comment_done end
+      end
+      comment_done:
+      nextch(); goto restart
+    end
+    sy := T.lparent; op := T.noop
+
+  elsif chartp[ord(ch)] = T.special then
+    // pcom.pas lines 543-546
+    sy := ssy[ord(ch)]; op := sop[ord(ch)]
+    nextch()
+
+  elsif chartp[ord(ch)] = T.chspace then
+    sy := T.othersy
+  end
+end insymbol
+
+
+// pcom.pas lines 551-573: enterid - enter identifier into name table
+proc enterid(fcp: T.Ctp)
+  var nam: T.Alpha; lcp, lcp1: T.Ctp; lleft: boolean
+begin
+  nam := fcp.name
+  lcp := display[top].fname
+  if lcp = nil then
+    display[top].fname := fcp
+  else
+    loop
+      lcp1 := lcp
+      if lcp.name = nam then // alphaEq(@lcp.name, @nam)
+        error(101); lcp := lcp.rlink; lleft := false
+      elsif lcp.name < nam then // alphaLt(@lcp.name, @nam)
+        lcp := lcp.rlink; lleft := false
+      else
+        lcp := lcp.llink; lleft := true
+      end
+      if lcp = nil then goto enterid_done end
+    end
+    enterid_done:
+    if lleft then lcp1.llink := fcp
+    else lcp1.rlink := fcp end
+  end
+  fcp.llink := nil; fcp.rlink := nil
+end enterid
+
+// pcom.pas lines 575-586: searchsection
+proc searchsection(fcp: T.Ctp; fcp1: ^T.Ctp)
+begin
+  while fcp <> nil do
+    if fcp.name = id then fcp1^ := fcp; return end // alphaEq(@fcp.name, @id)
+    if fcp.name < id then fcp := fcp.rlink // alphaLt(@fcp.name, @id)
+    else fcp := fcp.llink end
+  end
+  fcp1^ := nil
+end searchsection
+
+// pcom.pas lines 588-626: searchid
+proc searchid(fidcls: T.SetOfIds; fcp: ^T.Ctp)
+  var lcp: T.Ctp
+begin
+  disx := top
+  while disx >= 0 do
+    lcp := display[disx].fname
+    while lcp <> nil do
+      if lcp.name = id then // alphaEq(@lcp.name, @id)
+        if T.idIn(fidcls, lcp.klass) then fcp^ := lcp; return end
+        if prterr then error(103) end
+        lcp := lcp.rlink
+      elsif lcp.name < id then lcp := lcp.rlink // alphaLt(@lcp.name, @id)
+      else lcp := lcp.llink end
+    end
+    dec(disx)
+  end
+  // search not successful
+  if prterr then
+    error(104)
+    if T.idIn(fidcls, T.types) then lcp := utypptr
+    elsif T.idIn(fidcls, T.vars) then lcp := uvarptr
+    elsif T.idIn(fidcls, T.field) then lcp := ufldptr
+    elsif T.idIn(fidcls, T.konst) then lcp := ucstptr
+    elsif T.idIn(fidcls, T.procc) then lcp := uprcptr
+    else lcp := ufctptr end
+  end
+  fcp^ := lcp
+end searchid
+
+// pcom.pas lines 628-644: getbounds
+proc getbounds(fsp: T.Stp; fmin, fmax: ^integer)
+begin
+  fmin^ := 0; fmax^ := 0
+  if fsp <> nil then
+    if fsp.form = T.subrange then
+      fmin^ := fsp.min.ival; fmax^ := fsp.max.ival
+    elsif fsp = charptr then
+      fmin^ := T.ordminchar; fmax^ := T.ordmaxchar
+    elsif fsp.form = T.scalar then
+      if fsp.fconst <> nil then
+        fmax^ := fsp.fconst.values.ival
+      end
+    end
+  end
+end getbounds
+
+// pcom.pas lines 646-666: alignquot
+proc alignquot(fsp: T.Stp): integer
+begin
+  if fsp = nil then return 1 end
+  if fsp.form = T.scalar then
+    if fsp = intptr then return T.intal
+    elsif fsp = boolptr then return T.boolal
+    elsif fsp.scalkind = T.declared then return T.intal
+    elsif fsp = charptr then return T.charal
+    elsif fsp = realptr then return T.realal
+    else return T.parmal end
+  elsif fsp.form = T.subrange then return alignquot(fsp.rangetype)
+  elsif fsp.form = T.pointer_f then return T.adral
+  elsif fsp.form = T.power then return T.setal
+  elsif fsp.form = T.files then return T.fileal
+  elsif fsp.form = T.arrays then return alignquot(fsp.aeltype)
+  elsif fsp.form = T.records then return T.recal
+  elsif (fsp.form = T.variant_f) or (fsp.form = T.tagfld) then error(501); return 1
+  else return 1 end
+end alignquot
+
+// pcom.pas lines 668-674: align
+proc align(fsp: T.Stp; flc: ^integer)
+  var k, l: integer
+begin
+  k := alignquot(fsp)
+  l := flc^ - 1
+  flc^ := l + k - (k + l) mod k
+end align
+
+
+// pcom.pas lines 676-845: printtables (simplified for Micron)
+proc printtables(fb: boolean)
+  var i, lim: integer
+  // Forward declarations for mutually recursive procs
+  procedure^ markstp(fp: T.Stp)
+  procedure^ markctp(fp: T.Ctp)
+  procedure^ followstp(fp: T.Stp)
+  procedure^ followctp(fp: T.Ctp)
+
+  proc markstp(fp: T.Stp)
+  begin
+    if fp <> nil then
+      fp.marked := true
+      if fp.form = T.scalar then // nothing
+      elsif fp.form = T.subrange then markstp(fp.rangetype)
+      elsif fp.form = T.pointer_f then // don't mark eltype (cycle)
+      elsif fp.form = T.power then markstp(fp.elset)
+      elsif fp.form = T.arrays then
+        markstp(fp.aeltype); markstp(fp.inxtype)
+      elsif fp.form = T.records then
+        markctp(fp.fstfld); markstp(fp.recvar)
+      elsif fp.form = T.files then markstp(fp.filtype)
+      elsif fp.form = T.tagfld then markstp(fp.fstvar)
+      elsif fp.form = T.variant_f then
+        markstp(fp.nxtvar); markstp(fp.subvar)
+      end
+    end
+  end markstp
+
+  proc markctp(fp: T.Ctp)
+  begin
+    if fp <> nil then
+      markctp(fp.llink); markctp(fp.rlink)
+      markstp(fp.idtype)
+    end
+  end markctp
+
+  proc followstp(fp: T.Stp)
+  begin
+    if fp <> nil then
+      if fp.marked then
+        fp.marked := false
+        O.String("    "); O.Int(0, 6); O.Int(fp.size, 10)
+        if fp.form = T.scalar then
+          O.String("    scalar")
+          if fp.scalkind = T.standard then O.String("  standard")
+          else O.String("  declared") end
+          O.Ln
+        elsif fp.form = T.subrange then
+          O.String("  subrange"); O.Ln
+          followstp(fp.rangetype)
+        elsif fp.form = T.pointer_f then
+          O.String("   pointer"); O.Ln
+        elsif fp.form = T.power then
+          O.String("       set"); O.Ln
+          followstp(fp.elset)
+        elsif fp.form = T.arrays then
+          O.String("     array"); O.Ln
+          followstp(fp.aeltype); followstp(fp.inxtype)
+        elsif fp.form = T.records then
+          O.String("    record"); O.Ln
+          followctp(fp.fstfld); followstp(fp.recvar)
+        elsif fp.form = T.files then
+          O.String("      file"); O.Ln
+          followstp(fp.filtype)
+        elsif fp.form = T.tagfld then
+          O.String("    tagfld"); O.Ln
+          followstp(fp.fstvar)
+        elsif fp.form = T.variant_f then
+          O.String("   variant"); O.Ln
+          followstp(fp.nxtvar); followstp(fp.subvar)
+        end
+      end
+    end
+  end followstp
+
+  proc followctp(fp: T.Ctp)
+  begin
+    if fp <> nil then
+      O.String("    "); printAlpha(fp.name)
+      if fp.klass = T.types then O.String("      type")
+      elsif fp.klass = T.konst then O.String("  constant")
+      elsif fp.klass = T.vars then
+        O.String("  variable")
+        if fp.vkind = T.actual then O.String("    actual")
+        else O.String("    formal") end
+      elsif fp.klass = T.field then O.String("     field")
+      elsif fp.klass = T.procc then O.String(" procedure")
+      elsif fp.klass = T.funcc then O.String("  function")
+      end
+      O.Ln
+      followctp(fp.llink); followctp(fp.rlink)
+      followstp(fp.idtype)
+    end
+  end followctp
+
+begin
+  // printtables main body
+  O.Ln; O.Ln; O.Ln
+  if fb then lim := 0
+  else lim := top; O.String(" local") end
+  O.String(" tables "); O.Ln; O.Ln
+  // marker
+  for i := top to 0 by -1 do markctp(display[i].fname) end
+  // follow
+  for i := top to 0 by -1 do followctp(display[i].fname) end
+  O.Ln
+end printtables
+
+// pcom.pas lines 847-850: genlabel
+proc genlabel(nxtlab: ^integer)
+begin
+  inc(intlabel)
+  nxtlab^ := intlabel
+end genlabel
+
+// pcom.pas lines 852-3716: block procedure and all nested procedures
+
+(* NOTE: In Micron, we flatten the nesting: block's local state becomes
+   module-level vars, and nested procs become module-level procs
+   that receive needed outer state as parameters. *)
+
+// Forward declarations 
+procedure^ skip(fsys: T.SetOfSys)
+procedure^ constant(fsys: T.SetOfSys; fsp: ^T.Stp; fvalu: ^T.Valu)
+procedure^ equalbounds(fsp1, fsp2: T.Stp): boolean
+procedure^ comptypes(fsp1, fsp2: T.Stp): boolean
+procedure^ isString(fsp: T.Stp): boolean
+procedure^ typ(fsys: T.SetOfSys; fsp: ^T.Stp; fsize: ^integer)
+procedure^ simpletype(fsys: T.SetOfSys; fsp: ^T.Stp; fsize: ^integer)
+procedure^ fieldlist(fsys: T.SetOfSys; frecvar: ^T.Stp; displ: ^integer)
+procedure^ selector(fsys: T.SetOfSys; fcp: T.Ctp)
+procedure^ expression(fsys: T.SetOfSys)
+procedure^ simpleexpression(fsys: T.SetOfSys)
+procedure^ term(fsys: T.SetOfSys)
+procedure^ factor(fsys: T.SetOfSys)
+procedure^ statement(fsys: T.SetOfSys)
+procedure^ body(fsys: T.SetOfSys; fprocp_: T.Ctp)
+procedure^ labeldeclaration(fsys: T.SetOfSys)
+procedure^ constdeclaration(fsys: T.SetOfSys)
+procedure^ typedeclaration(fsys: T.SetOfSys)
+procedure^ vardeclaration(fsys: T.SetOfSys)
+procedure^ procdeclaration(fsys: T.SetOfSys; fsy: T.Symbol)
+
+// code generation forward decls
+procedure^ gen0(fop: integer)
+procedure^ gen1(fop: integer; fp2: integer)
+procedure^ gen2(fop: integer; fp1: integer; fp2: integer)
+procedure^ gen0t(fop: integer; fp2: T.Stp)
+procedure^ gen1t(fop: integer; fp2: integer; fp3: T.Stp)
+procedure^ gen2t(fop: integer; fp1: integer; fp2: integer; fp3: T.Stp)
+procedure^ load()
+procedure^ store(lattr: T.Attr)
+procedure^ loadaddress()
+procedure^ genfjp(faddr: ^integer)
+procedure^ genujpxjp(fop: integer; fp2: ^integer)
+procedure^ gencupent(fop: integer; fp1: integer; fp2: integer)
+
+// pcom.pas lines 855-862: skip
+proc skip(fsys: T.SetOfSys)
+begin
+  if not F.Eof(srcfile) then
+    while not T.symIn(fsys, sy) and not F.Eof(srcfile) do
+      insymbol()
+    end
+    if not T.symIn(fsys, sy) then insymbol() end
+  end
+end skip
+
+
+// pcom.pas lines 864-932: constant
+proc constant(fsys: T.SetOfSys; fsp: ^T.Stp; fvalu: ^T.Valu)
+  var lsp: T.Stp; lcp: T.Ctp; sign: integer  // 0=none, 1=pos, 2=neg
+      lvp: T.Csp; i: integer
+begin
+  lsp := nil; fvalu.intval := true; fvalu.ival := 0
+  if not T.symIn(constbegsys, sy) then
+    error(50); skip(T.ssUnion(fsys, constbegsys))
+  end
+  if T.symIn(constbegsys, sy) then
+    if sy = T.stringconst then
+      if lgth = 1 then lsp := charptr
+      else
+        new(lsp)
+        lsp.aeltype := charptr; lsp.inxtype := nil
+        lsp.size := lgth * T.charsize; lsp.form := T.arrays
+      end
+      fvalu^ := val; insymbol()
+    else
+      sign := 0
+      if (sy = T.addop) and ((op = T.plus) or (op = T.minus)) then
+        if op = T.plus then sign := 1 else sign := 2 end
+        insymbol()
+      end
+      if sy = T.ident then
+        searchid(T.idBit(T.konst), @lcp)
+        lsp := lcp.idtype; fvalu^ := lcp.values
+        if sign <> 0 then
+          if lsp = intptr then
+            if sign = 2 then fvalu.ival := -fvalu.ival end
+          elsif lsp = realptr then
+            if sign = 2 then
+              new(lvp); lvp.cclass := T.reel
+              if fvalu.valp.rval[1] = "-" then
+                lvp.rval[1] := "+"
+              else lvp.rval[1] := "-" end
+              for i := 2 to T.strglgth do
+                lvp.rval[i] := fvalu.valp.rval[i]
+              end
+              fvalu.intval := false; fvalu.valp := lvp
+            end
+          else error(105) end
+        end
+        insymbol()
+      elsif sy = T.intconst then
+        if sign = 2 then val.ival := -val.ival end
+        lsp := intptr; fvalu^ := val; insymbol()
+      elsif sy = T.realconst then
+        if sign = 2 then val.valp.rval[1] := "-" end
+        lsp := realptr; fvalu^ := val; insymbol()
+      else
+        error(106); skip(fsys)
+      end
+    end
+    if not T.symIn(fsys, sy) then
+      error(6); skip(fsys)
+    end
+  end
+  fsp^ := lsp
+end constant
+
+
+// pcom.pas lines 934-944: equalbounds
+proc equalbounds(fsp1, fsp2: T.Stp): boolean
+  var lmin1, lmin2, lmax1, lmax2: integer
+begin
+  if (fsp1 = nil) or (fsp2 = nil) then return true end
+  getbounds(fsp1, @lmin1, @lmax1)
+  getbounds(fsp2, @lmin2, @lmax2)
+  return (lmin1 = lmin2) and (lmax1 = lmax2)
+end equalbounds
+
+
+// pcom.pas lines 946-1016: comptypes
+proc comptypes(fsp1, fsp2: T.Stp): boolean
+  var nxt1, nxt2: T.Ctp; comp: boolean
+      ltestp1, ltestp2: T.Testp
+begin
+  if fsp1 = fsp2 then return true end
+  if (fsp1 <> nil) and (fsp2 <> nil) then
+    if fsp1.form = fsp2.form then
+      if fsp1.form = T.scalar then return false
+      elsif fsp1.form = T.subrange then
+        return comptypes(fsp1.rangetype, fsp2.rangetype)
+      elsif fsp1.form = T.pointer_f then
+        comp := false; ltestp1 := globtestp; ltestp2 := globtestp
+        while ltestp1 <> nil do
+          if (ltestp1.elt1 = fsp1.eltype) and
+             (ltestp1.elt2 = fsp2.eltype) then comp := true end
+          ltestp1 := ltestp1.lasttestp
+        end
+        if not comp then
+          new(ltestp1)
+          ltestp1.elt1 := fsp1.eltype
+          ltestp1.elt2 := fsp2.eltype
+          ltestp1.lasttestp := globtestp
+          globtestp := ltestp1
+          comp := comptypes(fsp1.eltype, fsp2.eltype)
+        end
+        globtestp := ltestp2
+        return comp
+      elsif fsp1.form = T.power then
+        return comptypes(fsp1.elset, fsp2.elset)
+      elsif fsp1.form = T.arrays then
+        comp := comptypes(fsp1.aeltype, fsp2.aeltype) and
+                comptypes(fsp1.inxtype, fsp2.inxtype)
+        return comp and (fsp1.size = fsp2.size) and
+               equalbounds(fsp1.inxtype, fsp2.inxtype)
+      elsif fsp1.form = T.records then
+        nxt1 := fsp1.fstfld; nxt2 := fsp2.fstfld; comp := true
+        while (nxt1 <> nil) and (nxt2 <> nil) do
+          comp := comp and comptypes(nxt1.idtype, nxt2.idtype)
+          nxt1 := nxt1.next; nxt2 := nxt2.next
+        end
+        return comp and (nxt1 = nil) and (nxt2 = nil) and
+               (fsp1.recvar = nil) and (fsp2.recvar = nil)
+      elsif fsp1.form = T.files then
+        return comptypes(fsp1.filtype, fsp2.filtype)
+      end
+    else
+      if fsp1.form = T.subrange then
+        return comptypes(fsp1.rangetype, fsp2)
+      elsif fsp2.form = T.subrange then
+        return comptypes(fsp1, fsp2.rangetype)
+      else return false end
+    end
+  else return true end
+  return false
+end comptypes
+
+// pcom.pas lines 1018-1023: string test
+proc isString(fsp: T.Stp): boolean
+begin
+  if fsp <> nil then
+    if fsp.form = T.arrays then
+      if comptypes(fsp.aeltype, charptr) then return true end
+    end
+  end
+  return false
+end isString
+
+
+// pcom.pas lines 1029-1112: simpletype
+proc simpletype(fsys: T.SetOfSys; fsp: ^T.Stp; fsize: ^integer)
+  var lsp, lsp1: T.Stp; lcp, lcp1: T.Ctp; ttop: integer
+      lcnt: integer; lvalu: T.Valu
+begin
+  fsize^ := 1
+  if not T.symIn(simptypebegsys, sy) then
+    error(1); skip(T.ssUnion(fsys, simptypebegsys))
+  end
+  if T.symIn(simptypebegsys, sy) then
+    if sy = T.lparent then
+      // pcom.pas lines 1037-1063: enumeration type
+      ttop := top
+      while display[top].occur <> T.blck do dec(top) end
+      new(lsp)
+      lsp.size := T.intsize; lsp.form := T.scalar
+      lsp.scalkind := T.declared; lsp.fconst := nil
+      lcp1 := nil; lcnt := 0
+      loop
+        insymbol()
+        if sy = T.ident then
+          new(lcp)
+          lcp.name := id; lcp.idtype := lsp; lcp.next := lcp1
+          lcp.values.intval := true; lcp.values.ival := lcnt
+          lcp.klass := T.konst
+          enterid(lcp)
+          inc(lcnt); lcp1 := lcp; insymbol()
+        else error(2) end
+        if not T.symIn(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent), sy) then
+          error(6); skip(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+        end
+        if sy <> T.comma then goto enum_done end
+      end
+      enum_done:
+      lsp.fconst := lcp1; top := ttop
+      if sy = T.rparent then insymbol() else error(4) end
+    else
+      // pcom.pas lines 1065-1111: ident or constant subrange
+      if sy = T.ident then
+        searchid(T.idBit(T.types) + T.idBit(T.konst), @lcp)
+        insymbol()
+        if lcp.klass = T.konst then
+          new(lsp); lsp.form := T.subrange
+          lsp.rangetype := lcp.idtype
+          if isString(lsp.rangetype) then
+            error(148); lsp.rangetype := nil
+          end
+          lsp.min := lcp.values; lsp.size := T.intsize
+          if sy = T.colon then insymbol() else error(5) end
+          constant(fsys, @lsp1, @lvalu)
+          lsp.max := lvalu
+          if lsp.rangetype <> lsp1 then error(107) end
+        else
+          lsp := lcp.idtype
+          if lsp <> nil then fsize^ := lsp.size end
+        end
+      else
+        new(lsp); lsp.form := T.subrange
+        constant(T.ssAdd(fsys, T.colon), @lsp1, @lvalu)
+        if isString(lsp1) then error(148); lsp1 := nil end
+        lsp.rangetype := lsp1; lsp.min := lvalu; lsp.size := T.intsize
+        if sy = T.colon then insymbol() else error(5) end
+        constant(fsys, @lsp1, @lvalu)
+        lsp.max := lvalu
+        if lsp.rangetype <> lsp1 then error(107) end
+      end
+      if lsp <> nil then
+        if lsp.form = T.subrange then
+          if lsp.rangetype <> nil then
+            if lsp.rangetype = realptr then error(399)
+            elsif lsp.min.ival > lsp.max.ival then error(102)
+            end
+          end
+        end
+      end
+    end
+    fsp^ := lsp
+    if not T.symIn(fsys, sy) then error(6); skip(fsys) end
+  else fsp^ := nil end
+end simpletype
+
+
+// pcom.pas lines 1114-1244: fieldlist
+proc fieldlist(fsys: T.SetOfSys; frecvar: ^T.Stp; displ: ^integer)
+  var lcp, lcp1, nxt, nxt1: T.Ctp
+      lsp, lsp1, lsp2, lsp3, lsp4: T.Stp
+      minsize, maxsize, lsize: integer
+      lvalu: T.Valu
+begin
+  nxt1 := nil; lsp := nil
+  if not T.symIn(T.ssAdd(T.ssAdd(fsys, T.ident), T.casesy), sy) then
+    error(19); skip(T.ssAdd(T.ssAdd(fsys, T.ident), T.casesy))
+  end
+  while sy = T.ident do
+    nxt := nxt1
+    loop
+      if sy = T.ident then
+        new(lcp)
+        lcp.name := id; lcp.idtype := nil; lcp.next := nxt
+        lcp.klass := T.field; lcp.fldaddr := 0
+        nxt := lcp; enterid(lcp); insymbol()
+      else error(2) end
+      if not T.symIn(T.ss2(T.comma, T.colon), sy) then
+        error(6); skip(T.ss4(T.comma, T.colon, T.semicolon, T.casesy))
+      end
+      if sy <> T.comma then goto fld_done end
+      insymbol()
+    end
+    fld_done:
+    if sy = T.colon then insymbol() else error(5) end
+    typ(T.ssAdd(T.ssAdd(fsys, T.casesy), T.semicolon), @lsp, @lsize)
+    while nxt <> nxt1 do
+      align(lsp, displ)
+      nxt.idtype := lsp; nxt.fldaddr := displ^
+      nxt := nxt.next; displ^ := displ^ + lsize
+    end
+    nxt1 := lcp
+    while sy = T.semicolon do
+      insymbol()
+      if not T.symIn(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.ident), T.casesy), T.semicolon), sy) then
+        error(19); skip(T.ssAdd(T.ssAdd(fsys, T.ident), T.casesy))
+      end
+    end
+  end
+  // reverse the field list
+  nxt := nil
+  while nxt1 <> nil do
+    lcp := nxt1.next; nxt1.next := nxt; nxt := nxt1; nxt1 := lcp
+  end
+  if sy = T.casesy then
+    // pcom.pas lines 1159-1242: variant part
+    new(lsp); lsp.form := T.tagfld
+    lsp.tagfieldp := nil; lsp.fstvar := nil
+    frecvar^ := lsp
+    insymbol()
+    if sy = T.ident then
+      new(lcp)
+      lcp.name := id; lcp.idtype := nil; lcp.klass := T.field
+      lcp.next := nil; lcp.fldaddr := displ^
+      enterid(lcp); insymbol()
+      if sy = T.colon then insymbol() else error(5) end
+      if sy = T.ident then
+        searchid(T.idBit(T.types), @lcp1)
+        lsp1 := lcp1.idtype
+        if lsp1 <> nil then
+          align(lsp1, displ)
+          lcp.fldaddr := displ^
+          displ^ := displ^ + lsp1.size
+          if (ord(lsp1.form) <= ord(T.subrange)) or isString(lsp1) then
+            if comptypes(realptr, lsp1) then error(109)
+            elsif isString(lsp1) then error(399)
+            else
+              lcp.idtype := lsp1; lsp.tagfieldp := lcp
+            end
+          else error(110) end
+        end
+        insymbol()
+      else error(2); skip(T.ssAdd(T.ssAdd(fsys, T.ofsy), T.lparent)) end
+    else error(2); skip(T.ssAdd(T.ssAdd(fsys, T.ofsy), T.lparent)) end
+    lsp.size := displ^
+    if sy = T.ofsy then insymbol() else error(8) end
+    lsp1 := nil; minsize := displ^; maxsize := displ^
+    loop
+      lsp2 := nil
+      if not T.symIn(T.ssAdd(fsys, T.semicolon), sy) then
+        loop
+          constant(T.ss3(T.comma, T.colon, T.lparent), @lsp3, @lvalu)
+          if lsp.tagfieldp <> nil then
+            if not comptypes(lsp.tagfieldp.idtype, lsp3) then error(111) end
+          end
+          new(lsp3); lsp3.form := T.variant_f
+          lsp3.nxtvar := lsp1; lsp3.subvar := lsp2; lsp3.varval := lvalu
+          lsp4 := lsp1
+          while lsp4 <> nil do
+            if lsp4.varval.ival = lvalu.ival then error(178) end
+            lsp4 := lsp4.nxtvar
+          end
+          lsp1 := lsp3; lsp2 := lsp3
+          if sy <> T.comma then goto var_done end
+          insymbol()
+        end
+        var_done:
+        if sy = T.colon then insymbol() else error(5) end
+        if sy = T.lparent then insymbol() else error(9) end
+        fieldlist(T.ssAdd(T.ssAdd(fsys, T.rparent), T.semicolon), @lsp2, displ)
+        if displ^ > maxsize then maxsize := displ^ end
+        while lsp3 <> nil do
+          lsp4 := lsp3.subvar; lsp3.subvar := lsp2
+          lsp3.size := displ^; lsp3 := lsp4
+        end
+        if sy = T.rparent then
+          insymbol()
+          if not T.symIn(T.ssAdd(fsys, T.semicolon), sy) then
+            error(6); skip(T.ssAdd(fsys, T.semicolon))
+          end
+        else error(4) end
+      end
+      if sy <> T.semicolon then goto variant_done end
+      displ^ := minsize; insymbol()
+    end
+    variant_done:
+    displ^ := maxsize; lsp.fstvar := lsp1
+  else frecvar^ := nil end
+end fieldlist
+
+// pcom.pas lines 1246-1385: typ
+proc typ(fsys: T.SetOfSys; fsp: ^T.Stp; fsize: ^integer)
+  var lsp, lsp1, lsp2: T.Stp; oldtop: integer; lcp: T.Ctp
+      lsize, displ: integer; lmin, lmax: integer
+begin
+  if not T.symIn(typebegsys, sy) then
+    error(10); skip(T.ssUnion(fsys, typebegsys))
+  end
+  if T.symIn(typebegsys, sy) then
+    if T.symIn(simptypebegsys, sy) then
+      simpletype(fsys, fsp, fsize)
+    elsif sy = T.arrow then
+      // pcom.pas lines 1253-1278: pointer type
+      new(lsp); fsp^ := lsp
+      lsp.eltype := nil; lsp.size := T.ptrsize; lsp.form := T.pointer_f
+      insymbol()
+      if sy = T.ident then
+        prterr := false
+        searchid(T.idBit(T.types), @lcp)
+        prterr := true
+        if lcp = nil then
+          // forward referenced type id
+          new(lcp)
+          lcp.name := id; lcp.idtype := lsp
+          lcp.next := fwptr; lcp.klass := T.types
+          fwptr := lcp
+        else
+          if lcp.idtype <> nil then
+            if lcp.idtype.form = T.files then error(108)
+            else lsp.eltype := lcp.idtype end
+          end
+        end
+        insymbol()
+      else error(2) end
+    else
+      // packed, array, record, set, file
+      if sy = T.packedsy then
+        insymbol()
+        if not T.symIn(typedels, sy) then
+          error(10); skip(T.ssUnion(fsys, typedels))
+        end
+      end
+      if sy = T.arraysy then
+        // pcom.pas lines 1288-1327: array type
+        insymbol()
+        if sy = T.lbrack then insymbol() else error(11) end
+        lsp1 := nil
+        loop
+          new(lsp)
+          lsp.aeltype := lsp1; lsp.inxtype := nil; lsp.form := T.arrays
+          lsp1 := lsp
+          simpletype(T.ss3(T.comma, T.rbrack, T.ofsy), @lsp2, @lsize)
+          lsp1.size := lsize
+          if lsp2 <> nil then
+            if ord(lsp2.form) <= ord(T.subrange) then
+              if lsp2 = realptr then error(109); lsp2 := nil
+              elsif lsp2 = intptr then error(149); lsp2 := nil
+              else lsp.inxtype := lsp2 end
+            else error(113); lsp2 := nil end
+          end
+          if sy <> T.comma then goto arr_done end
+          insymbol()
+        end
+        arr_done:
+        if sy = T.rbrack then insymbol() else error(12) end
+        if sy = T.ofsy then insymbol() else error(8) end
+        typ(fsys, @lsp, @lsize)
+        loop
+          lsp2 := lsp1.aeltype; lsp1.aeltype := lsp
+          if lsp1.inxtype <> nil then
+            getbounds(lsp1.inxtype, @lmin, @lmax)
+            align(lsp, @lsize)
+            lsize := lsize * (lmax - lmin + 1)
+            lsp1.size := lsize
+          end
+          lsp := lsp1; lsp1 := lsp2
+          if lsp1 = nil then goto arr_chain_done end
+        end
+        arr_chain_done:
+      elsif sy = T.recordsy then
+        // pcom.pas lines 1329-1350: record type
+        insymbol()
+        oldtop := top
+        if top < T.displimit then
+          inc(top)
+          display[top].fname := nil
+          display[top].flabel := nil
+          display[top].occur := T.rec
+        else error(250) end
+        displ := 0
+        fieldlist(T.ssAdd(fsys, T.endsy), @lsp1, @displ)
+        new(lsp)
+        lsp.fstfld := display[top].fname
+        lsp.recvar := lsp1; lsp.size := displ; lsp.form := T.records
+        top := oldtop
+        if sy = T.endsy then insymbol() else error(13) end
+      elsif sy = T.setsy then
+        // pcom.pas lines 1352-1372: set type
+        insymbol()
+        if sy = T.ofsy then insymbol() else error(8) end
+        simpletype(fsys, @lsp1, @lsize)
+        if lsp1 <> nil then
+          if ord(lsp1.form) > ord(T.subrange) then
+            error(115); lsp1 := nil
+          elsif lsp1 = realptr then error(114); lsp1 := nil
+          elsif lsp1 = intptr then error(169); lsp1 := nil
+          else
+            getbounds(lsp1, @lmin, @lmax)
+            if (lmin < T.setlow) or (lmax > T.sethigh) then error(169) end
+          end
+        end
+        new(lsp)
+        lsp.elset := lsp1; lsp.size := T.setsize; lsp.form := T.power
+      elsif sy = T.filesy then
+        // pcom.pas lines 1374-1377: file type
+        insymbol()
+        error(399); skip(fsys); lsp := nil
+      end
+      fsp^ := lsp
+    end
+    if not T.symIn(fsys, sy) then error(6); skip(fsys) end
+  else fsp^ := nil end
+  if fsp^ = nil then fsize^ := 1 else fsize^ := fsp^.size end
+end typ
+
+
+// pcom.pas lines 1387-1415: labeldeclaration
+proc labeldeclaration(fsys: T.SetOfSys)
+  var llp: T.Lbp; redef: boolean; lbname: integer
+begin
+  loop
+    if sy = T.intconst then
+      llp := display[top].flabel; redef := false
+      while (llp <> nil) and not redef do
+        if llp.labval <> val.ival then
+          llp := llp.nextlab
+        else redef := true; error(166) end
+      end
+      if not redef then
+        new(llp)
+        llp.labval := val.ival
+        genlabel(@lbname)
+        llp.defined := false; llp.nextlab := display[top].flabel
+        llp.labname := lbname
+        display[top].flabel := llp
+      end
+      insymbol()
+    else error(15) end
+    if not T.symIn(T.ssAdd(T.ssAdd(fsys, T.comma), T.semicolon), sy) then
+      error(6); skip(T.ssAdd(T.ssAdd(fsys, T.comma), T.semicolon))
+    end
+    if sy <> T.comma then goto label_done end
+    insymbol()
+  end
+  label_done:
+  if sy = T.semicolon then insymbol() else error(14) end
+end labeldeclaration
+
+
+// pcom.pas lines 1417-1438: constdeclaration
+proc constdeclaration(fsys: T.SetOfSys)
+  var lcp: T.Ctp; lsp: T.Stp; lvalu: T.Valu
+begin
+  if sy <> T.ident then error(2); skip(T.ssAdd(fsys, T.ident)) end
+  while sy = T.ident do
+    new(lcp)
+    lcp.name := id; lcp.idtype := nil; lcp.next := nil; lcp.klass := T.konst
+    insymbol()
+    if (sy = T.relop) and (op = T.eqop) then insymbol() else error(16) end
+    constant(T.ssAdd(fsys, T.semicolon), @lsp, @lvalu)
+    enterid(lcp)
+    lcp.idtype := lsp; lcp.values := lvalu
+    if sy = T.semicolon then
+      insymbol()
+      if not T.symIn(T.ssAdd(fsys, T.ident), sy) then
+        error(6); skip(T.ssAdd(fsys, T.ident))
+      end
+    else error(14) end
+  end
+end constdeclaration
+
+// pcom.pas lines 1440-1481: typedeclaration
+proc typedeclaration(fsys: T.SetOfSys)
+  var lcp, lcp1, lcp2: T.Ctp; lsp: T.Stp; lsize: integer
+begin
+  if sy <> T.ident then error(2); skip(T.ssAdd(fsys, T.ident)) end
+  while sy = T.ident do
+    new(lcp)
+    lcp.name := id; lcp.idtype := nil; lcp.klass := T.types
+    insymbol()
+    if (sy = T.relop) and (op = T.eqop) then insymbol() else error(16) end
+    typ(T.ssAdd(fsys, T.semicolon), @lsp, @lsize)
+    enterid(lcp)
+    lcp.idtype := lsp
+    // resolve forward references
+    lcp1 := fwptr
+    while lcp1 <> nil do
+      if lcp1.name = lcp.name then // alphaEq(@lcp1.name, @lcp.name)
+        lcp1.idtype.eltype := lcp.idtype
+        if lcp1 <> fwptr then lcp2.next := lcp1.next
+        else fwptr := lcp1.next end
+      else lcp2 := lcp1 end
+      lcp1 := lcp1.next
+    end
+    if sy = T.semicolon then
+      insymbol()
+      if not T.symIn(T.ssAdd(fsys, T.ident), sy) then
+        error(6); skip(T.ssAdd(fsys, T.ident))
+      end
+    else error(14) end
+  end
+  if fwptr <> nil then
+    error(117); O.Ln
+    while fwptr <> nil do
+      O.String(" type-id "); printAlpha(fwptr.name); O.Ln
+      fwptr := fwptr.next
+    end
+  end
+end typedeclaration
+
+
+// pcom.pas lines 1483-1519: vardeclaration
+proc vardeclaration(fsys: T.SetOfSys)
+  var lcp, nxt: T.Ctp; lsp: T.Stp; lsize: integer
+begin
+  nxt := nil
+  loop
+    loop
+      if sy = T.ident then
+        new(lcp)
+        lcp.name := id; lcp.next := nxt; lcp.klass := T.vars
+        lcp.idtype := nil; lcp.vkind := T.actual; lcp.vlev := level
+        enterid(lcp); nxt := lcp; insymbol()
+      else error(2) end
+      if not T.symIn(T.ssUnion(T.ssAdd(T.ssAdd(fsys, T.comma), T.colon), typedels), sy) then
+        error(6); skip(T.ssUnion(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.comma), T.colon), T.semicolon), typedels))
+      end
+      if sy <> T.comma then goto vardecl_inner_done end
+      insymbol()
+    end
+    vardecl_inner_done:
+    if sy = T.colon then insymbol() else error(5) end
+    typ(T.ssUnion(T.ssAdd(fsys, T.semicolon), typedels), @lsp, @lsize)
+    while nxt <> nil do
+      align(lsp, @lc)
+      nxt.idtype := lsp; nxt.vaddr := lc
+      lc := lc + lsize; nxt := nxt.next
+    end
+    if sy = T.semicolon then
+      insymbol()
+      if not T.symIn(T.ssAdd(fsys, T.ident), sy) then
+        error(6); skip(T.ssAdd(fsys, T.ident))
+      end
+    else error(14) end
+    if sy <> T.ident then goto vardecl_done end
+  end
+  vardecl_done:
+end vardeclaration
+
+// pcom.pas lines 1521-1694: procdeclaration
+proc procdeclaration(fsys: T.SetOfSys; fsy: T.Symbol)
+  var oldlev: integer; lcp, lcp1: T.Ctp; lsp: T.Stp
+      forw: boolean; oldtop: integer
+      llc, lcm: integer; lbname: integer
+      markp: integer  // dummy for mark/release
+
+  // pcom.pas lines 1533-1700: parameterlist
+  // Takes fsy_ (set containing semicolon, or semicolon+colon for func)
+  proc parameterlist(fsy_: T.SetOfSys; fpar: ^T.Ctp; fsys: T.SetOfSys; forw: boolean)
+    var lcp, lcp1, lcp2, lcp3: T.Ctp; lsp: T.Stp; lkind: T.IdKind
+        llc, lsize: integer; count: integer
+  begin
+    lcp1 := nil
+    if not T.symIn(T.ssAdd(fsy_, T.lparent), sy) then
+      error(7); skip(T.ssUnion(fsys, T.ssAdd(fsy_, T.lparent)))
+    end
+    if sy = T.lparent then
+      if forw then error(119) end
+      insymbol()
+      if not T.symIn(T.ss4(T.ident, T.varsy, T.procsy, T.funcsy), sy) then
+        error(7); skip(T.ssAdd(fsys, T.rparent))
+      end
+      while T.symIn(T.ss4(T.ident, T.varsy, T.procsy, T.funcsy), sy) do
+        if sy = T.procsy then
+          // pcom.pas lines 1546-1566: procedure parameter
+          error(399)
+          loop
+            insymbol()
+            if sy = T.ident then
+              new(lcp)
+              lcp.name := id; lcp.idtype := nil; lcp.next := lcp1
+              lcp.klass := T.procc; lcp.pfdeckind := T.declared
+              lcp.pfkind := T.formal
+              lcp.pflev := level
+              enterid(lcp); lcp1 := lcp
+              align(parmptr, @lc)
+              // lc := lc + some size
+              insymbol()
+            else error(2) end
+            if not T.symIn(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent), sy) then
+              error(7); skip(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+            end
+            if sy <> T.comma then exit end
+          end
+        else
+          if sy = T.funcsy then
+            // pcom.pas lines 1569-1611: function parameter
+            error(399); lcp2 := nil
+            loop
+              insymbol()
+              if sy = T.ident then
+                new(lcp)
+                lcp.name := id; lcp.idtype := nil; lcp.next := lcp2
+                lcp.klass := T.funcc; lcp.pfdeckind := T.declared
+                lcp.pfkind := T.formal
+                lcp.pflev := level
+                enterid(lcp); lcp2 := lcp
+                align(parmptr, @lc)
+                // lc := lc + some size
+                insymbol()
+              end
+              if not T.symIn(T.ssAdd(T.ssAdd(fsys, T.comma), T.colon), sy) then
+                error(7); skip(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+              end
+              if sy <> T.comma then exit end
+            end
+            if sy = T.colon then
+              insymbol()
+              if sy = T.ident then
+                searchid(T.idBit(T.types), @lcp)
+                lsp := lcp.idtype
+                if lsp <> nil then
+                  if (lsp.form <> T.scalar) and (lsp.form <> T.subrange) and (lsp.form <> T.pointer_f) then
+                    error(120); lsp := nil
+                  end
+                end
+                lcp3 := lcp2
+                while lcp2 <> nil do
+                  lcp2.idtype := lsp; lcp := lcp2; lcp2 := lcp2.next
+                end
+                lcp.next := lcp1; lcp1 := lcp3
+                insymbol()
+              else error(2) end
+              if not T.symIn(T.ssAdd(T.ssAdd(fsys, T.semicolon), T.rparent), sy) then
+                error(7); skip(T.ssAdd(T.ssAdd(fsys, T.semicolon), T.rparent))
+              end
+            else error(5) end
+          else
+            // pcom.pas lines 1613-1668: value or variable parameter
+            if sy = T.varsy then lkind := T.formal; insymbol()
+            else lkind := T.actual end
+            lcp2 := nil; count := 0
+            loop
+              if sy = T.ident then
+                new(lcp)
+                lcp.name := id; lcp.idtype := nil; lcp.klass := T.vars
+                lcp.vkind := lkind; lcp.next := lcp2; lcp.vlev := level
+                enterid(lcp); lcp2 := lcp; inc(count); insymbol()
+              end
+              if not T.symIn(T.ssAdd(T.ssAdd(fsys, T.comma), T.colon), sy) then
+                error(7); skip(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.comma), T.semicolon), T.rparent))
+              end
+              if sy <> T.comma then exit end
+              insymbol()
+            end
+            if sy = T.colon then
+              insymbol()
+              if sy = T.ident then
+                searchid(T.idBit(T.types), @lcp)
+                lsp := lcp.idtype; lsize := T.ptrsize
+                if lsp <> nil then
+                  if lkind = T.actual then
+                    if ord(lsp.form) <= ord(T.power) then lsize := lsp.size
+                    elsif lsp.form = T.files then error(121) end
+                  end
+                end
+                align(parmptr, @lsize)
+                lcp3 := lcp2
+                align(parmptr, @lc)
+                lc := lc + count * lsize
+                llc := lc
+                while lcp2 <> nil do
+                  lcp := lcp2
+                  lcp2.idtype := lsp
+                  llc := llc - lsize
+                  lcp2.vaddr := llc
+                  lcp2 := lcp2.next
+                end
+                lcp.next := lcp1; lcp1 := lcp3
+                insymbol()
+              else error(2) end
+              if not T.symIn(T.ssAdd(T.ssAdd(fsys, T.semicolon), T.rparent), sy) then
+                error(7); skip(T.ssAdd(T.ssAdd(fsys, T.semicolon), T.rparent))
+              end
+            else error(5) end
+          end
+        end
+        if sy = T.semicolon then
+          insymbol()
+          if not T.symIn(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.ident), T.varsy), T.procsy), sy) then
+            if sy <> T.funcsy then
+              error(7); skip(T.ssAdd(fsys, T.rparent))
+            end
+          end
+        end
+      end
+      if sy = T.rparent then
+        insymbol()
+        if not T.symIn(T.ssUnion(fsy_, fsys), sy) then
+          error(6); skip(T.ssUnion(fsy_, fsys))
+        end
+      else error(4) end
+      // pcom.pas lines 1682-1697: reverse pointers and reserve local cells
+      lcp3 := nil
+      while lcp1 <> nil do
+        lcp2 := lcp1.next; lcp1.next := lcp3
+        if lcp1.klass = T.vars then
+          if lcp1.idtype <> nil then
+            if (lcp1.vkind = T.actual) and (ord(lcp1.idtype.form) > ord(T.power)) then
+              align(lcp1.idtype, @lc)
+              lcp1.vaddr := lc
+              lc := lc + lcp1.idtype.size
+            end
+          end
+        end
+        lcp3 := lcp1; lcp1 := lcp2
+      end
+      fpar^ := lcp3
+    else fpar^ := nil end
+  end parameterlist
+
+begin // procdeclaration
+  // pcom.pas lines 1702-1741
+  llc := lc; lc := T.lcaftermarkstack; forw := false
+  if sy = T.ident then
+    searchsection(display[top].fname, @lcp1)
+    if lcp1 <> nil then
+      if lcp1.klass = T.procc then
+        forw := lcp1.forwdecl and (fsy = T.procsy) and (lcp1.pfkind = T.actual)
+      elsif lcp1.klass = T.funcc then
+        forw := lcp1.forwdecl and (fsy = T.funcsy) and (lcp1.pfkind = T.actual)
+      else forw := false end
+      if not forw then error(160) end
+    end
+    if not forw then
+      new(lcp)
+      lcp.name := id; lcp.idtype := nil
+      lcp.pfdeckind := T.declared; lcp.pfkind := T.actual
+      lcp.externl := false; lcp.pflev := level
+      genlabel(@lbname); lcp.pfname := lbname
+      if fsy = T.procsy then lcp.klass := T.procc
+      else lcp.klass := T.funcc end
+      enterid(lcp)
+    else
+      // forward declared: re-enter params into new scope
+      lcp := lcp1
+      lcp1 := lcp.next
+      while lcp1 <> nil do
+        if lcp1.klass = T.vars then
+          if lcp1.idtype <> nil then
+            lcm := lcp1.vaddr + lcp1.idtype.size
+            if lcm > lc then lc := lcm end
+          end
+        end
+        lcp1 := lcp1.next
+      end
+    end
+    insymbol()
+  else error(2); lcp := ufctptr end
+  oldlev := level; oldtop := top
+  if level < T.maxlevel then inc(level) else error(251) end
+  if top < T.displimit then
+    inc(top)
+    if forw then display[top].fname := lcp.next
+    else display[top].fname := nil end
+    display[top].flabel := nil
+    display[top].occur := T.blck
+  else error(250) end
+  // pcom.pas lines 1759-1785
+  if fsy = T.procsy then
+    parameterlist(T.symBit(T.semicolon), @lcp1, fsys, forw)
+    if not forw then lcp.next := lcp1 end
+  else
+    parameterlist(T.ssAdd(T.symBit(T.semicolon), T.colon), @lcp1, fsys, forw)
+    if not forw then lcp.next := lcp1 end
+    if sy = T.colon then
+      insymbol()
+      if sy = T.ident then
+        if forw then error(122) end
+        searchid(T.idBit(T.types), @lcp1)
+        lsp := lcp1.idtype
+        lcp.idtype := lsp
+        if lsp <> nil then
+          if (lsp.form <> T.scalar) and (lsp.form <> T.subrange) and (lsp.form <> T.pointer_f) then
+            error(120); lcp.idtype := nil
+          end
+        end
+        insymbol()
+      else error(2); skip(T.ssAdd(fsys, T.semicolon)) end
+    else
+      if not forw then error(123) end
+    end
+  end
+  if sy = T.semicolon then insymbol() else error(14) end
+  if sy = T.forwardsy then
+    if forw then error(161) end
+    lcp.forwdecl := true
+    insymbol()
+    if sy = T.semicolon then insymbol() else error(14) end
+    if not T.symIn(fsys, sy) then error(6); skip(fsys) end
+  else
+    lcp.forwdecl := false
+    mark()
+    // recursive call to block for procedure body
+    block(fsys, T.semicolon, lcp)
+    if sy = T.semicolon then
+      insymbol()
+      if not T.symIn(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.ident), T.procsy), T.funcsy), sy) then
+        error(6); skip(fsys)
+      end
+    else error(14) end
+    release()
+  end
+  level := oldlev; top := oldtop; lc := llc
+end procdeclaration
+
+
+// pcom.pas lines 1825-1828: mes - track stack usage
+proc mes(i: integer)
+begin
+  topnew := topnew + cdx[i] * T.maxstack
+  if topnew > topmax then topmax := topnew end
+end mes
+
+// pcom.pas lines 1830-1831: putic
+proc putic()
+begin
+  if ic mod 10 = 0 then
+    fWriteString(prr, "i"); fWriteInt(prr, ic, 5); fWriteLn(prr)
+  end
+end putic
+
+// pcom.pas lines 1833-1837: gen0
+proc gen0(fop: integer)
+begin
+  if prcode then putic(); fWriteArr4(prr, mn[fop]); fWriteLn(prr) end
+  ic := ic + 1; mes(fop)
+end gen0
+
+// pcom.pas lines 1839-1866: gen1
+proc gen1(fop: integer; fp2: integer)
+  var k: integer
+begin
+  if prcode then
+    putic(); fWriteArr4(prr, mn[fop])
+    if fop = 30 then
+      // csp - original: writeln(prr,sna[fp2]:12)
+      fWriteString(prr, "        "); fWriteArr4(prr, sna[fp2]); fWriteLn(prr)
+      topnew := topnew + pdx[fp2] * T.maxstack
+      if topnew > topmax then topmax := topnew end
+    else
+      if fop = 38 then
+        // lca - string constant
+        fWriteChar(prr, "'")
+        k := 0
+        while k < cstptr[fp2].slgth do
+          fWriteChar(prr, cstptr[fp2].sval[k])
+          inc(k)
+        end
+        while k < T.strglgth do fWriteChar(prr, " "); inc(k) end
+        fWriteChar(prr, "'"); fWriteLn(prr)
+      elsif fop = 42 then
+        // ret
+        fWriteChar(prr, chr(fp2)); fWriteLn(prr)
+      else
+        fWriteInt(prr, fp2, 12); fWriteLn(prr)
+      end
+      mes(fop)
+    end
+  end
+  ic := ic + 1
+end gen1
+
+// pcom.pas lines 1868-1902: gen2
+proc gen2(fop: integer; fp1, fp2: integer)
+  var k: integer
+begin
+  if prcode then
+    putic(); fWriteArr4(prr, mn[fop])
+    if (fop = 45) or (fop = 50) or (fop = 54) or (fop = 56) then
+      // chk, lda, lod, str
+      fWriteChar(prr, " "); fWriteInt(prr, fp1, 3); fWriteInt(prr, fp2, 8)
+      fWriteLn(prr)
+    elsif (fop = 47) or (fop = 48) or (fop = 49) or (fop = 52) or (fop = 53) or (fop = 55) then
+      // equ, geq, grt, leq, les, neq
+      fWriteChar(prr, chr(fp1))
+      if fp1 = +ord("m") then fWriteInt(prr, fp2, 11) end
+      fWriteLn(prr)
+    elsif fop = 51 then
+      // ldc
+      if fp1 = 1 then
+        fWriteString(prr, "i "); fWriteInt(prr, fp2, 1); fWriteLn(prr)
+      elsif fp1 = 2 then
+        fWriteString(prr, "r ")
+        for k := 1 to T.strglgth do
+          fWriteChar(prr, cstptr[fp2].rval[k])
+        end
+        fWriteLn(prr)
+      elsif fp1 = 3 then
+        fWriteString(prr, "b "); fWriteInt(prr, fp2, 1); fWriteLn(prr)
+      elsif fp1 = 4 then
+        fWriteString(prr, "n"); fWriteLn(prr)
+      elsif fp1 = 6 then
+        fWriteString(prr, "c '"); fWriteChar(prr, chr(fp2))
+        fWriteString(prr, "'"); fWriteLn(prr)
+      elsif fp1 = 5 then
+        fWriteString(prr, "(")
+        for k := T.setlow to T.sethigh do
+          if T.inPset(cstptr[fp2].pval, k) then
+            fWriteInt(prr, k, 3)
+          end
+        end
+        fWriteString(prr, ")"); fWriteLn(prr)
+      end
+    end
+  end
+  ic := ic + 1; mes(fop)
+end gen2
+
+// pcom.pas lines 1904-1923: gentypindicator
+proc gentypindicator(fsp: T.Stp)
+begin
+  if fsp <> nil then
+    if fsp.form = T.scalar then
+      if fsp = intptr then fWriteChar(prr, "i")
+      elsif fsp = boolptr then fWriteChar(prr, "b")
+      elsif fsp = charptr then fWriteChar(prr, "c")
+      elsif fsp.scalkind = T.declared then fWriteChar(prr, "i")
+      else fWriteChar(prr, "r") end
+    elsif fsp.form = T.subrange then gentypindicator(fsp.rangetype)
+    elsif fsp.form = T.pointer_f then fWriteChar(prr, "a")
+    elsif fsp.form = T.power then fWriteChar(prr, "s")
+    elsif (fsp.form = T.records) or (fsp.form = T.arrays) then fWriteChar(prr, "m")
+    elsif (fsp.form = T.files) or (fsp.form = T.tagfld) or (fsp.form = T.variant_f) then
+      error(500)
+    end
+  end
+end gentypindicator
+
+// pcom.pas lines 1925-1934: gen0t
+proc gen0t(fop: integer; fsp: T.Stp)
+begin
+  if prcode then
+    putic(); fWriteArr4(prr, mn[fop]); gentypindicator(fsp); fWriteLn(prr)
+  end
+  ic := ic + 1; mes(fop)
+end gen0t
+
+// pcom.pas lines 1936-1945: gen1t
+proc gen1t(fop: integer; fp2: integer; fsp: T.Stp)
+begin
+  if prcode then
+    putic(); fWriteArr4(prr, mn[fop]); gentypindicator(fsp)
+    fWriteInt(prr, fp2, 11); fWriteLn(prr)
+  end
+  ic := ic + 1; mes(fop)
+end gen1t
+
+// pcom.pas lines 1947-1956: gen2t
+proc gen2t(fop: integer; fp1, fp2: integer; fsp: T.Stp)
+  var w: integer
+begin
+  if prcode then
+    putic(); fWriteArr4(prr, mn[fop]); gentypindicator(fsp)
+    if (fp1 > 99) or (fp1 < -99) then w := 8 else w := 3 end
+    fWriteInt(prr, fp1, w); fWriteInt(prr, fp2, 8); fWriteLn(prr)
+  end
+  ic := ic + 1; mes(fop)
+end gen2t
+
+// pcom.pas lines 1958-1993: load
+proc load()
+begin
+  if gattr.typtr <> nil then
+    if gattr.kind = T.cst then
+      if (gattr.typtr.form = T.scalar) and (gattr.typtr <> realptr) then
+        if gattr.typtr = boolptr then gen2(51, 3, gattr.cval.ival)
+        elsif gattr.typtr = charptr then gen2(51, 6, gattr.cval.ival)
+        else gen2(51, 1, gattr.cval.ival) end
+      else
+        if gattr.typtr = nilptr then gen2(51, 4, 0)
+        else
+          if cstptrix >= cstoccmax then error(254)
+          else
+            inc(cstptrix)
+            cstptr[cstptrix] := gattr.cval.valp
+            if gattr.typtr = realptr then gen2(51, 2, cstptrix)
+            else gen2(51, 5, cstptrix) end
+          end
+        end
+      end
+    elsif gattr.kind = T.varbl then
+      if gattr.access = T.drct then
+        if gattr.vlevel <= 1 then gen1t(39, gattr.dplmt, gattr.typtr)
+        else gen2t(54, level - gattr.vlevel, gattr.dplmt, gattr.typtr) end
+      elsif gattr.access = T.indrct then
+        gen1t(35, gattr.idplmt, gattr.typtr)
+      elsif gattr.access = T.inxd then error(400) end
+    // expr: nothing to do
+    end
+    gattr.kind := T.expr
+  end
+end load
+
+// pcom.pas lines 1995-2006: store
+proc store(lattr: T.Attr)
+begin
+  if lattr.typtr <> nil then
+    if lattr.access = T.drct then
+      if lattr.vlevel <= 1 then gen1t(43, lattr.dplmt, lattr.typtr)
+      else gen2t(56, level - lattr.vlevel, lattr.dplmt, lattr.typtr) end
+    elsif lattr.access = T.indrct then
+      if lattr.idplmt <> 0 then error(400)
+      else gen0t(26, lattr.typtr) end
+    elsif lattr.access = T.inxd then error(400) end
+  end
+end store
+
+// pcom.pas lines 2008-2033: loadaddress
+proc loadaddress()
+begin
+  if gattr.typtr <> nil then
+    if gattr.kind = T.cst then
+      if isString(gattr.typtr) then
+        if cstptrix >= cstoccmax then error(254)
+        else
+          inc(cstptrix)
+          cstptr[cstptrix] := gattr.cval.valp
+          gen1(38, cstptrix)
+        end
+      else error(400) end
+    elsif gattr.kind = T.varbl then
+      if gattr.access = T.drct then
+        if gattr.vlevel <= 1 then gen1(37, gattr.dplmt)
+        else gen2(50, level - gattr.vlevel, gattr.dplmt) end
+      elsif gattr.access = T.indrct then
+        if gattr.idplmt <> 0 then gen1t(34, gattr.idplmt, nilptr) end
+      elsif gattr.access = T.inxd then error(400) end
+    elsif gattr.kind = T.expr then error(400) end
+    gattr.kind := T.varbl; gattr.access := T.indrct; gattr.idplmt := 0
+  end
+end loadaddress
+
+// pcom.pas lines 2036-2042: genfjp
+proc genfjp(faddr: ^integer)
+begin
+  load()
+  if gattr.typtr <> nil then
+    if gattr.typtr <> boolptr then error(144) end
+  end
+  if prcode then
+    putic(); fWriteArr4(prr, mn[33]); fWriteString(prr, "      l")
+    fWriteInt(prr, faddr^, 4); fWriteLn(prr)
+  end
+  ic := ic + 1; mes(33)
+end genfjp
+
+// pcom.pas lines 2044-2049: genujpxjp
+proc genujpxjp(fop: integer; fp2: ^integer)
+begin
+  if prcode then
+    putic(); fWriteArr4(prr, mn[fop]); fWriteString(prr, "      l")
+    fWriteInt(prr, fp2^, 4); fWriteLn(prr)
+  end
+  ic := ic + 1; mes(fop)
+end genujpxjp
+
+// pcom.pas lines 2052-2059: gencupent
+proc gencupent(fop: integer; fp1, fp2: integer)
+begin
+  if prcode then
+    putic(); fWriteArr4(prr, mn[fop]); fWriteInt(prr, fp1, 4)
+    fWriteString(prr, "   l"); fWriteInt(prr, fp2, 4); fWriteLn(prr)
+  end
+  ic := ic + 1; mes(fop)
+end gencupent
+
+// pcom.pas lines 2062-2073: checkbnds
+proc checkbnds(fsp: T.Stp)
+  var lmin, lmax: integer
+begin
+  if fsp <> nil then
+    if fsp <> intptr then
+      if fsp <> realptr then
+        if ord(fsp.form) <= ord(T.subrange) then
+          getbounds(fsp, @lmin, @lmax)
+          gen2t(45, lmin, lmax, fsp)
+        end
+      end
+    end
+  end
+end checkbnds
+
+// pcom.pas lines 2076-2078: putlabel
+proc putlabel(labname: integer)
+begin
+  if prcode then
+    fWriteString(prr, "l"); fWriteInt(prr, labname, 4); fWriteLn(prr)
+  end
+end putlabel
+
+
+// pcom.pas lines 2086-2225: selector
+proc selector(fsys: T.SetOfSys; fcp: T.Ctp)
+  var lattr: T.Attr; lcp: T.Ctp; lsize: integer; lmin, lmax: integer
+begin
+  // Initialize gattr from fcp
+  gattr.typtr := fcp.idtype; gattr.kind := T.varbl
+  if fcp.klass = T.vars then
+    if fcp.vkind = T.actual then
+      gattr.access := T.drct; gattr.vlevel := fcp.vlev
+      gattr.dplmt := fcp.vaddr
+    else
+      gen2t(54, level - fcp.vlev, fcp.vaddr, nilptr)
+      gattr.access := T.indrct; gattr.idplmt := 0
+    end
+  elsif fcp.klass = T.field then
+    if display[disx].occur = T.crec then
+      gattr.access := T.drct; gattr.vlevel := display[disx].clev
+      gattr.dplmt := display[disx].cdspl + fcp.fldaddr
+    else
+      if level = 1 then gen1t(39, display[disx].vdspl, nilptr)
+      else gen2t(54, 0, display[disx].vdspl, nilptr) end
+      gattr.access := T.indrct; gattr.idplmt := fcp.fldaddr
+    end
+  elsif fcp.klass = T.funcc then
+    if fcp.pfdeckind = T.standard then
+      error(150); gattr.typtr := nil
+    else
+      if fcp.pfkind = T.formal then error(151)
+      else
+        if (fcp.pflev + 1 <> level) or (fprocp <> fcp) then error(177) end
+      end
+      gattr.access := T.drct; gattr.vlevel := fcp.pflev + 1
+      gattr.dplmt := 0
+    end
+  end
+
+  if not T.symIn(T.ssUnion(selectsys, fsys), sy) then
+    error(59); skip(T.ssUnion(selectsys, fsys))
+  end
+  while T.symIn(selectsys, sy) do
+    if sy = T.lbrack then
+      // Array indexing [
+      loop
+        lattr := gattr
+        if lattr.typtr <> nil then
+          if lattr.typtr.form <> T.arrays then
+            error(138); lattr.typtr := nil
+          end
+        end
+        loadaddress()
+        insymbol(); expression(T.ssAdd(T.ssAdd(fsys, T.comma), T.rbrack))
+        load()
+        if gattr.typtr <> nil then
+          if gattr.typtr.form <> T.scalar then error(113)
+          elsif not comptypes(gattr.typtr, intptr) then
+            gen0t(58, gattr.typtr)
+          end
+        end
+        if lattr.typtr <> nil then
+          if comptypes(lattr.typtr.inxtype, gattr.typtr) then
+            if lattr.typtr.inxtype <> nil then
+              getbounds(lattr.typtr.inxtype, @lmin, @lmax)
+              if debug then gen2t(45, lmin, lmax, intptr) end
+              if lmin > 0 then gen1t(31, lmin, intptr)
+              elsif lmin < 0 then gen1t(34, -lmin, intptr) end
+            end
+          else error(139) end
+          gattr.typtr := lattr.typtr.aeltype; gattr.kind := T.varbl
+          gattr.access := T.indrct; gattr.idplmt := 0
+          if gattr.typtr <> nil then
+            lsize := gattr.typtr.size
+            align(gattr.typtr, @lsize)
+            gen1(36, lsize)
+          end
+        end
+        if sy <> T.comma then exit end
+      end // loop
+      if sy = T.rbrack then insymbol() else error(12) end
+    elsif sy = T.period then
+      // Record field .
+      if gattr.typtr <> nil then
+        if gattr.typtr.form <> T.records then
+          error(140); gattr.typtr := nil
+        end
+      end
+      insymbol()
+      if sy = T.ident then
+        if gattr.typtr <> nil then
+          searchsection(gattr.typtr.fstfld, @lcp)
+          if lcp = nil then
+            error(152); gattr.typtr := nil
+          else
+            gattr.typtr := lcp.idtype
+            if gattr.access = T.drct then
+              gattr.dplmt := gattr.dplmt + lcp.fldaddr
+            elsif gattr.access = T.indrct then
+              gattr.idplmt := gattr.idplmt + lcp.fldaddr
+            elsif gattr.access = T.inxd then error(400) end
+          end
+        end
+        insymbol()
+      else error(2) end
+    else
+      // Pointer dereference ^
+      if gattr.typtr <> nil then
+        if gattr.typtr.form = T.pointer_f then
+          load(); gattr.typtr := gattr.typtr.eltype
+          if debug then gen2t(45, 1, T.maxaddr, nilptr) end
+          gattr.kind := T.varbl; gattr.access := T.indrct
+          gattr.idplmt := 0
+        elsif gattr.typtr.form = T.files then
+          gattr.typtr := gattr.typtr.filtype
+        else error(141) end
+      end
+      insymbol()
+    end
+    if not T.symIn(T.ssUnion(fsys, selectsys), sy) then
+      error(6); skip(T.ssUnion(fsys, selectsys))
+    end
+  end // while
+end selector
+
+// pcom.pas lines 2230-2237: variable (nested in call)
+proc variable(fsys: T.SetOfSys)
+  var lcp: T.Ctp
+begin
+  if sy = T.ident then
+    searchid(T.idSet2(T.vars, T.field), @lcp); insymbol()
+  else error(2); lcp := uvarptr end
+  selector(fsys, lcp)
+end variable
+
+// pcom.pas lines 2227-2737: call
+proc call(fsys: T.SetOfSys; fcp: T.Ctp)
+  var lkey: integer
+
+  // pcom.pas lines 2239-2245: getputresetrewrite
+  proc getputresetrewrite(fsys: T.SetOfSys; lkey: integer)
+  begin
+    variable(T.ssAdd(fsys, T.rparent)); loadaddress()
+    if gattr.typtr <> nil then
+      if gattr.typtr.form <> T.files then error(116) end
+    end
+    if lkey <= 2 then gen1(30, lkey) else error(399) end
+  end getputresetrewrite
+
+  // pcom.pas lines 2247-2302: readProc
+  proc readProc(fsys: T.SetOfSys; lkey: integer)
+    var llev: integer; laddr: integer; lsp: T.Stp
+  begin
+    llev := 1; laddr := T.lcaftermarkstack
+    if sy = T.lparent then
+      insymbol()
+      variable(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+      lsp := gattr.typtr; test := false
+      if lsp <> nil then
+        if lsp.form = T.files then
+          if lsp.filtype = charptr then
+            llev := gattr.vlevel; laddr := gattr.dplmt
+          else error(399) end
+          if sy = T.rparent then
+            if lkey = 5 then error(116) end
+            test := true
+          elsif sy <> T.comma then
+            error(116); skip(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+          end
+          if sy = T.comma then
+            insymbol(); variable(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+          else test := true end
+        end
+      end
+      if not test then
+        loop
+          loadaddress()
+          gen2(50, level - llev, laddr)
+          if gattr.typtr <> nil then
+            if ord(gattr.typtr.form) <= ord(T.subrange) then
+              if comptypes(intptr, gattr.typtr) then gen1(30, 3)
+              elsif comptypes(realptr, gattr.typtr) then gen1(30, 4)
+              elsif comptypes(charptr, gattr.typtr) then gen1(30, 5)
+              else error(399) end
+            else error(116) end
+          end
+          test := sy <> T.comma
+          if not test then
+            insymbol(); variable(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+          end
+          if test then exit end
+        end // loop
+      end
+      if sy = T.rparent then insymbol() else error(4) end
+    elsif lkey = 5 then error(116) end
+    if lkey = 11 then
+      gen2(50, level - llev, laddr)
+      gen1(30, 21)
+    end
+  end readProc
+
+  // pcom.pas lines 2304-2396: writeProc
+  proc writeProc(fsys: T.SetOfSys; lkey: integer)
+    var lsp: T.Stp; default_: boolean; llkey: integer
+        llev: integer; laddr, len: integer
+  begin
+    llkey := lkey
+    llev := 1; laddr := +T.lcaftermarkstack + T.charmax
+    if sy = T.lparent then
+      insymbol()
+      expression(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.comma), T.colon), T.rparent))
+      lsp := gattr.typtr; test := false
+      if lsp <> nil then
+        if lsp.form = T.files then
+          if lsp.filtype = charptr then
+            llev := gattr.vlevel; laddr := gattr.dplmt
+          else error(399) end
+          if sy = T.rparent then
+            if llkey = 6 then error(116) end
+            test := true
+          elsif sy <> T.comma then
+            error(116); skip(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+          end
+          if sy = T.comma then
+            insymbol()
+            expression(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.comma), T.colon), T.rparent))
+          else test := true end
+        end
+      end
+      if not test then
+        loop
+          lsp := gattr.typtr
+          if lsp <> nil then
+            if ord(lsp.form) <= ord(T.subrange) then load() else loadaddress() end
+          end
+          if sy = T.colon then
+            insymbol()
+            expression(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.comma), T.colon), T.rparent))
+            if gattr.typtr <> nil then
+              if gattr.typtr <> intptr then error(116) end
+            end
+            load(); default_ := false
+          else default_ := true end
+          if sy = T.colon then
+            insymbol(); expression(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+            if gattr.typtr <> nil then
+              if gattr.typtr <> intptr then error(116) end
+            end
+            if lsp <> realptr then error(124) end
+            load(); error(399)
+          else
+            if lsp = intptr then
+              if default_ then gen2(51, 1, 10) end
+              gen2(50, level - llev, laddr)
+              gen1(30, 6)
+            elsif lsp = realptr then
+              if default_ then gen2(51, 1, 20) end
+              gen2(50, level - llev, laddr)
+              gen1(30, 8)
+            elsif lsp = charptr then
+              if default_ then gen2(51, 1, 1) end
+              gen2(50, level - llev, laddr)
+              gen1(30, 9)
+            elsif lsp <> nil then
+              if lsp.form = T.scalar then error(399)
+              elsif isString(lsp) then
+                len := lsp.size div T.charmax
+                if default_ then gen2(51, 1, len) end
+                gen2(51, 1, len)
+                gen2(50, level - llev, laddr)
+                gen1(30, 10)
+              else error(116) end
+            end
+          end
+          test := sy <> T.comma
+          if not test then
+            insymbol()
+            expression(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.comma), T.colon), T.rparent))
+          end
+          if test then exit end
+        end // loop
+      end
+      if sy = T.rparent then insymbol() else error(4) end
+    elsif lkey = 6 then error(116) end
+    if llkey = 12 then
+      gen2(50, level - llev, laddr)
+      gen1(30, 22)
+    end
+  end writeProc
+
+  // pcom.pas lines 2398-2424: packProc
+  proc packProc(fsys: T.SetOfSys)
+    var lsp, lsp1: T.Stp
+  begin
+    error(399); variable(T.ssAdd(fsys, T.rparent))
+    lsp := nil; lsp1 := nil
+    if gattr.typtr <> nil then
+      if gattr.typtr.form = T.arrays then
+        lsp := gattr.typtr.inxtype; lsp1 := gattr.typtr.aeltype
+      else error(116) end
+    end
+    if sy = T.comma then insymbol() else error(20) end
+    expression(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+    if gattr.typtr <> nil then
+      if gattr.typtr.form <> T.scalar then error(116)
+      elsif not comptypes(lsp, gattr.typtr) then error(116) end
+    end
+    if sy = T.comma then insymbol() else error(20) end
+    variable(T.ssAdd(fsys, T.rparent))
+    if gattr.typtr <> nil then
+      if gattr.typtr.form = T.arrays then
+        if not comptypes(gattr.typtr.aeltype, lsp1)
+           or not comptypes(gattr.typtr.inxtype, lsp) then
+          error(116)
+        end
+      else error(116) end
+    end
+  end packProc
+
+  // pcom.pas lines 2426-2452: unpackProc
+  proc unpackProc(fsys: T.SetOfSys)
+    var lsp, lsp1: T.Stp
+  begin
+    error(399); variable(T.ssAdd(fsys, T.rparent))
+    lsp := nil; lsp1 := nil
+    if gattr.typtr <> nil then
+      if gattr.typtr.form = T.arrays then
+        lsp := gattr.typtr.inxtype; lsp1 := gattr.typtr.aeltype
+      else error(116) end
+    end
+    if sy = T.comma then insymbol() else error(20) end
+    variable(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+    if gattr.typtr <> nil then
+      if gattr.typtr.form = T.arrays then
+        if not comptypes(gattr.typtr.aeltype, lsp1)
+           or not comptypes(gattr.typtr.inxtype, lsp) then
+          error(116)
+        end
+      else error(116) end
+    end
+    if sy = T.comma then insymbol() else error(20) end
+    expression(T.ssAdd(fsys, T.rparent))
+    if gattr.typtr <> nil then
+      if gattr.typtr.form <> T.scalar then error(116)
+      elsif not comptypes(lsp, gattr.typtr) then error(116) end
+    end
+  end unpackProc
+
+  // pcom.pas lines 2454-2497: newProc
+  proc newProc(fsys: T.SetOfSys)
+    var lsp, lsp1: T.Stp; varts: integer; lsize: integer; lval: T.Valu
+        found: boolean
+  begin
+    variable(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent)); loadaddress()
+    lsp := nil; varts := 0; lsize := 0
+    if gattr.typtr <> nil then
+      if gattr.typtr.form = T.pointer_f then
+        if gattr.typtr.eltype <> nil then
+          lsize := gattr.typtr.eltype.size
+          if gattr.typtr.eltype.form = T.records then
+            lsp := gattr.typtr.eltype.recvar
+          end
+        end
+      else error(116) end
+    end
+    while sy = T.comma do
+      insymbol(); constant(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent), @lsp1, @lval)
+      varts := varts + 1
+      if lsp = nil then error(158)
+      elsif lsp.form <> T.tagfld then error(162)
+      else
+        if lsp.tagfieldp <> nil then
+          if isString(lsp1) or (lsp1 = realptr) then error(159)
+          elsif comptypes(lsp.tagfieldp.idtype, lsp1) then
+            lsp1 := lsp.fstvar; found := false
+            while (lsp1 <> nil) and not found do
+              if lsp1.varval.ival = lval.ival then
+                lsize := lsp1.size; lsp := lsp1.subvar
+                found := true
+              else lsp1 := lsp1.nxtvar end
+            end
+            if not found then
+              lsize := lsp.size; lsp := nil
+            end
+          else error(116) end
+        end
+      end
+    end // while
+    gen2(51, 1, lsize)
+    gen1(30, 12)
+  end newProc
+
+  // pcom.pas lines 2499-2505: markProc
+  proc markProc(fsys: T.SetOfSys)
+  begin
+    variable(T.ssAdd(fsys, T.rparent))
+    if gattr.typtr <> nil then
+      if gattr.typtr.form = T.pointer_f then
+        loadaddress(); gen1(30, 23)
+      else error(116) end
+    end
+  end markProc
+
+  // pcom.pas lines 2507-2513: releaseProc
+  proc releaseProc(fsys: T.SetOfSys)
+  begin
+    variable(T.ssAdd(fsys, T.rparent))
+    if gattr.typtr <> nil then
+      if gattr.typtr.form = T.pointer_f then
+        load(); gen1(30, 13)
+      else error(116) end
+    end
+  end releaseProc
+
+  // pcom.pas lines 2517-2524: absFunc
+  proc absFunc()
+  begin
+    if gattr.typtr <> nil then
+      if gattr.typtr = intptr then gen0(0)
+      elsif gattr.typtr = realptr then gen0(1)
+      else error(125); gattr.typtr := intptr end
+    end
+  end absFunc
+
+  // pcom.pas lines 2526-2533: sqrFunc
+  proc sqrFunc()
+  begin
+    if gattr.typtr <> nil then
+      if gattr.typtr = intptr then gen0(24)
+      elsif gattr.typtr = realptr then gen0(25)
+      else error(125); gattr.typtr := intptr end
+    end
+  end sqrFunc
+
+  // pcom.pas lines 2535-2541: truncFunc
+  proc truncFunc()
+  begin
+    if gattr.typtr <> nil then
+      if gattr.typtr <> realptr then error(125) end
+    end
+    gen0(27); gattr.typtr := intptr
+  end truncFunc
+
+  // pcom.pas lines 2543-2549: oddFunc
+  proc oddFunc()
+  begin
+    if gattr.typtr <> nil then
+      if gattr.typtr <> intptr then error(125) end
+    end
+    gen0(20); gattr.typtr := boolptr
+  end oddFunc
+
+  // pcom.pas lines 2551-2557: ordFunc
+  proc ordFunc()
+  begin
+    if gattr.typtr <> nil then
+      if ord(gattr.typtr.form) >= ord(T.power) then error(125) end
+    end
+    gen0t(58, gattr.typtr); gattr.typtr := intptr
+  end ordFunc
+
+  // pcom.pas lines 2559-2565: chrFunc
+  proc chrFunc()
+  begin
+    if gattr.typtr <> nil then
+      if gattr.typtr <> intptr then error(125) end
+    end
+    gen0(59); gattr.typtr := charptr
+  end chrFunc
+
+  // pcom.pas lines 2567-2573: predsucc
+  proc predsucc(lkey: integer)
+  begin
+    if gattr.typtr <> nil then
+      if gattr.typtr.form <> T.scalar then error(125) end
+    end
+    if lkey = 7 then gen1t(31, 1, gattr.typtr)
+    else gen1t(34, 1, gattr.typtr) end
+  end predsucc
+
+  // pcom.pas lines 2575-2591: eofFunc
+  proc eofFunc(fsys: T.SetOfSys; lkey: integer)
+  begin
+    if sy = T.lparent then
+      insymbol(); variable(T.ssAdd(fsys, T.rparent))
+      if sy = T.rparent then insymbol() else error(4) end
+    else
+      gattr.typtr := textptr; gattr.kind := T.varbl; gattr.access := T.drct
+      gattr.vlevel := 1; gattr.dplmt := T.lcaftermarkstack
+    end
+    loadaddress()
+    if gattr.typtr <> nil then
+      if gattr.typtr.form <> T.files then error(125) end
+    end
+    if lkey = 9 then gen0(8) else gen1(30, 14) end
+    gattr.typtr := boolptr
+  end eofFunc
+
+  // pcom.pas lines 2595-2692: callnonstandard
+  proc callnonstandard(fsys: T.SetOfSys; fcp: T.Ctp)
+    var nxt, lcp: T.Ctp; lsp: T.Stp; lkind: T.IdKind; lb: boolean
+        locpar, llc: integer
+  begin
+    locpar := 0
+    nxt := fcp.next; lkind := fcp.pfkind
+    if not fcp.externl then gen1(41, level - fcp.pflev) end
+    if sy = T.lparent then
+      llc := lc
+      loop
+        lb := false
+        if lkind = T.actual then
+          if nxt = nil then error(126)
+          else lb := (nxt.klass = T.procc) or (nxt.klass = T.funcc) end
+        else error(399) end
+        insymbol()
+        if lb then
+          error(399)
+          if sy <> T.ident then
+            error(2); skip(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+          else
+            if nxt.klass = T.procc then searchid(T.idSet2(T.procc, T.procc), @lcp)
+            else
+              searchid(T.idSet2(T.funcc, T.funcc), @lcp)
+              if not comptypes(lcp.idtype, nxt.idtype) then error(128) end
+            end
+            insymbol()
+            if not T.symIn(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent), sy) then
+              error(6); skip(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+            end
+          end
+        else
+          expression(T.ssAdd(T.ssAdd(fsys, T.comma), T.rparent))
+          if gattr.typtr <> nil then
+            if lkind = T.actual then
+              if nxt <> nil then
+                lsp := nxt.idtype
+                if lsp <> nil then
+                  if nxt.vkind = T.actual then
+                    if ord(lsp.form) <= ord(T.power) then
+                      load()
+                      if debug then checkbnds(lsp) end
+                      if comptypes(realptr, lsp) and (gattr.typtr = intptr) then
+                        gen0(10); gattr.typtr := realptr
+                      end
+                      locpar := locpar + lsp.size
+                      align(parmptr, @locpar)
+                    else
+                      loadaddress()
+                      locpar := locpar + T.ptrsize
+                      align(parmptr, @locpar)
+                    end
+                  else
+                    if gattr.kind = T.varbl then
+                      loadaddress()
+                      locpar := locpar + T.ptrsize
+                      align(parmptr, @locpar)
+                    else error(154) end
+                  end
+                  if not comptypes(lsp, gattr.typtr) then error(142) end
+                end
+              end
+            end
+          end
+        end
+        if (lkind = T.actual) and (nxt <> nil) then nxt := nxt.next end
+        if sy <> T.comma then exit end
+      end // loop
+      lc := llc
+      if sy = T.rparent then insymbol() else error(4) end
+    end
+    if lkind = T.actual then
+      if nxt <> nil then error(126) end
+      if fcp.externl then gen1(30, fcp.pfname)
+      else gencupent(46, locpar, fcp.pfname) end
+    end
+    gattr.typtr := fcp.idtype
+  end callnonstandard
+
+begin // call body
+  if fcp.pfdeckind = T.standard then
+    lkey := fcp.key
+    if fcp.klass = T.procc then
+      if not ((lkey = 5) or (lkey = 6) or (lkey = 11) or (lkey = 12)) then
+        if sy = T.lparent then insymbol() else error(9) end
+      end
+      if (lkey = 1) or (lkey = 2) or (lkey = 3) or (lkey = 4) then
+        getputresetrewrite(fsys, lkey)
+      elsif (lkey = 5) or (lkey = 11) then readProc(fsys, lkey)
+      elsif (lkey = 6) or (lkey = 12) then writeProc(fsys, lkey)
+      elsif lkey = 7 then packProc(fsys)
+      elsif lkey = 8 then unpackProc(fsys)
+      elsif lkey = 9 then newProc(fsys)
+      elsif lkey = 10 then releaseProc(fsys)
+      elsif lkey = 13 then markProc(fsys)
+      end
+      if not ((lkey = 5) or (lkey = 6) or (lkey = 11) or (lkey = 12)) then
+        if sy = T.rparent then insymbol() else error(4) end
+      end
+    else
+      if lkey <= 8 then
+        if sy = T.lparent then insymbol() else error(9) end
+        expression(T.ssAdd(fsys, T.rparent)); load()
+      end
+      if lkey = 1 then absFunc()
+      elsif lkey = 2 then sqrFunc()
+      elsif lkey = 3 then truncFunc()
+      elsif lkey = 4 then oddFunc()
+      elsif lkey = 5 then ordFunc()
+      elsif lkey = 6 then chrFunc()
+      elsif (lkey = 7) or (lkey = 8) then predsucc(lkey)
+      elsif (lkey = 9) or (lkey = 10) then eofFunc(fsys, lkey)
+      end
+      if lkey <= 8 then
+        if sy = T.rparent then insymbol() else error(4) end
+      end
+    end
+  else callnonstandard(fsys, fcp) end
+end call
+
+// pcom.pas lines 2748-2896: factor
+proc factor(fsys: T.SetOfSys)
+  var lcp: T.Ctp; lvp: ^T.ConstantRec; varpart: boolean
+      cstpart: T.SetTy; lsp: T.Stp
+begin
+  if not T.symIn(facbegsys, sy) then
+    error(58); skip(T.ssUnion(fsys, facbegsys))
+    gattr.typtr := nil
+  end
+  while T.symIn(facbegsys, sy) do
+    if sy = T.ident then
+      searchid(T.idSet5(T.konst, T.vars, T.field, T.funcc, T.funcc), @lcp)
+      insymbol()
+      if lcp.klass = T.funcc then
+        call(fsys, lcp)
+        gattr.kind := T.expr
+        if gattr.typtr <> nil then
+          if gattr.typtr.form = T.subrange then
+            gattr.typtr := gattr.typtr.rangetype
+          end
+        end
+      elsif lcp.klass = T.konst then
+        gattr.typtr := lcp.idtype; gattr.kind := T.cst
+        gattr.cval := lcp.values
+      else
+        selector(fsys, lcp)
+        if gattr.typtr <> nil then
+          if gattr.typtr.form = T.subrange then
+            gattr.typtr := gattr.typtr.rangetype
+          end
+        end
+      end
+    elsif sy = T.intconst then
+      gattr.typtr := intptr; gattr.kind := T.cst
+      gattr.cval := val
+      insymbol()
+    elsif sy = T.realconst then
+      gattr.typtr := realptr; gattr.kind := T.cst
+      gattr.cval := val
+      insymbol()
+    elsif sy = T.stringconst then
+      if lgth = 1 then gattr.typtr := charptr
+      else
+        new(lsp)
+        lsp.form := T.arrays; lsp.size := lgth * T.charsize
+        lsp.aeltype := charptr; lsp.inxtype := nil
+        gattr.typtr := lsp
+      end
+      gattr.kind := T.cst; gattr.cval := val
+      insymbol()
+    elsif sy = T.lparent then
+      insymbol(); expression(T.ssAdd(fsys, T.rparent))
+      if sy = T.rparent then insymbol() else error(4) end
+    elsif sy = T.notsy then
+      insymbol(); factor(fsys)
+      load(); gen0(19)
+      if gattr.typtr <> nil then
+        if gattr.typtr <> boolptr then
+          error(135); gattr.typtr := nil
+        end
+      end
+    elsif sy = T.lbrack then
+      // Set constructor
+      insymbol(); cstpart := 0; varpart := false
+      new(lsp)
+      lsp.form := T.power; lsp.elset := nil; lsp.size := T.setsize
+      if sy = T.rbrack then
+        gattr.typtr := lsp; gattr.kind := T.cst
+        insymbol()
+      else
+        loop
+          expression(T.ssAdd(T.ssAdd(fsys, T.comma), T.rbrack))
+          if gattr.typtr <> nil then
+            if gattr.typtr.form <> T.scalar then
+              error(136); gattr.typtr := nil
+            elsif comptypes(lsp.elset, gattr.typtr) then
+              if gattr.kind = T.cst then
+                if (gattr.cval.ival < T.setlow)
+                   or (gattr.cval.ival > T.sethigh) then
+                  error(304)
+                else
+                  T.addToPset(@cstpart, gattr.cval.ival)
+                end
+              else
+                load()
+                if not comptypes(gattr.typtr, intptr) then gen0t(58, gattr.typtr) end
+                gen0(23)
+                if varpart then gen0(28) else varpart := true end
+              end
+              lsp.elset := gattr.typtr
+              gattr.typtr := lsp
+            else error(137) end
+          end
+          test := sy <> T.comma
+          if not test then insymbol() end
+          if test then exit end
+        end // loop
+        if sy = T.rbrack then insymbol() else error(12) end
+      end
+      if varpart then
+        if cstpart <> 0 then
+          new(lvp)
+          lvp.cclass := T.pset; lvp.pval := cstpart
+          if cstptrix = cstoccmax then error(254)
+          else
+            inc(cstptrix)
+            cstptr[cstptrix] := lvp
+            gen2(51, 5, cstptrix)
+            gen0(28); gattr.kind := T.expr
+          end
+        end
+      else
+        new(lvp)
+        lvp.cclass := T.pset; lvp.pval := cstpart
+        gattr.cval.valp := lvp
+      end
+    end // case sy
+    if not T.symIn(fsys, sy) then
+      error(6); skip(T.ssUnion(fsys, facbegsys))
+    end
+  end // while
+end factor
+
+// pcom.pas lines 2745-2951: term
+proc term(fsys: T.SetOfSys)
+  var lattr: T.Attr; lop: T.Operator
+begin
+  factor(T.ssAdd(fsys, T.mulop))
+  while sy = T.mulop do
+    load(); lattr := gattr; lop := op
+    insymbol(); factor(T.ssAdd(fsys, T.mulop)); load()
+    if (lattr.typtr <> nil) and (gattr.typtr <> nil) then
+      if lop = T.mul then
+        if (lattr.typtr = intptr) and (gattr.typtr = intptr) then gen0(15)
+        else
+          if lattr.typtr = intptr then gen0(9); lattr.typtr := realptr end
+          if gattr.typtr = intptr then gen0(10); gattr.typtr := realptr end
+          if (lattr.typtr = realptr) and (gattr.typtr = realptr) then gen0(16)
+          elsif (lattr.typtr.form = T.power) and comptypes(lattr.typtr, gattr.typtr) then
+            gen0(12)
+          else error(134); gattr.typtr := nil end
+        end
+      elsif lop = T.rdiv then
+        if gattr.typtr = intptr then gen0(10); gattr.typtr := realptr end
+        if lattr.typtr = intptr then gen0(9); lattr.typtr := realptr end
+        if (lattr.typtr = realptr) and (gattr.typtr = realptr) then gen0(7)
+        else error(134); gattr.typtr := nil end
+      elsif lop = T.idiv then
+        if (lattr.typtr = intptr) and (gattr.typtr = intptr) then gen0(6)
+        else error(134); gattr.typtr := nil end
+      elsif lop = T.imod then
+        if (lattr.typtr = intptr) and (gattr.typtr = intptr) then gen0(14)
+        else error(134); gattr.typtr := nil end
+      elsif lop = T.andop then
+        if (lattr.typtr = boolptr) and (gattr.typtr = boolptr) then gen0(4)
+        else error(134); gattr.typtr := nil end
+      end
+    else gattr.typtr := nil end
+  end // while
+end term
+
+// pcom.pas lines 2742-3020: simpleexpression
+proc simpleexpression(fsys: T.SetOfSys)
+  var lattr: T.Attr; lop: T.Operator; signed: boolean
+begin
+  signed := false
+  if (sy = T.addop) and ((op = T.plus) or (op = T.minus)) then
+    signed := op = T.minus; insymbol()
+  end
+  term(T.ssAdd(fsys, T.addop))
+  if signed then
+    load()
+    if gattr.typtr = intptr then gen0(17)
+    elsif gattr.typtr = realptr then gen0(18)
+    else error(134); gattr.typtr := nil end
+  end
+  while sy = T.addop do
+    load(); lattr := gattr; lop := op
+    insymbol(); term(T.ssAdd(fsys, T.addop)); load()
+    if (lattr.typtr <> nil) and (gattr.typtr <> nil) then
+      if lop = T.plus then
+        if (lattr.typtr = intptr) and (gattr.typtr = intptr) then gen0(2)
+        else
+          if lattr.typtr = intptr then gen0(9); lattr.typtr := realptr end
+          if gattr.typtr = intptr then gen0(10); gattr.typtr := realptr end
+          if (lattr.typtr = realptr) and (gattr.typtr = realptr) then gen0(3)
+          elsif (lattr.typtr.form = T.power) and comptypes(lattr.typtr, gattr.typtr) then
+            gen0(28)
+          else error(134); gattr.typtr := nil end
+        end
+      elsif lop = T.minus then
+        if (lattr.typtr = intptr) and (gattr.typtr = intptr) then gen0(21)
+        else
+          if lattr.typtr = intptr then gen0(9); lattr.typtr := realptr end
+          if gattr.typtr = intptr then gen0(10); gattr.typtr := realptr end
+          if (lattr.typtr = realptr) and (gattr.typtr = realptr) then gen0(22)
+          elsif (lattr.typtr.form = T.power) and comptypes(lattr.typtr, gattr.typtr) then
+            gen0(5)
+          else error(134); gattr.typtr := nil end
+        end
+      elsif lop = T.orop then
+        if (lattr.typtr = boolptr) and (gattr.typtr = boolptr) then gen0(13)
+        else error(134); gattr.typtr := nil end
+      end
+    else gattr.typtr := nil end
+  end // while
+end simpleexpression
+
+// pcom.pas lines 2739-3102: expression
+proc expression(fsys: T.SetOfSys)
+  var lattr: T.Attr; lop: T.Operator; typind: char; lsize: integer
+begin
+  simpleexpression(T.ssAdd(fsys, T.relop))
+  if sy = T.relop then
+    if gattr.typtr <> nil then
+      if ord(gattr.typtr.form) <= ord(T.power) then load() else loadaddress() end
+    end
+    lattr := gattr; lop := op
+    if lop = T.inop then
+      if not comptypes(gattr.typtr, intptr) then gen0t(58, gattr.typtr) end
+    end
+    insymbol(); simpleexpression(fsys)
+    if gattr.typtr <> nil then
+      if ord(gattr.typtr.form) <= ord(T.power) then load() else loadaddress() end
+    end
+    if (lattr.typtr <> nil) and (gattr.typtr <> nil) then
+      if lop = T.inop then
+        if gattr.typtr.form = T.power then
+          if comptypes(lattr.typtr, gattr.typtr.elset) then gen0(11)
+          else error(129); gattr.typtr := nil end
+        else error(130); gattr.typtr := nil end
+      else
+        if lattr.typtr <> gattr.typtr then
+          if lattr.typtr = intptr then gen0(9); lattr.typtr := realptr
+          elsif gattr.typtr = intptr then gen0(10); gattr.typtr := realptr end
+        end
+        if comptypes(lattr.typtr, gattr.typtr) then
+          lsize := lattr.typtr.size
+          if lattr.typtr.form = T.scalar then
+            if lattr.typtr = realptr then typind := "r"
+            elsif lattr.typtr = boolptr then typind := "b"
+            elsif lattr.typtr = charptr then typind := "c"
+            else typind := "i" end
+          elsif lattr.typtr.form = T.pointer_f then
+            if (lop = T.ltop) or (lop = T.leop)
+               or (lop = T.gtop) or (lop = T.geop) then error(131) end
+            typind := "a"
+          elsif lattr.typtr.form = T.power then
+            if (lop = T.ltop) or (lop = T.gtop) then error(132) end
+            typind := "s"
+          elsif lattr.typtr.form = T.arrays then
+            if not isString(lattr.typtr) then error(134) end
+            typind := "m"
+          elsif lattr.typtr.form = T.records then
+            error(134); typind := "m"
+          elsif lattr.typtr.form = T.files then
+            error(133); typind := "f"
+          end
+          if lop = T.ltop then gen2(53, +ord(typind), lsize)
+          elsif lop = T.leop then gen2(52, +ord(typind), lsize)
+          elsif lop = T.gtop then gen2(49, +ord(typind), lsize)
+          elsif lop = T.geop then gen2(48, +ord(typind), lsize)
+          elsif lop = T.neop then gen2(55, +ord(typind), lsize)
+          elsif lop = T.eqop then gen2(47, +ord(typind), lsize) end
+        else error(129) end
+      end
+    end
+    gattr.typtr := boolptr; gattr.kind := T.expr
+  end
+end expression
+
+// pcom.pas lines 3104-3144: assignment
+proc assignment(fsys: T.SetOfSys; fcp: T.Ctp)
+  var lattr: T.Attr
+begin
+  selector(T.ssAdd(fsys, T.becomes), fcp)
+  if sy = T.becomes then
+    if gattr.typtr <> nil then
+      if (gattr.access <> T.drct) or (ord(gattr.typtr.form) > ord(T.power)) then
+        loadaddress()
+      end
+    end
+    lattr := gattr
+    insymbol(); expression(fsys)
+    if gattr.typtr <> nil then
+      if ord(gattr.typtr.form) <= ord(T.power) then load() else loadaddress() end
+    end
+    if (lattr.typtr <> nil) and (gattr.typtr <> nil) then
+      if comptypes(realptr, lattr.typtr) and (gattr.typtr = intptr) then
+        gen0(10); gattr.typtr := realptr
+      end
+      if comptypes(lattr.typtr, gattr.typtr) then
+        if (lattr.typtr.form = T.scalar) or (lattr.typtr.form = T.subrange) then
+          if debug then checkbnds(lattr.typtr) end
+          store(lattr)
+        elsif lattr.typtr.form = T.pointer_f then
+          if debug then gen2t(45, 0, T.maxaddr, nilptr) end
+          store(lattr)
+        elsif lattr.typtr.form = T.power then
+          store(lattr)
+        elsif (lattr.typtr.form = T.arrays) or (lattr.typtr.form = T.records) then
+          gen1(40, lattr.typtr.size)
+        elsif lattr.typtr.form = T.files then error(146) end
+      else error(129) end
+    end
+  else error(51) end
+end assignment
+
+// pcom.pas lines 3146-3172: gotostatement
+proc gotostatement(fsys: T.SetOfSys)
+  var llp: T.Lbp; found: boolean; ttop, ttop1: integer
+begin
+  if sy = T.intconst then
+    found := false
+    ttop := top
+    while display[ttop].occur <> T.blck do ttop := ttop - 1 end
+    ttop1 := ttop
+    loop
+      llp := display[ttop].flabel
+      while (llp <> nil) and not found do
+        if llp.labval = val.ival then
+          found := true
+          if ttop = ttop1 then
+            genujpxjp(57, @llp.labname)
+          else error(399) end
+        else llp := llp.nextlab end
+      end
+      ttop := ttop - 1
+      if found or (ttop = 0) then exit end
+    end
+    if not found then error(167) end
+    insymbol()
+  else error(15) end
+end gotostatement
+
+// pcom.pas lines 3174-3183: compoundstatement
+proc compoundstatement(fsys: T.SetOfSys)
+begin
+  loop
+    loop
+      statement(T.ssAdd(T.ssAdd(fsys, T.semicolon), T.endsy))
+      if not T.symIn(statbegsys, sy) then exit end
+    end
+    test := sy <> T.semicolon
+    if not test then insymbol() end
+    if test then exit end
+  end
+  if sy = T.endsy then insymbol() else error(13) end
+end compoundstatement
+
+// pcom.pas lines 3185-3198: ifstatement
+proc ifstatement(fsys: T.SetOfSys)
+  var lcix1, lcix2: integer
+begin
+  expression(T.ssAdd(fsys, T.thensy))
+  genlabel(@lcix1); genfjp(@lcix1)
+  if sy = T.thensy then insymbol() else error(52) end
+  statement(T.ssAdd(fsys, T.elsesy))
+  if sy = T.elsesy then
+    genlabel(@lcix2); genujpxjp(57, @lcix2)
+    putlabel(lcix1)
+    insymbol(); statement(fsys)
+    putlabel(lcix2)
+  else putlabel(lcix1) end
+end ifstatement
+
+// pcom.pas lines 3200-3289: casestatement
+// CaseInfo record for linked list of case labels
+type CaseInfo = record
+  next: ^CaseInfo
+  csstart: integer
+  cslab: integer
+end
+
+proc casestatement(fsys: T.SetOfSys)
+  var lsp, lsp1: T.Stp
+      fstptr, lpt1, lpt2, lpt3: ^CaseInfo
+      lval: T.Valu
+      laddr, lcix, lcix1, lmin, lmax: integer
+      found: boolean
+begin
+  expression(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.ofsy), T.comma), T.colon))
+  load(); genlabel(@lcix)
+  lsp := gattr.typtr
+  if lsp <> nil then
+    if (lsp.form <> T.scalar) or (lsp = realptr) then
+      error(144); lsp := nil
+    elsif not comptypes(lsp, intptr) then gen0t(58, lsp) end
+  end
+  genujpxjp(57, @lcix)
+  if sy = T.ofsy then insymbol() else error(8) end
+  fstptr := nil; genlabel(@laddr)
+  loop
+    lpt3 := nil; genlabel(@lcix1)
+    if not ((sy = T.semicolon) or (sy = T.endsy)) then
+      loop
+        constant(T.ssAdd(T.ssAdd(fsys, T.comma), T.colon), @lsp1, @lval)
+        if lsp <> nil then
+          if comptypes(lsp, lsp1) then
+            lpt1 := fstptr; lpt2 := nil
+            found := false
+            while (lpt1 <> nil) and not found do
+              if lpt1.cslab <= lval.ival then
+                if lpt1.cslab = lval.ival then error(156) end
+                lpt2 := lpt1; lpt1 := lpt1.next
+                found := true
+              else
+                lpt2 := lpt1; lpt1 := lpt1.next
+              end
+            end
+            new(lpt3)
+            lpt3.next := lpt1; lpt3.cslab := lval.ival
+            lpt3.csstart := lcix1
+            if lpt2 = nil then fstptr := lpt3
+            else lpt2.next := lpt3 end
+          else error(147) end
+        end
+        test := sy <> T.comma
+        if not test then insymbol() end
+        if test then exit end
+      end // loop constants
+      if sy = T.colon then insymbol() else error(5) end
+      putlabel(lcix1)
+      loop
+        statement(T.ssAdd(fsys, T.semicolon))
+        if not T.symIn(statbegsys, sy) then exit end
+      end
+      if lpt3 <> nil then genujpxjp(57, @laddr) end
+    end
+    test := sy <> T.semicolon
+    if not test then insymbol() end
+    if test then exit end
+  end // loop cases
+  putlabel(lcix)
+  if fstptr <> nil then
+    lmax := fstptr.cslab
+    // Reverse pointers
+    lpt1 := fstptr; fstptr := nil
+    while lpt1 <> nil do
+      lpt2 := lpt1.next; lpt1.next := fstptr
+      fstptr := lpt1; lpt1 := lpt2
+    end
+    lmin := fstptr.cslab
+    if lmax - lmin < T.cixmax then
+      gen2t(45, lmin, lmax, intptr)
+      gen2(51, 1, lmin); gen0(21); genlabel(@lcix)
+      genujpxjp(44, @lcix); putlabel(lcix)
+      while fstptr <> nil do
+        while fstptr.cslab > lmin do
+          gen0(60) // ujc error
+          lmin := lmin + 1
+        end
+        genujpxjp(57, @fstptr.csstart)
+        fstptr := fstptr.next; lmin := lmin + 1
+      end
+      putlabel(laddr)
+    else error(157) end
+  end
+  if sy = T.endsy then insymbol() else error(13) end
+end casestatement
+
+// pcom.pas lines 3291-3307: repeatstatement
+proc repeatstatement(fsys: T.SetOfSys)
+  var laddr: integer
+begin
+  genlabel(@laddr); putlabel(laddr)
+  loop
+    statement(T.ssAdd(T.ssAdd(fsys, T.semicolon), T.untilsy))
+    if T.symIn(statbegsys, sy) then error(14) end
+    if not T.symIn(statbegsys, sy) then exit end
+  end
+  while sy = T.semicolon do
+    insymbol()
+    loop
+      statement(T.ssAdd(T.ssAdd(fsys, T.semicolon), T.untilsy))
+      if T.symIn(statbegsys, sy) then error(14) end
+      if not T.symIn(statbegsys, sy) then exit end
+    end
+  end
+  if sy = T.untilsy then
+    insymbol(); expression(fsys); genfjp(@laddr)
+  else error(53) end
+end repeatstatement
+
+// pcom.pas lines 3309-3315: whilestatement
+proc whilestatement(fsys: T.SetOfSys)
+  var laddr, lcix: integer
+begin
+  genlabel(@laddr); putlabel(laddr)
+  expression(T.ssAdd(fsys, T.dosy)); genlabel(@lcix); genfjp(@lcix)
+  if sy = T.dosy then insymbol() else error(54) end
+  statement(fsys); genujpxjp(57, @laddr); putlabel(lcix)
+end whilestatement
+
+// pcom.pas lines 3317-3387: forstatement
+proc forstatement(fsys: T.SetOfSys)
+  var lattr: T.Attr; lsy: T.Symbol
+      lcix, laddr: integer; llc: integer
+      lcp: T.Ctp
+begin
+  llc := lc
+  lattr.typtr := nil; lattr.kind := T.varbl
+  lattr.access := T.drct; lattr.vlevel := level; lattr.dplmt := 0
+  if sy = T.ident then
+    searchid(T.idSet2(T.vars, T.vars), @lcp)
+    lattr.typtr := lcp.idtype; lattr.kind := T.varbl
+    if lcp.vkind = T.actual then
+      lattr.access := T.drct; lattr.vlevel := lcp.vlev
+      lattr.dplmt := lcp.vaddr
+    else error(155); lattr.typtr := nil end
+    if lattr.typtr <> nil then
+      if (ord(lattr.typtr.form) > ord(T.subrange))
+         or comptypes(realptr, lattr.typtr) then
+        error(143); lattr.typtr := nil
+      end
+    end
+    insymbol()
+  else
+    error(2); skip(T.ssAdd(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.becomes), T.tosy), T.downtosy), T.dosy))
+  end
+  if sy = T.becomes then
+    insymbol()
+    expression(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.tosy), T.downtosy), T.dosy))
+    if gattr.typtr <> nil then
+      if gattr.typtr.form <> T.scalar then error(144)
+      elsif comptypes(lattr.typtr, gattr.typtr) then
+        load(); store(lattr)
+      else error(145) end
+    end
+  else
+    error(51); skip(T.ssAdd(T.ssAdd(T.ssAdd(fsys, T.tosy), T.downtosy), T.dosy))
+  end
+  if (sy = T.tosy) or (sy = T.downtosy) then
+    lsy := sy; insymbol()
+    expression(T.ssAdd(fsys, T.dosy))
+    if gattr.typtr <> nil then
+      if gattr.typtr.form <> T.scalar then error(144)
+      elsif comptypes(lattr.typtr, gattr.typtr) then
+        load()
+        if not comptypes(lattr.typtr, intptr) then gen0t(58, gattr.typtr) end
+        align(intptr, @lc)
+        gen2t(56, 0, lc, intptr)
+        genlabel(@laddr); putlabel(laddr)
+        gattr := lattr; load()
+        if not comptypes(gattr.typtr, intptr) then gen0t(58, gattr.typtr) end
+        gen2t(54, 0, lc, intptr)
+        lc := lc + T.intsize
+        if lc > lcmax then lcmax := lc end
+        if lsy = T.tosy then gen2(52, +ord("i"), 1)
+        else gen2(48, +ord("i"), 1) end
+      else error(145) end
+    end
+  else error(55); skip(T.ssAdd(fsys, T.dosy)) end
+  genlabel(@lcix); genujpxjp(33, @lcix)
+  if sy = T.dosy then insymbol() else error(54) end
+  statement(fsys)
+  gattr := lattr; load()
+  if lsy = T.tosy then gen1t(34, 1, gattr.typtr)
+  else gen1t(31, 1, gattr.typtr) end
+  store(lattr); genujpxjp(57, @laddr); putlabel(lcix)
+  lc := llc
+end forstatement
+
+// pcom.pas lines 3390-3429: withstatement
+proc withstatement(fsys: T.SetOfSys)
+  var lcp: T.Ctp; lcnt1: integer; llc: integer
+begin
+  lcnt1 := 0; llc := lc
+  loop
+    if sy = T.ident then
+      searchid(T.idSet2(T.vars, T.field), @lcp); insymbol()
+    else error(2); lcp := uvarptr end
+    selector(T.ssAdd(T.ssAdd(fsys, T.comma), T.dosy), lcp)
+    if gattr.typtr <> nil then
+      if gattr.typtr.form = T.records then
+        if top < T.displimit then
+          top := top + 1; lcnt1 := lcnt1 + 1
+          display[top].fname := gattr.typtr.fstfld
+          display[top].flabel := nil
+          if gattr.access = T.drct then
+            display[top].occur := T.crec
+            display[top].clev := gattr.vlevel
+            display[top].cdspl := gattr.dplmt
+          else
+            loadaddress()
+            align(nilptr, @lc)
+            gen2t(56, 0, lc, nilptr)
+            display[top].occur := T.vrec
+            display[top].vdspl := lc
+            lc := lc + T.ptrsize
+            if lc > lcmax then lcmax := lc end
+          end
+        else error(250) end
+      else error(140) end
+    end
+    test := sy <> T.comma
+    if not test then insymbol() end
+    if test then exit end
+  end // loop
+  if sy = T.dosy then insymbol() else error(54) end
+  statement(fsys)
+  top := top - lcnt1; lc := llc
+end withstatement
+
+// pcom.pas lines 3431-3467: statement
+proc statement(fsys: T.SetOfSys)
+  var lcp: T.Ctp; llp: T.Lbp
+begin
+  if level <= 1 then
+  end
+  // Check for label
+  if sy = T.intconst then
+    llp := display[level].flabel
+    while llp <> nil do
+      if llp.labval = val.ival then
+        if llp.defined then error(165) end
+        putlabel(llp.labname); llp.defined := true
+        llp := nil // break
+      else llp := llp.nextlab end
+    end
+    // If we didn't find the label in the loop above, error
+    insymbol()
+    if sy = T.colon then insymbol() else error(5) end
+  end
+  if not T.symIn(T.ssAdd(fsys, T.ident), sy) then
+    error(6); skip(fsys)
+  end
+  if T.symIn(T.ssAdd(statbegsys, T.ident), sy) then
+    if sy = T.ident then
+      searchid(T.idSet5(T.vars, T.field, T.funcc, T.procc, T.procc), @lcp)
+      insymbol()
+      if lcp.klass = T.procc then
+        call(fsys, lcp)
+      else assignment(fsys, lcp) end
+    elsif sy = T.beginsy then insymbol(); compoundstatement(fsys)
+    elsif sy = T.gotosy then insymbol(); gotostatement(fsys)
+    elsif sy = T.ifsy then insymbol(); ifstatement(fsys)
+    elsif sy = T.casesy then insymbol(); casestatement(fsys)
+    elsif sy = T.whilesy then insymbol(); whilestatement(fsys)
+    elsif sy = T.repeatsy then insymbol(); repeatstatement(fsys)
+    elsif sy = T.forsy then insymbol(); forstatement(fsys)
+    elsif sy = T.withsy then insymbol(); withstatement(fsys)
+    end
+    if not ((sy = T.semicolon) or (sy = T.endsy) or (sy = T.elsesy) or (sy = T.untilsy)) then
+      error(6); skip(fsys)
+    end
+  end
+end statement
+
+// pcom.pas lines 3469-3564: body - generates code for a block's body
+proc body(fsys: T.SetOfSys; fprocp_: T.Ctp)
+  var entname, segsize, stacktop: integer
+      llc1: integer; lcp: T.Ctp; llp: T.Lbp; llcp: T.Ctp
+      saveid: T.Alpha
+begin
+  if fprocp_ <> nil then entname := fprocp_.pfname
+  else genlabel(@entname) end
+  fprocp := fprocp_  // set module-level fprocp for use by variable()
+  cstptrix := 0; cstoccmax := 65; bCixmax := 1000
+  topnew := T.lcaftermarkstack; topmax := T.lcaftermarkstack
+  putlabel(entname); genlabel(@segsize); genlabel(@stacktop)
+  gencupent(32, 1, segsize); gencupent(32, 2, stacktop)
+  if fprocp_ <> nil then
+    // Copy multiple values into local cells
+    llc1 := T.lcaftermarkstack
+    lcp := fprocp_.next
+    while lcp <> nil do
+      align(parmptr, @llc1)
+      if lcp.klass = T.vars then
+        if lcp.idtype <> nil then
+          if ord(lcp.idtype.form) > ord(T.power) then
+            if lcp.vkind = T.actual then
+              gen2(50, 0, lcp.vaddr)
+              gen2t(54, 0, llc1, nilptr)
+              gen1(40, lcp.idtype.size)
+            end
+            llc1 := llc1 + T.ptrsize
+          else llc1 := llc1 + lcp.idtype.size end
+        end
+      end
+      lcp := lcp.next
+    end
+  end
+  lcmax := lc
+  // Parse statements
+  loop
+    loop
+      statement(T.ssAdd(T.ssAdd(fsys, T.semicolon), T.endsy))
+      if not T.symIn(statbegsys, sy) then exit end
+    end
+    test := sy <> T.semicolon
+    if not test then
+      insymbol()
+    end
+    if test then exit end
+  end
+  if sy = T.endsy then insymbol() else error(13) end
+  // Check for undefined labels
+  llp := display[top].flabel
+  while llp <> nil do
+    if not llp.defined then
+      error(168)
+      PRINTLN
+      print(" label "); print(llp.labval)
+    end
+    llp := llp.nextlab
+  end
+  if fprocp_ <> nil then
+    if fprocp_.idtype = nil then gen1(42, +ord("p"))
+    else gen0t(42, fprocp_.idtype) end
+    align(parmptr, @lcmax)
+    if prcode then
+      fWriteString(prr, "l"); fWriteInt(prr, segsize, 4)
+      fWriteString(prr, "="); fWriteInt(prr, lcmax, 1); fWriteLn(prr)
+      fWriteString(prr, "l"); fWriteInt(prr, stacktop, 4)
+      fWriteString(prr, "="); fWriteInt(prr, topmax, 1); fWriteLn(prr)
+    end
+  else
+    gen1(42, +ord("p"))
+    align(parmptr, @lcmax)
+    if prcode then
+      fWriteString(prr, "l"); fWriteInt(prr, segsize, 4)
+      fWriteString(prr, "="); fWriteInt(prr, lcmax, 1); fWriteLn(prr)
+      fWriteString(prr, "l"); fWriteInt(prr, stacktop, 4)
+      fWriteString(prr, "="); fWriteInt(prr, topmax, 1); fWriteLn(prr)
+      fWriteString(prr, "q"); fWriteLn(prr)
+    end
+    ic := 0
+    // Generate call of main program at absolute address zero
+    gen1(41, 0); gencupent(46, 0, entname); gen0(29)
+    if prcode then
+      fWriteString(prr, "q"); fWriteLn(prr)
+    end
+    saveid := id
+    while fextfilep <> nil do
+      if not ((fextfilep.filename = "input   ")
+              or (fextfilep.filename = "output  ")
+              or (fextfilep.filename = "prd     ")
+              or (fextfilep.filename = "prr     ")) then
+        id := fextfilep.filename
+        searchid(T.idSet2(T.vars, T.vars), @llcp)
+        if llcp.idtype <> nil then
+          if llcp.idtype.form <> T.files then
+            PRINTLN; print("        undeclared external file")
+            print(fextfilep.filename)
+          end
+        end
+      end
+      fextfilep := fextfilep.nextfile
+    end
+    id := saveid
+    if prtables then
+      PRINTLN; printtables(true)
+    end
+  end
+end body
+
+
+// pcom.pas lines 3566-3588: block
+proc block(fsys: T.SetOfSys; fsy: T.Symbol; fprocp_: T.Ctp)
+  var lsy: T.Symbol
+begin
+  dp := true
+  loop
+    if sy = T.labelsy then insymbol(); labeldeclaration(fsys) end
+    if sy = T.constsy then insymbol(); constdeclaration(fsys) end
+    if sy = T.typesy then insymbol(); typedeclaration(fsys) end
+    if sy = T.varsy then insymbol(); vardeclaration(fsys) end
+    while (sy = T.procsy) or (sy = T.funcsy) do
+      lsy := sy; insymbol(); procdeclaration(fsys, lsy)
+    end
+    if sy <> T.beginsy then
+      error(18); skip(fsys)
+    end
+    if T.symIn(statbegsys, sy) or F.Eof(srcfile) then exit end
+  end
+  dp := false
+  if sy = T.beginsy then insymbol() else error(17) end
+  loop
+    body(T.ssAdd(fsys, T.casesy), fprocp_)
+    if sy <> fsy then
+      error(6); skip(fsys)
+    end
+    if (sy = fsy) or T.symIn(blockbegsys, sy) or F.Eof(srcfile) then exit end
+  end
+end block
+
+
+// pcom.pas lines 3590-3621: programme
+proc programme(fsys: T.SetOfSys)
+  var extfp: T.ExtFileP
+begin
+  if sy = T.progsy then
+    insymbol()
+    if sy <> T.ident then error(2) end
+    insymbol()
+    if not ((sy = T.lparent) or (sy = T.semicolon)) then error(14) end
+    if sy = T.lparent then
+      loop
+        insymbol()
+        if sy = T.ident then
+          new(extfp)
+          extfp.filename := id; extfp.nextfile := fextfilep
+          fextfilep := extfp
+          insymbol()
+          if not ((sy = T.comma) or (sy = T.rparent)) then error(20) end
+        else error(2) end
+        if sy <> T.comma then exit end
+      end
+      if sy <> T.rparent then error(4) end
+      insymbol()
+    end
+    if sy <> T.semicolon then error(14) else insymbol() end
+  end
+  loop
+    block(fsys, T.period, nil)
+    if sy <> T.period then error(21) end
+    if (sy = T.period) or F.Eof(srcfile) then exit end
+  end
+  if list then PRINTLN end
+  if errinx <> 0 then
+    list := false; endofline()
+  end
+end programme
+
+// pcom.pas lines 3624-3639: stdnames
+proc stdnames()
+begin
+  na[ 1] := "false   "; na[ 2] := "true    "; na[ 3] := "input   "
+  na[ 4] := "output  "; na[ 5] := "get     "; na[ 6] := "put     "
+  na[ 7] := "reset   "; na[ 8] := "rewrite "; na[ 9] := "read    "
+  na[10] := "write   "; na[11] := "pack    "; na[12] := "unpack  "
+  na[13] := "new     "; na[14] := "release "; na[15] := "readln  "
+  na[16] := "writeln "
+  na[17] := "abs     "; na[18] := "sqr     "; na[19] := "trunc   "
+  na[20] := "odd     "; na[21] := "ord     "; na[22] := "chr     "
+  na[23] := "pred    "; na[24] := "succ    "; na[25] := "eof     "
+  na[26] := "eoln    "
+  na[27] := "sin     "; na[28] := "cos     "; na[29] := "exp     "
+  na[30] := "sqrt    "; na[31] := "ln      "; na[32] := "arctan  "
+  na[33] := "prd     "; na[34] := "prr     "; na[35] := "mark    "
+end stdnames
+
+// pcom.pas lines 3641-3667: enterstdtypes
+proc enterstdtypes()
+begin
+  // integer
+  new(intptr)
+  intptr.size := T.intsize; intptr.form := T.scalar
+  intptr.scalkind := T.standard
+  // real
+  new(realptr)
+  realptr.size := T.realsize; realptr.form := T.scalar
+  realptr.scalkind := T.standard
+  // char
+  new(charptr)
+  charptr.size := T.charsize; charptr.form := T.scalar
+  charptr.scalkind := T.standard
+  // boolean
+  new(boolptr)
+  boolptr.size := T.boolsize; boolptr.form := T.scalar
+  boolptr.scalkind := T.declared
+  // nil
+  new(nilptr)
+  nilptr.eltype := nil; nilptr.size := T.ptrsize
+  nilptr.form := T.pointer_f
+  // parmptr (for alignment of parameters)
+  new(parmptr)
+  parmptr.size := T.parmsize; parmptr.form := T.scalar
+  parmptr.scalkind := T.standard
+  // text
+  new(textptr)
+  textptr.filtype := charptr; textptr.size := T.charsize
+  textptr.form := T.files
+end enterstdtypes
+
+// pcom.pas lines 3669-3762: entstdnames
+proc entstdnames()
+  var cp, cp1: T.Ctp; i: integer
+begin
+  // integer type name
+  new(cp); cp.llink := nil; cp.rlink := nil
+  cp.name := "integer "; cp.idtype := intptr; cp.klass := T.types
+  enterid(cp)
+  if display[0].fname <> nil then
+  end
+  // real type name
+  new(cp); cp.name := "real    "; cp.idtype := realptr; cp.klass := T.types
+  enterid(cp)
+  // char type name
+  new(cp); cp.name := "char    "; cp.idtype := charptr; cp.klass := T.types
+  enterid(cp)
+  // boolean type name
+  new(cp); cp.name := "boolean "; cp.idtype := boolptr; cp.klass := T.types
+  enterid(cp)
+  // text type name (standard Pascal predeclared type)
+  new(cp); cp.name := "text    "; cp.idtype := textptr; cp.klass := T.types
+  enterid(cp)
+
+  // false, true constants
+  cp1 := nil
+  for i := 1 to 2 do
+    new(cp)
+    cp.name := na[i]; cp.idtype := boolptr
+    cp.next := cp1; cp.values.ival := i - 1; cp.klass := T.konst
+    enterid(cp); cp1 := cp
+  end
+  boolptr.fconst := cp
+
+  // nil constant
+  new(cp)
+  cp.name := "nil     "; cp.idtype := nilptr
+  cp.next := nil; cp.values.ival := 0; cp.klass := T.konst
+  enterid(cp)
+
+  // input, output file variables
+  for i := 3 to 4 do
+    new(cp)
+    cp.name := na[i]; cp.idtype := textptr; cp.klass := T.vars
+    cp.vkind := T.actual; cp.next := nil; cp.vlev := 1
+    cp.vaddr := T.lcaftermarkstack + (i - 3) * T.charmax
+    enterid(cp)
+  end
+
+  // prd, prr file variables
+  for i := 33 to 34 do
+    new(cp)
+    cp.name := na[i]; cp.idtype := textptr; cp.klass := T.vars
+    cp.vkind := T.actual; cp.next := nil; cp.vlev := 1
+    cp.vaddr := T.lcaftermarkstack + (i - 31) * T.charmax
+    enterid(cp)
+  end
+
+  // Standard procedures: get, put, reset, rewrite, read, write, pack, unpack, new, release, readln, writeln
+  for i := 5 to 16 do
+    new(cp)
+    cp.name := na[i]; cp.idtype := nil
+    cp.next := nil; cp.key := i - 4
+    cp.klass := T.procc; cp.pfdeckind := T.standard
+    enterid(cp)
+  end
+  // mark (standard proc, key=13)
+  new(cp)
+  cp.name := na[35]; cp.idtype := nil
+  cp.next := nil; cp.key := 13
+  cp.klass := T.procc; cp.pfdeckind := T.standard
+  enterid(cp)
+
+  // Standard functions: abs, sqr, trunc, odd, ord, chr, pred, succ, eof, eoln
+  for i := 17 to 26 do
+    new(cp)
+    cp.name := na[i]; cp.idtype := nil
+    cp.next := nil; cp.key := i - 16
+    cp.klass := T.funcc; cp.pfdeckind := T.standard
+    enterid(cp)
+  end
+
+  // Parameter of predeclared math functions
+  new(cp)
+  cp.name := "        "; cp.idtype := realptr; cp.klass := T.vars
+  cp.vkind := T.actual; cp.next := nil; cp.vlev := 1; cp.vaddr := 0
+
+  // sin, cos, exp, sqrt, ln, arctan
+  for i := 27 to 32 do
+    new(cp1)
+    cp1.name := na[i]; cp1.idtype := realptr; cp1.next := cp
+    cp1.forwdecl := false; cp1.externl := true; cp1.pflev := 0
+    cp1.pfname := i - 12
+    cp1.klass := T.funcc; cp1.pfdeckind := T.declared; cp1.pfkind := T.actual
+    enterid(cp1)
+  end
+end entstdnames
+
+
+// pcom.pas lines 3764-3796: enterundecl
+proc enterundecl()
+begin
+  new(utypptr)
+  utypptr.name := "        "; utypptr.idtype := nil; utypptr.klass := T.types
+
+  new(ucstptr)
+  ucstptr.name := "        "; ucstptr.idtype := nil; ucstptr.next := nil
+  ucstptr.values.ival := 0; ucstptr.klass := T.konst
+
+  new(uvarptr)
+  uvarptr.name := "        "; uvarptr.idtype := nil; uvarptr.vkind := T.actual
+  uvarptr.next := nil; uvarptr.vlev := 0; uvarptr.vaddr := 0
+  uvarptr.klass := T.vars
+
+  new(ufldptr)
+  ufldptr.name := "        "; ufldptr.idtype := nil; ufldptr.next := nil
+  ufldptr.fldaddr := 0; ufldptr.klass := T.field
+
+  new(uprcptr)
+  uprcptr.name := "        "; uprcptr.idtype := nil; uprcptr.forwdecl := false
+  uprcptr.next := nil; uprcptr.externl := false; uprcptr.pflev := 0
+  genlabel(@uprcptr.pfname)
+  uprcptr.klass := T.procc; uprcptr.pfdeckind := T.declared; uprcptr.pfkind := T.actual
+
+  new(ufctptr)
+  ufctptr.name := "        "; ufctptr.idtype := nil; ufctptr.next := nil
+  ufctptr.forwdecl := false; ufctptr.externl := false; ufctptr.pflev := 0
+  genlabel(@ufctptr.pfname)
+  ufctptr.klass := T.funcc; ufctptr.pfdeckind := T.declared; ufctptr.pfkind := T.actual
+end enterundecl
+
+
+// pcom.pas lines 3798-3809: initscalars
+proc initscalars()
+begin
+  fwptr := nil
+  prtables := false; list := true; prcode := true; debug := true
+  dp := true; prterr := true; errinx := 0
+  intlabel := 0; kk := 8; fextfilep := nil
+  lc := T.lcaftermarkstack + T.filebuffer * (+T.charmax)
+  // note: reservation of buffer store for 2 text files
+  ic := 3; eol := true; linecount := 0
+  ch := " "; chcnt := 0
+  globtestp := nil
+  mxint10 := +T.maxint div 10; digmax := T.strglgth - 1i
+end initscalars
+
+// pcom.pas lines 3811-3821: initsets
+proc initsets()
+begin
+  constbegsys := T.ss5(T.addop, T.intconst, T.realconst, T.stringconst, T.ident)
+  simptypebegsys := T.ssAdd(constbegsys, T.lparent)
+  typebegsys := T.ssUnion(T.ss6(T.arrow, T.packedsy, T.arraysy, T.recordsy, T.setsy, T.filesy), simptypebegsys)
+  typedels := T.ss4(T.arraysy, T.recordsy, T.setsy, T.filesy)
+  blockbegsys := T.ss7(T.labelsy, T.constsy, T.typesy, T.varsy, T.procsy, T.funcsy, T.beginsy)
+  selectsys := T.ss3(T.arrow, T.period, T.lbrack)
+  facbegsys := T.ss7(T.intconst, T.realconst, T.stringconst, T.ident, T.lparent, T.lbrack, T.notsy)
+  statbegsys := T.ss8(T.beginsy, T.gotosy, T.ifsy, T.whilesy, T.repeatsy, T.forsy, T.withsy, T.casesy)
+end initsets
+
+
+// pcom.pas lines 3823-3976: inittables
+proc inittables()
+  var i: integer
+
+  // pcom.pas lines 3824-3841: reswords
+  proc reswords()
+  begin
+    rw[ 1] := "if      "; rw[ 2] := "do      "; rw[ 3] := "of      "
+    rw[ 4] := "to      "; rw[ 5] := "in      "; rw[ 6] := "or      "
+    rw[ 7] := "end     "; rw[ 8] := "for     "; rw[ 9] := "var     "
+    rw[10] := "div     "; rw[11] := "mod     "; rw[12] := "set     "
+    rw[13] := "and     "; rw[14] := "not     "; rw[15] := "then    "
+    rw[16] := "else    "; rw[17] := "with    "; rw[18] := "goto    "
+    rw[19] := "case    "; rw[20] := "type    "
+    rw[21] := "file    "; rw[22] := "begin   "
+    rw[23] := "until   "; rw[24] := "while   "; rw[25] := "array   "
+    rw[26] := "const   "; rw[27] := "label   "
+    rw[28] := "repeat  "; rw[29] := "record  "; rw[30] := "downto  "
+    rw[31] := "packed  "; rw[32] := "forward "; rw[33] := "program "
+    rw[34] := "function"; rw[35] := "procedur"
+    frw[1] :=  1; frw[2] :=  1; frw[3] :=  7; frw[4] := 15; frw[5] := 22
+    frw[6] := 28; frw[7] := 32; frw[8] := 34; frw[9] := 36
+  end reswords
+
+  // pcom.pas lines 3843-3864: symbols
+  proc symbols()
+  begin
+    rsy[ 1] := T.ifsy;      rsy[ 2] := T.dosy;      rsy[ 3] := T.ofsy
+    rsy[ 4] := T.tosy;      rsy[ 5] := T.relop;     rsy[ 6] := T.addop
+    rsy[ 7] := T.endsy;     rsy[ 8] := T.forsy;     rsy[ 9] := T.varsy
+    rsy[10] := T.mulop;     rsy[11] := T.mulop;     rsy[12] := T.setsy
+    rsy[13] := T.mulop;     rsy[14] := T.notsy;     rsy[15] := T.thensy
+    rsy[16] := T.elsesy;    rsy[17] := T.withsy;    rsy[18] := T.gotosy
+    rsy[19] := T.casesy;    rsy[20] := T.typesy
+    rsy[21] := T.filesy;    rsy[22] := T.beginsy
+    rsy[23] := T.untilsy;   rsy[24] := T.whilesy;   rsy[25] := T.arraysy
+    rsy[26] := T.constsy;   rsy[27] := T.labelsy
+    rsy[28] := T.repeatsy;  rsy[29] := T.recordsy;  rsy[30] := T.downtosy
+    rsy[31] := T.packedsy;  rsy[32] := T.forwardsy; rsy[33] := T.progsy
+    rsy[34] := T.funcsy;    rsy[35] := T.procsy
+    ssy[ord("+")] := T.addop;    ssy[ord("-")] := T.addop;    ssy[ord("*")] := T.mulop
+    ssy[ord("/")] := T.mulop;    ssy[ord("(")] := T.lparent;  ssy[ord(")")] := T.rparent
+    ssy[ord("$")] := T.othersy;  ssy[ord("=")] := T.relop;    ssy[ord(" ")] := T.othersy
+    ssy[ord(",")] := T.comma;    ssy[ord(".")] := T.period;   ssy[ord("'")] := T.othersy
+    ssy[ord("[")] := T.lbrack;   ssy[ord("]")] := T.rbrack;   ssy[ord(":")] := T.colon
+    ssy[ord("^")] := T.arrow;    ssy[ord("<")] := T.relop;    ssy[ord(">")] := T.relop
+    ssy[ord(";")] := T.semicolon
+  end symbols
+
+  // pcom.pas lines 3867-3876: rators
+  proc rators()
+    var i: integer
+  begin
+    for i := 1 to 35 do rop[i] := T.noop end
+    rop[5] := T.inop; rop[10] := T.idiv; rop[11] := T.imod
+    rop[6] := T.orop; rop[13] := T.andop
+    for i := T.ordminchar to T.ordmaxchar do sop[i] := T.noop end
+    sop[ord("+")] := T.plus; sop[ord("-")] := T.minus; sop[ord("*")] := T.mul; sop[ord("/")] := T.rdiv
+    sop[ord("=")] := T.eqop; sop[ord("<")] := T.ltop;  sop[ord(">")] := T.gtop
+  end rators
+
+  // pcom.pas lines 3878-3886: procmnemonics
+  proc procmnemonics()
+  begin
+    sna[ 1] := " get"; sna[ 2] := " put"; sna[ 3] := " rdi"; sna[ 4] := " rdr"
+    sna[ 5] := " rdc"; sna[ 6] := " wri"; sna[ 7] := " wro"; sna[ 8] := " wrr"
+    sna[ 9] := " wrc"; sna[10] := " wrs"; sna[11] := " pak"; sna[12] := " new"
+    sna[13] := " rst"; sna[14] := " eln"; sna[15] := " sin"; sna[16] := " cos"
+    sna[17] := " exp"; sna[18] := " sqt"; sna[19] := " log"; sna[20] := " atn"
+    sna[21] := " rln"; sna[22] := " wln"; sna[23] := " sav"
+  end procmnemonics
+
+  // pcom.pas lines 3888-3906: instrmnemonics
+  proc instrmnemonics()
+  begin
+    mn[ 0] := " abi"; mn[ 1] := " abr"; mn[ 2] := " adi"; mn[ 3] := " adr"
+    mn[ 4] := " and"; mn[ 5] := " dif"; mn[ 6] := " dvi"; mn[ 7] := " dvr"
+    mn[ 8] := " eof"; mn[ 9] := " flo"; mn[10] := " flt"; mn[11] := " inn"
+    mn[12] := " int"; mn[13] := " ior"; mn[14] := " mod"; mn[15] := " mpi"
+    mn[16] := " mpr"; mn[17] := " ngi"; mn[18] := " ngr"; mn[19] := " not"
+    mn[20] := " odd"; mn[21] := " sbi"; mn[22] := " sbr"; mn[23] := " sgs"
+    mn[24] := " sqi"; mn[25] := " sqr"; mn[26] := " sto"; mn[27] := " trc"
+    mn[28] := " uni"; mn[29] := " stp"; mn[30] := " csp"; mn[31] := " dec"
+    mn[32] := " ent"; mn[33] := " fjp"; mn[34] := " inc"; mn[35] := " ind"
+    mn[36] := " ixa"; mn[37] := " lao"; mn[38] := " lca"; mn[39] := " ldo"
+    mn[40] := " mov"; mn[41] := " mst"; mn[42] := " ret"; mn[43] := " sro"
+    mn[44] := " xjp"; mn[45] := " chk"; mn[46] := " cup"; mn[47] := " equ"
+    mn[48] := " geq"; mn[49] := " grt"; mn[50] := " lda"; mn[51] := " ldc"
+    mn[52] := " leq"; mn[53] := " les"; mn[54] := " lod"; mn[55] := " neq"
+    mn[56] := " str"; mn[57] := " ujp"; mn[58] := " ord"; mn[59] := " chr"
+    mn[60] := " ujc"
+  end instrmnemonics
+
+  // pcom.pas lines 3908-3944: chartypes
+  proc chartypes()
+    var i: integer
+  begin
+    for i := T.ordminchar to T.ordmaxchar do chartp[i] := T.illegal end
+    chartp[ord("a")] := T.letter; chartp[ord("b")] := T.letter; chartp[ord("c")] := T.letter
+    chartp[ord("d")] := T.letter; chartp[ord("e")] := T.letter; chartp[ord("f")] := T.letter
+    chartp[ord("g")] := T.letter; chartp[ord("h")] := T.letter; chartp[ord("i")] := T.letter
+    chartp[ord("j")] := T.letter; chartp[ord("k")] := T.letter; chartp[ord("l")] := T.letter
+    chartp[ord("m")] := T.letter; chartp[ord("n")] := T.letter; chartp[ord("o")] := T.letter
+    chartp[ord("p")] := T.letter; chartp[ord("q")] := T.letter; chartp[ord("r")] := T.letter
+    chartp[ord("s")] := T.letter; chartp[ord("t")] := T.letter; chartp[ord("u")] := T.letter
+    chartp[ord("v")] := T.letter; chartp[ord("w")] := T.letter; chartp[ord("x")] := T.letter
+    chartp[ord("y")] := T.letter; chartp[ord("z")] := T.letter
+    chartp[ord("0")] := T.number; chartp[ord("1")] := T.number; chartp[ord("2")] := T.number
+    chartp[ord("3")] := T.number; chartp[ord("4")] := T.number; chartp[ord("5")] := T.number
+    chartp[ord("6")] := T.number; chartp[ord("7")] := T.number; chartp[ord("8")] := T.number
+    chartp[ord("9")] := T.number
+    chartp[ord("+")] := T.special; chartp[ord("-")] := T.special; chartp[ord("*")] := T.special
+    chartp[ord("/")] := T.special; chartp[ord("(")] := T.chlparen; chartp[ord(")")] := T.special
+    chartp[ord("$")] := T.special; chartp[ord("=")] := T.special; chartp[ord(" ")] := T.chspace
+    chartp[ord(",")] := T.special; chartp[ord(".")] := T.chperiod; chartp[ord("'")] := T.chstrquo
+    chartp[ord("[")] := T.special; chartp[ord("]")] := T.special; chartp[ord(":")] := T.chcolon
+    chartp[ord("^")] := T.special; chartp[ord(";")] := T.special
+    chartp[ord("<")] := T.chlt;    chartp[ord(">")] := T.chgt
+    ordint[ord("0")] := 0; ordint[ord("1")] := 1; ordint[ord("2")] := 2
+    ordint[ord("3")] := 3; ordint[ord("4")] := 4; ordint[ord("5")] := 5
+    ordint[ord("6")] := 6; ordint[ord("7")] := 7; ordint[ord("8")] := 8
+    ordint[ord("9")] := 9
+  end chartypes
+
+  // pcom.pas lines 3946-3970: initdx
+  proc initdx()
+  begin
+    cdx[ 0] :=  0; cdx[ 1] :=  0; cdx[ 2] := -1; cdx[ 3] := -1
+    cdx[ 4] := -1; cdx[ 5] := -1; cdx[ 6] := -1; cdx[ 7] := -1
+    cdx[ 8] :=  0; cdx[ 9] :=  0; cdx[10] :=  0; cdx[11] := -1
+    cdx[12] := -1; cdx[13] := -1; cdx[14] := -1; cdx[15] := -1
+    cdx[16] := -1; cdx[17] :=  0; cdx[18] :=  0; cdx[19] :=  0
+    cdx[20] :=  0; cdx[21] := -1; cdx[22] := -1; cdx[23] :=  0
+    cdx[24] :=  0; cdx[25] :=  0; cdx[26] := -2; cdx[27] :=  0
+    cdx[28] := -1; cdx[29] :=  0; cdx[30] :=  0; cdx[31] :=  0
+    cdx[32] :=  0; cdx[33] := -1; cdx[34] :=  0; cdx[35] :=  0
+    cdx[36] := -1; cdx[37] :=  1; cdx[38] :=  1; cdx[39] :=  1
+    cdx[40] := -2; cdx[41] :=  0; cdx[42] :=  0; cdx[43] := -1
+    cdx[44] := -1; cdx[45] :=  0; cdx[46] :=  0; cdx[47] := -1
+    cdx[48] := -1; cdx[49] := -1; cdx[50] :=  1; cdx[51] :=  1
+    cdx[52] := -1; cdx[53] := -1; cdx[54] :=  1; cdx[55] := -1
+    cdx[56] := -1; cdx[57] :=  0; cdx[58] :=  0; cdx[59] :=  0
+    cdx[60] :=  0
+    pdx[ 1] := -1; pdx[ 2] := -1; pdx[ 3] := -2; pdx[ 4] := -2
+    pdx[ 5] := -2; pdx[ 6] := -3; pdx[ 7] := -3; pdx[ 8] := -3
+    pdx[ 9] := -3; pdx[10] := -4; pdx[11] :=  0; pdx[12] := -2
+    pdx[13] := -1; pdx[14] :=  0; pdx[15] :=  0; pdx[16] :=  0
+    pdx[17] :=  0; pdx[18] :=  0; pdx[19] :=  0; pdx[20] :=  0
+    pdx[21] := -1; pdx[22] := -1; pdx[23] := -1
+  end initdx
+
+begin // inittables body
+  reswords()
+  symbols()
+  rators()
+  instrmnemonics()
+  procmnemonics()
+  chartypes()
+  initdx()
+end inittables
+
+
+// Main entry point
+// pcom.pas lines 3978-4000
+begin
+  // Initialize
+  hasLookAhead := false
+  initscalars()
+  initsets()
+  inittables()
+
+  // Enter standard names and standard types
+  level := 0; top := 0
+  display[0].fname := nil; display[0].flabel := nil; display[0].occur := T.blck
+  enterstdtypes()
+  stdnames()
+  entstdnames()
+  enterundecl()
+  top := 1; level := 1
+  display[1].fname := nil; display[1].flabel := nil; display[1].occur := T.blck
+
+  // Open source file and output file, then compile
+  if A.Count() < 2 then
+    println("Usage: Pcom <source.pas>")
+    return
+  end
+  argptr := A.Arg(1)
+  if argptr = nil then
+    println("Error: cannot read argument")
+    return
+  end
+  // Copy arg to srcname (up to 255 chars)
+  argidx := 0
+  while (argidx < 255) and (argptr[argidx] <> 0X) do
+    srcname[argidx] := argptr[argidx]; inc(argidx)
+  end
+  srcname[argidx] := 0X
+  srcfile := F.Open(@srcname, F.ReadOnly)
+  if srcfile = nil then
+    print("Error: cannot open "); println(srcname)
+    return
+  end
+  prrname := "prr"
+  prr := F.Open(@prrname, F.Create)
+  insymbol()
+  programme(T.ssDiff(T.ssUnion(blockbegsys, statbegsys), T.symBit(T.casesy)))
+  F.Close(prr)
+end Pcom

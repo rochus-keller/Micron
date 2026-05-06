@@ -1,0 +1,23 @@
+module ArrayRelations
+
+type Str = array 32 of char
+     StrStr = array 3 of Str
+
+var a, b: Str
+    c: StrStr
+    
+begin
+  a := "alpha"
+  b := "meine"
+  c[0] := "alle"
+  c[1] := "meine"
+  c[2] := "entchen"
+  
+  
+  if a = b then println("equal") else println("unequal") end
+
+  if c[1] = b then println("equal") else println("unequal") end
+  
+  if b = "meine" then println("equal") else println("unequal") end
+
+end ArrayRelations

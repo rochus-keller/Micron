@@ -399,8 +399,9 @@ bool Evaluator::derefPointer(bool byVal, const RowCol& pos)
     v.type = v.type->getType();
     v.ref = true;
 
-    if( v.type->isCharArray() && v.type->len == 0 && byVal )
-        byVal = false; // avoid ldind for an open array of char
+    // don't copy char arrays to stack by value eagerly to support relation ops
+    if( v.type->isCharArray() && byVal )
+        byVal = false;
 
     stack.push_back(v);
 
@@ -522,6 +523,13 @@ bool Evaluator::desigField(Declaration* field, bool byVal, const RowCol& pos)
         td = qMakePair( q,field->name);
     }else
         td = qMakePair(toQuali(lhs.type),field->name);
+
+#if 1
+    // don't copy char arrays to stack by value eagerly to support relation ops
+    if( byVal && field->getType()->isCharArray() )
+        byVal = false;
+#endif
+
     if( byVal )
         out->ldfld_(td);
     else
@@ -545,6 +553,12 @@ bool Evaluator::desigVar(bool byVal, const RowCol& pos)
         return error("expecting a value on the stack",pos);
     }
     Value v = stack.takeLast();
+
+#if 1
+    // don't copy char arrays to stack by value eagerly to support relation ops
+    if( byVal && v.type->isCharArray() )
+        byVal = false;
+#endif
 
     out->line_(pos);
     if( byVal )
@@ -604,6 +618,12 @@ bool Evaluator::desigIndex(bool byVal, const RowCol& pos)
         }
         pushMilStack(rhs, pos);
     }
+
+#if 1
+    // don't copy char arrays to stack by value eagerly to support relation ops
+    if( byVal && lhs.type->getType()->isCharArray() )
+        byVal = false;
+#endif
 
     const Qualident elemType = toQuali(lhs.type->getType());
     out->line_(pos);
@@ -1480,6 +1500,12 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs, const Ro
     return res;
 }
 
+static inline void checkCharArrayIsRef(const Value& v)
+{
+    if( v.type && v.type->isCharArray() && !v.ref )
+        qWarning() << "!!!! relation on char array by value";
+}
+
 Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const RowCol& pos)
 {
     Value res;
@@ -1599,6 +1625,36 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
         }
     }else if( lhs.type->isText() && rhs.type->isText() )
     {
+        if( lhs.isConst() && rhs.isConst() )
+        {
+            res.mode = Value::Const;
+            const int cmp = strcmp(lhs.val.toByteArray().constData(), rhs.val.toByteArray().constData());
+            switch(op)
+            {
+            case Expression::Geq:
+                res.val = cmp >= 0;
+                break;
+            case Expression::Gt:
+                res.val = cmp > 0;
+                break;
+            case Expression::Eq:
+                res.val = cmp == 0;
+                break;
+            case Expression::Neq:
+                res.val = cmp != 0;
+                break;
+            case Expression::Leq:
+                res.val = cmp <= 0;
+                break;
+            case Expression::Lt:
+                res.val = cmp < 0;
+                break;
+            default:
+                error(msg, pos);
+                return res;
+            }
+            return res;
+        } // else
         switch(op)
         {
         case Expression::Geq:
@@ -1631,12 +1687,17 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
         }
         if( lhs.type->kind == Type::CHAR && rhs.type->kind == Type::CHAR )
             out->call_(coreName("relop4"),3,true);
-        else if( lhs.type->kind == Type::CHAR )
+        else if( lhs.type->kind == Type::CHAR ) {
+            checkCharArrayIsRef(rhs);
             out->call_(coreName("relop3"),3,true);
-        else if( rhs.type->kind == Type::CHAR )
+        }else if( rhs.type->kind == Type::CHAR ) {
+            checkCharArrayIsRef(lhs);
             out->call_(coreName("relop2"),3,true);
-        else
+        }else {
+            checkCharArrayIsRef(lhs);
+            checkCharArrayIsRef(rhs);
             out->call_(coreName("relop1"),3,true);
+        }
     }else if( lhs.type->kind == Type::Pointer && rhs.type->kind == Type::Pointer ||
               lhs.type->kind == Type::Pointer && rhs.type->kind == Type::Nil ||
               lhs.type->kind == Type::Nil && rhs.type->kind == Type::Pointer ||

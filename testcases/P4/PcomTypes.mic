@@ -1,0 +1,381 @@
+(* Micron port of the 1976 P4 Pascal Compiler
+ * PcomTypes - Type definitions and constants for the P4 Pascal Compiler
+ * pcom.pas and pint.pas were originally written by Urs Ammann, Kesav Nori, Christian Jacobi.
+ * We used the version of the 1982 book: "Pascal Implementation" by Pemberton & Daniels
+ *   https://homepages.cwi.nl/~steven/pascal/book/pascalimplementation.html
+ * This file includes references to the Pascal pcom.pas version in the
+ *   form of "// pcom.pas lines from-to" comments; use them to look up the 
+ *   original comments  and the corresponding explanation in the book.
+ * Migrated from Pascal in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *)
+
+module PcomTypes [level = 3, visibility = "*"]
+
+const
+  // pcom.pas lines 33-69: compiler constants
+  displimit    = 20
+  maxlevel     = 10
+  intsize      = 1
+  intal        = 1
+  realsize     = 1
+  realal       = 1
+  charsize     = 1
+  charal       = 1
+  charmax      = 1
+  boolsize     = 1
+  boolal       = 1
+  ptrsize      = 1
+  adral        = 1
+  setsize      = 1
+  setal        = 1
+  stackal      = 1
+  stackelsize  = 1
+  strglgth     = 16
+  sethigh      = 47
+  setlow       = 0
+  ordmaxchar   = 63
+  ordminchar   = 0
+  maxint       = 32767
+  lcaftermarkstack = 5
+  fileal       = charal
+  maxstack     = 1
+  parmal       = stackal
+  parmsize     = stackelsize
+  recal        = stackal
+  filebuffer   = 4
+  maxaddr      = maxint
+
+  cixmax       = 10000
+
+  alfalength*    = 8
+
+  nrreswords     = 35
+  nrstdnames     = 35
+  nrinstructions = 60
+  nrprocs        = 23
+
+type
+  // pcom.pas lines 80-91: basic symbol and character type enumerations
+  Symbol* = (
+    ident, intconst, realconst, stringconst, notsy,
+    mulop, addop, relop,
+    lparent, rparent, lbrack, rbrack,
+    comma, semicolon, period, arrow,
+    colon, becomes,
+    labelsy, constsy, typesy, varsy, funcsy, progsy,
+    procsy, setsy, packedsy, arraysy, recordsy, filesy, forwardsy,
+    beginsy, ifsy, casesy, repeatsy, whilesy, forsy, withsy,
+    gotosy, endsy, elsesy, untilsy, ofsy, dosy, tosy, downtosy,
+    thensy, othersy
+  )
+
+  Operator* = (
+    mul, rdiv, andop, idiv, imod,
+    plus, minus, orop,
+    ltop, leop, geop, gtop, neop, eqop, inop, noop
+  )
+
+  CharType* = (
+    letter, number, special, illegal,
+    chstrquo, chcolon, chperiod, chlt, chgt, chlparen, chspace
+  )
+
+  // pcom.pas lines 96-108: constant types
+  CstClass* = (reel, pset, strg)
+
+  // pcom.pas lines 112-116: data structure enumerations
+  StructForm* = (
+    scalar, subrange, pointer_f, power, arrays, records, files,
+    tagfld, variant_f
+  )
+
+  DeclKind* = (standard, declared)
+  IdClass* = (types, konst, vars, field, procc, funcc)
+  IdKind* = (actual, formal)
+
+  // pcom.pas lines 159-165: display and expression enumerations
+  DispKind* = (blck, crec, vrec, rec)
+  AttrKind* = (cst, varbl, expr)
+  Vaccess* = (drct, indrct, inxd)
+
+  // pcom.pas lines 76, 140: basic type aliases
+  Alpha* = array 9 of char  // 8 meaningful chars + null terminator for Micron string literals
+
+  // pcom.pas lines 95: set type - using uint32 for P-machine set values
+  SetTy* = uint32
+
+  // pcom.pas line 89: set of symbols - two-word bitset for 48 symbols
+  SetOfSys* = record lo*, hi*: uint32 end
+
+  // pcom.pas line 138: set of id classes (6 values, fits in uint32)
+  SetOfIds* = uint32
+
+  // Forward pointer type declarations
+  // pcom.pas line 116: stp = ^structure; ctp = ^identifier
+  Csp* = ^ConstantRec
+  Stp* = ^StructRec
+  Ctp* = ^IdentRec
+
+  // pcom.pas lines 97-103: constant record
+  ConstantRec* = record
+    cclass*: CstClass
+    case
+      | inline reel_v*: record rval*: array strglgth of char end
+      | inline pset_v*: record pval*: SetTy end
+      | inline strg_v*: record slgth*: integer; sval*: array strglgth of char end
+  end
+
+  // pcom.pas lines 105-108: value record
+  Valu* = record
+    intval*: boolean
+    case
+      | inline int_v*: record ival*: integer end
+      | inline ptr_v*: record valp*: Csp end
+  end
+
+  // pcom.pas lines 118-132: structure record
+  StructRec* = record
+    marked*: boolean
+    size*: integer
+    form*: StructForm
+    case
+      | inline scalar_v*: record scalkind*: DeclKind; fconst*: Ctp end
+      | inline subrange_v*: record rangetype*: Stp; min*: Valu; max*: Valu end
+      | inline pointer_fv*: record eltype*: Stp end
+      | inline power_v*: record elset*: Stp end
+      | inline arrays_v*: record aeltype*: Stp; inxtype*: Stp end
+      | inline records_v*: record fstfld*: Ctp; recvar*: Stp end
+      | inline files_v*: record filtype*: Stp end
+      | inline tagfld_v*: record tagfieldp*: Ctp; fstvar*: Stp end
+      | inline variant_fv*: record nxtvar*: Stp; subvar*: Stp; varval*: Valu end
+  end
+
+  // pcom.pas lines 137-156: identifier record
+  IdentRec* = record
+    name*: Alpha
+    llink*, rlink*: Ctp
+    idtype*: Stp
+    next*: Ctp
+    klass*: IdClass
+    case
+      | inline types_v*: record end
+      | inline konst_v*: record values*: Valu end
+      | inline vars_v*: record vkind*: IdKind; vlev*: integer; vaddr*: integer end
+      | inline field_v*: record fldaddr*: integer end
+      | inline proc_v*: record
+          pfdeckind*: DeclKind; key*: integer
+          pflev*: integer; pfname*: integer
+          pfkind*: IdKind
+          forwdecl*: boolean; externl*: boolean
+        end
+  end
+
+  // pcom.pas lines 167-173: attribute record
+  Attr* = record
+    typtr*: Stp
+    kind*: AttrKind
+    case
+      | inline cst_a*: record cval*: Valu end
+      | inline varbl_a*: record
+          access*: Vaccess; vlevel*: integer
+          dplmt*: integer; idplmt*: integer
+        end
+  end
+
+  // pcom.pas lines 175-179: test pointer record
+  Testp* = ^TestRec
+  TestRec* = record
+    elt1*, elt2*: Stp
+    lasttestp*: Testp
+  end
+
+  // pcom.pas lines 183-186: label record
+  Lbp* = ^LabelRec
+  LabelRec* = record
+    nextlab*: Lbp
+    defined*: boolean
+    labval*: integer
+    labname*: integer
+  end
+
+  // pcom.pas lines 188-189: external file record
+  ExtFileP* = ^ExtFileRec
+  ExtFileRec* = record
+    filename*: Alpha
+    nextfile*: ExtFileP
+  end
+
+  // pcom.pas lines 250-258: display record
+  DispRec* = record
+    fname*: Ctp
+    flabel*: Lbp
+    occur*: DispKind
+    clev*: integer
+    cdspl*: integer
+    vdspl*: integer
+  end
+
+  // pcom.pas lines 265-269: error list record
+  ErrRec* = record
+    pos*: integer
+    nmr*: integer
+  end
+
+
+// Helper procedures for set-of-symbol operations 
+// Micron SET only covers 0..31; Symbol enum has 48 values (0..47),
+// so we use a two-uint32 record with bitwise operations.
+
+proc symBit*(s: Symbol): SetOfSys
+  inline
+  var n: uint32; res: SetOfSys
+begin
+  n := ord(s)
+  res.lo := 0; res.hi := 0
+  if n < 32 then res.lo := shl(1, n)
+  else res.hi := shl(1, n - 32) end
+  return res
+end symBit
+
+proc symIn*(ss: SetOfSys; s: Symbol): boolean
+  inline
+  var n: uint32
+begin
+  n := ord(s)
+  if n < 32 then return band(ss.lo, shl(1, n)) <> 0
+  else return band(ss.hi, shl(1, n - 32)) <> 0 end
+end symIn
+
+proc ssUnion*(a, b: SetOfSys): SetOfSys
+  inline
+  var res: SetOfSys
+begin
+  res.lo := bor(a.lo, b.lo); res.hi := bor(a.hi, b.hi)
+  return res
+end ssUnion
+
+proc ssAdd*(ss: SetOfSys; s: Symbol): SetOfSys
+  inline
+begin
+  return ssUnion(ss, symBit(s))
+end ssAdd
+
+proc ssEmpty*(): SetOfSys
+  inline
+  var res: SetOfSys
+begin
+  res.lo := 0; res.hi := 0
+  return res
+end ssEmpty
+
+// Build sets from 2..8 symbols
+proc ss2*(s1, s2: Symbol): SetOfSys
+  inline
+begin
+  return ssUnion(symBit(s1), symBit(s2))
+end ss2
+
+proc ss3*(s1, s2, s3: Symbol): SetOfSys
+  inline
+begin
+  return ssUnion(ss2(s1, s2), symBit(s3))
+end ss3
+
+proc ss4*(s1, s2, s3, s4: Symbol): SetOfSys
+  inline
+begin
+  return ssUnion(ss2(s1, s2), ss2(s3, s4))
+end ss4
+
+proc ss5*(s1, s2, s3, s4, s5: Symbol): SetOfSys
+  inline
+begin
+  return ssUnion(ss4(s1, s2, s3, s4), symBit(s5))
+end ss5
+
+proc ss6*(s1, s2, s3, s4, s5, s6: Symbol): SetOfSys
+  inline
+begin
+  return ssUnion(ss4(s1, s2, s3, s4), ss2(s5, s6))
+end ss6
+
+proc ss7*(s1, s2, s3, s4, s5, s6, s7: Symbol): SetOfSys
+  inline
+begin
+  return ssUnion(ss4(s1, s2, s3, s4), ss3(s5, s6, s7))
+end ss7
+
+proc ss8*(s1, s2, s3, s4, s5, s6, s7, s8: Symbol): SetOfSys
+  inline
+begin
+  return ssUnion(ss4(s1, s2, s3, s4), ss4(s5, s6, s7, s8))
+end ss8
+
+// Helper for set-of-idclass operations (6 values, fits in single uint32)
+proc idBit*(c: IdClass): SetOfIds
+  inline
+begin
+  return shl(1, ord(c))
+end idBit
+
+proc idIn*(ss: SetOfIds; c: IdClass): boolean
+  inline
+begin
+  return band(ss, shl(1, ord(c))) <> 0
+end idIn
+
+proc idSet2*(c1, c2: IdClass): SetOfIds
+  inline
+begin
+  return bor(shl(1, ord(c1)), shl(1, ord(c2)))
+end idSet2
+
+proc idSet3*(c1, c2, c3: IdClass): SetOfIds
+  inline
+begin
+  return bor(idSet2(c1, c2), shl(1, ord(c3)))
+end idSet3
+
+proc idSet4*(c1, c2, c3, c4: IdClass): SetOfIds
+  inline
+begin
+  return bor(idSet2(c1, c2), idSet2(c3, c4))
+end idSet4
+
+proc idSet5*(c1, c2, c3, c4, c5: IdClass): SetOfIds
+  inline
+begin
+  return bor(idSet4(c1, c2, c3, c4), shl(1, ord(c5)))
+end idSet5
+
+// Set difference: a - b
+proc ssDiff*(a, b: SetOfSys): SetOfSys
+  inline
+  var res: SetOfSys
+begin
+  res.lo := band(a.lo, bnot(b.lo)); res.hi := band(a.hi, bnot(b.hi))
+  return res
+end ssDiff
+
+// Set bit k in a P-machine set value (uint32)
+proc addToPset*(s: ^SetTy; k: integer)
+  inline
+  var kk: uint32
+begin
+  kk := ord(chr(k))
+  s^ := bor(s^, shl(1, kk))
+end addToPset
+
+// Test if bit k is set in a P-machine set value (uint32)
+proc inPset*(s: SetTy; k: integer): boolean
+  inline
+  var kk: uint32
+begin
+  if (k < 0) or (k > 31) then return false end
+  kk := ord(chr(k))
+  return band(s, shl(1, kk)) # 0
+end inPset
+
+
+end PcomTypes

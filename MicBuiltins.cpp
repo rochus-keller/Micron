@@ -928,7 +928,7 @@ void Builtins::ASSERT(int nArgs,const RowCol& pos)
         ev->error("expecting integer second argument",pos);
         return;
     }
-    if( !file.type->isText() )
+    if( !file.type->isText(true) )
     {
         ev->error("expecting string third argument",pos);
         return;
@@ -1176,46 +1176,48 @@ void Builtins::LEN(int nArgs,const RowCol& pos)
 
 void Builtins::PRINT(int nArgs, bool ln, const RowCol& pos)
 {
-    if( nArgs < 1 || ev->stack.back().type == 0 ||
-            !(ev->stack.back().type->isSimple() ||
-              ev->stack.back().type->isText() ||
-              ev->stack.back().type->kind == Type::ConstEnum ||
-              ev->stack.back().type->kind == Type::Generic ))
+    const Value& back = ev->stack.back();
+
+    if( nArgs < 1 || back.type == 0 ||
+            !(back.type->isSimple() ||
+              back.type->isText(true) ||
+              back.type->kind == Type::ConstEnum ||
+              back.type->kind == Type::Generic ))
     {
         ev->error("expecting one argument of basic, enum or char array type",pos);
         return;
     }
-    if( ev->stack.back().type->kind == Type::ConstEnum )
+    if( back.type->kind == Type::ConstEnum )
     {
         ev->out->conv_(Mil::EmiTypes::I8);
         ev->out->call_(coreName("printI8"),1,false);
-    }else if( ev->stack.back().type->isInt() )
+    }else if( back.type->isInt() )
     {
-        if( ev->stack.back().type->kind != Type::INT64 )
+        if( back.type->kind != Type::INT64 )
             ev->out->conv_(Mil::EmiTypes::I8);
         ev->out->call_(coreName("printI8"),1,false);
-    }else if( ev->stack.back().type->isUInt() )
+    }else if( back.type->isUInt() )
     {
-        if( ev->stack.back().type->kind != Type::UINT64 )
+        if( back.type->kind != Type::UINT64 )
             ev->out->conv_(Mil::EmiTypes::U8);
         ev->out->call_(coreName("printU8"),1,false);
-    }else if( ev->stack.back().type->isReal() )
+    }else if( back.type->isReal() )
     {
-        if( ev->stack.back().type->kind != Type::FLT64 )
+        if( back.type->kind != Type::FLT64 )
             ev->out->conv_(Mil::EmiTypes::R8);
         ev->out->call_(coreName("printF8"),1,false);
-    }else if( ev->stack.back().type->isText() )
+    }else if( back.type->isText(true) )
     {
         // TODO: do we really accept array of string by value?
-        if( ev->stack.back().type->kind != Type::CHAR )
+        if( back.type->kind != Type::CHAR )
             ev->out->call_(coreName("printStr"),1,false);
         else
             ev->out->call_(coreName("printCh"),1,false);
-    }else if( ev->stack.back().type->isBoolean() )
+    }else if( back.type->isBoolean() )
         ev->out->call_(coreName("printBool"),1,false);
-    else if( ev->stack.back().type->isSet() )
+    else if( back.type->isSet() )
         ev->out->call_(coreName("printSet"),1,false);
-    else if( ev->stack.back().type->kind == Type::Generic )
+    else if( back.type->kind == Type::Generic )
         ev->out->pop_(); // we don't have a generic print operation, just remove the argument from stack
     else
         ev->error("given type not supported with PRINT or PRINTLN", pos);

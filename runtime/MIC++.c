@@ -47,14 +47,18 @@ unsigned int MIC$$relop1(const char* l, const char* r, int op)
 
 unsigned int MIC$$relop2(const char* lhs, char rhs, int op)
 {
-	char ch[2] = "x";
+    if( lhs == 0 )
+        return 0;
+    char ch[2] = "x";
 	ch[0] = rhs;
 	return MIC$$relop1(lhs,ch,op);
 }
 
 unsigned int MIC$$relop3(char lhs, const char* rhs, int op)
 {
-	char ch[2] = "x";
+    if( rhs == 0 )
+        return 0;
+    char ch[2] = "x";
 	ch[0] = lhs;
 	return MIC$$relop1(ch,rhs,op);
 }

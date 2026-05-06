@@ -35,7 +35,7 @@ using namespace Vm;
 
 enum { PreAllocSize = 1024 };
 
-enum { StackAlig = 8, StackAligM1 = StackAlig - 1, StackAligM1Inv = ~(StackAlig - 1)};
+enum { StackAlig = Interpreter::StackAlign, StackAligM1 = StackAlig - 1, StackAligM1Inv = ~(StackAlig - 1)};
 
 #define _stackAligned(off) ((off + StackAligM1) & StackAligM1Inv)
     // precondition: a is power of two and > 0
@@ -223,8 +223,8 @@ static bool MIC_relop1(void* args, void* ret)
 {
     // int MIC$$relop1(const char* l, const char* r, int op)
     const int res = MIC$$relop1((char*)Interpreter::toP(args, 0),
-                                (char*)Interpreter::toP(args, sizeof(void*)),
-                                Interpreter::toI4(args, TwiceStackAlignedPtrSize));
+                                (char*)Interpreter::toP(args, StackAlig),
+                                Interpreter::toI4(args, 2*StackAlig));
     Interpreter::retI4(ret, res);
     return true;
 }
@@ -233,8 +233,8 @@ static bool MIC_relop2(void* args, void* ret)
 {
     // int MIC$$relop2(const char* lhs, char rhs, int op)
     const int res = MIC$$relop2((char*)Interpreter::toP(args, 0),
-                                Interpreter::toI4(args, sizeof(void*)),
-                                Interpreter::toI4(args, TwiceStackAlignedPtrSize));
+                                Interpreter::toI4(args, StackAlig),
+                                Interpreter::toI4(args, 2*StackAlig));
     Interpreter::retI4(ret, res);
     return true;
 }
@@ -243,8 +243,8 @@ static bool MIC_relop3(void* args, void* ret)
 {
     // int MIC$$relop3(char lhs, const char* rhs, int op)
     const int res = MIC$$relop3(Interpreter::toI4(args, 0),
-                                (char*)Interpreter::toP(args, sizeof(int)),
-                                Interpreter::toI4(args, TwiceStackAlignedPtrSize));
+                                (char*)Interpreter::toP(args, StackAlig),
+                                Interpreter::toI4(args, 2*StackAlig));
     Interpreter::retI4(ret, res);
     return true;
 }
@@ -253,8 +253,8 @@ static bool MIC_relop4(void* args, void* ret)
 {
     // int MIC$$relop4(char lhs, char rhs, int op)
     const int res = MIC$$relop4(Interpreter::toI4(args, 0),
-                                Interpreter::toI4(args, sizeof(void*)),
-                                Interpreter::toI4(args, TwiceStackAlignedPtrSize));
+                                Interpreter::toI4(args, StackAlig),
+                                Interpreter::toI4(args, 2*StackAlig));
     Interpreter::retI4(ret, res);
     return true;
 }
