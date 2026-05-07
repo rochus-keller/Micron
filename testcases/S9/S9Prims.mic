@@ -1530,20 +1530,24 @@ var
   pre: array 101 of char
   k: T.int
 begin
+  k := 0
   if G.cdr(x) = T._NIL then
     pre[0] := 'g'
     pre[1] := 0X
   elsif G.string_p(G.cadr(x)) then
-    G.StrCopy_p(@pre[0], G.string(G.cadr(x)))
     k := G.string_len(G.cadr(x))
+    if k > 100 then
+      return G.error("gensym: prefix too long", G.cadr(x))
+    end
+    G.StrCopy_p(@pre[0], G.string(G.cadr(x)))
   elsif G.symbol_p(G.cadr(x)) then
-    G.StrCopy_p(@pre[0], G.symbol_name(G.cadr(x)))
     k := G.symbol_len(G.cadr(x))
+    if k > 100 then
+      return G.error("gensym: prefix too long", G.cadr(x))
+    end
+    G.StrCopy_p(@pre[0], G.symbol_name(G.cadr(x)))
   else
     return G.error("gensym: expected string or symbol, got", G.cadr(x))
-  end
-  if k > 100 then
-    return G.error("gensym: prefix too long", G.cadr(x))
   end
   return E.gensym(@pre)
 end pp_gensym

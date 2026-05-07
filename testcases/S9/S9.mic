@@ -137,10 +137,10 @@ var
   v: T.cell
   n: T.cell
 begin
-  if name = "apply" then
+  if name^ = "apply" then
     G.Apply_magic := G.Last_prim
   end
-  if name = "call/cc" then
+  if name^ = "call/cc" then
     G.Callcc_magic := G.Last_prim
   end
   v := IO.symbol_ref(name)

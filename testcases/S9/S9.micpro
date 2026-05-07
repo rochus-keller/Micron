@@ -1,5 +1,6 @@
 [General]
-BuildDir=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicronDevin/build
+Arguments=@ByteArray()
+BuildDir=
 BuiltInOakwood=true
 MainModule=@ByteArray()
 MainProc=@ByteArray()
@@ -11,23 +12,23 @@ WorkingDir=
 size=0
 
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicronDevin/S9Types.mic
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Types.mic
 1\RelPath=S9Types.mic
-2\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicronDevin/S9Globals.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Globals.mic
 2\RelPath=S9Globals.mic
-3\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicronDevin/S9Memory.mic
+3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Memory.mic
 3\RelPath=S9Memory.mic
-4\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicronDevin/S9Bignum.mic
+4\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Bignum.mic
 4\RelPath=S9Bignum.mic
-5\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicronDevin/S9Real.mic
+5\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Real.mic
 5\RelPath=S9Real.mic
-6\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicronDevin/S9IO.mic
+6\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9IO.mic
 6\RelPath=S9IO.mic
-7\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicronDevin/S9Eval.mic
+7\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Eval.mic
 7\RelPath=S9Eval.mic
-8\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicronDevin/S9Prims.mic
+8\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9Prims.mic
 8\RelPath=S9Prims.mic
-9\AbsPath=/home/me/Entwicklung/Modules/Micron/Versteck/S9toMicronDevin/S9.mic
+9\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/S9/S9.mic
 9\RelPath=S9.mic
 size=9
 
