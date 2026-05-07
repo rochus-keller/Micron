@@ -1,0 +1,1797 @@
+(* Micron port of the 1976 P4 Pascal Compiler
+ * Pint.mic - P4 Pascal P-code Interpreter
+ * pint.pas was originally written by K. Jensen, N. Wirth, Ch. Jacobi.
+ * We used the version of the 1982 book: "Pascal Implementation" by Pemberton & Daniels
+ *   https://homepages.cwi.nl/~steven/pascal/book/pascalimplementation.html
+ * This file includes references to the Pascal pint.pas version in the
+ *   form of "// pint.pas lines from-to" comments; use them to look up the 
+ *   original comments  and the corresponding explanation in the book.
+ * Migrated from Pascal in 2026 by me@rochus-keller.ch, made available under
+ * the terms of the GNU General Public License (GPL) versions 2.0 or 3.0 
+ *)
+ 
+module Pint
+
+import F := Files
+       A := Args
+       O := Out
+       M := Math
+
+// pint.pas lines 21-36: constants
+const 
+  codemax   = 8650
+  pcmax     = 17500
+  maxstk    = 13650   // size of variable store
+  overi     = 13655   // size of integer constant table = 5
+  overr     = 13660   // size of real constant table = 5
+  overs     = 13730   // size of set constant table = 70
+  overb     = 13820
+  overm     = 18000
+  maxstr    = 18001
+  largeint  = 26144
+  begincode = 3
+  inputadr  = 5
+  outputadr = 6
+  prdadr    = 7
+  prradr    = 8
+  duminst   = 62
+  maxlabel  = 1850
+  strglgth  = 16      // string constant length in store
+
+// Helper: ordinal of '0' as integer for digit parsing
+  ord0 = +ord("0")
+
+// pint.pas lines 38-46: types
+// datatype = (undef,int,reel,bool,sett,adr,mark,car)
+// We use integer constants for datatype
+// settype = set of 0..58 -> two uint32 record (59 bits needed)
+type 
+  SetType = record lo: uint32; hi: uint32 end
+
+// pint.pas lines 43,45: alfa = packed array[1..10] of char
+// In Micron, we use array 11 of char (0-based, 10 chars + null)
+  Alfa = array 11 of char
+
+// pint.pas lines 47-54: code record
+// packed record op1:bit6; p1:bit4; q1:bit20; op2:bit6; p2:bit4; q2:bit20 end
+  CodeRec = record
+    op1: integer
+    p1:  integer
+    q1:  integer
+    op2: integer
+    p2:  integer
+    q2:  integer
+  end
+
+// pint.pas lines 58-68: store - variant record
+// We represent each store cell as a 64-bit value.
+// Access vi (integer), vr (real), vb (boolean), vc (char), va (address), vs (set)
+// through the same memory. Since Micron doesn't have variant records at module level
+// in the same way, we use a record with an integer field and cast as needed.
+// For simplicity in the interpreter, we'll use an integer array and
+// reinterpret for real values via pointer casting.
+  StoreCell = record
+    vi: integer   // also used for va (address), vm (mark), vb (as 0/1), vc (as ordinal)
+  end
+
+// For real values we need to store them differently
+// We'll use a parallel real array for cells that hold reals
+var 
+  realstore: array 18001 of real
+
+// pint.pas lines 47-68: global variables
+  code: array 4326 of CodeRec  // codemax/2 + 1
+  pc: integer          // program address register
+  op: integer          // instruction register - opcode
+  p:  integer          // instruction register - p field
+  q:  integer          // instruction register - q field
+
+  store: array 18001 of StoreCell  // 0..overm
+  mp: integer          // points to beginning of data segment
+  sp: integer          // points to top of stack
+  np: integer          // points to top of dynamically allocated area
+  ep: integer          // points to maximum extent of stack
+
+  interpreting: boolean
+
+// pint.pas line 76: prd, prr files
+  prd: F.File          // prd for read only
+  prr: F.File          // prr for write only
+  stdinFile: F.File    // stdin handle for read/readln
+
+// pint.pas lines 78-80: instruction and sp tables
+  instr: array 63 of Alfa         // mnemonic instruction codes (0..62)
+  cop: array 63 of integer        // opcode mapping
+  sptable: array 21 of Alfa       // standard functions and procedures (0..20)
+
+// pint.pas lines 83-86: locally used for interpreting
+  ad: integer
+  ad1: integer
+  b: boolean
+  i: integer
+  j: integer
+  i1: integer
+  i2: integer
+  c: char
+
+// pint.pas line 91-92: load procedure locals (made module-level)
+  icp: integer         // pointer to next free integer constant position
+  rcp: integer         // pointer to next free real constant position
+  scp: integer         // pointer to next free set constant position
+  bcp: integer         // pointer to next free boundary constant position
+  mcp: integer         // pointer to next free multiple (string) constant position
+
+const 
+  entered = 0
+  defined = 1
+
+type 
+  LabelRec = record
+    val: integer
+    st:  integer   // 0=entered, 1=defined
+  end
+
+var 
+  labeltab: array 1851 of LabelRec  // 0..maxlabel
+  labelvalue: integer
+
+// Word buffer for reading instruction names
+  word: array 11 of char  // 1..10 in Pascal, we use 0..9
+
+// Flag for error-goto simulation (Pascal's goto 1)
+  errorFlag: boolean
+
+// prd reading helpers - since we can't use Pascal's read(prd,ch) directly
+// we need to buffer the prd file and parse it character by character
+  prdBuf: array 256 of char   // current line buffer
+  prdPos: integer              // current position in buffer
+  prdLen: integer              // length of current line
+  prdEof: boolean              // end of file flag
+  prdEoln: boolean             // end of line flag
+  ch: char                     // current character from prd
+
+// stdin reading helpers - for read/readln from stdin (Pascal's input file)
+  stdinCh: char              // lookahead character from stdin
+  stdinEof: boolean          // end of file on stdin
+  stdinEoln: boolean         // end of line on stdin
+
+// Output file name from Args
+  prdname: array 256 of char
+  prrname: array 256 of char
+
+
+// File I/O helpers for prd (read-only P-code input)
+
+
+// Read one line from prd into prdBuf
+proc prdReadLine()
+  var idx: integer
+      byt: byte
+      ok: boolean
+begin
+  if prdEof then return end
+  idx := 0
+  loop
+    ok := F.Read(prd, @byt)
+    if F.Eof(prd) then
+      if idx = 0 then prdEof := true end
+      prdLen := idx
+      prdPos := 0
+      prdEoln := true
+      return
+    end
+    if byt = 0AH then  // newline
+      prdBuf[idx] := 0X
+      prdLen := idx
+      prdPos := 0
+      prdEoln := false
+      return
+    end
+    if byt = 0DH then  // carriage return
+      // check for following LF
+      ok := F.Read(prd, @byt)
+      // CR or CR/LF - treat as newline
+      prdBuf[idx] := 0X
+      prdLen := idx
+      prdPos := 0
+      prdEoln := false
+      return
+    end
+    if idx < 255 then
+      prdBuf[idx] := CHR(byt)
+      inc(idx)
+    end
+  end
+end prdReadLine
+
+// Read next character from prd
+proc prdRead(chp: ^char)
+begin
+  if prdPos < prdLen then
+    chp^ := prdBuf[prdPos]
+    inc(prdPos)
+    prdEoln := (prdPos >= prdLen)
+  else
+    chp^ := " "
+    prdEoln := true
+  end
+end prdRead
+
+// Check if at end of line
+proc prdIsEoln(): boolean
+begin
+  return prdPos >= prdLen
+end prdIsEoln
+
+// Read to end of line and advance to next line
+proc prdReadLn()
+begin
+  prdReadLine()
+end prdReadLn
+
+// Skip spaces and read an integer from prd
+proc prdReadInt(valp: ^integer)
+  var neg: boolean
+      ch: char
+      val: integer
+      d: integer
+begin
+  val := 0
+  neg := false
+  // skip spaces
+  while (prdPos < prdLen) and (prdBuf[prdPos] = " ") do
+    inc(prdPos)
+  end
+  if prdPos < prdLen then
+    if prdBuf[prdPos] = "-" then
+      neg := true; inc(prdPos)
+    elsif prdBuf[prdPos] = "+" then
+      inc(prdPos)
+    end
+  end
+  while (prdPos < prdLen) and (prdBuf[prdPos] >= "0") and (prdBuf[prdPos] <= "9") do
+    d := +ord(prdBuf[prdPos]) - ord0
+    val := val * 10 + d
+    inc(prdPos)
+  end
+  if neg then val := -val end
+  valp^ := val
+  prdEoln := (prdPos >= prdLen)
+end prdReadInt
+
+// Read a real number from prd
+proc prdReadReal(valp: ^real)
+  var intpart: integer
+      fracpart: real
+      divisor: real
+      neg: boolean
+      expval: integer
+      expneg: boolean
+      ch: char
+      val: real
+      d: integer
+begin
+  val := 0.0
+  neg := false
+  // skip spaces
+  while (prdPos < prdLen) and (prdBuf[prdPos] = " ") do
+    inc(prdPos)
+  end
+  if prdPos < prdLen then
+    if prdBuf[prdPos] = "-" then
+      neg := true; inc(prdPos)
+    elsif prdBuf[prdPos] = "+" then
+      inc(prdPos)
+    end
+  end
+  // integer part
+  intpart := 0
+  while (prdPos < prdLen) and (prdBuf[prdPos] >= "0") and (prdBuf[prdPos] <= "9") do
+    d := +ord(prdBuf[prdPos]) - ord0
+    intpart := intpart * 10 + d
+    inc(prdPos)
+  end
+  val := flt(intpart)
+  // fractional part
+  if (prdPos < prdLen) and (prdBuf[prdPos] = ".") then
+    inc(prdPos)
+    fracpart := 0.0
+    divisor := 1.0
+    while (prdPos < prdLen) and (prdBuf[prdPos] >= "0") and (prdBuf[prdPos] <= "9") do
+      d := +ord(prdBuf[prdPos]) - ord0
+      fracpart := fracpart * 10.0 + flt(d)
+      divisor := divisor * 10.0
+      inc(prdPos)
+    end
+    val := val + fracpart / divisor
+  end
+  // exponent
+  if (prdPos < prdLen) and ((prdBuf[prdPos] = "e") or (prdBuf[prdPos] = "E")) then
+    inc(prdPos)
+    expneg := false
+    if prdPos < prdLen then
+      if prdBuf[prdPos] = "-" then
+        expneg := true; inc(prdPos)
+      elsif prdBuf[prdPos] = "+" then
+        inc(prdPos)
+      end
+    end
+    expval := 0
+    while (prdPos < prdLen) and (prdBuf[prdPos] >= "0") and (prdBuf[prdPos] <= "9") do
+      d := +ord(prdBuf[prdPos]) - ord0
+      expval := expval * 10 + d
+      inc(prdPos)
+    end
+    // apply exponent: val := val * 10^expval
+    i := 0
+    if expneg then
+      while i < expval do val := val / 10.0; inc(i) end
+    else
+      while i < expval do val := val * 10.0; inc(i) end
+    end
+  end
+  if neg then val := -val end
+  valp^ := val
+  prdEoln := (prdPos >= prdLen)
+end prdReadReal
+
+// Read a single char from prd
+proc prdReadChar(chp: ^char)
+begin
+  if prdPos < prdLen then
+    chp^ := prdBuf[prdPos]
+    inc(prdPos)
+  else
+    chp^ := " "
+  end
+  prdEoln := (prdPos >= prdLen)
+end prdReadChar
+
+
+// Stdin reading helpers - for Pascal's input file (read/readln from stdin)
+
+proc stdinAdvance()
+  // Read one character from stdin into stdinCh
+  var byt: byte
+begin
+  if stdinEof then return end
+  if not F.Read(stdinFile, @byt) then
+    stdinEof := true; stdinCh := " "; stdinEoln := true
+  elsif byt = 10 then  // newline
+    stdinEoln := true; stdinCh := " "
+  elsif byt = 13 then  // carriage return - skip, read next
+    if not F.Read(stdinFile, @byt) then
+      stdinEof := true; stdinCh := " "; stdinEoln := true
+    elsif byt = 10 then
+      stdinEoln := true; stdinCh := " "
+    else
+      stdinEoln := false; stdinCh := chr(+byt)
+    end
+  else
+    stdinEoln := false; stdinCh := chr(+byt)
+  end
+end stdinAdvance
+
+proc stdinReadLn()
+  // Skip to end of current line on stdin
+begin
+  while not stdinEoln and not stdinEof do stdinAdvance() end
+  if not stdinEof then stdinAdvance() end  // consume the newline, read next char
+end stdinReadLn
+
+proc stdinReadInt(valp: ^integer)
+  // Read a text-format integer from stdin (Pascal's read(input, i))
+  var neg: boolean
+      n: integer
+      d: integer
+begin
+  // skip whitespace (spaces, tabs, newlines)
+  while (stdinCh = " ") or (stdinCh = 9X) or stdinEoln do
+    if stdinEof then valp^ := 0; return end
+    stdinAdvance()
+  end
+  neg := false
+  if stdinCh = "-" then neg := true; stdinAdvance()
+  elsif stdinCh = "+" then stdinAdvance() end
+  n := 0
+  while (stdinCh >= "0") and (stdinCh <= "9") do
+    d := +ord(stdinCh) - ord0
+    n := n * 10 + d
+    stdinAdvance()
+  end
+  if neg then n := -n end
+  valp^ := n
+end stdinReadInt
+
+proc stdinReadReal(valp: ^real)
+  // Read a text-format real from stdin (Pascal's read(input, r))
+  var neg: boolean
+      n: real
+      fracDiv: real
+      expNeg: boolean
+      expVal: integer
+      d: integer
+begin
+  // skip whitespace
+  while (stdinCh = " ") or (stdinCh = 9X) or stdinEoln do
+    if stdinEof then valp^ := 0.0; return end
+    stdinAdvance()
+  end
+  neg := false
+  if stdinCh = "-" then neg := true; stdinAdvance()
+  elsif stdinCh = "+" then stdinAdvance() end
+  n := 0.0
+  while (stdinCh >= "0") and (stdinCh <= "9") do
+    d := +ord(stdinCh) - ord0
+    n := n * 10.0 + flt(d)
+    stdinAdvance()
+  end
+  if stdinCh = "." then
+    stdinAdvance()
+    fracDiv := 10.0
+    while (stdinCh >= "0") and (stdinCh <= "9") do
+      d := +ord(stdinCh) - ord0
+      n := n + flt(d) / fracDiv
+      fracDiv := fracDiv * 10.0
+      stdinAdvance()
+    end
+  end
+  if (stdinCh = "e") or (stdinCh = "E") then
+    stdinAdvance()
+    expNeg := false; expVal := 0
+    if stdinCh = "-" then expNeg := true; stdinAdvance()
+    elsif stdinCh = "+" then stdinAdvance() end
+    while (stdinCh >= "0") and (stdinCh <= "9") do
+      d := +ord(stdinCh) - ord0
+      expVal := expVal * 10 + d
+      stdinAdvance()
+    end
+    if expNeg then
+      while expVal > 0 do n := n / 10.0; dec(expVal) end
+    else
+      while expVal > 0 do n := n * 10.0; dec(expVal) end
+    end
+  end
+  if neg then n := -n end
+  valp^ := n
+end stdinReadReal
+
+proc stdinReadChar(chp: ^char)
+  // Read a single character from stdin (Pascal's read(input, c))
+begin
+  chp^ := stdinCh
+  stdinAdvance()
+end stdinReadChar
+
+
+// Output helpers
+
+proc printChar(code: integer)
+begin
+  O.Char(chr(code))
+end printChar
+
+// Write to prr file helpers
+proc prrWriteChar(c: char)
+begin
+  if prr <> nil then
+    F.Write(prr, ord(c))
+  end
+end prrWriteChar
+
+proc prrWriteStr(s: ^array of char)
+  var k: integer
+begin
+  k := 0
+  while s[k] <> 0X do
+    prrWriteChar(s[k]); inc(k)
+  end
+end prrWriteStr
+
+proc prrWriteInt(val: integer; width: integer)
+  var buf: array 20 of char
+      l: integer
+      neg: boolean
+      tmp: integer
+      k: integer
+begin
+  if val < 0 then neg := true; tmp := -val
+  else neg := false; tmp := val end
+  l := 0
+  if tmp = 0 then
+    buf[0] := "0"; l := 1
+  else
+    while tmp > 0 do
+      buf[l] := chr(+ord("0") + (tmp mod 10))
+      tmp := tmp div 10
+      inc(l)
+    end
+  end
+  if neg then buf[l] := "-"; inc(l) end
+  k := l
+  while k < width do prrWriteChar(" "); inc(k) end
+  k := l - 1
+  while k >= 0 do prrWriteChar(buf[k]); dec(k) end
+end prrWriteInt
+
+proc prrWriteLn()
+begin
+  prrWriteChar(0AX)
+end prrWriteLn
+
+
+// Set operations for settype (set of 0..58)
+proc setEmpty(): SetType
+  var r: SetType
+begin
+  r.lo := 0; r.hi := 0
+  return r
+end setEmpty
+
+proc setOf(elem: integer): SetType
+  var r: SetType
+begin
+  r.lo := 0; r.hi := 0
+  if (elem >= 0) and (elem <= 58) then
+    if elem < 32 then r.lo := shl(1, val(uint32, elem))
+    else r.hi := shl(1, val(uint32, elem - 32)) end
+  end
+  return r
+end setOf
+
+proc setAdd(s: SetType; elem: integer): SetType
+  var b: SetType
+begin
+  b := setOf(elem)
+  s.lo := bor(s.lo, b.lo); s.hi := bor(s.hi, b.hi)
+  return s
+end setAdd
+
+proc setUnion(a: SetType; b: SetType): SetType
+  var r: SetType
+begin
+  r.lo := bor(a.lo, b.lo); r.hi := bor(a.hi, b.hi)
+  return r
+end setUnion
+
+proc setInter(a: SetType; b: SetType): SetType
+  var r: SetType
+begin
+  r.lo := band(a.lo, b.lo); r.hi := band(a.hi, b.hi)
+  return r
+end setInter
+
+proc setDiff(a: SetType; b: SetType): SetType
+  var r: SetType
+begin
+  r.lo := band(a.lo, bnot(b.lo)); r.hi := band(a.hi, bnot(b.hi))
+  return r
+end setDiff
+
+proc setIn(elem: integer; s: SetType): boolean
+begin
+  if (elem >= 0) and (elem <= 58) then
+    if elem < 32 then return band(s.lo, shl(1, val(uint32, elem))) <> 0
+    else return band(s.hi, shl(1, val(uint32, elem - 32))) <> 0 end
+  end
+  return false
+end setIn
+
+proc setEq(a: SetType; b: SetType): boolean
+begin return (a.lo = b.lo) and (a.hi = b.hi) end setEq
+
+proc setLeq(a: SetType; b: SetType): boolean
+// a <= b means a is subset of b: (a AND b) = a
+begin return (band(a.lo, b.lo) = a.lo) and (band(a.hi, b.hi) = a.hi) end setLeq
+
+proc setGeq(a: SetType; b: SetType): boolean
+// a >= b means a is superset of b: (a AND b) = b
+begin return (band(a.lo, b.lo) = b.lo) and (band(a.hi, b.hi) = b.hi) end setGeq
+
+// Store a set value into store cells (uses 2 consecutive cells for lo/hi)
+// We store uint32 in the integer field via a shared array
+var 
+  setlo: array 18001 of uint32  // parallel array for set lo words
+  sethi: array 18001 of uint32  // parallel array for set hi words
+
+proc storeSetPut(idx: integer; s: SetType)
+begin
+  setlo[idx] := s.lo
+  sethi[idx] := s.hi
+end storeSetPut
+
+proc storeSetGet(idx: integer): SetType
+  var r: SetType
+begin
+  r.lo := setlo[idx]
+  r.hi := sethi[idx]
+  return r
+end storeSetGet
+
+// Store a real value
+proc storeRealPut(idx: integer; r: real)
+begin
+  realstore[idx] := r
+end storeRealPut
+
+proc storeRealGet(idx: integer): real
+begin
+  return realstore[idx]
+end storeRealGet
+
+
+// pint.pas lines 167-171: errorl - error in loading
+proc errorl(const msg: array 40 of char)
+begin
+  O.String(""); O.Ln
+  O.String(@msg); O.Ln
+  errorFlag := true
+end errorl
+
+// pint.pas lines 438-465: pmd and errori
+proc pmd()
+  var s: integer
+  var cnt: integer
+begin
+  O.String(" pc ="); O.Int(pc - 1, 5)
+  O.String(" op ="); O.Int(op, 3)
+  O.String("  sp ="); O.Int(sp, 5)
+  O.String("  mp ="); O.Int(mp, 5)
+  O.String("  np ="); O.Int(np, 5)
+  O.String(""); O.Ln
+  O.String("--------------------------------------"); O.Ln
+  s := sp; cnt := 0
+  while s >= 0 do
+    O.Int(s, 6)
+    if abs(store[s].vi) < 2147483647 then O.Int(store[s].vi, 0)
+    else O.String("too big ") end
+    dec(s)
+    inc(cnt)
+    if cnt = 4 then O.String(""); O.Ln; cnt := 0 end
+  end
+  s := maxstk
+  while s >= np do
+    O.Int(s, 6)
+    if abs(store[s].vi) < 2147483647 then O.Int(store[s].vi, 0)
+    else O.String("too big ") end
+    dec(s)
+    inc(cnt)
+    if cnt = 4 then O.String(""); O.Ln; cnt := 0 end
+  end
+end pmd
+
+proc errori(const msg: array 40 of char)
+begin
+  O.String(""); O.Ln
+  O.String(@msg); O.Ln
+  pmd()
+  errorFlag := true
+end errori
+
+// pint.pas lines 467-474: base function
+proc base(ld: integer): integer
+  var ad: integer
+begin
+  ad := mp
+  while ld > 0 do
+    ad := store[ad + 1].vi  // vm field = vi
+    dec(ld)
+  end
+  return ad
+end base
+
+// pint.pas lines 476-485: compare
+proc doCompare()
+begin
+  i1 := store[sp].vi      // va = vi (address)
+  i2 := store[sp + 1].vi
+  i := 0; b := true
+  while b and (i <> q) do
+    if store[i1 + i].vi = store[i2 + i].vi then inc(i)
+    else b := false end
+  end
+end doCompare
+
+// pint.pas lines 173-198: update
+proc update(x: integer)
+  var curr: integer
+      succ: integer
+      endlist: boolean
+begin
+  if labeltab[x].st = defined then
+    errorl("duplicated label")
+  else
+    if labeltab[x].val <> -1 then  // forward reference(s)
+      curr := labeltab[x].val
+      endlist := false
+      while not endlist do
+        if (curr mod 2) <> 0 then
+          succ := code[curr div 2].q2
+          code[curr div 2].q2 := labelvalue
+        else
+          succ := code[curr div 2].q1
+          code[curr div 2].q1 := labelvalue
+        end
+        if succ = -1 then endlist := true
+        else curr := succ end
+      end
+    end
+    labeltab[x].st := defined
+    labeltab[x].val := labelvalue
+  end
+end update
+
+// pint.pas lines 228-235: lookup
+proc lookup(x: integer)
+begin
+  if labeltab[x].st = entered then
+    q := labeltab[x].val
+    labeltab[x].val := pc
+  elsif labeltab[x].st = defined then
+    q := labeltab[x].val
+  end
+end lookup
+
+// pint.pas lines 237-241: labelsearch
+proc labelsearch()
+  var x: integer
+begin
+  while (ch <> "l") and not prdIsEoln() do prdReadChar(@ch) end
+  prdReadInt(@x)
+  lookup(x)
+end labelsearch
+
+// pint.pas lines 243-248: getname
+proc getname(name: ^Alfa)
+  var k: integer
+begin
+  word[0] := ch
+  prdReadChar(@word[1])
+  prdReadChar(@word[2])
+  if not prdIsEoln() then prdReadChar(@ch) end  // next character
+  // pack word into name (copy first 10 chars, pad with spaces)
+  for k := 0 to 9 do name[k] := word[k] end
+  name[10] := 0X
+end getname
+
+// pint.pas lines 250-264: typesymbol
+proc typesymbol()
+  var ti: integer
+begin
+  if ch <> "i" then
+    if ch = "a" then ti := 0
+    elsif ch = "r" then ti := 1
+    elsif ch = "s" then ti := 2
+    elsif ch = "b" then ti := 3
+    elsif ch = "c" then ti := 4
+    else ti := 0 end
+    op := cop[op] + ti
+  end
+end typesymbol
+
+// pint.pas lines 223-427: assemble
+proc assemble()
+  var name: Alfa
+      ab: boolean
+      r: real
+      s: SetType
+      c1: char
+      ai: integer
+      s1: integer
+      lb: integer
+      ub: integer
+      skipStore: boolean  // replaces goto 1
+begin
+  skipStore := false
+  p := 0; q := 0; op := 0
+  getname(@name)
+  // instr[duminst] := name
+  for ai := 0 to 9 do instr[duminst][ai] := name[ai] end
+  instr[duminst][10] := 0X
+
+
+  while instr[op] <> name do inc(op) end
+  if op = duminst then errorl("illegal instruction"); return end
+
+  // pint.pas lines 272-416: case op - get parameters p, q
+  if (op >= 17) and (op <= 22) then
+    // equ,neq,geq,grt,leq,les
+    if ch = "a" then // p = 0
+    elsif ch = "i" then p := 1
+    elsif ch = "r" then p := 2
+    elsif ch = "b" then p := 3
+    elsif ch = "s" then p := 4
+    elsif ch = "c" then p := 6
+    elsif ch = "m" then p := 5; prdReadInt(@q)
+    end
+
+  elsif (op = 0) or (op = 2) then
+    // lod, str
+    typesymbol(); prdReadInt(@p); prdReadInt(@q)
+
+  elsif op = 4 then
+    // lda
+    prdReadInt(@p); prdReadInt(@q)
+
+  elsif op = 12 then
+    // cup
+    prdReadInt(@p); labelsearch()
+
+  elsif op = 11 then
+    // mst
+    prdReadInt(@p)
+
+  elsif op = 14 then
+    // ret
+    if ch = "p" then p := 0
+    elsif ch = "i" then p := 1
+    elsif ch = "r" then p := 2
+    elsif ch = "c" then p := 3
+    elsif ch = "b" then p := 4
+    elsif ch = "a" then p := 5
+    end
+
+  elsif (op = 5) or (op = 16) or (op = 55) then
+    // lao, ixa, mov
+    prdReadInt(@q)
+
+  elsif (op = 1) or (op = 3) or (op = 9) or (op = 10) or (op = 57) then
+    // ldo, sro, ind, inc, dec
+    typesymbol(); prdReadInt(@q)
+
+  elsif (op = 23) or (op = 24) or (op = 25) then
+    // ujp, fjp, xjp
+    labelsearch()
+
+  elsif op = 13 then
+    // ent
+    prdReadInt(@p); labelsearch()
+
+  elsif op = 15 then
+    // csp
+    for ai := 1 to 9 do prdReadChar(@ch) end
+    getname(@name)
+
+    while name <> sptable[q] do inc(q) end
+
+  elsif op = 7 then
+    // ldc
+    if ch = "i" then
+      p := 1; prdReadInt(@ai)
+      if abs(ai) >= largeint then
+        op := 8
+        store[icp].vi := ai; q := maxstk
+        while store[q].vi <> ai do inc(q) end
+        if q = icp then
+          inc(icp)
+          if icp = overi then errorl("integer table overflow"); return end
+        end
+      else q := ai end
+
+    elsif ch = "r" then
+      op := 8; p := 2
+      prdReadReal(@r)
+      realstore[rcp] := r; q := overi
+      while realstore[q] <> r do inc(q) end
+      if q = rcp then
+        inc(rcp)
+        if rcp = overr then errorl("real table overflow"); return end
+      end
+
+    elsif ch = "n" then
+      // nil: p,q = 0
+
+    elsif ch = "b" then
+      p := 3; prdReadInt(@q)
+
+    elsif ch = "c" then
+      p := 6
+      // skip spaces until quote
+      prdReadChar(@ch)
+      while ch = " " do prdReadChar(@ch) end
+      if ch <> "'" then errorl("illegal character"); return end
+      prdReadChar(@ch); q := +ord(ch)
+      prdReadChar(@ch)
+      if ch <> "'" then errorl("illegal character"); return end
+
+    elsif ch = "(" then
+      op := 8; p := 4
+      s := setEmpty()
+      prdReadChar(@ch)
+      while ch <> ")" do
+        prdReadInt(@s1)
+        s := setAdd(s, s1)
+        prdReadChar(@ch)
+      end
+      storeSetPut(scp, s); q := overr
+      while not setEq(storeSetGet(q), s) do inc(q) end
+      if q = scp then
+        inc(scp)
+        if scp = overs then errorl("set table overflow"); return end
+      end
+    end
+
+  elsif op = 26 then
+    // chk
+    typesymbol()
+    prdReadInt(@lb); prdReadInt(@ub)
+    if op = 95 then q := lb
+    else
+      store[bcp - 1].vi := lb; store[bcp].vi := ub
+      q := overs
+      while not ((store[q - 1].vi = lb) and (store[q].vi = ub)) do q := q + 2 end
+      if q = bcp then
+        bcp := bcp + 2
+        if bcp = overb then errorl("boundary table overflow"); return end
+      end
+    end
+
+  elsif op = 56 then
+    // lca
+    if mcp + 16 >= overm then errorl("multiple table overflow"); return end
+    mcp := mcp + strglgth
+    q := mcp
+    for ai := 0 to strglgth - 1 do
+      prdReadChar(@ch)
+      store[q + ai].vi := +ord(ch)  // store as char ordinal in vi
+    end
+
+  elsif op = 6 then
+    // sto
+    typesymbol()
+
+  elsif (op >= 27) and (op <= 54) then
+    // adi..dvr: no parameters
+
+  elsif op = 58 then
+    // stp: no parameters
+
+  elsif (op = 59) or (op = 60) then
+    // ord, chr: skip store
+    skipStore := true
+
+  elsif op = 61 then
+    // ujc: no parameters
+  end
+
+  if errorFlag then return end
+
+  if not skipStore then
+    // store instruction
+    if (pc mod 2) <> 0 then
+      code[pc div 2].op2 := op
+      code[pc div 2].p2 := p
+      code[pc div 2].q2 := q
+    else
+      code[pc div 2].op1 := op
+      code[pc div 2].p1 := p
+      code[pc div 2].q1 := q
+    end
+    inc(pc)
+  end
+
+  prdReadLn()
+end assemble
+
+// pint.pas lines 202-221: generate
+proc generate()
+  var x: integer
+      again: boolean
+begin
+  again := true
+  while again and not errorFlag do
+    prdReadChar(@ch)  // first character of line
+    if ch = "i" then
+      prdReadLn()
+    elsif ch = "l" then
+      prdReadInt(@x)
+      if not prdIsEoln() then prdReadChar(@ch) end
+      if ch = "=" then prdReadInt(@labelvalue)
+      else labelvalue := pc end
+      update(x)
+      prdReadLn()
+    elsif ch = "q" then
+      again := false
+      prdReadLn()
+    elsif ch = " " then
+      prdReadChar(@ch)
+      assemble()
+    else
+      prdReadLn()  // skip unknown lines
+    end
+  end
+end generate
+
+// pint.pas lines 103-165: init
+proc init()
+  var ii: integer
+begin
+  instr[ 0] := "lod       "; instr[ 0][10] := 0X
+  instr[ 1] := "ldo       "; instr[ 1][10] := 0X
+  instr[ 2] := "str       "; instr[ 2][10] := 0X
+  instr[ 3] := "sro       "; instr[ 3][10] := 0X
+  instr[ 4] := "lda       "; instr[ 4][10] := 0X
+  instr[ 5] := "lao       "; instr[ 5][10] := 0X
+  instr[ 6] := "sto       "; instr[ 6][10] := 0X
+  instr[ 7] := "ldc       "; instr[ 7][10] := 0X
+  instr[ 8] := "...       "; instr[ 8][10] := 0X
+  instr[ 9] := "ind       "; instr[ 9][10] := 0X
+  instr[10] := "inc       "; instr[10][10] := 0X
+  instr[11] := "mst       "; instr[11][10] := 0X
+  instr[12] := "cup       "; instr[12][10] := 0X
+  instr[13] := "ent       "; instr[13][10] := 0X
+  instr[14] := "ret       "; instr[14][10] := 0X
+  instr[15] := "csp       "; instr[15][10] := 0X
+  instr[16] := "ixa       "; instr[16][10] := 0X
+  instr[17] := "equ       "; instr[17][10] := 0X
+  instr[18] := "neq       "; instr[18][10] := 0X
+  instr[19] := "geq       "; instr[19][10] := 0X
+  instr[20] := "grt       "; instr[20][10] := 0X
+  instr[21] := "leq       "; instr[21][10] := 0X
+  instr[22] := "les       "; instr[22][10] := 0X
+  instr[23] := "ujp       "; instr[23][10] := 0X
+  instr[24] := "fjp       "; instr[24][10] := 0X
+  instr[25] := "xjp       "; instr[25][10] := 0X
+  instr[26] := "chk       "; instr[26][10] := 0X
+  instr[27] := "eof       "; instr[27][10] := 0X
+  instr[28] := "adi       "; instr[28][10] := 0X
+  instr[29] := "adr       "; instr[29][10] := 0X
+  instr[30] := "sbi       "; instr[30][10] := 0X
+  instr[31] := "sbr       "; instr[31][10] := 0X
+  instr[32] := "sgs       "; instr[32][10] := 0X
+  instr[33] := "flt       "; instr[33][10] := 0X
+  instr[34] := "flo       "; instr[34][10] := 0X
+  instr[35] := "trc       "; instr[35][10] := 0X
+  instr[36] := "ngi       "; instr[36][10] := 0X
+  instr[37] := "ngr       "; instr[37][10] := 0X
+  instr[38] := "sqi       "; instr[38][10] := 0X
+  instr[39] := "sqr       "; instr[39][10] := 0X
+  instr[40] := "abi       "; instr[40][10] := 0X
+  instr[41] := "abr       "; instr[41][10] := 0X
+  instr[42] := "not       "; instr[42][10] := 0X
+  instr[43] := "and       "; instr[43][10] := 0X
+  instr[44] := "ior       "; instr[44][10] := 0X
+  instr[45] := "dif       "; instr[45][10] := 0X
+  instr[46] := "int       "; instr[46][10] := 0X
+  instr[47] := "uni       "; instr[47][10] := 0X
+  instr[48] := "inn       "; instr[48][10] := 0X
+  instr[49] := "mod       "; instr[49][10] := 0X
+  instr[50] := "odd       "; instr[50][10] := 0X
+  instr[51] := "mpi       "; instr[51][10] := 0X
+  instr[52] := "mpr       "; instr[52][10] := 0X
+  instr[53] := "dvi       "; instr[53][10] := 0X
+  instr[54] := "dvr       "; instr[54][10] := 0X
+  instr[55] := "mov       "; instr[55][10] := 0X
+  instr[56] := "lca       "; instr[56][10] := 0X
+  instr[57] := "dec       "; instr[57][10] := 0X
+  instr[58] := "stp       "; instr[58][10] := 0X
+  instr[59] := "ord       "; instr[59][10] := 0X
+  instr[60] := "chr       "; instr[60][10] := 0X
+  instr[61] := "ujc       "; instr[61][10] := 0X
+
+  sptable[ 0] := "get       "; sptable[ 0][10] := 0X
+  sptable[ 1] := "put       "; sptable[ 1][10] := 0X
+  sptable[ 2] := "rst       "; sptable[ 2][10] := 0X
+  sptable[ 3] := "rln       "; sptable[ 3][10] := 0X
+  sptable[ 4] := "new       "; sptable[ 4][10] := 0X
+  sptable[ 5] := "wln       "; sptable[ 5][10] := 0X
+  sptable[ 6] := "wrs       "; sptable[ 6][10] := 0X
+  sptable[ 7] := "eln       "; sptable[ 7][10] := 0X
+  sptable[ 8] := "wri       "; sptable[ 8][10] := 0X
+  sptable[ 9] := "wrr       "; sptable[ 9][10] := 0X
+  sptable[10] := "wrc       "; sptable[10][10] := 0X
+  sptable[11] := "rdi       "; sptable[11][10] := 0X
+  sptable[12] := "rdr       "; sptable[12][10] := 0X
+  sptable[13] := "rdc       "; sptable[13][10] := 0X
+  sptable[14] := "sin       "; sptable[14][10] := 0X
+  sptable[15] := "cos       "; sptable[15][10] := 0X
+  sptable[16] := "exp       "; sptable[16][10] := 0X
+  sptable[17] := "log       "; sptable[17][10] := 0X
+  sptable[18] := "sqt       "; sptable[18][10] := 0X
+  sptable[19] := "atn       "; sptable[19][10] := 0X
+  sptable[20] := "sav       "; sptable[20][10] := 0X
+
+  cop[ 0] := 105; cop[ 1] := 65
+  cop[ 2] := 70;  cop[ 3] := 75
+  cop[ 6] := 80;  cop[ 9] := 85
+  cop[10] := 90;  cop[26] := 95
+  cop[57] := 100
+
+  pc := begincode
+  icp := maxstk + 1i
+  rcp := overi + 1i
+  scp := overr + 1i
+  bcp := overs + 2i
+  mcp := overb + 1i
+
+  for ii := 0 to 9 do word[ii] := " " end
+  word[10] := 0X
+  for ii := 0 to maxlabel do
+    labeltab[ii].val := -1
+    labeltab[ii].st := entered
+  end
+end init
+
+
+// pint.pas lines 90-434: load procedure
+proc load()
+begin
+  init()
+  // Open prd file
+  prd := F.Open(@prdname, F.ReadOnly)
+  if prd = nil then
+    O.String("Error: cannot open "); O.String(@prdname); O.Ln
+    errorFlag := true; return
+  end
+  prdEof := false
+  prdEoln := false
+  prdPos := 0
+  prdLen := 0
+  prdReadLine()  // read first line
+  generate()
+  pc := 0
+  generate()
+end load
+
+
+// pint.pas lines 487-662: callsp
+proc callsp()
+  var line: boolean
+      adptr: integer
+      adelnt: integer
+      ci: integer
+      fad: integer
+      cch: char
+      r: real
+      tmpReal: real
+      tmpCh: char
+
+  // pint.pas lines 517-527: writestr
+  proc doWriteStr(toOutput: boolean)
+    var wi: integer
+        wj: integer
+        wk: integer
+        wad: integer
+  begin
+    wad := store[sp - 3].vi  // va
+    wk := store[sp - 2].vi
+    wj := store[sp - 1].vi
+    // j and k are numbers of characters
+    if wk > wj then
+      for wi := 1 to wk - wj do
+        if toOutput then O.String(" ")
+        else prrWriteChar(" ") end
+      end
+    else wj := wk end
+    for wi := 0 to wj - 1 do
+      if toOutput then printChar(store[wad + wi].vi)
+      else prrWriteChar(chr(store[wad + wi].vi)) end
+    end
+    sp := sp - 4
+  end doWriteStr
+
+begin // callsp
+  if q = 0 then
+    // get
+    if store[sp].vi = inputadr then
+      // getfile(input) - advance stdin, store lookahead at inputadr
+      fad := store[sp].vi  // va = inputadr
+      stdinAdvance()
+      store[fad].vi := +ord(stdinCh)
+      sp := sp - 1
+    elsif store[sp].vi = prdadr then
+      // getfile(prd) - advance prd
+      sp := sp - 1
+    else errori("get on output/prr file") end
+
+  elsif q = 1 then
+    // put
+    if store[sp].vi = outputadr then
+      // putfile(output) - write buffered char
+      fad := store[sp].vi
+      printChar(store[fad].vi)
+      sp := sp - 1
+    elsif store[sp].vi = prradr then
+      fad := store[sp].vi
+      prrWriteChar(chr(store[fad].vi))
+      sp := sp - 1
+    else errori("put on read file") end
+
+  elsif q = 2 then
+    // rst
+    np := store[sp].vi  // va
+    sp := sp - 1
+
+  elsif q = 3 then
+    // rln - readln
+    if store[sp].vi = inputadr then
+      // readln(input) - skip to next line, store lookahead
+      stdinReadLn()
+      store[inputadr].vi := +ord(stdinCh)
+      sp := sp - 1
+    elsif store[sp].vi = prdadr then
+      prdReadLn()
+      sp := sp - 1
+    else errori("readln on output/prr file") end
+
+  elsif q = 4 then
+    // new
+    ad := np - store[sp].vi
+    if ad <= ep then errori("store overflow") end
+    np := ad
+    ad := store[sp - 1].vi  // va
+    store[ad].vi := np       // va
+    sp := sp - 2
+
+  elsif q = 5 then
+    // wln - writeln
+    if store[sp].vi = outputadr then
+      O.String(""); O.Ln
+    elsif store[sp].vi = prradr then
+      prrWriteLn()
+    else errori("writeln on input/prd file") end
+    sp := sp - 1
+
+  elsif q = 6 then
+    // wrs - write string
+    if store[sp].vi = outputadr then
+      doWriteStr(true)
+    elsif store[sp].vi = prradr then
+      doWriteStr(false)
+    else errori("write on input/prd file") end
+
+  elsif q = 7 then
+    // eln - eoln
+    if store[sp].vi = inputadr then
+      // eoln(input) - check if at end of line on stdin
+      if stdinEoln then store[sp].vi := 1 else store[sp].vi := 0 end
+    else errori("eoln on output/prr file") end
+
+  elsif q = 8 then
+    // wri - write integer
+    if store[sp].vi = outputadr then
+      O.Int(store[sp - 2].vi, store[sp - 1].vi)
+    elsif store[sp].vi = prradr then
+      prrWriteInt(store[sp - 2].vi, store[sp - 1].vi)
+    else errori("write on input/prd file") end
+    sp := sp - 3
+
+  elsif q = 9 then
+    // wrr - write real
+    if store[sp].vi = outputadr then
+      O.Real(storeRealGet(sp - 2), store[sp - 1].vi)
+    elsif store[sp].vi = prradr then
+      // TODO: write real to prr
+    end
+    sp := sp - 3
+
+  elsif q = 10 then
+    // wrc - write char
+    if store[sp].vi = outputadr then
+      // pad with spaces for field width
+      ci := store[sp - 1].vi
+      while ci > 1 do O.String(" "); dec(ci) end
+      printChar(store[sp - 2].vi)
+    elsif store[sp].vi = prradr then
+      ci := store[sp - 1].vi
+      while ci > 1 do prrWriteChar(" "); dec(ci) end
+      prrWriteChar(chr(store[sp - 2].vi))
+    else errori("write on input/prd file") end
+    sp := sp - 3
+
+  elsif q = 11 then
+    // rdi - read integer (pint.pas line 633)
+    if store[sp].vi = inputadr then
+      ad := store[sp - 1].vi  // va - address to store result
+      stdinReadInt(@store[ad].vi)
+      store[inputadr].vi := +ord(stdinCh)  // lookahead
+      sp := sp - 2
+    elsif store[sp].vi = prdadr then
+      ad := store[sp - 1].vi
+      prdReadInt(@store[ad].vi)
+      sp := sp - 2
+    else errori("read on output file") end
+
+  elsif q = 12 then
+    // rdr - read real (pint.pas line 639)
+    if store[sp].vi = inputadr then
+      ad := store[sp - 1].vi
+      stdinReadReal(@tmpReal)
+      storeRealPut(ad, tmpReal)
+      store[inputadr].vi := +ord(stdinCh)
+      sp := sp - 2
+    elsif store[sp].vi = prdadr then
+      ad := store[sp - 1].vi
+      prdReadReal(@tmpReal)
+      storeRealPut(ad, tmpReal)
+      sp := sp - 2
+    else errori("read on output file") end
+
+  elsif q = 13 then
+    // rdc - read char (pint.pas line 645)
+    if store[sp].vi = inputadr then
+      ad := store[sp - 1].vi
+      stdinReadChar(@tmpCh)
+      store[ad].vi := +ord(tmpCh)
+      store[inputadr].vi := +ord(stdinCh)  // lookahead
+      sp := sp - 2
+    elsif store[sp].vi = prdadr then
+      ad := store[sp - 1].vi
+      prdReadChar(@tmpCh)
+      store[ad].vi := +ord(tmpCh)
+      sp := sp - 2
+    else errori("read on output file") end
+
+  elsif q = 14 then
+    // sin
+    storeRealPut(sp, M.sin(storeRealGet(sp)))
+  elsif q = 15 then
+    // cos
+    storeRealPut(sp, M.cos(storeRealGet(sp)))
+  elsif q = 16 then
+    // exp
+    storeRealPut(sp, M.exp(storeRealGet(sp)))
+  elsif q = 17 then
+    // log (ln in Pascal)
+    storeRealPut(sp, M.ln(storeRealGet(sp)))
+  elsif q = 18 then
+    // sqt (sqrt in Pascal)
+    storeRealPut(sp, M.sqrt(storeRealGet(sp)))
+  elsif q = 19 then
+    // atn (arctan in Pascal)
+    storeRealPut(sp, M.arctan(storeRealGet(sp)))
+  elsif q = 20 then
+    // sav
+    ad := store[sp].vi  // va
+    store[ad].vi := np   // va
+    sp := sp - 1
+  end
+end callsp
+
+// pint.pas lines 664-1017: main interpreter loop
+proc interpret()
+  var s1: SetType
+      s2: SetType
+begin
+  // pint.pas line 668
+  pc := 0; sp := -1; mp := 0; np := +(maxstk + 1); ep := 5
+  // Initialize stdin for read/readln support (Pascal's input file)
+  stdinFile := F.System(F.Stdin)
+  stdinEof := false; stdinEoln := false; stdinCh := " "
+  store[inputadr].vi := +ord(" ")  // initial lookahead = space
+  interpreting := true
+
+  while interpreting and not errorFlag do
+    // fetch
+    if (pc mod 2) <> 0 then
+      op := code[pc div 2].op2
+      p := code[pc div 2].p2
+      q := code[pc div 2].q2
+    else
+      op := code[pc div 2].op1
+      p := code[pc div 2].p1
+      q := code[pc div 2].q1
+    end
+    inc(pc)
+
+    // execute
+    if (op = 0) or ((op >= 105) and (op <= 109)) then
+      // lod
+      ad := base(p) + q
+      inc(sp)
+      store[sp] := store[ad]
+      realstore[sp] := realstore[ad]
+
+    elsif (op = 1) or ((op >= 65) and (op <= 69)) then
+      // ldo
+      inc(sp)
+      store[sp] := store[q]
+      realstore[sp] := realstore[q]
+
+    elsif (op = 2) or ((op >= 70) and (op <= 74)) then
+      // str
+      store[base(p) + q] := store[sp]
+      realstore[base(p) + q] := realstore[sp]
+      dec(sp)
+
+    elsif (op = 3) or ((op >= 75) and (op <= 79)) then
+      // sro
+      store[q] := store[sp]
+      realstore[q] := realstore[sp]
+      dec(sp)
+
+    elsif op = 4 then
+      // lda
+      inc(sp)
+      store[sp].vi := base(p) + q
+
+    elsif op = 5 then
+      // lao
+      inc(sp)
+      store[sp].vi := q
+
+    elsif (op = 6) or ((op >= 80) and (op <= 84)) then
+      // sto
+      store[store[sp - 1].vi] := store[sp]
+      realstore[store[sp - 1].vi] := realstore[sp]
+      sp := sp - 2
+
+    elsif op = 7 then
+      // ldc
+      inc(sp)
+      if p = 1 then
+        store[sp].vi := q
+      elsif p = 6 then
+        store[sp].vi := q  // char stored as ordinal
+      elsif p = 3 then
+        if q = 1 then store[sp].vi := 1 else store[sp].vi := 0 end  // boolean
+      else
+        store[sp].vi := maxstr  // nil
+      end
+
+    elsif op = 8 then
+      // lci
+      inc(sp)
+      store[sp] := store[q]
+      realstore[sp] := realstore[q]
+
+    elsif (op = 9) or ((op >= 85) and (op <= 89)) then
+      // ind
+      ad := store[sp].vi + q
+      store[sp] := store[ad]
+      realstore[sp] := realstore[ad]
+
+    elsif (op = 10) or ((op >= 90) and (op <= 94)) then
+      // inc
+      store[sp].vi := store[sp].vi + q
+
+    elsif op = 11 then
+      // mst
+      store[sp + 2].vi := base(p)  // sl (static link)
+      store[sp + 3].vi := mp       // dl (dynamic link)
+      store[sp + 4].vi := ep       // ep save
+      sp := sp + 5
+
+    elsif op = 12 then
+      // cup
+      mp := sp - (p + 4)
+      store[mp + 4].vi := pc  // return address
+      pc := q
+
+    elsif op = 13 then
+      // ent
+      if p = 1 then
+        sp := mp + q
+        if sp > np then errori("store overflow") end
+      else
+        ep := sp + q
+        if ep > np then errori("store overflow") end
+      end
+
+    elsif op = 14 then
+      // ret
+      if p = 0 then sp := mp - 1
+      else sp := mp end
+      pc := store[mp + 4].vi
+      ep := store[mp + 3].vi
+      mp := store[mp + 2].vi
+
+    elsif op = 15 then
+      // csp
+      callsp()
+
+    elsif op = 16 then
+      // ixa
+      i := store[sp].vi
+      dec(sp)
+      store[sp].vi := q * i + store[sp].vi
+
+    elsif op = 17 then
+      // equ
+      dec(sp)
+      if p = 1 then b := store[sp].vi = store[sp + 1].vi
+      elsif p = 0 then b := store[sp].vi = store[sp + 1].vi  // address
+      elsif p = 6 then b := store[sp].vi = store[sp + 1].vi  // char
+      elsif p = 2 then b := realstore[sp] = realstore[sp + 1]
+      elsif p = 3 then b := store[sp].vi = store[sp + 1].vi  // bool
+      elsif p = 4 then b := setEq(storeSetGet(sp), storeSetGet(sp + 1))
+      elsif p = 5 then doCompare(); b := b
+      end
+      if b then store[sp].vi := 1 else store[sp].vi := 0 end
+
+    elsif op = 18 then
+      // neq
+      dec(sp)
+      if p = 0 then b := store[sp].vi <> store[sp + 1].vi
+      elsif p = 1 then b := store[sp].vi <> store[sp + 1].vi
+      elsif p = 6 then b := store[sp].vi <> store[sp + 1].vi
+      elsif p = 2 then b := realstore[sp] <> realstore[sp + 1]
+      elsif p = 3 then b := store[sp].vi <> store[sp + 1].vi
+      elsif p = 4 then b := not setEq(storeSetGet(sp), storeSetGet(sp + 1))
+      elsif p = 5 then doCompare(); b := not b
+      end
+      if b then store[sp].vi := 1 else store[sp].vi := 0 end
+
+    elsif op = 19 then
+      // geq
+      dec(sp)
+      if p = 0 then errori("<,<=,>,>= for address")
+      elsif p = 1 then b := store[sp].vi >= store[sp + 1].vi
+      elsif p = 6 then b := store[sp].vi >= store[sp + 1].vi
+      elsif p = 2 then b := realstore[sp] >= realstore[sp + 1]
+      elsif p = 3 then b := store[sp].vi >= store[sp + 1].vi
+      elsif p = 4 then b := setGeq(storeSetGet(sp), storeSetGet(sp + 1))
+      elsif p = 5 then doCompare(); b := b or (store[i1 + i].vi >= store[i2 + i].vi)
+      end
+      if b then store[sp].vi := 1 else store[sp].vi := 0 end
+
+    elsif op = 20 then
+      // grt
+      dec(sp)
+      if p = 0 then errori("<,<=,>,>= for address")
+      elsif p = 1 then b := store[sp].vi > store[sp + 1].vi
+      elsif p = 6 then b := store[sp].vi > store[sp + 1].vi
+      elsif p = 2 then b := realstore[sp] > realstore[sp + 1]
+      elsif p = 3 then b := store[sp].vi > store[sp + 1].vi
+      elsif p = 4 then errori("set inclusion")
+      elsif p = 5 then doCompare(); b := (not b) and (store[i1 + i].vi > store[i2 + i].vi)
+      end
+      if b then store[sp].vi := 1 else store[sp].vi := 0 end
+
+    elsif op = 21 then
+      // leq
+      dec(sp)
+      if p = 0 then errori("<,<=,>,>= for address")
+      elsif p = 1 then b := store[sp].vi <= store[sp + 1].vi
+      elsif p = 6 then b := store[sp].vi <= store[sp + 1].vi
+      elsif p = 2 then b := realstore[sp] <= realstore[sp + 1]
+      elsif p = 3 then b := store[sp].vi <= store[sp + 1].vi
+      elsif p = 4 then b := setLeq(storeSetGet(sp), storeSetGet(sp + 1))
+      elsif p = 5 then doCompare(); b := b or (store[i1 + i].vi <= store[i2 + i].vi)
+      end
+      if b then store[sp].vi := 1 else store[sp].vi := 0 end
+
+    elsif op = 22 then
+      // les
+      dec(sp)
+      if p = 0 then errori("<,<=,>,>= for address")
+      elsif p = 1 then b := store[sp].vi < store[sp + 1].vi
+      elsif p = 6 then b := store[sp].vi < store[sp + 1].vi
+      elsif p = 2 then b := realstore[sp] < realstore[sp + 1]
+      elsif p = 3 then b := store[sp].vi < store[sp + 1].vi
+      elsif p = 5 then doCompare(); b := (not b) and (store[i1 + i].vi < store[i2 + i].vi)
+      end
+      if b then store[sp].vi := 1 else store[sp].vi := 0 end
+
+    elsif op = 23 then
+      // ujp
+      pc := q
+
+    elsif op = 24 then
+      // fjp
+      if store[sp].vi = 0 then pc := q end  // vb false = 0
+      dec(sp)
+
+    elsif op = 25 then
+      // xjp
+      pc := store[sp].vi + q
+      dec(sp)
+
+    elsif op = 95 then
+      // chka
+      if (store[sp].vi < np) or (store[sp].vi > (maxstr - q)) then
+        errori("bad pointer value")
+      end
+
+    elsif (op = 26) or ((op >= 96) and (op <= 99)) then
+      // chk
+      if (store[sp].vi < store[q - 1].vi) or (store[sp].vi > store[q].vi) then
+        errori("value out of range")
+      end
+
+    elsif op = 27 then
+      // eof
+      i := store[sp].vi
+      if i = inputadr then
+        store[sp].vi := 0  // eof(input) - false for now
+      else errori("code in error") end
+
+    elsif op = 28 then
+      // adi
+      dec(sp)
+      store[sp].vi := store[sp].vi + store[sp + 1].vi
+
+    elsif op = 29 then
+      // adr
+      dec(sp)
+      realstore[sp] := realstore[sp] + realstore[sp + 1]
+
+    elsif op = 30 then
+      // sbi
+      dec(sp)
+      store[sp].vi := store[sp].vi - store[sp + 1].vi
+
+    elsif op = 31 then
+      // sbr
+      dec(sp)
+      realstore[sp] := realstore[sp] - realstore[sp + 1]
+
+    elsif op = 32 then
+      // sgs
+      storeSetPut(sp, setOf(store[sp].vi))
+
+    elsif op = 33 then
+      // flt
+      realstore[sp] := flt(store[sp].vi)
+
+    elsif op = 34 then
+      // flo
+      realstore[sp - 1] := flt(store[sp - 1].vi)
+
+    elsif op = 35 then
+      // trc
+      store[sp].vi := floor(realstore[sp])
+
+    elsif op = 36 then
+      // ngi
+      store[sp].vi := -store[sp].vi
+
+    elsif op = 37 then
+      // ngr
+      realstore[sp] := -realstore[sp]
+
+    elsif op = 38 then
+      // sqi
+      store[sp].vi := store[sp].vi * store[sp].vi
+
+    elsif op = 39 then
+      // sqr (real)
+      realstore[sp] := realstore[sp] * realstore[sp]
+
+    elsif op = 40 then
+      // abi
+      store[sp].vi := abs(store[sp].vi)
+
+    elsif op = 41 then
+      // abr
+      if realstore[sp] < 0.0 then realstore[sp] := -realstore[sp] end
+
+    elsif op = 42 then
+      // not
+      if store[sp].vi = 0 then store[sp].vi := 1
+      else store[sp].vi := 0 end
+
+    elsif op = 43 then
+      // and
+      dec(sp)
+      if (store[sp].vi <> 0) and (store[sp + 1].vi <> 0) then store[sp].vi := 1
+      else store[sp].vi := 0 end
+
+    elsif op = 44 then
+      // ior
+      dec(sp)
+      if (store[sp].vi <> 0) or (store[sp + 1].vi <> 0) then store[sp].vi := 1
+      else store[sp].vi := 0 end
+
+    elsif op = 45 then
+      // dif
+      dec(sp)
+      storeSetPut(sp, setDiff(storeSetGet(sp), storeSetGet(sp + 1)))
+
+    elsif op = 46 then
+      // int (set intersection)
+      dec(sp)
+      storeSetPut(sp, setInter(storeSetGet(sp), storeSetGet(sp + 1)))
+
+    elsif op = 47 then
+      // uni
+      dec(sp)
+      storeSetPut(sp, setUnion(storeSetGet(sp), storeSetGet(sp + 1)))
+
+    elsif op = 48 then
+      // inn
+      dec(sp)
+      i := store[sp].vi
+      if setIn(i, storeSetGet(sp + 1)) then store[sp].vi := 1
+      else store[sp].vi := 0 end
+
+    elsif op = 49 then
+      // mod
+      dec(sp)
+      store[sp].vi := store[sp].vi mod store[sp + 1].vi
+
+    elsif op = 50 then
+      // odd
+      if (store[sp].vi mod 2) <> 0 then store[sp].vi := 1
+      else store[sp].vi := 0 end
+
+    elsif op = 51 then
+      // mpi
+      dec(sp)
+      store[sp].vi := store[sp].vi * store[sp + 1].vi
+
+    elsif op = 52 then
+      // mpr
+      dec(sp)
+      realstore[sp] := realstore[sp] * realstore[sp + 1]
+
+    elsif op = 53 then
+      // dvi
+      dec(sp)
+      store[sp].vi := store[sp].vi div store[sp + 1].vi
+
+    elsif op = 54 then
+      // dvr
+      dec(sp)
+      realstore[sp] := realstore[sp] / realstore[sp + 1]
+
+    elsif op = 55 then
+      // mov
+      i1 := store[sp - 1].vi  // va
+      i2 := store[sp].vi      // va
+      sp := sp - 2
+      for i := 0 to q - 1 do
+        store[i1 + i] := store[i2 + i]
+        realstore[i1 + i] := realstore[i2 + i]
+      end
+
+    elsif (op = 56) then
+      // lca
+      inc(sp)
+      store[sp].vi := q  // va = address of string in store
+
+    elsif (op = 57) or ((op >= 100) and (op <= 104)) then
+      // dec
+      store[sp].vi := store[sp].vi - q
+
+    elsif op = 58 then
+      // stp
+      interpreting := false
+
+    elsif op = 59 then
+      // ord - no-op (just changes tag)
+
+    elsif op = 60 then
+      // chr - no-op (just changes tag)
+
+    elsif op = 61 then
+      // ujc
+      errori("case - error")
+
+    end  // if chain for opcodes
+  end  // while interpreting
+end interpret
+
+var 
+  argptr: A.String
+  argidx: integer
+
+begin
+  O.String("Pint starting..."); O.Ln
+  errorFlag := false
+
+  // Get prd file name from command line args
+  if A.Count() < 2 then
+    O.String("Usage: Pint <pcode-file>"); O.Ln
+    return
+  end
+  argptr := A.Arg(1)
+  if argptr = nil then
+    O.String("Error: cannot read argument"); O.Ln
+    return
+  end
+  // Copy arg to prdname
+  argidx := 0
+  while (argidx < 255) and (argptr[argidx] <> 0X) do
+    prdname[argidx] := argptr[argidx]; inc(argidx)
+  end
+  prdname[argidx] := 0X
+  O.String("Opening prd file: "); O.String(@prdname); O.Ln
+
+  load()
+  O.String("Load complete."); O.Ln
+  if not errorFlag then
+    interpret()
+  end
+
+end Pint

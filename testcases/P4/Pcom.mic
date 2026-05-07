@@ -1,5 +1,5 @@
 (* Micron port of the 1976 P4 Pascal Compiler
- * pcom.pas and pint.pas were originally written by Urs Ammann, Kesav Nori, Christian Jacobi.
+ * pcom.pas was originally written by Urs Ammann, Kesav Nori, Christian Jacobi.
  * We used the version of the 1982 book: "Pascal Implementation" by Pemberton & Daniels
  *   https://homepages.cwi.nl/~steven/pascal/book/pascalimplementation.html
  * This file includes references to the Pascal pcom.pas version in the
@@ -11,10 +11,11 @@
  
 module Pcom
 
-import T := PcomTypes
-import F := Files
-import O := Out
-import A := Args
+import 
+    T := PcomTypes
+    F := Files
+    O := Out
+    A := Args
 
 // pcom.pas lines 193-298: global variables
 

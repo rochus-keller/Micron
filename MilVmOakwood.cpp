@@ -170,6 +170,141 @@ static bool MathL_arctanh(void* args, void* ret)
     Interpreter::retR8(ret,res);
     return true;
 }
+
+// float Math$sqrt(float x)
+static bool Math_sqrt(void* args, void* ret)
+{
+    const float res = Math$sqrt(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$power(float x, float b)
+static bool Math_power(void* args, void* ret)
+{
+    const float res = Math$power(Interpreter::toR4(args,0), Interpreter::toR4(args,Interpreter::StackAlign));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$exp(float x)
+static bool Math_exp(void* args, void* ret)
+{
+    const float res = Math$exp(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$ln(float x)
+static bool Math_ln(void* args, void* ret)
+{
+    const float res = Math$ln(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$log(float x, float base)
+static bool Math_log(void* args, void* ret)
+{
+    const float res = Math$log(Interpreter::toR4(args,0), Interpreter::toR4(args,Interpreter::StackAlign));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$round(float x)
+static bool Math_round(void* args, void* ret)
+{
+    const float res = Math$round(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$sin(float x)
+static bool Math_sin(void* args, void* ret)
+{
+    const float res = Math$sin(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$cos(float x)
+static bool Math_cos(void* args, void* ret)
+{
+    const float res = Math$cos(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$tan(float x)
+static bool Math_tan(void* args, void* ret)
+{
+    const float res = Math$tan(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$arcsin(float x)
+static bool Math_arcsin(void* args, void* ret)
+{
+    const float res = Math$arcsin(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$arccos(float x)
+static bool Math_arccos(void* args, void* ret)
+{
+    const float res = Math$arccos(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$arctan(float x)
+static bool Math_arctan(void* args, void* ret)
+{
+    const float res = Math$arctan(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$arctan2(float x, float y)
+static bool Math_arctan2(void* args, void* ret)
+{
+    const float res = Math$arctan2(Interpreter::toR4(args,0), Interpreter::toR4(args,Interpreter::StackAlign));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$sinh(float x)
+static bool Math_sinh(void* args, void* ret)
+{
+    const float res = Math$sinh(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$cosh(float x)
+static bool Math_cosh(void* args, void* ret)
+{
+    const float res = Math$cosh(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$tanh(float x)
+static bool Math_tanh(void* args, void* ret)
+{
+    const float res = Math$tanh(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$arcsinh(float x)
+static bool Math_arcsinh(void* args, void* ret)
+{
+    const float res = Math$arcsinh(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$arccosh(float x)
+static bool Math_arccosh(void* args, void* ret)
+{
+    const float res = Math$arccosh(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+// float Math$arctanh(float x)
+static bool Math_arctanh(void* args, void* ret)
+{
+    const float res = Math$arctanh(Interpreter::toR4(args,0));
+    Interpreter::retR4(ret,res);
+    return true;
+}
+
 // void Out$Int(long long i, int n)
 static bool Out_Int(void* args, void* ret)
 {
@@ -206,27 +341,7 @@ static bool Out_String(void* args, void* ret)
     Out$String((char*)Interpreter::toP(args,0));
     return true;
 }
-// float Math$cos(float x)
-static bool Math_cos(void* args, void* ret)
-{
-    const float res = Math$cos(Interpreter::toR4(args,0));
-    Interpreter::retR4(ret,res);
-    return true;
-}
 
-static bool Math_sin(void* args, void* ret)
-{
-    const float res = Math$sin(Interpreter::toR4(args,0));
-    Interpreter::retR4(ret,res);
-    return true;
-}
-
-static bool Math_sqrt(void* args, void* ret)
-{
-    const float res = Math$sqrt(Interpreter::toR4(args,0));
-    Interpreter::retR4(ret,res);
-    return true;
-}
 
 // struct Files$Handle* Files$Open(const char* name, int mode)
 static bool Files_Open(void* args, void* ret)
@@ -325,9 +440,27 @@ void VmOakwood::addTo(Interpreter* ip)
     ip->registerProc("MathL", "arcsinh", MathL_arcsinh);
     ip->registerProc("MathL", "arccosh", MathL_arccosh);
     ip->registerProc("MathL", "arctanh", MathL_arctanh);
-    ip->registerProc("Math", "cos", Math_cos);
-    ip->registerProc("Math", "sin", Math_sin);
+
     ip->registerProc("Math", "sqrt", Math_sqrt);
+    ip->registerProc("Math", "power", Math_power);
+    ip->registerProc("Math", "exp", Math_exp);
+    ip->registerProc("Math", "ln", Math_ln);
+    ip->registerProc("Math", "log", Math_log);
+    ip->registerProc("Math", "round", Math_round);
+    ip->registerProc("Math", "sin", Math_sin);
+    ip->registerProc("Math", "cos", Math_cos);
+    ip->registerProc("Math", "tan", Math_tan);
+    ip->registerProc("Math", "arcsin", Math_arcsin);
+    ip->registerProc("Math", "arccos", Math_arccos);
+    ip->registerProc("Math", "arctan", Math_arctan);
+    ip->registerProc("Math", "arctan2", Math_arctan2);
+    ip->registerProc("Math", "sinh", Math_sinh);
+    ip->registerProc("Math", "cosh", Math_cosh);
+    ip->registerProc("Math", "tanh", Math_tanh);
+    ip->registerProc("Math", "arcsinh", Math_arcsinh);
+    ip->registerProc("Math", "arccosh", Math_arccosh);
+    ip->registerProc("Math", "arctanh", Math_arctanh);
+
     ip->registerProc("Files", "Open", Files_Open);
     ip->registerProc("Files", "System", Files_System);
     ip->registerProc("Files", "Close", Files_Close);
