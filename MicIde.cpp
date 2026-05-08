@@ -1648,7 +1648,8 @@ bool Ide::generate(bool useGnu)
         for( int i = 0; i < cFiles.size(); i++ )
         {
             QString& file = cFiles[i];
-            const QString cmd = QString("gcc -m32 -fno-stack-protector -D_MIC_NO_BEGIN_ -c %1 -o %2.o").arg(file).arg(file);
+            const QString cmd = QString("gcc %3 -m32 -fno-stack-protector -D_MIC_NO_BEGIN_ -c %1 -o %2.o").
+                    arg(file).arg(file).arg(d_debugging ? "-g" : "");
             //qDebug() << cmd; // TEST
             const int res = QProcess::execute(cmd);
             if( res != 0 )
@@ -3108,7 +3109,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.20");
+    a.setApplicationVersion("0.4.21");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

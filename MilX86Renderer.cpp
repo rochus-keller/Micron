@@ -923,12 +923,14 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
     const quint8 pw = 4; // pointerWidth for x86-32
     const quint8 sa = 4; // stackAlignment
 
-    // Compute pushed size: sum of each param's stack-aligned individual size (no gaps)
+    // Compute pushed size: sum of each param's stack-aligned individual size (no gaps).
+    // The eval stack rounds each value type up to the next multiple of stackAlignment,
+    // so we must use the same rounding here (not just qMax).
     quint32 pushedSize = 0;
     for (int i = 0; i < params.size(); i++) {
         Type* t = params[i]->getType();
         int size = t->getByteSize(pw);
-        pushedSize += qMax(size, (int)sa);
+        pushedSize += d_code.stackAligned(qMax(size, (int)sa));
     }
 
     // Compute aligned argsSize by replicating calcParamsLocalsLayout logic
@@ -966,12 +968,13 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
     };
     QVector<ParamInfo> pinfo(params.size());
 
-    // Contiguous offsets (from old ESP, i.e. from ESP+gap after expansion)
+    // Contiguous offsets (from old ESP, i.e. from ESP+gap after expansion).
+    // Must use the same aligned sizes as the eval stack.
     quint32 coff = 0;
     for (int i = 0; i < params.size(); i++) {
         Type* t = params[i]->getType();
         int size = t->getByteSize(pw);
-        int ssize = qMax(size, (int)sa);
+        int ssize = d_code.stackAligned(qMax(size, (int)sa));
         pinfo[i].contigOff = coff;
         pinfo[i].size = ssize;
         coff += ssize;

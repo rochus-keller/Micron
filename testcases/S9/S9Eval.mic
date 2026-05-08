@@ -11,11 +11,12 @@
  *)
 
 module S9Eval [level=3]
-
+ 
 import S9Types
 import G := S9Globals
 import M := S9Memory
 import IO := S9IO
+import Out
 
 (* ============================================================
  * Error handling
@@ -721,15 +722,66 @@ end bind_args
  * Main evaluator
  * ============================================================ *)
 
-(* The main evaluation loop *)
-procedure xeval*(x: S9Types.cell; mcsf: int32): S9Types.cell
+(* Rib accessors: rib = (args append result . source)
+ *   rib_args   = car(rib)
+ *   rib_append = cadr(rib)
+ *   rib_result = caddr(rib)
+ *   rib_source = cdddr(rib)
+ *)
+
+(* bind_arguments: C-compatible version that saves Environment on Stack
+ * and sets up the new environment. n = (proc arg1 arg2 ...) *)
+procedure bind_arguments(n: S9Types.cell)
+var
+  p: S9Types.cell
+  v: S9Types.cell
+  a: S9Types.cell
+  rib_: S9Types.cell
+  new_: S9Types.cell
+begin
+  M.save(G.Environment)
+  p := G.car(n)     (* procedure closure *)
+  a := G.cdr(n)     (* arguments *)
+  v := G.cadr(p)    (* formals *)
+  G.Environment := G.cdddr(p)  (* closure environment *)
+  rib_ := S9Types._NIL
+  M.save(rib_)
+  while G.pair_p(v) do
+    if G.atom_p(a) then
+      M.unsave(1)
+      too_few_args(n)
+      return
+    end
+    new_ := make_binding(G.car(v), G.car(a))
+    rib_ := M.cons(new_, rib_)
+    G.Car[G.Stack] := rib_
+    v := G.cdr(v)
+    a := G.cdr(a)
+  end
+  if G.symbol_p(v) then
+    new_ := make_binding(v, a)
+    rib_ := M.cons(new_, rib_)
+    G.Car[G.Stack] := rib_
+  elsif a # S9Types._NIL then
+    M.unsave(1)
+    too_many_args(n)
+    return
+  end
+  M.unsave(1)
+  G.Environment := make_env(rib_, G.Environment)
+end bind_arguments
+
+(* The main evaluation loop - rib-based approach matching C code *)
+procedure xeval*(x: S9Types.cell; cbn: int32): S9Types.cell
 var
   s: int32
   c: int32
   m: S9Types.cell
+  m2: S9Types.cell
+  a: S9Types.cell
   n: S9Types.cell
-  p: S9Types.cell
   rib: S9Types.cell
+  name: S9Types.cell
 begin
   M.save(x)
   M.save(G.State_stack)
@@ -750,61 +802,65 @@ begin
     
     (* Descent: evaluate current expression *)
     c := 0
-    if G.special_value_p(x) then
-      G.Acc := x
-    elsif G.symbol_p(x) then
-      m := lookup(x, G.Environment, true)
-      if G.Error_flag # 0 then
-        G.Acc := S9Types._UNDEFINED
+    if G.symbol_p(x) then
+      if cbn # 0 then
+        G.Acc := x
+        cbn := 0
       else
-        G.Acc := G.binding_value(m)
-        if G.Acc = S9Types._UNDEFINED then
-          G.error("symbol not bound", x)
+        G.Acc := lookup(x, G.Environment, true)
+        if G.Error_flag # 0 then
+          G.Acc := S9Types._UNDEFINED
+        else
+          G.Acc := G.binding_value(G.Acc)
+          if G.Acc = S9Types._UNDEFINED then
+            G.error("symbol not bound", x)
+          end
         end
       end
-    elsif G.auto_quoting_p(x) then
+    elsif G.auto_quoting_p(x) or (cbn = 2) then
       G.Acc := x
+      cbn := 0
     elsif G.pair_p(x) then
-      (* Application or special form *)
-      m := G.car(x)
-      if G.special_p(m) then
-        (* Special form *)
-        M.save(x)
-        save_state(s)
-        x := apply_special(x, @c, @s)
-        if c = 0 then
-          G.Acc := x
-          M.unsave(1)
-          s := restore_state()
+      (* (...) -> Value
+       * DESCEND into lists using rib = (args append result . source)
+       * Rib is saved on Stack, state on State_stack *)
+      G.Acc := x
+      x := G.car(G.Acc)
+      save_state(s)
+      if G.special_p(x) or (cbn # 0) then
+        (* Special forms and cbn: don't evaluate sub-expressions *)
+        cbn := 0
+        rib := M.cons(G.Acc, G.Acc)      (* result . source *)
+        rib := M.cons(S9Types._NIL, rib)  (* append *)
+        rib := M.cons(S9Types._NIL, rib)  (* args = NIL *)
+        if ~IO.proper_list_p(G.Acc) then
+          G.error("syntax error", G.Acc)
         end
-      elsif G.syntax_p(m) then
-        (* Macro application *)
-        M.save(x)
-        save_state(s)
-        s := sig(ord(S9Types.EV_MACRO_EXPAND))
-        c := 1
-        x := M.cons(G.cadr(m), G.cdr(x))
+        x := S9Types._NIL
       else
-        (* Procedure application *)
-        M.save(x)
-        save_state(s)
-        s := sig(ord(S9Types.EV_ARGS))
-        M.save(G.cdr(x))  (* Save argument list *)
-        M.save(S9Types._NIL)  (* Evaluated args accumulator *)
-        c := 1
-        x := m  (* Evaluate operator *)
+        (* Normal application: evaluate all sub-expressions *)
+        m := M.cons(S9Types._NIL, S9Types._NIL)  (* placeholder for first result *)
+        M.save(m)  (* protect from GC *)
+        rib := M.cons(m, G.Acc)            (* result . source *)
+        rib := M.cons(m, rib)              (* append *)
+        rib := M.cons(G.cdr(G.Acc), rib)  (* args *)
+        M.unsave(1)  (* unprotect placeholder *)
+        x := G.car(G.Acc)
       end
+      M.save(rib)
+      s := sig(ord(S9Types.EV_ARGS))
+      c := 3  (* skip ascent, go directly to next outer loop iteration *)
     else
       G.Acc := x
     end
     
-    (* Ascent: process evaluator states.
-       This inner loop continues processing states when c = 0
-       (result in Acc, need to process next state). It exits
-       when c # 0 (need to descend/evaluate new x) or when done. *)
+    if c = 3 then
+      c := 0
+    else
+    (* Ascent: process evaluator states *)
     loop
       if c # 0 then
-        exit  (* Need to evaluate new x, exit ascent loop *)
+        exit
       end
       
       if G.Error_flag # 0 then
@@ -815,93 +871,88 @@ begin
         return S9Types._UNDEFINED
       end
       
-      if s = sig(ord(S9Types.EV_ATOM)) then
-        if G.Stack = G.Stack_bottom then
-          (* Evaluation complete *)
-          G.Stack := G.Stack_bottom
-          G.Stack_bottom := M.unsave(1)
-          G.State_stack := M.unsave(1)
-          M.unsave(1)
-          return G.Acc
-        end
-        (* Returning from procedure body: restore environment and state *)
+      if s = sig(ord(S9Types.EV_BETA)) then
+        (* Finish BETA reduction *)
         G.Environment := M.unsave(1)
+        M.unsave(1)  (* source expression / rib *)
         s := restore_state()
-        c := 0  (* Continue ascent with result in Acc *)
       elsif s = sig(ord(S9Types.EV_ARGS)) then
-        (* Collecting arguments *)
-        m := G.car(G.Stack)  (* Evaluated args so far *)
-        m := M.cons(G.Acc, m)
-        G.Car[G.Stack] := m
-        n := G.cadr(G.Stack)  (* Remaining args *)
-        if n = S9Types._NIL then
-          (* All args evaluated, apply procedure *)
-          m := G.car(G.Stack)
-          (* Reverse the argument list *)
-          p := S9Types._NIL
-          while m # S9Types._NIL do
-            p := M.cons(G.car(m), p)
-            m := G.cdr(m)
-          end
-          M.unsave(2)  (* args accumulator, remaining args *)
-          x := M.unsave(1)  (* source expression *)
-          s := restore_state()
-          
-          (* p now contains (proc arg1 arg2 ...) *)
-          m := G.car(p)  (* The procedure *)
-          n := G.cdr(p)  (* The arguments *)
-          
-          if G.primitive_p(m) then
-            (* Call primitive *)
-            G.Acc := G.Primitives[val(int32, G.cadr(m))].handler(p)
-            if (val(int32, G.cadr(m)) = G.Apply_magic) or
-               (val(int32, G.cadr(m)) = G.Callcc_magic) then
-              (* apply/call-cc return a form to re-evaluate *)
-              x := G.Acc
-              c := 1  (* Descend to evaluate the returned form *)
-            else
-              c := 0  (* Result in Acc, continue ascent *)
+        (* Append to list, reduce *)
+        rib := G.car(G.Stack)
+        x := G.car(rib)              (* rib_args *)
+        a := G.cadr(rib)             (* rib_append *)
+        m2 := G.caddr(rib)           (* rib_result *)
+        if a # S9Types._NIL then     (* Append new member *)
+          G.Car[a] := G.Acc
+        end
+        if x = S9Types._NIL then     (* End of list *)
+          G.Acc := m2
+          name := G.car(G.cdddr(rib))  (* car(rib_source) *)
+          if G.primitive_p(G.car(G.Acc)) then
+            if val(int32, G.cadr(G.car(G.Acc))) = val(int32, G.Apply_magic) then
+              c := 1
+              cbn := 1
             end
-          elsif G.procedure_p(m) then
-            (* Apply user procedure *)
-            rib := bind_args(G.cadr(m), n)
-            if G.Error_flag # 0 then
-              c := 0
-            else
-              M.save(G.Environment)
-              save_state(s)
-              s := sig(ord(S9Types.EV_ATOM))
-              G.Environment := make_env(rib, G.cdddr(m))
-              x := G.caddr(m)
-              c := 1  (* Descend to evaluate body *)
+            if val(int32, G.cadr(G.car(G.Acc))) = val(int32, G.Callcc_magic) then
+              c := 1
+              cbn := 1
             end
-          elsif G.continuation_p(m) then
+            G.Acc := G.Primitives[val(int32, G.cadr(G.car(G.Acc)))].handler(G.Acc)
+            x := G.Acc
+          elsif G.special_p(G.car(G.Acc)) then
+            G.Acc := apply_special(G.Acc, @c, @s)
+            x := G.Acc
+          elsif G.procedure_p(G.car(G.Acc)) then
+            name := G.car(G.Acc)
+            if G.symbol_p(name) then
+              (* ok *)
+            else
+              name := S9Types._NIL
+            end
+            bind_arguments(G.Acc)
+            x := G.caddr(G.car(G.Acc))  (* caddar: body of closure *)
+            c := 2
+            s := sig(ord(S9Types.EV_BETA))
+          elsif G.continuation_p(G.car(G.Acc)) then
             (* Resume continuation *)
-            if n = S9Types._NIL then
-              too_few_args(p)
-            elsif G.cdr(n) # S9Types._NIL then
-              too_many_args(p)
+            if G.cdr(G.Acc) = S9Types._NIL then
+              too_few_args(G.Acc)
+            elsif G.cddr(G.Acc) # S9Types._NIL then
+              too_many_args(G.Acc)
             else
-              m := G.cdr(m)
+              m := G.cdr(G.car(G.Acc))
               G.Environment := G.car(m)
               G.State_stack := G.cadr(m)
               G.Stack_bottom := G.caddr(m)
               G.Stack := G.cadddr(m)
-              G.Acc := G.car(n)
+              G.Acc := G.cadr(G.Acc)
             end
-            c := 0  (* Continue ascent with restored state *)
           else
-            G.error("application of non-procedure", m)
-            c := 0
+            G.error("application of non-procedure", name)
+            x := S9Types._NIL
           end
+          if c # 2 then
+            M.unsave(1)  (* drop rib *)
+            s := restore_state()
+          end
+          if c # 0 then
+            exit  (* Leave ascending loop, descend into x *)
+          end
+        elsif G.atom_p(x) then
+          G.error("syntax error", G.cdddr(rib))
+          x := S9Types._NIL
+          exit
         else
-          (* More args to evaluate *)
-          G.Car[G.cdr(G.Stack)] := G.cdr(n)
-          x := G.car(n)
-          c := 1  (* Descend to evaluate next arg *)
+          (* More args to evaluate: create space for next *)
+          G.Acc := M.cons(S9Types._NIL, S9Types._NIL)
+          G.Cdr[a] := G.Acc
+          G.Car[G.cdr(rib)] := G.cdr(a)   (* rib_append = cdr(a) *)
+          G.Car[rib] := G.cdr(x)          (* rib_args = cdr(x) *)
+          x := G.car(x)
+          exit  (* Leave ascending loop, evaluate next member *)
         end
       elsif s = sig(ord(S9Types.EV_IF_PRED)) then
-        m := M.unsave(1)  (* (pred conseq alt) *)
+        m := M.unsave(1)
         M.unsave(1)  (* source expression *)
         s := restore_state()
         if G.Acc # S9Types._FALSE then
@@ -909,37 +960,26 @@ begin
         else
           x := G.caddr(m)
         end
-        c := 1  (* Descend to evaluate branch *)
-      elsif s = sig(ord(S9Types.EV_AND)) then
-        m := G.car(G.Stack)
-        if G.Acc = S9Types._FALSE then
+        c := 1
+        exit
+      elsif (s = sig(ord(S9Types.EV_AND))) or (s = sig(ord(S9Types.EV_OR))) then
+        G.Stack := M.cons(G.cdar(G.Stack), G.cdr(G.Stack))
+        if ((G.Acc = S9Types._FALSE) & (s = sig(ord(S9Types.EV_AND)))) or
+           ((G.Acc # S9Types._FALSE) & (s = sig(ord(S9Types.EV_OR)))) or
+           (G.car(G.Stack) = S9Types._NIL) then
           M.unsave(2)
           s := restore_state()
-          c := 0  (* Short-circuit, continue ascent *)
-        elsif G.cdr(m) = S9Types._NIL then
+          x := G.Acc
+          cbn := 2
+        elsif G.cdar(G.Stack) = S9Types._NIL then
+          x := G.caar(G.Stack)
           M.unsave(2)
           s := restore_state()
-          c := 0  (* Last element done, continue ascent *)
         else
-          G.Car[G.Stack] := G.cdr(m)
-          x := G.cadr(m)
-          c := 1  (* Descend to evaluate next element *)
+          x := G.caar(G.Stack)
         end
-      elsif s = sig(ord(S9Types.EV_OR)) then
-        m := G.car(G.Stack)
-        if G.Acc # S9Types._FALSE then
-          M.unsave(2)
-          s := restore_state()
-          c := 0  (* Short-circuit, continue ascent *)
-        elsif G.cdr(m) = S9Types._NIL then
-          M.unsave(2)
-          s := restore_state()
-          c := 0  (* Last element done, continue ascent *)
-        else
-          G.Car[G.Stack] := G.cdr(m)
-          x := G.cadr(m)
-          c := 1  (* Descend to evaluate next element *)
-        end
+        c := 1
+        exit
       elsif s = sig(ord(S9Types.EV_COND)) then
         if G.Acc # S9Types._FALSE then
           x := G.cdaar(G.Stack)
@@ -971,7 +1011,8 @@ begin
             x := S9Types._TRUE
           end
         end
-        c := 1  (* Descend to evaluate cond result/next clause *)
+        c := 1
+        exit
       elsif s = sig(ord(S9Types.EV_BEGIN)) then
         G.Stack := M.cons(G.cdar(G.Stack), G.cdr(G.Stack))
         if G.cdar(G.Stack) = S9Types._NIL then
@@ -981,7 +1022,8 @@ begin
         else
           x := G.caar(G.Stack)
         end
-        c := 1  (* Descend to evaluate next expression *)
+        c := 1
+        exit
       elsif (s = sig(ord(S9Types.EV_SET_VAL))) or (s = sig(ord(S9Types.EV_MACRO))) then
         if s = sig(ord(S9Types.EV_MACRO)) then
           if G.procedure_p(G.Acc) then
@@ -995,26 +1037,32 @@ begin
         M.unsave(1)
         s := restore_state()
         G.set_box_value(x, G.Acc)
+        x := S9Types._UNSPECIFIC
         G.Acc := S9Types._UNSPECIFIC
-        c := 0  (* Continue ascent *)
+        c := 0
+        exit
       elsif s = sig(ord(S9Types.EV_MACRO_EXPAND)) then
-        (* Macro expansion complete, evaluate result *)
         M.unsave(1)
         s := restore_state()
         x := G.Acc
-        c := 1  (* Descend to evaluate expanded form *)
+        c := 1
+        exit
       else
-        (* Unknown state *)
-        if G.Stack = G.Stack_bottom then
-          G.Stack := G.Stack_bottom
-          G.Stack_bottom := M.unsave(1)
-          G.State_stack := M.unsave(1)
-          M.unsave(1)
-          return G.Acc
-        end
+        (* s = EV_ATOM *)
         exit
       end
     end  (* ascent loop *)
+    if c # 0 then
+      c := 0
+    elsif G.Stack = G.Stack_bottom then
+      (* done *)
+      G.Stack := G.Stack_bottom
+      G.Stack_bottom := M.unsave(1)
+      G.State_stack := M.unsave(1)
+      M.unsave(1)
+      return G.Acc
+    end
+    end  (* if c=3 else *)
   end
   
   G.Stack := G.Stack_bottom
@@ -1065,7 +1113,8 @@ begin
       M.save(x)
       app := M.cons(G.cdr(G.binding_value(y)), G.cdr(x))
       M.unsave(1)
-      return xeval(app, 1)
+      y := xeval(app, 1)
+      return y
     end
   end
   (*
@@ -1101,14 +1150,22 @@ end expand_syntax_1
 
 (* Expand syntax (macros) in an expression - outer loop *)
 procedure expand_syntax*(x: S9Types.cell): S9Types.cell
+var
+  loops: int32
 begin
   if (G.Error_flag # 0) or G.atom_p(x) or (G.car(x) = G.S_quote) then
     return x
   end
   M.save(x)
+  loops := 0
   loop
     if G.Error_flag # 0 then exit end
     if ~uses_transformer_p(x) then exit end
+    inc(loops)
+    if loops > 100 then
+      G.error("expand_syntax: expansion limit exceeded", x)
+      exit
+    end
     x := expand_syntax_1(x)
     G.Car[G.Stack] := x
   end

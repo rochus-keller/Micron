@@ -882,7 +882,7 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
     for (int i = 0; i < params.size(); i++) {
         Type* t = params[i]->getType();
         int size = t->getByteSize(ptrwidth);
-        pushedSize += qMax(size, (int)stackalig);
+        pushedSize += d_code.stackAligned(qMax(size, (int)stackalig)); // TODO: test
     }
 
     quint32 alignedSize = 0;
@@ -917,7 +917,7 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
     for (int i = 0; i < params.size(); i++) {
         Type* t = params[i]->getType();
         int size = t->getByteSize(ptrwidth);
-        int ssize = qMax(size, (int)stackalig);
+        int ssize = d_code.stackAligned(qMax(size, (int)stackalig));
         pinfo[i].contigOff = coff;
         pinfo[i].size = ssize;
         coff += ssize;

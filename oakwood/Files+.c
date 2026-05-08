@@ -69,6 +69,8 @@ unsigned char Files$Read(struct Files$Handle* f, unsigned char* x)
 
 unsigned char Files$Write(struct Files$Handle* f, unsigned char x)
 {
+    assert(f);
+    assert(f->f);
     const int count = fwrite(&x, 1, 1, f->f);
     return count == 1;
 }

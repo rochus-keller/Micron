@@ -1092,6 +1092,7 @@ QString Project2::writeC(const QString& where, const QString &what, const QStrin
     QDir dir(out);
     const bool a = QFile::copy(QString(":/%1/%2.h").arg(where).arg(what), dir.absoluteFilePath(what+".h"));
     const QString to = dir.absoluteFilePath(what+"+.c");
+    QFile::remove(to);
     const bool b = QFile::copy(QString(":/%1/%2+.c").arg(where).arg(what), to);
     return to;
     // qDebug() << what << a << b;
