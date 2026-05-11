@@ -181,7 +181,9 @@ static inline bool FIRST_Expression(int tt) {
     case Tok_CALLMI:
 	case Tok_LDC_I4_1:
 	case Tok_NEWARR:
-	case Tok_LDIND_R4:
+    case Tok_NEWARR0:
+    case Tok_NEWARRGC:
+    case Tok_LDIND_R4:
 	case Tok_CALLVIRT:
 	case Tok_LDC_I4_4:
 	case Tok_DIV:
@@ -228,7 +230,10 @@ static inline bool FIRST_Expression(int tt) {
 	case Tok_CONV_I4:
 	case Tok_LDARG:
 	case Tok_NEWOBJ:
-	case Tok_DIV_UN:
+    case Tok_NEWOBJ0:
+    case Tok_NEWOBJGC:
+    case Tok_GETREG:
+    case Tok_DIV_UN:
 	case Tok_LDELEM_I1:
 	case Tok_REM_UN:
 	case Tok_ISINST:
@@ -304,7 +309,9 @@ static inline bool FIRST_ExpInstr(int tt) {
     case Tok_CALLMI:
 	case Tok_LDC_I4_1:
 	case Tok_NEWARR:
-	case Tok_LDIND_R4:
+    case Tok_NEWARR0:
+    case Tok_NEWARRGC:
+    case Tok_LDIND_R4:
 	case Tok_CALLVIRT:
 	case Tok_LDC_I4_4:
 	case Tok_DIV:
@@ -351,7 +358,10 @@ static inline bool FIRST_ExpInstr(int tt) {
 	case Tok_CONV_I4:
 	case Tok_LDARG:
 	case Tok_NEWOBJ:
-	case Tok_DIV_UN:
+    case Tok_NEWOBJ0:
+    case Tok_NEWOBJGC:
+    case Tok_GETREG:
+    case Tok_DIV_UN:
 	case Tok_LDELEM_I1:
 	case Tok_REM_UN:
 	case Tok_ISINST:
@@ -448,6 +458,9 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_STELEM_R4:
 	case Tok_LDARG_2:
 	case Tok_GOTO:
+    case Tok_CLI:
+    case Tok_STI:
+    case Tok_PUTREG:
     case Tok_CALLMI:
 	case Tok_LDELEMA:
 	case Tok_DUP:
@@ -503,7 +516,9 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_STELEM:
 	case Tok_LDIND_I2:
 	case Tok_NEWARR:
-	case Tok_LDVAR:
+    case Tok_NEWARR0:
+    case Tok_NEWARRGC:
+    case Tok_LDVAR:
 	case Tok_CALL:
 	case Tok_STIND_R8:
 	case Tok_REM_UN:
@@ -543,7 +558,10 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_LDELEM_R4:
 	case Tok_LDSTR:
 	case Tok_NEWOBJ:
-	case Tok_STLOC_2:
+    case Tok_NEWOBJ0:
+    case Tok_NEWOBJGC:
+    case Tok_GETREG:
+    case Tok_STLOC_2:
 	case Tok_SHL:
 	case Tok_LDLOC_1:
 	case Tok_STIND_IPP:
@@ -583,7 +601,10 @@ static inline bool FIRST_Statement(int tt) {
 	case Tok_STLOC_2:
 	case Tok_STLOC_3:
 	case Tok_GOTO:
-	case Tok_LOOP:
+    case Tok_CLI:
+    case Tok_STI:
+    case Tok_PUTREG:
+    case Tok_LOOP:
 	case Tok_STLOC_0:
 	case Tok_STIND_R8:
 	case Tok_STELEM_I1:
@@ -857,6 +878,13 @@ qint64 Parser2::integer() {
         return -i;
     else
         return i;
+}
+
+quint64 Parser2::uinteger()
+{
+    expect(Tok_unsigned, false, "integer");
+    const quint64 i = cur.d_val.toULongLong();
+    return i;
 }
 
 void Parser2::number(Constant* c) {
@@ -1421,7 +1449,11 @@ void Parser2::ProcedureDeclaration() {
 				} else if( la.d_code == Tok_INIT ) {
 					expect(Tok_INIT, true, "ProcedureDeclaration");
                     p->entryPoint = true;
-				} else
+                } else if( la.d_code == Tok_ENTRY ) {
+                    expect(Tok_ENTRY, true, "ProcedureDeclaration");
+                    p->entryPoint = true;
+                    p->inline_ = true;
+                } else
 					invalid("ProcedureDeclaration");
 			}
 			if( la.d_type == Tok_Semi ) {
@@ -1885,6 +1917,10 @@ Expression* Parser2::ExpInstr() {
     } else if( la.d_code == Tok_DUP ) {
         expect(Tok_DUP, true, "ExpInstr");
         res->kind = IL_dup;
+    } else if( la.d_code == Tok_GETREG ) {
+            expect(Tok_GETREG, true, "ExpInstr");
+            res->kind = IL_getreg;
+            res->id = uinteger();
 #if 0
         // obsolete
     } else if( la.d_code == Tok_INITOBJ ) {
@@ -2211,6 +2247,18 @@ Expression* Parser2::ExpInstr() {
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl ) // element type
             error(cur, "expecting a type declaration");
+    } else if( la.d_code == Tok_NEWARR0 ) {
+        expect(Tok_NEWARR0, true, "ExpInstr");
+        res->kind = IL_newarr0;
+        res->d = qualident();
+        if( res->d && res->d->kind != Declaration::TypeDecl ) // element type
+            error(cur, "expecting a type declaration");
+    } else if( la.d_code == Tok_NEWARRGC ) {
+        expect(Tok_NEWARRGC, true, "ExpInstr");
+        res->kind = IL_newarrgc;
+        res->d = qualident();
+        if( res->d && res->d->kind != Declaration::TypeDecl ) // element type
+            error(cur, "expecting a type declaration");
     } else if( la.d_code == Tok_NEWVLA ) {
         expect(Tok_NEWVLA, true, "ExpInstr");
         res->kind = IL_newvla;
@@ -2220,6 +2268,22 @@ Expression* Parser2::ExpInstr() {
     } else if( la.d_code == Tok_NEWOBJ ) {
         expect(Tok_NEWOBJ, true, "ExpInstr");
         res->kind = IL_newobj;
+        res->d = qualident();
+        if( res->d && res->d->kind != Declaration::TypeDecl &&
+                res->d->getType() && res->d->getType()->kind != Type::Object &&
+                res->d->getType()->kind != Type::Struct && res->d->getType()->kind != Type::Union )
+            error(cur, "expecting a struct, union or object declaration");
+    } else if( la.d_code == Tok_NEWOBJ0 ) {
+        expect(Tok_NEWOBJ0, true, "ExpInstr");
+        res->kind = IL_newobj0;
+        res->d = qualident();
+        if( res->d && res->d->kind != Declaration::TypeDecl &&
+                res->d->getType() && res->d->getType()->kind != Type::Object &&
+                res->d->getType()->kind != Type::Struct && res->d->getType()->kind != Type::Union )
+            error(cur, "expecting a struct, union or object declaration");
+    } else if( la.d_code == Tok_NEWOBJGC ) {
+        expect(Tok_NEWOBJGC, true, "ExpInstr");
+        res->kind = IL_newobjgc;
         res->d = qualident();
         if( res->d && res->d->kind != Declaration::TypeDecl &&
                 res->d->getType() && res->d->getType()->kind != Type::Object &&
@@ -2378,6 +2442,15 @@ Statement* Parser2::Statement_()
     } else if( la.d_code == Tok_EXIT ) {
         expect(Tok_EXIT, true, "Statement");
         res->kind = IL_exit;
+    } else if( la.d_code == Tok_CLI ) {
+        expect(Tok_CLI, true, "Statement");
+        res->kind = IL_cli;
+    } else if( la.d_code == Tok_STI ) {
+        expect(Tok_STI, true, "Statement");
+        res->kind = IL_sti;
+    } else if( la.d_code == Tok_EXIT ) {
+        expect(Tok_EXIT, true, "Statement");
+        res->kind = IL_exit;
     } else if( la.d_code == Tok_GOTO ) {
         expect(Tok_GOTO, true, "Statement");
         res->kind = IL_goto;
@@ -2391,6 +2464,10 @@ Statement* Parser2::Statement_()
     } else if( la.d_code == Tok_POP ) {
         expect(Tok_POP, true, "Statement");
         res->kind = IL_pop;
+    } else if( la.d_code == Tok_PUTREG ) {
+        expect(Tok_PUTREG, true, "Statement");
+        res->kind = IL_putreg;
+        res->id = uinteger();
     } else if( la.d_code == Tok_RET ) {
         expect(Tok_RET, true, "Statement");
         res->kind = IL_ret;

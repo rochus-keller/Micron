@@ -26,7 +26,7 @@ using namespace Mil;
 
 // NOTE: removed all INTPTR from the checks. There should never be an actual INTPTR type on stack since there is no conv_ip
 
-Validator::Validator(AstModel* m):mdl(m),curMod(0),curProc(0),needsPointerInit(true)
+Validator::Validator(AstModel* m):mdl(m),curMod(0),curProc(0),needsPointerInit(true),entryPointFound(false)
 {
 
 }
@@ -152,6 +152,14 @@ void Validator::visitProcedure(Declaration* proc)
     }
     curProc = proc;
     stack.clear();
+
+    if( proc->entryPoint )
+    {
+        if( entryPointFound )
+            error(proc, "the module has more than one entry point");
+        entryPointFound = true;
+    }
+
     if( proc->typebound )
     {
         DeclList params = proc->getParams();

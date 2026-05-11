@@ -60,6 +60,7 @@ namespace Mil {
 			R_number,
 			R_qortrident,
 			R_qualident,
+			R_regwidth,
 			R_trident,
 			R_type,
 			R_Last

@@ -32,6 +32,7 @@ namespace Mil {
 		void trident(SynTree*);
 		void qortrident(SynTree*);
 		void identdef(SynTree*);
+		void regwidth(SynTree*);
 		void Line(SynTree*);
 		void ConstDeclaration(SynTree*);
 		void TypeDeclaration(SynTree*);

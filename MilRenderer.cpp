@@ -362,6 +362,9 @@ void IlAsmRenderer::render(const ProcData& m)
     case ProcData::ModuleInit:
         out << " init ";
         break;
+    case ProcData::ModuleEntry:
+        out << " entry ";
+        break;
     case ProcData::Forward:
         out << " forward ";
         break;
@@ -845,6 +848,10 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
             break;
         case ProcData::ModuleInit:
             decl->entryPoint = true;
+            break;
+        case ProcData::ModuleEntry:
+            decl->entryPoint = true;
+            decl->inline_ = true;
             break;
         }
 

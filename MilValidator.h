@@ -86,6 +86,7 @@ namespace Mil
         QList<NamePos> gotos, labels;
 
         bool needsPointerInit;
+        bool entryPointFound;
     };
 }
 

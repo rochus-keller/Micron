@@ -62,7 +62,9 @@ namespace Mil
                 type(type),name(name),isPublic(0),bits(0),line(line){}
         };
 
-        enum Kind { Invalid, Intrinsic, Normal, Forward, Extern, Foreign, Abstract, Inline, Invar, ModuleInit, ProcType, MethType };
+        enum Kind { Invalid, Normal, Forward, Extern, Foreign, Abstract, Inline, Invar, ModuleInit, ModuleEntry, ProcType, MethType };
+        // NOTE: Abstract is not required by frontend, but automatically set by Renderer for procs bound to interfaces
+        // NOTE: ENTRY is like INIT, but assumed INLINE, and all called procedures must be INLINE
         uint kind : 4;
         uint isPublic : 1;
         quint32 endLine;

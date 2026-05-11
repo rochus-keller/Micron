@@ -424,10 +424,10 @@ QList<Declaration*> Type::findInlined(const QByteArray &name, bool recurseSuper)
 {
     foreach( Declaration* d, subs)
     {
-        if(d->inline_ && (d->kind == Declaration::Field || d->kind == Declaration::Variant))
+        if(d->inline_ && (d->kind == Declaration::Field || d->kind == Declaration::Variant || d->kind == Declaration::Procedure))
         {
             Declaration* dd = d->getType()->findMember(name, recurseSuper);
-            if( dd && (dd->kind == Declaration::Field || dd->kind == Declaration::Variant))
+            if( dd && (dd->kind == Declaration::Field || dd->kind == Declaration::Variant || dd->kind == Declaration::Procedure))
                 return QList<Declaration*>() << d << dd;
             QList<Declaration *> res = d->getType()->findInlined(name, recurseSuper);
             if( !res.isEmpty() )

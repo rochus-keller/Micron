@@ -3780,6 +3780,7 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
 
     QList<quint32> initSymbols;
     for (int i = 0; i < moduleNames.size(); i++) {
+        // TODO: consider inline entry points which need a calling convention not depending on a stack
         QByteArray symName = moduleNames[i] + "$begin$";
         quint32 symIdx = elf.addSymbol(symName, 0, 0, 0, STB_GLOBAL, STT_FUNC);
         initSymbols.append(symIdx);

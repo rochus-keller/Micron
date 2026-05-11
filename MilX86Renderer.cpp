@@ -667,6 +667,7 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
     // Create external symbols for each module's init procedure
     QList<quint32> initSymbols;
     for (int i = 0; i < moduleNames.size(); i++) {
+        // TODO: consider inline entry points which need a calling convention not depending on a stack
         QByteArray symName = moduleNames[i] + "$begin$";
         quint32 symIdx = elf.addSymbol(symName, 0, 0, 0, STB_GLOBAL, STT_FUNC);
         initSymbols.append(symIdx);
@@ -1650,10 +1651,9 @@ int Renderer::emitOp(Procedure& proc, int pc)
         em.fstp_s(ESP, 0);   // store result
         return 1;
     case LL_sub_r4:
-        em.fld_s(ESP, 4);    // ST(0) = a
-        em.fld_s(ESP, 0);    // ST(0) = b, ST(1) = a
-        em.fxch();            // ST(0) = a, ST(1) = b
-        em.fsubp();           // ST(0) = a - b
+        em.fld_s(ESP, 4);    // a
+        em.fld_s(ESP, 0);    // b (ST(0)=b, ST(1)=a)
+        em.fsubp();           // ST(1)-ST(0) = a - b
         em.add_ri(ESP, 4);
         em.fstp_s(ESP, 0);
         return 1;
@@ -1666,9 +1666,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
     case LL_div_r4:
         em.fld_s(ESP, 4);    // a
-        em.fld_s(ESP, 0);    // b
-        em.fxch();            // ST(0)=a, ST(1)=b
-        em.fdivp();           // a / b
+        em.fld_s(ESP, 0);    // b (ST(0)=b, ST(1)=a)
+        em.fdivp();           // ST(1)/ST(0) = a / b
         em.add_ri(ESP, 4);
         em.fstp_s(ESP, 0);
         return 1;
@@ -1693,9 +1692,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
     case LL_sub_r8:
         em.fld_d(ESP, 8);    // a
-        em.fld_d(ESP, 0);    // b
-        em.fxch();
-        em.fsubp();
+        em.fld_d(ESP, 0);    // b (ST(0)=b, ST(1)=a)
+        em.fsubp();           // ST(1)-ST(0) = a - b
         em.add_ri(ESP, 8);
         em.fstp_d(ESP, 0);
         return 1;
@@ -1707,10 +1705,9 @@ int Renderer::emitOp(Procedure& proc, int pc)
         em.fstp_d(ESP, 0);
         return 1;
     case LL_div_r8:
-        em.fld_d(ESP, 8);
-        em.fld_d(ESP, 0);
-        em.fxch();
-        em.fdivp();
+        em.fld_d(ESP, 8);    // a
+        em.fld_d(ESP, 0);    // b (ST(0)=b, ST(1)=a)
+        em.fdivp();           // ST(1)/ST(0) = a / b
         em.add_ri(ESP, 8);
         em.fstp_d(ESP, 0);
         return 1;

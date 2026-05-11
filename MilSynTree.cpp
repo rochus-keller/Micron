@@ -59,6 +59,7 @@ const char* SynTree::rToStr( quint16 r ) {
 		case R_number: return "number";
 		case R_qortrident: return "qortrident";
 		case R_qualident: return "qualident";
+		case R_regwidth: return "regwidth";
 		case R_trident: return "trident";
 		case R_type: return "type";
 	default: if(r<R_First) return tokenTypeName(r); else return "";

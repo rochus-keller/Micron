@@ -761,9 +761,10 @@ void Parser2::replaceAll(Declaration * d, Type *what, Type *by)
         d->setType(by);
 }
 
-Expression *Parser2::createSelector(Declaration *field, Expression *prev, bool needsLvalue, const RowCol &pos)
+Expression *Parser2::createSelector(Declaration *field, Expression *prev, bool needsLvalue, const RowCol &pos, bool mark)
 {
-    markRef(field, cur.toRowCol(), needsLvalue ? Symbol::Lval : 0);
+    if( mark )
+        markRef(field, cur.toRowCol(), needsLvalue ? Symbol::Lval : 0);
     Expression::Kind k = Expression::FieldSelect;
 
     if( field->kind == Declaration::Procedure )
@@ -1106,7 +1107,7 @@ void Parser2::ForwardDeclaration()
     procedure();
     expect(Tok_Hat, false, "ProcedureDeclaration");
 
-    Declaration* procDecl = ProcedureHeader(true);
+    Declaration* procDecl = ProcedureHeader(true, 0);
     if( procDecl == 0 )
         return;
     procDecl->kind = Declaration::ForwardDecl;
@@ -2362,17 +2363,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                     path << field;
                 for(int i = 0; i < path.size(); i++ )
                 {
-#if 0               // not necessary, we generate accessor code on the fly
-                    if( res->getType()->kind == Type::Record && path[i]->kind == Declaration::Variant )
-                    {
-                        // check if there is a "union" access in the path and prefix it with the synthetic "union name $"
-                        Expression* tmp = Expression::create(Expression::FieldSelect, tok.toRowCol() );
-                        tmp->lhs = res;
-                        tmp->setType(path[i]->getType());
-                        res = tmp;
-                    }
-#endif
-                    res = createSelector(path[i], res, needsLvalue, tok.toRowCol());
+                    res = createSelector(path[i], res, needsLvalue, tok.toRowCol(), i == path.size()-1);
                 }
             }else
             {
@@ -3161,6 +3152,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
             res = res2;
         }else if( constrType->isPointerProcType())
         {
+            // TODO: should we restrict pointer literals to level 0 to 2?
             if( !res->getType()->isUInt() )
                 error(res->pos, "expecting unsigned integer to initialize pointer or procedure type");
         }
@@ -3364,6 +3356,7 @@ void Parser2::IfStatement() {
 	expect(Tok_IF, true, "IfStatement");
     line(cur).if_();
     Token t = la;
+
     Expression* cond = expression(0);
     if( cond )
         Evaluator::bindUniInt(cond->lhs, cond->rhs, ev);
@@ -3776,7 +3769,7 @@ Type* Parser2::ProcedureType() {
     return p;
 }
 
-Declaration* Parser2::ProcedureHeader(bool inForward) {
+Declaration* Parser2::ProcedureHeader(bool inForward, QByteArray* rt) {
     NameAndType receiver;
     bool autoself = false;
     if( FIRST_Receiver(la.d_type) ) {
@@ -3790,6 +3783,9 @@ Declaration* Parser2::ProcedureHeader(bool inForward) {
         receiver = Receiver2();
         autoself = true;
     }
+
+    if( !receiver.tn.d_val.isEmpty() && rt )
+        *rt = receiver.tn.d_val;
 
     const IdentDef id = identdef();
     if( !id.isValid() )
@@ -3894,7 +3890,8 @@ void Parser2::ProcedureDeclaration() {
         // inlined ProcedureHeading();
         procedure();
 
-        Declaration* procDecl = ProcedureHeader(false);
+        QByteArray receiverType;
+        Declaration* procDecl = ProcedureHeader(false, &receiverType);
         if( procDecl == 0 )
             return;
 
@@ -3988,6 +3985,16 @@ void Parser2::ProcedureDeclaration() {
             block();
             expect(Tok_END, true, "ProcedureBody");
             out->endProc(la.toRowCol());
+
+            if( la.d_type == Tok_ident && peek(2).d_type == Tok_Dot )
+            {
+                expect(Tok_ident, false, "ProcedureBody");
+                if( receiverType.constData() != cur.d_val.constData() )
+                    error(cur, QString("prefix of name after END must correspond with the receiver type") );
+                else
+                    markRef(procDecl->outer, cur.toRowCol(), Symbol::End);
+                expect(Tok_Dot, false, "ProcedureBody");
+            }
             expect(Tok_ident, false, "ProcedureBody");
             if( procDecl->name.constData() != cur.d_val.constData() )
                 error(cur, QString("name after END differs from procedure name") );
@@ -4013,7 +4020,7 @@ Parser2::NameAndType Parser2::Receiver() {
     res.id = cur;
     expect(Tok_Colon, false, "Receiver");
     expect(Tok_ident, false, "Receiver");
-    const Token type = cur;
+    res.tn = cur;
     Declaration* d = findDecl(cur);
     if( d == 0 )
         return res; // already reported
@@ -4022,12 +4029,12 @@ Parser2::NameAndType Parser2::Receiver() {
             (d->getType()->kind == Type::Pointer && ( d->getType()->getType() == 0 ||
                                                       d->getType()->getType()->kind != Type::Object)))
     {
-        error(type, "receiver must be an object or pointer to object type");
+        error(res.tn, "receiver must be an object or pointer to object type");
         return res;
     }else
         res.t = d->getType(); // res is an object or pointer to object
     expect(Tok_Rpar, false, "Receiver");
-    markRef(d, type.toRowCol());
+    markRef(d, res.tn.toRowCol());
     return res;
 }
 
@@ -4037,7 +4044,7 @@ Parser2::NameAndType Parser2::Receiver2()
     res.id = la;
     res.id.d_val = self;
     expect(Tok_ident, false, "Receiver");
-    const Token type = cur;
+    res.tn = cur;
     Declaration* cls = findDecl(cur);
     if( cls == 0 )
         return res; // already reported
@@ -4046,11 +4053,11 @@ Parser2::NameAndType Parser2::Receiver2()
             (cls->getType()->kind == Type::Pointer &&
                 ( cls->getType()->getType() == 0 || (cls->getType()->getType()->kind != Type::Object && cls->getType()->getType()->kind != Type::Record))))
     {
-        error(type, "receiver must be an object or record or pointer to object or record type");
+        error(res.tn, "receiver must be an object or record or pointer to object or record type");
         return res;
     }else
         res.t = cls->getType(); // res is an object or pointer to object
-    markRef(cls, type.toRowCol());
+    markRef(cls, res.tn.toRowCol());
     expect(Tok_Dot, false, "Receiver");
     return res;
 }
@@ -4393,7 +4400,7 @@ void Parser2::module(const Import & import) {
         id.visi = Node::Private;
         Declaration* procDecl = addDecl(id, Declaration::Procedure);
         mdl->openScope(procDecl);
-        out->beginProc("begin$", la.toRowCol(),0, Mil::ProcData::ModuleInit);
+        out->beginProc("begin$", la.toRowCol(),0, langLevel == 0 ? Mil::ProcData::ModuleEntry : Mil::ProcData::ModuleInit);
         resolveDeferreds();
         block();
         out->endProc(RowCol());

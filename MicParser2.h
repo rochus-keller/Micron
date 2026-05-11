@@ -127,6 +127,7 @@ namespace Mic {
         struct NameAndType{
             Token id;
             Type* t;
+            Token tn;
             NameAndType():t(0){}
         };
         NameAndType Receiver();
@@ -194,7 +195,7 @@ namespace Mic {
         bool checkUnaryOp(Expression*);
         bool checkRelOp(Expression*);
         void beginFinallyEnd(bool finally, const RowCol &pos);
-        Declaration* ProcedureHeader(bool inForward);
+        Declaration* ProcedureHeader(bool inForward, QByteArray *);
         Mil::Emitter& line(const RowCol&);
         Mil::Emitter& line(const Token&);
         Symbol *markDecl(Declaration* d);
@@ -202,7 +203,7 @@ namespace Mic {
         void checkPointerResolved(Type*);
         void replaceAll(Type* what, Type* by);
         void replaceAll(Declaration*,Type* what, Type* by);
-        Expression* createSelector(Declaration* field, Expression* prev, bool needsLvalue, const RowCol& pos);
+        Expression* createSelector(Declaration* field, Expression* prev, bool needsLvalue, const RowCol& pos, bool mark);
         Type* getGuardedType(Declaration* d);
 
     private:

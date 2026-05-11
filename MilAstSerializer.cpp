@@ -399,7 +399,7 @@ static void renderProc(const Declaration* p, AbstractRenderer* r, AstSerializer:
         proc.endLine = lineout(p->pd->end, dbi);
 
     if( p->entryPoint )
-        proc.kind = ProcData::ModuleInit;
+        proc.kind = p->inline_ ? ProcData::ModuleEntry : ProcData::ModuleInit;
     else if(p->extern_ )
         proc.kind = ProcData::Extern;
     else if(p->forward )

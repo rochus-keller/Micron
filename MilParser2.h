@@ -50,6 +50,7 @@ namespace Mil {
 		QList<Error> errors;
 	protected:
         qint64 integer();
+        quint64 uinteger();
         void number(Constant* c);
         Declaration* qualident(Quali* = 0);
         Declaration* trident(bool maybeQuali = false);
