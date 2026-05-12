@@ -934,15 +934,16 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
         pushedSize += d_code.stackAligned(qMax(size, (int)sa));
     }
 
-    // Compute aligned argsSize by replicating calcParamsLocalsLayout logic
+    // Compute aligned argsSize by replicating calcParamsLocalsLayout logic.
+    // NOTE: calcParamsLocalsLayout no longer inserts alignment padding between
+    // parameters; it packs them densely (each rounded up to stackAlignment).
+    // We must do the same here.
     quint32 alignedSize = 0;
     {
         int off_p = 0;
         for (int i = 0; i < params.size(); i++) {
             Type* t = params[i]->getType();
             int size = t->getByteSize(pw);
-            int alig = t->getAlignment(pw);
-            off_p += AstModel::padding(off_p, alig);
             off_p += qMax(size, (int)sa);
         }
         alignedSize = d_code.stackAligned(off_p);
@@ -981,14 +982,13 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
         coff += ssize;
     }
 
-    // Aligned offsets (from new ESP, matching callee's expected layout)
+    // Aligned offsets (from new ESP, matching callee's expected layout).
+    // Must match calcParamsLocalsLayout: dense packing, no alignment padding.
     {
         int off_p = 0;
         for (int i = 0; i < params.size(); i++) {
             Type* t = params[i]->getType();
             int size = t->getByteSize(pw);
-            int alig = t->getAlignment(pw);
-            off_p += AstModel::padding(off_p, alig);
             pinfo[i].alignedOff = off_p;
             off_p += qMax(size, (int)sa);
         }

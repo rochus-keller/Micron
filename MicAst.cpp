@@ -426,10 +426,13 @@ QList<Declaration*> Type::findInlined(const QByteArray &name, bool recurseSuper)
     {
         if(d->inline_ && (d->kind == Declaration::Field || d->kind == Declaration::Variant || d->kind == Declaration::Procedure))
         {
-            Declaration* dd = d->getType()->findMember(name, recurseSuper);
+            Type* t = d->getType();
+            if( t == 0 )
+                continue;
+            Declaration* dd = t->findMember(name, recurseSuper);
             if( dd && (dd->kind == Declaration::Field || dd->kind == Declaration::Variant || dd->kind == Declaration::Procedure))
                 return QList<Declaration*>() << d << dd;
-            QList<Declaration *> res = d->getType()->findInlined(name, recurseSuper);
+            QList<Declaration*> res = t->findInlined(name, recurseSuper);
             if( !res.isEmpty() )
             {
                 res.prepend(d);

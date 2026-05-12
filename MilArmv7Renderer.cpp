@@ -885,14 +885,15 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
         pushedSize += d_code.stackAligned(qMax(size, (int)stackalig)); // TODO: test
     }
 
+    // NOTE: calcParamsLocalsLayout no longer inserts alignment padding between
+    // parameters; it packs them densely (each rounded up to stackAlignment).
+    // We must do the same here.
     quint32 alignedSize = 0;
     {
         int off_p = 0;
         for (int i = 0; i < params.size(); i++) {
             Type* t = params[i]->getType();
             int size = t->getByteSize(ptrwidth);
-            int alig = t->getAlignment(ptrwidth);
-            off_p += AstModel::padding(off_p, alig);
             off_p += qMax(size, (int)stackalig);
         }
         alignedSize = d_code.stackAligned(off_p);
@@ -923,13 +924,12 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
         coff += ssize;
     }
 
+    // Must match calcParamsLocalsLayout: dense packing, no alignment padding.
     {
         int off_p = 0;
         for (int i = 0; i < params.size(); i++) {
             Type* t = params[i]->getType();
             int size = t->getByteSize(ptrwidth);
-            int alig = t->getAlignment(ptrwidth);
-            off_p += AstModel::padding(off_p, alig);
             pinfo[i].alignedOff = off_p;
             off_p += qMax(size, (int)stackalig);
         }
@@ -946,8 +946,6 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
             em.str_(AL, R0, MemOp(SP, dstOff + w));
         }
     }
-
-    // Returns the total gap (argsSize - pushedSize) that was inserted.
     return gap;
 }
 
