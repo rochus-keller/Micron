@@ -405,10 +405,17 @@ void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, qu
     {
         Type* t = p->getType();
         const int size = t->getByteSize(pointerWidth);
+#if 0
         const int alig = t->getAlignment(pointerWidth);
         off_p += AstModel::padding(off_p, alig);
         p->off = off_p;
         off_p += qMax(size,(int)stackAlignment);
+#else
+        // Do not apply alignment padding to parameters.
+        // The interpreter evaluation stack pushes arguments densely, only rounding the size to stackAlignment.
+        p->off = off_p;
+        off_p += qMax(size,(int)stackAlignment);
+#endif
     }
 }
 

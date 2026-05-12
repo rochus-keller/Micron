@@ -655,6 +655,7 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
         callee.type = mdl->getType(Type::NoType);
 
     Type* ret = 0;
+    bool hasReceiver = false;
     switch( callee.mode )
     {
     case Value::Builtin:
@@ -681,6 +682,7 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
             out->line_(pos);
             const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
             out->callinst_(trident,nArgs, ret != 0);
+            hasReceiver = true;
         }
         break;
     case Value::Method:
@@ -694,6 +696,7 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
                 out->callvirt_(trident,nArgs, ret != 0);
             else
                 out->callinst_(trident,nArgs, ret != 0);
+            hasReceiver = true;
         }
         break;
     case Value::IntfMeth:
@@ -727,6 +730,8 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
     }
 
     for( int i = 0; i < nArgs; i++ )
+        stack.pop_back();
+    if( hasReceiver )
         stack.pop_back();
 
     Value tmp;
@@ -1352,9 +1357,15 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs, const Ro
                     res.val = qint64(a * b);
                     break;
                 case Expression::Div:
+                    if (b == 0) {
+                        error("division by zero", pos); return res;
+                    }
                     res.val = (qint64)(a < 0 ? (a - b + 1) / b : a / b);
                     break;
                 case Expression::Mod:
+                    if (b == 0) {
+                        error("modulo by zero", pos); return res;
+                    }
                     res.val = qint64(a < 0 ? (b - 1) + ((a - b + 1)) % b : a % b);
                     break;
                 case Expression::Add:
@@ -1384,9 +1395,15 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs, const Ro
                     res.val = (quint64)(a * b);
                     break;
                 case Expression::Div:
+                    if (b == 0) {
+                        error("division by zero", pos); return res;
+                    }
                     res.val = (quint64)(a / b);
                     break;
                 case Expression::Mod:
+                    if (b == 0) {
+                        error("modulo by zero", pos); return res;
+                    }
                     res.val = (quint64)(a % b);
                     break;
                 case Expression::Add:
@@ -1487,10 +1504,21 @@ Value Evaluator::arithOp(quint8 op, const Value& lhs, const Value& rhs, const Ro
         res.type = mdl->getType(Type::StrLit);
         Q_ASSERT( op == Expression::Add );
         Q_ASSERT( lhs.isConst() && rhs.isConst() );
-        QByteArray tmp = lhs.val.toByteArray();
-        if( !tmp.isEmpty() && tmp[tmp.size()-1] == 0 )
-            tmp.chop(1); // get rid of the extra \x00 at the end of a literal
-        tmp += rhs.val.toByteArray();
+        QByteArray tmp;
+        if (lhs.type->kind == Type::CHAR) {
+            tmp.append(lhs.val.value<char>());
+        } else {
+            tmp = lhs.val.toByteArray();
+            if( !tmp.isEmpty() && tmp[tmp.size()-1] == '\0' ) tmp.chop(1);
+        }
+
+        if (rhs.type->kind == Type::CHAR) {
+            tmp.append(rhs.val.value<char>());
+        } else {
+            QByteArray rTmp = rhs.val.toByteArray();
+            if( !rTmp.isEmpty() && rTmp[rTmp.size()-1] == '\0' ) rTmp.chop(1);
+            tmp += rTmp;
+        }
         res.val = tmp;
         res.mode = Value::Const;
     }else
@@ -1979,7 +2007,7 @@ Qualident Evaluator::toQuali(Declaration* d, Declaration *module)
         if( d->kind == Declaration::LocalDecl ||
                 d->kind == Declaration::ParamDecl )
             return qMakePair(QByteArray(),d->name); // locals and params have no desig
-        if( d->kind == Declaration::Procedure && d->typebound )
+        if( (d->kind == Declaration::Procedure || d->kind == Declaration::ForwardDecl) && d->typebound )
             return qMakePair(QByteArray(),d->name); // bound procs are in the namespace of the type
         if( d->kind == Declaration::TypeDecl && d->outer == 0 && last == 0 )
             return toQuali(d->getType(), module); // this is a built-in type
@@ -1998,6 +2026,8 @@ Qualident Evaluator::toQuali(Declaration* d, Declaration *module)
     Q_ASSERT( d && d->kind == Declaration::Module );
     if( d == module )
         return qMakePair(QByteArray(),desig); // local symbol
+    if( d == 0 )
+        return Qualident();
     // else imported symbol
     ModuleData md = d->data.value<ModuleData>();
     return qMakePair(md.fullName, desig);

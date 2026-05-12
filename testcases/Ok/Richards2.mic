@@ -1,0 +1,822 @@
+(*
+ * Copyright (c) 2025 Rochus Keller <me@rochus-keller.ch> (for Micron migration)
+ *
+ * This benchmark is derived from Mario Wolczko's Java and Smalltalk version of
+ * Richards.
+ *
+ * License details:
+ *   http://web.archive.org/web/20050825101121/http://www.sunlabs.com/people/mario/java_benchmarking/index.html
+ *)
+ 
+module Richards2 [level=3]
+
+type
+  RBObject = record
+    next: ^RBObject
+  end
+
+  PacketData = array 4 of integer
+
+  Packet = record
+    inline base: RBObject
+    link: ^Packet
+    identity: integer
+    kind: integer
+    datum: integer
+    data: PacketData
+  end;
+  
+  TaskState = record
+    inline base: RBObject
+    packetPending_: boolean
+    taskWaiting: boolean
+    taskHolding: boolean
+  end
+
+  TaskControlBlockPtr = ^TaskControlBlock
+  
+  ProcessFunction = procedure(^)(work: ^Packet; word: ^RBObject): TaskControlBlockPtr
+
+  TaskControlBlock = record
+    inline base: TaskState
+    link: ^TaskControlBlock
+    identity: integer
+    priority: integer
+    input: ^Packet
+    procedure_: ProcessFunction
+    handle: ^RBObject
+  end
+
+  DeviceTaskDataRecord = record
+    inline base: RBObject
+    pending: ^Packet
+  end
+
+  HandlerTaskDataRecord = record
+    inline base: RBObject
+    workIn_: ^Packet
+    deviceIn_: ^Packet
+  end
+
+  IdleTaskDataRecord = record
+    inline base: RBObject
+    control: uint32
+    count: integer
+  end
+
+  WorkerTaskDataRecord = record
+    inline base: RBObject
+    destination: integer
+    count: integer
+  end
+
+  Scheduler = record
+    inline base: RBObject
+    taskList: ^TaskControlBlock
+    currentTask: ^TaskControlBlock
+    currentTaskIdentity: integer
+    taskTable: array 6 of ^TaskControlBlock
+    queuePacketCount: integer
+    holdCount: integer
+    layout: integer
+  end
+
+const
+  IDLER = 0
+  WORKER = 1
+  HANDLER_A = 2
+  HANDLER_B = 3
+  DEVICE_A = 4
+  DEVICE_B = 5
+  NUM_TYPES = 6
+
+  DEVICE_PACKET_KIND = 0
+  WORK_PACKET_KIND = 1
+
+  DATA_SIZE = 4
+
+var
+  NO_WORK: ^Packet
+  NO_TASK: ^TaskControlBlock
+  toDelete: ^RBObject
+  TRACING: boolean
+
+// forward declarations:
+procedure^ Scheduler.markWaiting(): ^TaskControlBlock
+procedure^ Scheduler.queuePacket(packet: ^Packet): ^TaskControlBlock
+procedure^ Scheduler.trace(id: integer)
+procedure^ Scheduler.holdSelf(): ^TaskControlBlock
+procedure^ Scheduler.release(identity: integer): ^TaskControlBlock
+procedure^ Scheduler.schedule()
+
+procedure RBObject.init()
+begin
+  self.next := toDelete
+  toDelete := self
+end init
+
+procedure RBObject.delete()
+begin
+  if self.next # nil then
+    self.next.delete()
+  end
+  dispose(self)
+end delete
+
+procedure Packet_create(link: ^Packet; identity, kind: integer): ^Packet
+var
+  me: ^Packet;
+  i: integer;
+begin
+  new(me)
+  me.init() // instead of me.base.init
+  me.link := link
+  me.identity := identity
+  me.kind := kind
+  me.datum := 0
+  for i := 0 to DATA_SIZE - 1i do
+    me.data[i] := 0
+  end
+  return me
+end Packet_create
+
+procedure Packet.getData(): ^PacketData
+begin
+  return @self.data
+end Packet.getData
+
+procedure Packet.getDatum(): integer
+begin
+  return self.datum
+end getDatum
+
+procedure Packet.setDatum(someData: integer)
+begin
+  self.datum := someData
+end setDatum
+
+procedure Packet.getIdentity(): integer
+begin
+  return self.identity
+end getIdentity
+
+procedure Packet.setIdentity(anIdentity: integer)
+begin
+  self.identity := anIdentity
+end setIdentity
+
+procedure Packet.getKind(): integer
+begin
+  return self.kind
+end getKind
+
+procedure Packet.getLink(): ^Packet
+begin
+  return self.link
+end getLink
+
+procedure Packet.setLink(aLink: ^Packet)
+begin
+  self.link := aLink
+end setLink
+
+procedure RBObject_append(packet, queueHead: ^Packet): ^Packet
+var
+  mouse, link: ^Packet;
+begin
+  packet.setLink(NO_WORK)
+  if queueHead = NO_WORK then
+    return packet
+  end
+
+  mouse := queueHead
+  
+  link := mouse.getLink()
+  while NO_WORK # link do
+      mouse := link
+      link := mouse.getLink()
+  end
+      
+  mouse.setLink(packet)
+  return queueHead
+end RBObject_append
+
+procedure TaskState.init()
+begin
+  self.base.init() // here we use base.init explicitly, infinite recursion otherwise
+  self.packetPending_ := false
+  self.taskWaiting := false
+  self.taskHolding := false
+end init
+
+procedure TaskState_create(): ^TaskState
+var
+  me: ^TaskState
+begin
+  new(me)
+  me.init()
+  return me
+end TaskState_create
+
+procedure TaskState.isPacketPending(): boolean
+begin
+  return self.packetPending_
+end TaskState.isPacketPending
+
+procedure TaskState.isTaskHolding(): boolean
+begin
+  return self.taskHolding
+end TaskState.isTaskHolding
+
+procedure TaskState.isTaskWaiting(): boolean
+begin
+  return self.taskWaiting
+end TaskState.isTaskWaiting
+
+procedure TaskState.setTaskHolding(b: boolean)
+begin
+  self.taskHolding := b
+end TaskState.setTaskHolding
+
+procedure TaskState.setTaskWaiting(b: boolean)
+begin
+  self.taskWaiting := b
+end TaskState.setTaskWaiting
+
+procedure TaskState.setPacketPending(b: boolean)
+begin
+  self.packetPending_ := b
+end setPacketPending
+
+procedure TaskState.packetPending()
+begin
+  self.packetPending_ := true
+  self.taskWaiting := false
+  self.taskHolding := false
+end TaskState.packetPending
+
+procedure TaskState.running()
+begin
+  self.packetPending_ := false
+  self.taskWaiting := false
+  self.taskHolding := false
+end TaskState.running
+
+procedure TaskState.waiting()
+begin
+  self.packetPending_ := false
+  self.taskHolding := false
+  self.taskWaiting := true
+end TaskState.waiting
+
+procedure TaskState.waitingWithPacket()
+begin
+  self.taskHolding := false
+  self.taskWaiting := true
+  self.packetPending_ := true
+end TaskState.waitingWithPacket
+
+procedure TaskState.isRunning(): boolean
+begin
+  return (not self.packetPending_) and (not self.taskWaiting) and (not self.taskHolding)
+end TaskState.isRunning
+
+procedure TaskState.isTaskHoldingOrWaiting(): boolean
+begin
+  return self.taskHolding or (not self.packetPending_ and self.taskWaiting)
+end TaskState.isTaskHoldingOrWaiting
+
+procedure TaskState.isWaiting(): boolean
+begin
+  return (not self.packetPending_) and self.taskWaiting and (not self.taskHolding)
+end TaskState.isWaiting
+
+procedure TaskState.isWaitingWithPacket(): boolean
+begin
+  return self.packetPending_ and self.taskWaiting and (not self.taskHolding)
+end TaskState.isWaitingWithPacket
+
+procedure TaskState_createPacketPending (): ^TaskState
+var
+  t: ^TaskState
+begin
+  t := TaskState_create()
+  t.packetPending
+  return t
+end TaskState_createPacketPending
+
+procedure TaskState_createRunning(): ^TaskState
+var
+  t: ^TaskState
+begin
+  t := TaskState_create()
+  t.running
+  return t
+end TaskState_createRunning
+
+procedure TaskState_createWaiting(): ^TaskState
+var
+  t: ^TaskState
+begin
+  t := TaskState_create()
+  t.waiting
+  return t
+end TaskState_createWaiting
+
+procedure TaskState_createWaitingWithPacket(): ^TaskState
+var
+  t: ^TaskState
+begin
+  t := TaskState_create()
+  t.waitingWithPacket
+  return t
+end TaskState_createWaitingWithPacket
+
+procedure TaskControlBlock_create(aLink: ^TaskControlBlock; anIdentity, aPriority: integer;
+  anInitialWorkQueue: ^Packet; anInitialState: ^TaskState; aBlock: ProcessFunction;
+  aPrivateData: ^RBObject): ^TaskControlBlock
+var
+  me: ^TaskControlBlock
+begin
+  new(me)
+  me.init // instead of me.base.init
+  me.link := aLink
+  me.identity := anIdentity
+  me.priority := aPriority
+  me.input := anInitialWorkQueue
+  me.setPacketPending(anInitialState.isPacketPending())
+  me.setTaskWaiting(anInitialState.isTaskWaiting())
+  me.setTaskHolding(anInitialState.isTaskHolding())
+  me.procedure_ := aBlock
+  me.handle := aPrivateData
+  return me
+end TaskControlBlock_create
+
+procedure TaskControlBlock.getIdentity(): integer
+begin
+  return self.identity
+end TaskControlBlock.getIdentity
+
+procedure TaskControlBlock.getLink(): ^TaskControlBlock
+begin
+  return self.link
+end TaskControlBlock.getLink
+
+procedure TaskControlBlock.getPriority(): integer
+begin
+  return self.priority
+end TaskControlBlock.getPriority
+
+procedure TaskControlBlock.addInputAndCheckPriority(packet: ^Packet; oldTask: ^TaskControlBlock): ^TaskControlBlock
+begin
+  if self.input = NO_WORK then
+    self.input := packet
+    self.setPacketPending(true)
+    if self.priority > oldTask.getPriority() then
+      return self
+    end
+  else
+    self.input := RBObject_append(packet, self.input)
+  end
+  return oldTask
+end TaskControlBlock.addInputAndCheckPriority
+
+procedure TaskControlBlock.runTask(): ^TaskControlBlock
+var
+  message: ^Packet
+begin
+  if self.isWaitingWithPacket() then
+    message := self.input
+    self.input := message.getLink()
+    if self.input = NO_WORK then
+      self.running
+    else
+      self.packetPending
+    end
+  else
+    message := NO_WORK
+  end;
+  return self.procedure_(message, self.handle)
+end TaskControlBlock.runTask
+
+procedure DeviceTaskDataRecord_create(): ^DeviceTaskDataRecord
+var
+  me: ^DeviceTaskDataRecord
+begin
+  new(me)
+  me.init
+  me.pending := NO_WORK
+  return me
+end DeviceTaskDataRecord_create
+
+procedure DeviceTaskDataRecord.getPending(): ^Packet
+begin
+  return self.pending
+end DeviceTaskDataRecord.getPending
+
+procedure DeviceTaskDataRecord.setPending(packet: ^Packet)
+begin
+  self.pending := packet
+end DeviceTaskDataRecord.setPending
+
+procedure HandlerTaskDataRecord_create(): ^HandlerTaskDataRecord
+var
+  me: ^HandlerTaskDataRecord
+begin
+  new(me)
+  me.init
+  me.workIn_ := NO_WORK
+  me.deviceIn_ := NO_WORK
+  return me
+end HandlerTaskDataRecord_create
+
+procedure HandlerTaskDataRecord.deviceIn(): ^Packet
+begin
+  return self.deviceIn_
+end HandlerTaskDataRecord.deviceIn
+
+procedure HandlerTaskDataRecord.setDeviceIn(aPacket: ^Packet)
+begin
+  self.deviceIn_ := aPacket
+end HandlerTaskDataRecord.setDeviceIn
+
+procedure HandlerTaskDataRecord.deviceInAdd(packet: ^Packet)
+begin
+  self.deviceIn_ := RBObject_append(packet, self.deviceIn_)
+end HandlerTaskDataRecord.deviceInAdd
+
+procedure HandlerTaskDataRecord.workIn(): ^Packet
+begin
+  return self.workIn_
+end HandlerTaskDataRecord.workIn
+
+procedure HandlerTaskDataRecord.setWorkIn(aWorkQueue: ^Packet)
+begin
+  self.workIn_ := aWorkQueue
+end HandlerTaskDataRecord.setWorkIn
+
+procedure HandlerTaskDataRecord.workInAdd(packet: ^Packet)
+begin
+  self.workIn_ := RBObject_append(packet, self.workIn_)
+end HandlerTaskDataRecord.workInAdd
+
+procedure IdleTaskDataRecord_create(): ^IdleTaskDataRecord
+var
+  me: ^IdleTaskDataRecord
+begin
+  new(me)
+  me.init
+  me.control := 1
+  me.count := 10000
+  return me
+end IdleTaskDataRecord_create
+
+procedure IdleTaskDataRecord.getControl(): uint32
+begin
+  return self.control
+end IdleTaskDataRecord.getControl
+
+procedure IdleTaskDataRecord.setControl(aNumber: uint32)
+begin
+  self.control := aNumber
+end IdleTaskDataRecord.setControl
+
+procedure IdleTaskDataRecord.getCount(): integer
+begin
+  return self.count
+end IdleTaskDataRecord.getCount
+
+procedure IdleTaskDataRecord.setCount(aCount: integer)
+begin
+  self.count := aCount
+end IdleTaskDataRecord.setCount
+
+procedure WorkerTaskDataRecord_create(): ^WorkerTaskDataRecord
+var
+  me: ^WorkerTaskDataRecord
+begin
+  new(me)
+  me.init
+  me.destination := HANDLER_A
+  me.count := 0
+  return me
+end WorkerTaskDataRecord_create
+
+procedure WorkerTaskDataRecord.getCount(): integer
+begin
+  return self.count
+end WorkerTaskDataRecord.getCount
+
+procedure WorkerTaskDataRecord.setCount(aCount: integer)
+begin
+  self.count := aCount
+end WorkerTaskDataRecord.setCount
+
+procedure WorkerTaskDataRecord.getDestination(): integer
+begin
+  return self.destination
+end WorkerTaskDataRecord.getDestination
+
+procedure WorkerTaskDataRecord.setDestination(aHandler: integer)
+begin
+  self.destination := aHandler
+end WorkerTaskDataRecord.setDestination
+
+procedure Scheduler.init()
+var
+  i: integer
+begin
+  self.layout := 0
+  self.currentTask := nil
+  self.currentTaskIdentity := 0
+  self.queuePacketCount := 0
+  self.holdCount := 0
+  for i := 0 to NUM_TYPES - 1i do
+    self.taskTable[i] := NO_TASK
+  end
+  self.taskList := NO_TASK
+end Scheduler.init
+
+procedure Scheduler.applyDevice(workArg: ^Packet; wordArg: ^RBObject): ^TaskControlBlock
+var
+  dataRecord: ^DeviceTaskDataRecord
+  functionWork: ^Packet
+begin
+  dataRecord := wordArg(DeviceTaskDataRecord)
+  functionWork := workArg
+  if functionWork = NO_WORK then
+  	functionWork := dataRecord.getPending()
+    if NO_WORK = functionWork then
+      return self.markWaiting()
+    else
+      dataRecord.setPending(NO_WORK)
+      return self.queuePacket(functionWork)
+    end;
+  else
+    dataRecord.setPending(functionWork)
+    if TRACING then
+      self.trace(functionWork.getDatum())
+    end
+    return self.holdSelf()
+  end;
+end Scheduler.applyDevice
+
+procedure Scheduler.createTask(identity, priority: integer; work: ^Packet;
+  state: ^TaskState; aBlock: ProcessFunction; data: ^RBObject)
+var
+  t: ^TaskControlBlock
+begin
+  t := TaskControlBlock_create(self.taskList, identity, priority, work, state, aBlock, data)
+  self.taskList := t
+  self.taskTable[identity] := t
+end Scheduler.createTask
+
+procedure Scheduler.createDevice(identity, priority: integer; workPacket: ^Packet; state: ^TaskState)
+var
+  data: ^DeviceTaskDataRecord
+begin
+  data := DeviceTaskDataRecord_create()
+  self.createTask(identity, priority, workPacket, state, self.applyDevice, data)
+end Scheduler.createDevice
+
+procedure Scheduler.applyHandler(work: ^Packet; word: ^RBObject): ^TaskControlBlock
+var
+  dataRecord: ^HandlerTaskDataRecord
+  workPacket, devicePacket: ^Packet
+  count: integer
+begin
+  dataRecord := word(HandlerTaskDataRecord)
+  if work # NO_WORK then
+    if work.getKind() = WORK_PACKET_KIND then
+      dataRecord.workInAdd(work)
+    else
+      dataRecord.deviceInAdd(work)
+    end
+  end
+
+  workPacket := dataRecord.workIn()
+  if workPacket = NO_WORK then
+    return self.markWaiting()
+  else
+    count := workPacket.getDatum()
+    if count >= DATA_SIZE then
+      dataRecord.setWorkIn(workPacket.getLink())
+      return self.queuePacket(workPacket)
+    else
+      devicePacket := dataRecord.deviceIn()
+      if devicePacket = NO_WORK then
+        return self.markWaiting()
+      else
+        dataRecord.setDeviceIn(devicePacket.getLink())
+        devicePacket.setDatum(workPacket.getData()[count])
+        workPacket.setDatum(count + 1)
+        return self.queuePacket(devicePacket)
+      end
+    end
+  end
+end Scheduler.applyHandler
+
+procedure Scheduler.createHandler(identity, priority: integer; workPacket: ^Packet; state: ^TaskState)
+var
+  data: ^HandlerTaskDataRecord
+begin
+  data := HandlerTaskDataRecord_create()
+  self.createTask(identity, priority, workPacket, state, self.applyHandler, data)
+end Scheduler.createHandler
+
+procedure Scheduler.applyIdler(workArg: ^Packet; wordArg: ^RBObject): ^TaskControlBlock
+var
+  dataRecord: ^IdleTaskDataRecord
+begin
+  dataRecord := wordArg(IdleTaskDataRecord)
+  dataRecord.setCount(dataRecord.getCount() - 1)
+  if dataRecord.getCount() = 0 then
+    return self.holdSelf()
+  else
+    if band(dataRecord.getControl(), 1u) = 0 then
+      dataRecord.setControl(dataRecord.getControl() div 2)
+      return self.release(DEVICE_A)
+    else
+      dataRecord.setControl(bxor(dataRecord.getControl() div 2, 53256u))
+      return self.release(DEVICE_B)
+    end
+  end
+end Scheduler.applyIdler
+
+procedure Scheduler.createIdler(identity, priority: integer; work: ^Packet; state: ^TaskState)
+var
+  data: ^IdleTaskDataRecord
+begin
+  data := IdleTaskDataRecord_create()
+  self.createTask(identity, priority, work, state, self.applyIdler, data)
+end Scheduler.createIdler
+
+procedure Scheduler.createPacket(link: ^Packet; identity, kind: integer): ^Packet
+begin
+  return Packet_create(link, identity, kind)
+end Scheduler.createPacket
+
+procedure Scheduler.applyWorker(work: ^Packet; word: ^RBObject): ^TaskControlBlock
+var
+  data: ^WorkerTaskDataRecord
+  i: integer
+begin
+  data := word(WorkerTaskDataRecord)
+  if work = NO_WORK then
+    return self.markWaiting()
+  else
+  	if data.getDestination() = HANDLER_A then // TODO: replace by iif()
+    	data.setDestination(HANDLER_B )
+    else 
+    	data.setDestination(HANDLER_A )
+    end
+    work.setIdentity(data.getDestination())
+    work.setDatum(0)
+    for i := 0 to DATA_SIZE - 1i do
+      data.setCount(data.getCount() + 1)
+      if data.getCount() > 26 then
+         data.setCount(1)
+      end
+      work.getData()[i] := 65 + data.getCount() - 1
+    end
+    return self.queuePacket(work)
+  end
+end Scheduler.applyWorker
+
+procedure Scheduler.createWorker(identity, priority: integer; workPacket: ^Packet; state: ^TaskState)
+var
+  dataRecord: ^WorkerTaskDataRecord
+begin
+  dataRecord := WorkerTaskDataRecord_create()
+  self.createTask(identity, priority, workPacket, state, self.applyWorker, dataRecord)
+end Scheduler.createWorker
+
+procedure Scheduler.start(): boolean
+var
+  workQ: ^Packet
+begin
+  workQ := nil
+  self.createIdler(IDLER, 0, NO_WORK, TaskState_createRunning())
+  workQ := self.createPacket(NO_WORK, WORKER, WORK_PACKET_KIND)
+  workQ := self.createPacket(workQ, WORKER, WORK_PACKET_KIND)
+  self.createWorker(WORKER, 1000, workQ, TaskState_createWaitingWithPacket())
+  workQ := self.createPacket(NO_WORK, DEVICE_A, DEVICE_PACKET_KIND)
+  workQ := self.createPacket(workQ, DEVICE_A, DEVICE_PACKET_KIND)
+  workQ := self.createPacket(workQ, DEVICE_A, DEVICE_PACKET_KIND)
+  self.createHandler(HANDLER_A, 2000, workQ, TaskState_createWaitingWithPacket())
+  workQ := self.createPacket(NO_WORK, DEVICE_B, DEVICE_PACKET_KIND)
+  workQ := self.createPacket(workQ, DEVICE_B, DEVICE_PACKET_KIND)
+  workQ := self.createPacket(workQ, DEVICE_B, DEVICE_PACKET_KIND)
+  self.createHandler(HANDLER_B, 3000, workQ, TaskState_createWaitingWithPacket())
+  self.createDevice(DEVICE_A, 4000, NO_WORK, TaskState_createWaiting())
+  self.createDevice(DEVICE_B, 5000, NO_WORK, TaskState_createWaiting())
+  self.schedule()
+  return (self.queuePacketCount = 23246) and (self.holdCount = 9297)
+end Scheduler.start
+
+procedure Scheduler.findTask(identity: integer): ^TaskControlBlock
+var
+  t: ^TaskControlBlock
+begin
+  t := self.taskTable[identity]
+  if t = NO_TASK then
+    assert(false)
+  end
+  return t
+end Scheduler.findTask
+
+procedure Scheduler.holdSelf(): ^TaskControlBlock
+begin
+  self.holdCount := self.holdCount + 1
+  self.currentTask.setTaskHolding(true)
+  return self.currentTask.getLink()
+end Scheduler.holdSelf
+
+procedure Scheduler.queuePacket(packet: ^Packet): ^TaskControlBlock
+var
+  t: ^TaskControlBlock
+begin
+  t := self.findTask(packet.getIdentity())
+  if t = NO_TASK then
+    return NO_TASK
+  end;
+  self.queuePacketCount := self.queuePacketCount + 1
+  packet.setLink(NO_WORK)
+  packet.setIdentity(self.currentTaskIdentity)
+  return t.addInputAndCheckPriority(packet, self.currentTask)
+end Scheduler.queuePacket
+
+procedure Scheduler.release(identity: integer): ^TaskControlBlock
+var
+  t: ^TaskControlBlock
+begin
+  t := self.findTask( identity)
+  if t = NO_TASK then
+    return NO_TASK;
+  end
+  t.base.setTaskHolding(false)
+  if t.getPriority() > self.currentTask.getPriority() then
+    return t
+  else
+    return self.currentTask
+  end
+end Scheduler.release
+
+procedure Scheduler.trace(id: integer)
+begin
+  self.layout := self.layout - 1
+  if self.layout <= 0 then
+    println;
+    self.layout := 50
+  end;
+  print(id);
+end Scheduler.trace
+
+procedure Scheduler.markWaiting(): ^TaskControlBlock
+begin
+  self.currentTask.setTaskWaiting(true)
+  return self.currentTask;
+end Scheduler.markWaiting
+
+procedure Scheduler.schedule()
+var
+  tmp: ^TaskControlBlock
+begin
+  self.currentTask := self.taskList
+  while self.currentTask # NO_TASK do
+    if self.currentTask.base.isTaskHoldingOrWaiting() then
+      tmp := self.currentTask.getLink()
+      self.currentTask := tmp
+    else
+      self.currentTaskIdentity := self.currentTask.getIdentity()
+      if TRACING then
+        self.trace(self.currentTaskIdentity)
+      end
+      tmp := self.currentTask.runTask()
+      self.currentTask := tmp
+    end
+  end
+end Scheduler.schedule
+
+procedure benchmark(): integer
+var
+  s: Scheduler
+  res: boolean
+begin
+  res := false
+  s.init
+  res := s.start()
+  toDelete.delete()
+  toDelete := nil
+  if res then return 1 else return 0 end
+end benchmark
+
+begin
+	println("Richards begin")
+	TRACING := false
+	NO_WORK := nil
+	NO_TASK := nil
+	toDelete := nil
+	assert(benchmark()#0)
+	println("Richards end")
+end Richards2

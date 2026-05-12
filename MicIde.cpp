@@ -876,9 +876,6 @@ void Ide::onExportLl()
     if (dirPath.isEmpty())
         return;
 
-    // TODO
-    if( !compile(false,false) ) // otherwise allocated flag is already set after one generator run
-        return;
     d_pro->interpret(dirPath);
 }
 
@@ -2154,7 +2151,7 @@ QTreeWidgetItem* Ide::fillXref(Symbol* hit, Declaration* module)
 
     Project2::UsageByMod usage = d_pro->getUsage(hit->decl);
 
-    d_xrefTitle->setText(QString("%1 '%2'").arg(declKindName(hit->decl)).arg(hit->decl->name.constData()));
+    d_xrefTitle->setText(QString("%1 '%2'").arg(declKindName(hit->decl)).arg(hit->decl->deforward()->name.constData()));
 
     QFont f = d_xref->font();
     f.setBold(true);
@@ -3109,7 +3106,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.22");
+    a.setApplicationVersion("0.4.23");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

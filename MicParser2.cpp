@@ -767,13 +767,14 @@ Expression *Parser2::createSelector(Declaration *field, Expression *prev, bool n
         markRef(field, cur.toRowCol(), needsLvalue ? Symbol::Lval : 0);
     Expression::Kind k = Expression::FieldSelect;
 
-    if( field->kind == Declaration::Procedure )
+    if( field->kind == Declaration::Procedure || field->kind == Declaration::ForwardDecl )
     {
         if( prev->getType()->kind == Type::Interface )
             k = Expression::IntfSelect;
         else
             k = Expression::MethSelect;
-    }else if( field->kind != Declaration::Field && field->kind != Declaration::Variant )
+    }else if( field->kind != Declaration::Field && field->kind != Declaration::Variant &&
+              field->kind != Declaration::Procedure && field->kind != Declaration::ForwardDecl ) // at this point the actual proc might not yet be known
         error(cur, "expecting a field, variant or method");
 
     Expression* tmp = Expression::create(k, pos );
@@ -2115,8 +2116,8 @@ bool Parser2::checkArithOp(Expression* e)
     if( e->lhs->getType()->isNumber() && e->rhs->getType()->isNumber() )
     {
         Evaluator::bindUniInt(e->lhs, e->rhs, ev);
-        if( e->lhs->getType()->isInt() && e->rhs->getType()->isInt() ||
-                e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt() )
+        if( (e->lhs->getType()->isInt() && e->rhs->getType()->isInt()) ||
+                (e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt()) )
             switch(e->kind)
             {
             case Expression::Mul:
@@ -2229,9 +2230,9 @@ bool Parser2::checkRelOp(Expression* e)
     if( e->lhs->getType()->isNumber() && e->rhs->getType()->isNumber() )
     {
         Evaluator::bindUniInt(e->lhs, e->rhs, ev);
-        if( e->lhs->getType()->isInt() && e->rhs->getType()->isInt() ||
-                e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt() ||
-                e->lhs->getType()->isReal() && e->rhs->getType()->isReal() )
+        if( (e->lhs->getType()->isInt() && e->rhs->getType()->isInt()) ||
+                (e->lhs->getType()->isUInt() && e->rhs->getType()->isUInt()) ||
+                (e->lhs->getType()->isReal() && e->rhs->getType()->isReal()) )
         {
             Type* mt = Evaluator::maxType(e->lhs->getType(),e->rhs->getType());
             if( mt != e->lhs->getType() )
@@ -2241,19 +2242,19 @@ bool Parser2::checkRelOp(Expression* e)
         }else
             return error(e->pos.d_row, e->pos.d_col,QString("operands are not of the same type (%1, %2)")
                   .arg(e->lhs->getType()->getName()).arg(e->rhs->getType()->getName()));
-    }else if( e->lhs->getType()->isText() && e->rhs->getType()->isText() ||
-              e->lhs->getType()->kind == Type::Pointer && e->rhs->getType()->kind == Type::Pointer ||
-              e->lhs->getType()->kind == Type::Pointer && e->rhs->getType()->kind == Type::Nil ||
-              e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Pointer ||
-              e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Nil ||
-              e->lhs->getType()->kind == Type::ConstEnum  && e->rhs->getType()->kind == Type::ConstEnum )
+    }else if( (e->lhs->getType()->isText() && e->rhs->getType()->isText()) ||
+              (e->lhs->getType()->kind == Type::Pointer && e->rhs->getType()->kind == Type::Pointer) ||
+              (e->lhs->getType()->kind == Type::Pointer && e->rhs->getType()->kind == Type::Nil) ||
+              (e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Pointer) ||
+              (e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Nil) ||
+              (e->lhs->getType()->kind == Type::ConstEnum  && e->rhs->getType()->kind == Type::ConstEnum) )
     {
         if( e->lhs->getType()->kind == Type::ConstEnum  && e->rhs->getType()->kind == Type::ConstEnum &&
                 e->lhs->getType() != e->rhs->getType() )
             return error(e->pos.d_row, e->pos.d_col, "cannot compare the elements of different enumeration types");
-    }else if(e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Proc && e->lhs->getType()->typebound == e->rhs->getType()->typebound ||
-             e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Nil ||
-             e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Proc )
+    }else if((e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Proc && e->lhs->getType()->typebound == e->rhs->getType()->typebound) ||
+             (e->lhs->getType()->kind == Type::Proc && e->rhs->getType()->kind == Type::Nil) ||
+             (e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Proc) )
     {
         if( (e->lhs->getType()->typebound || e->rhs->getType()->typebound) && e->kind != Expression::Eq && e->kind != Expression::Neq )
             return error(e->pos.d_row, e->pos.d_col, "operation not supported for type-bound procedure types");
@@ -3314,6 +3315,7 @@ void Parser2::assignmentOrProcedureCall() {
             errorEv();
         if( lhs->getType() && lhs->getType()->kind != Type::NoType )
             line(lhs->pos).pop_(); // remove unused result
+        ev->pop();
     }
     Expression::deleteAllExpressions();
 }
@@ -3499,14 +3501,14 @@ void Parser2::LabelRange(Type* t, CaseLabels& l) {
             error(tok,"label not unique in list");
         else
             l.insert(rhs);
-        if( lhs >= rhs )
+        if( lhs > rhs )
             do {
                 if( l.contains(lhs) )
                     error(tok,"label range not unique in list");
                 else
                     l.insert(lhs);
             }while(--lhs > rhs);
-        else
+        else if ( lhs < rhs )
             do {
                 if( l.contains(lhs) )
                     error(tok,"label range not unique in list");
@@ -3529,8 +3531,10 @@ void Parser2::TypeCase(Expression* e)
         errorEv();
     if( tyname->getType()->kind == Type::Nil )
         line(e->pos).ldnull_();
-    else
-        ev->pop();
+
+    ev->pop(); // pop tyname
+    ev->pop(); // pop e
+
     if( !assigCompat(e->getType(), tyname->getType(), e->pos) )
         error(tyname->pos,"label has incompatible type");
 
@@ -3630,6 +3634,8 @@ void Parser2::ForStatement() {
         Expression* lhs = toExpr(idxvar, tok.toRowCol());
         Expression* start = expression(0);
         ev->bindUniInt(start,idxvar->getType()->isInt());
+        if (!assigCompat(idxvar->getType(), start, tok.toRowCol()))
+            error(tok, "start expression is not compatible with control variable");
         ev->assign(lhs, start, tok.toRowCol());
         Expression::deleteAllExpressions();
     }
@@ -3858,7 +3864,7 @@ Declaration* Parser2::ProcedureHeader(bool inForward, QByteArray* rt) {
 
     if( forward )
     {
-        if( !matchFormals(forward->getParams(), procDecl->getParams(true) ) ||
+        if( !matchFormals(forward->getParams(true), procDecl->getParams(true) ) ||
                 !matchResultType(forward->getType(), procDecl->getType()) ||
                 forward->visi != procDecl->visi ||
                 forward->typebound != procDecl->typebound )
@@ -4130,6 +4136,7 @@ void Parser2::ReturnStatement() {
             error(tok,"expression is not compatible with the return type");
         if( e && !ev->prepareRhs(retType, false, e->pos) )
             errorEv();
+        ev->pop();
         line(ret).ret_(true);
         Expression::deleteAllExpressions();
     }else if( mdl->getTopScope()->getType() != 0 && mdl->getTopScope()->getType()->kind != Type::NoType )

@@ -71,7 +71,9 @@ public:
         {
             if( borrowed )
             {
-                d = (char*)malloc(len);
+                char* new_d = (char*)malloc(len);
+                memcpy(new_d, d, s); // copy existing data
+                d = new_d;
                 borrowed = 0;
             }else
                 d = (char*)realloc(d, len);
@@ -101,10 +103,12 @@ public:
     Frame():proc(0),outer(0),sp(0){}
     void* alloc(int len)
     {
-        if( len < StackAlig )
-            len = StackAlig;
+        // Enforce strict stack alignment for ALL sizes (e.g. 12 becomes 16)
+        len = _stackAligned(len);
+
         if( sp + len > stack.size() )
-            stack.resize(len);
+            stack.resize(sp + len + PreAllocSize); // Grow safely to avoid constant reallocs
+
         void* res = stack.data()+sp;
         sp += len;
         return res;
@@ -195,6 +199,7 @@ public:
         // make room for one slot as the first argument and
         // move all existing arguments by one slot to the right
         quint8* to = (quint8*)(stack.data()+sp+off);
+#if 0
         quint8* from = (quint8*)(stack.data()+sp);
         while( from >= to )
         {
@@ -203,6 +208,13 @@ public:
         }
         *(void**)to = p;
         sp -= off;
+#else
+        if (sp + StackAlig > stack.size())
+            stack.resize(sp + StackAlig + PreAllocSize); // Ensure capacity
+        memmove(to + StackAlig, to, -off); // move the existing arguments to the right by exactly one slot
+        *(void**)to = p; // Insert the new pointer
+        sp += StackAlig; // Increment sp by EXACTLY one slot (StackAlign), NOT by -off
+#endif
     }
 
     inline void copy(void* to, int off, int len)
@@ -1869,7 +1881,12 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
             return false;
         }
 #endif
+#if 0
         frame->push(newframe.stack.data(), newframe.sp);
+#else
+        // The return value must go to the very top of the callee's stack
+        frame->push(newframe.stack.data() + newframe.sp - newframe.proc->returnSize, newframe.proc->returnSize);
+#endif
     }
     return res;
 }

@@ -813,19 +813,25 @@ bool Project2::interpret(const QString& outDir)
     for(int i = mods.size()-1; i >= 0; i--)
     {
         Mil::Declaration* module = mods[i];
-        if( !r.precompile(module) )            
+        if( !r.precompile(module) ) {
+            qCritical() << "error precompiling" << module->name;
             return false;
-        else if( !outDir.isEmpty() )
+        }
+    }
+
+    if( !outDir.isEmpty() )
+    {
+        for(int i = mods.size()-1; i >= 0; i--)
         {
+            // we have to dump here because when doing it in the precompile loop only the begin$ is ready
+            Mil::Declaration* module = mods[i];
             QFile body( QDir(outDir).absoluteFilePath(QString::fromLatin1(module->name) + ".ll"));
             body.open(QFile::WriteOnly);
             QTextStream out(&body);
             r.dumpModule(out, module);
         }
-    }
-
-    if( !outDir.isEmpty() )
         return true; // just write ll and return
+    }
 
     QByteArrayList args = d_args.simplified().split(' ');
     QVector<char*> argv;
@@ -918,7 +924,10 @@ Declaration *Project2::loadModule(const Import &imp)
     if( !p.errors.isEmpty() )
     {
         foreach( const Mic::Parser2::Error& e, p.errors )
+        {
+            //qDebug() << e.path << e.row << e.col << e.msg;
             errors << Error(e.msg, RowCol(e.row, e.col), e.path);
+        }
         hasErrors = true;
     }
 
