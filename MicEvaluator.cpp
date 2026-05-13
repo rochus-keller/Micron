@@ -526,7 +526,7 @@ bool Evaluator::desigField(Declaration* field, bool byVal, const RowCol& pos)
 
 #if 1
     // don't copy char arrays to stack by value eagerly to support relation ops
-    if( byVal && field->getType()->isCharArray() )
+    if( byVal && field->getType() && field->getType()->isCharArray() )
         byVal = false;
 #endif
 

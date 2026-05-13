@@ -3764,6 +3764,39 @@ bool Renderer::renderProcedure(Procedure& proc, int procIdx)
     return true;
 }
 
+static void appendLE32f(QByteArray& frame, quint32 val) {
+    char b[4];
+    b[0] = val & 0xFF; b[1] = (val >> 8) & 0xFF;
+    b[2] = (val >> 16) & 0xFF; b[3] = (val >> 24) & 0xFF;
+    frame.append(b, 4);
+}
+static void patchLE32f(QByteArray& frame, int off, quint32 val) {
+    frame[off]   = val & 0xFF;
+    frame[off+1] = (val >> 8) & 0xFF;
+    frame[off+2] = (val >> 16) & 0xFF;
+    frame[off+3] = (val >> 24) & 0xFF;
+}
+static void appendULEB128f(QByteArray& frame, quint32 val) {
+    do {
+        quint8 byte = val & 0x7F;
+        val >>= 7;
+        if (val) byte |= 0x80;
+        frame.append(static_cast<char>(byte));
+    } while (val);
+}
+static void appendSLEB128f(QByteArray& frame, qint32 val) {
+    bool more = true;
+    while (more) {
+        quint8 byte = val & 0x7F;
+        val >>= 7;
+        if ((val == 0 && !(byte & 0x40)) || (val == -1 && (byte & 0x40)))
+            more = false;
+        else
+            byte |= 0x80;
+        frame.append(static_cast<char>(byte));
+    }
+}
+
 bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QString& outputPath, bool indirect)
 {
     using namespace Rv32;
@@ -3776,7 +3809,6 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
 
     ElfWriter::StandardSections sec = elf.createStandardSections();
     quint32 textSymIdx = elf.addSectionSymbol(sec.text);
-    Q_UNUSED(textSymIdx);
 
     QList<quint32> initSymbols;
     for (int i = 0; i < moduleNames.size(); i++) {
@@ -3787,6 +3819,7 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
     }
 
     Rv32::FixupTracker fix;
+    quint32 micMainOff = 0; // offset of __mic$main within .text (indirect mode only)
 
     if (indirect) {
         quint32 micInitSym = elf.addSymbol("__mic$init", 0, 0, 0, STB_GLOBAL, STT_FUNC);
@@ -3805,7 +3838,7 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
 
         em.ebreak(); // should never return
 
-        quint32 micMainOff = em.currentPosition();
+        micMainOff = em.currentPosition();
 
         // __mic$main:
         em.addi(Sp, Sp, -8);
@@ -3864,6 +3897,96 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
         fix.generateRelocations(elf, sec.relText, sec.relData);
 
         elf.addSymbol("_start", sec.text, 0, em.currentPosition(), STB_GLOBAL, STT_FUNC);
+    }
+
+    // Emit .debug_frame with CIE + FDE for _start (and __mic$main if indirect).
+    // The FDE for _start uses DW_CFA_undefined for the return address register
+    // to tell the debugger this is the outermost frame — stop unwinding here.
+    // Without this, debuggers show spurious "??" entries above the top frame.
+    {
+        static const quint8 DW_CFA_nop_  = 0x00;
+        static const quint8 DW_CFA_undefined_ = 0x07;
+        static const quint8 DW_CFA_def_cfa_ = 0x0C;
+        static const quint8 DW_CFA_offset_ = 0x80;
+        static const quint8 DW_CFA_advance_loc_ = 0x40;
+        static const quint8 DW_CFA_def_cfa_offset_ = 0x0E;
+        static const quint8 DW_CFA_def_cfa_register_ = 0x0D;
+        const quint8 SP_REG = 2, FP_REG = 8, RA_REG = 1;
+        // RISC-V DWARF: sp=x2, s0/fp=x8, ra=x1
+
+        quint32 frameSec = elf.addSection(QByteArray(".debug_frame"), 1 /*SHT_PROGBITS*/, 0, 4);
+        quint32 relFrameSec = elf.addSection(QByteArray(".rela.debug_frame"), 4 /*SHT_RELA*/, 0, 4);
+        elf.configureRelSection(relFrameSec, frameSec);
+        quint32 textSym = textSymIdx;
+
+        QByteArray frame;
+
+        // CIE
+        int cieStart = frame.size();
+        appendLE32f(frame, 0);             // length placeholder
+        appendLE32f(frame, 0xFFFFFFFF);    // CIE id
+        frame.append(char(4));      // version 4
+        frame.append('\0');         // augmentation (empty)
+        frame.append(char(4));      // address_size
+        frame.append(char(0));      // segment_size
+        appendULEB128f(frame, 2);          // code_alignment_factor (RV32 = 2-byte compressed or 4-byte)
+        appendSLEB128f(frame, -4);         // data_alignment_factor
+        appendULEB128f(frame, RA_REG);     // return_address_register = ra (x1)
+        // Initial instructions: CFA = SP + 0
+        frame.append(char(DW_CFA_def_cfa_));
+        appendULEB128f(frame, SP_REG);
+        appendULEB128f(frame, 0);
+        while ((frame.size() - cieStart) % 4 != 0)
+            frame.append(char(DW_CFA_nop_));
+        patchLE32f(frame, cieStart, frame.size() - cieStart - 4);
+
+        // FDE for _start: mark return address as undefined (outermost frame)
+        int fdeStart = frame.size();
+        appendLE32f(frame, 0);             // length placeholder
+        appendLE32f(frame, cieStart);      // CIE pointer
+        // initial_location (relocated to .text + 0)
+        elf.addRelocation(relFrameSec, frame.size(), textSym, 1 /*R_RISCV_32*/);
+        appendLE32f(frame, 0);             // _start offset (0)
+        appendLE32f(frame, em.currentPosition()); // address range
+        // li fp, 0 is a pseudo-instruction (lui+addi or just addi), typically 4 bytes
+        // After clearing fp: mark ra as undefined — no caller
+        frame.append(char(DW_CFA_advance_loc_ | 2)); // 2 * code_align(2) = 4 bytes
+        frame.append(char(DW_CFA_undefined_));
+        appendULEB128f(frame, RA_REG);
+        while ((frame.size() - fdeStart) % 4 != 0)
+            frame.append(char(DW_CFA_nop_));
+        patchLE32f(frame, fdeStart, frame.size() - fdeStart - 4);
+
+        if (indirect) {
+            // FDE for __mic$main: addi sp,-8; sw ra,4(sp); sw fp,0(sp); mv fp,sp
+            int fde2Start = frame.size();
+            appendLE32f(frame, 0);             // length placeholder
+            appendLE32f(frame, cieStart);      // CIE pointer
+            elf.addRelocation(relFrameSec, frame.size(), textSym, 1 /*R_RISCV_32*/);
+            appendLE32f(frame, micMainOff);    // __mic$main offset
+            appendLE32f(frame, em.currentPosition() - micMainOff);
+            // addi sp, sp, -8 (4 bytes): CFA = SP + 8
+            frame.append(char(DW_CFA_advance_loc_ | 2)); // 2 * 2 = 4 bytes
+            frame.append(char(DW_CFA_def_cfa_offset_));
+            appendULEB128f(frame, 8);
+            // sw ra, 4(sp) (4 bytes): ra saved at CFA-4
+            frame.append(char(DW_CFA_advance_loc_ | 2));
+            frame.append(char(DW_CFA_offset_ | RA_REG));
+            appendULEB128f(frame, 1);          // ra at CFA - 1*4
+            // sw fp, 0(sp) (4 bytes): fp saved at CFA-8
+            frame.append(char(DW_CFA_advance_loc_ | 2));
+            frame.append(char(DW_CFA_offset_ | FP_REG));
+            appendULEB128f(frame, 2);          // fp at CFA - 2*4
+            // mv fp, sp (4 bytes): CFA = FP + 8
+            frame.append(char(DW_CFA_advance_loc_ | 2));
+            frame.append(char(DW_CFA_def_cfa_register_));
+            appendULEB128f(frame, FP_REG);
+            while ((frame.size() - fde2Start) % 4 != 0)
+                frame.append(char(DW_CFA_nop_));
+            patchLE32f(frame, fde2Start, frame.size() - fde2Start - 4);
+        }
+
+        elf.appendToSection(frameSec, frame);
     }
 
     return elf.write(outputPath);

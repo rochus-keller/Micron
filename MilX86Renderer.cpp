@@ -643,6 +643,40 @@ QByteArray Renderer::toByteArray()
     return d_elf.toByteArray();
 }
 
+static void appendLE32f(QByteArray& frame, quint32 val) {
+    char b[4];
+    b[0] = val & 0xFF; b[1] = (val >> 8) & 0xFF;
+    b[2] = (val >> 16) & 0xFF; b[3] = (val >> 24) & 0xFF;
+    frame.append(b, 4);
+}
+static void patchLE32f(QByteArray& frame, int off, quint32 val) {
+    frame[off]   = val & 0xFF;
+    frame[off+1] = (val >> 8) & 0xFF;
+    frame[off+2] = (val >> 16) & 0xFF;
+    frame[off+3] = (val >> 24) & 0xFF;
+}
+static void appendULEB128f(QByteArray& frame, quint32 val) {
+    do {
+        quint8 byte = val & 0x7F;
+        val >>= 7;
+        if (val) byte |= 0x80;
+        frame.append(static_cast<char>(byte));
+    } while (val);
+}
+static void appendSLEB128f(QByteArray& frame, qint32 val) {
+    bool more = true;
+    while (more) {
+        quint8 byte = val & 0x7F;
+        val >>= 7;
+        if ((val == 0 && !(byte & 0x40)) || (val == -1 && (byte & 0x40)))
+            more = false;
+        else
+            byte |= 0x80;
+        frame.append(static_cast<char>(byte));
+    }
+}
+
+
 bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QString& outputPath, bool indirect)
 {
     // moduleNames: list of module names whose <name>$begin$ will be called in order.
@@ -662,7 +696,6 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
     // Create standard sections
     ElfWriter::StandardSections sec = elf.createStandardSections();
     quint32 textSymIdx = elf.addSectionSymbol(sec.text);
-    Q_UNUSED(textSymIdx);
 
     // Create external symbols for each module's init procedure
     QList<quint32> initSymbols;
@@ -672,6 +705,8 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
         quint32 symIdx = elf.addSymbol(symName, 0, 0, 0, STB_GLOBAL, STT_FUNC);
         initSymbols.append(symIdx);
     }
+
+    quint32 micMainOff = 0; // offset of __mic$main within .text (indirect mode only)
 
     if (indirect) {
         // External symbol for __mic$init (provided by C support code)
@@ -688,7 +723,7 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
         em.emitByte(0xF4);         // HLT (should never reach here)
 
         // Record end of _start, start of __mic$main
-        quint32 micMainOff = em.currentPosition();
+        micMainOff = em.currentPosition();
 
         // Emit __mic$main:
         em.push_r(EBP);
@@ -727,6 +762,93 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
 
         // Add _start as global symbol
         elf.addSymbol("_start", sec.text, 0, em.currentPosition(), STB_GLOBAL, STT_FUNC);
+    }
+
+    // Emit .debug_frame with CIE + FDE for _start (and __mic$main if indirect).
+    // The FDE for _start uses DW_CFA_undefined for the return address register
+    // to tell the debugger this is the outermost frame — stop unwinding here.
+    // Without this, debuggers show spurious "??" entries above the top frame.
+    {
+        static const quint8 DW_CFA_nop_  = 0x00;
+        static const quint8 DW_CFA_undefined_ = 0x07;
+        static const quint8 DW_CFA_def_cfa_ = 0x0C;
+        static const quint8 DW_CFA_offset_ = 0x80;
+        static const quint8 DW_CFA_advance_loc_ = 0x40;
+        static const quint8 DW_CFA_def_cfa_offset_ = 0x0E;
+        static const quint8 DW_CFA_def_cfa_register_ = 0x0D;
+        const quint8 ESP_REG = 4, EBP_REG = 5, EIP_REG = 8;
+
+        quint32 frameSec = elf.addSection(QByteArray(".debug_frame"), 1 /*SHT_PROGBITS*/, 0, 4);
+        quint32 relFrameSec = elf.addSection(QByteArray(".rel.debug_frame"), 9 /*SHT_REL*/, 0, 4);
+        elf.configureRelSection(relFrameSec, frameSec);
+        quint32 textSym = textSymIdx;
+
+        QByteArray frame;
+        // CIE
+        int cieStart = frame.size();
+        appendLE32f(frame, 0);             // length placeholder
+        appendLE32f(frame, 0xFFFFFFFF);    // CIE id
+        frame.append(char(4));      // version 4
+        frame.append('\0');         // augmentation (empty)
+        frame.append(char(4));      // address_size
+        frame.append(char(0));      // segment_size
+        appendULEB128f(frame, 1);          // code_alignment_factor
+        appendSLEB128f(frame, -4);         // data_alignment_factor
+        appendULEB128f(frame, EIP_REG);    // return_address_register
+        // Initial instructions: CFA = ESP + 4, EIP at CFA-4
+        frame.append(char(DW_CFA_def_cfa_));
+        appendULEB128f(frame, ESP_REG);
+        appendULEB128f(frame, 4);
+        frame.append(char(DW_CFA_offset_ | EIP_REG));
+        appendULEB128f(frame, 1);          // EIP at CFA - 1*4
+        while ((frame.size() - cieStart) % 4 != 0)
+            frame.append(char(DW_CFA_nop_));
+        patchLE32f(frame, cieStart, frame.size() - cieStart - 4);
+
+        // FDE for _start: mark return address as undefined (outermost frame)
+        int fdeStart = frame.size();
+        appendLE32f(frame, 0);             // length placeholder
+        appendLE32f(frame, cieStart);      // CIE pointer
+        // initial_location (relocated to .text + 0)
+        elf.addRelocation(relFrameSec, frame.size(), textSym, 1 /*R_386_32*/);
+        appendLE32f(frame, 0);             // _start offset (0)
+        if (indirect) {
+            appendLE32f(frame, em.currentPosition()); // covers _start + __mic$main
+        } else {
+            appendLE32f(frame, em.currentPosition()); // covers entire _start
+        }
+        // After xor ebp,ebp (2 bytes): mark EIP as undefined — no caller
+        frame.append(char(DW_CFA_advance_loc_ | 2));
+        frame.append(char(DW_CFA_undefined_));
+        appendULEB128f(frame, EIP_REG);
+        while ((frame.size() - fdeStart) % 4 != 0)
+            frame.append(char(DW_CFA_nop_));
+        patchLE32f(frame, fdeStart, frame.size() - fdeStart - 4);
+
+        if (indirect) {
+            // FDE for __mic$main: standard push ebp; mov ebp, esp prologue
+            int fde2Start = frame.size();
+            appendLE32f(frame, 0);             // length placeholder
+            appendLE32f(frame, cieStart);      // CIE pointer
+            elf.addRelocation(relFrameSec, frame.size(), textSym, 1 /*R_386_32*/);
+            appendLE32f(frame, micMainOff);    // __mic$main offset
+            appendLE32f(frame, em.currentPosition() - micMainOff);
+            // push ebp (1 byte)
+            frame.append(char(DW_CFA_advance_loc_ | 1));
+            frame.append(char(DW_CFA_def_cfa_offset_));
+            appendULEB128f(frame, 8);
+            frame.append(char(DW_CFA_offset_ | EBP_REG));
+            appendULEB128f(frame, 2);          // EBP at CFA - 2*4
+            // mov ebp, esp (2 bytes)
+            frame.append(char(DW_CFA_advance_loc_ | 2));
+            frame.append(char(DW_CFA_def_cfa_register_));
+            appendULEB128f(frame, EBP_REG);
+            while ((frame.size() - fde2Start) % 4 != 0)
+                frame.append(char(DW_CFA_nop_));
+            patchLE32f(frame, fde2Start, frame.size() - fde2Start - 4);
+        }
+
+        elf.appendToSection(frameSec, frame);
     }
 
     // Write the ELF object file

@@ -3168,7 +3168,8 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
     if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Lbrace ) ||  peek(1).d_type == Tok_Lbrace ) {
         res = constructor(hint);
     } else if( la.d_type == Tok_At && ( peek(2).d_type == Tok_ident && peek(3).d_type == Tok_Lbrace || peek(2).d_type == Tok_Lbrace ) ) {
-        Expression* tmp = constructor(hint->getType());
+        expect(Tok_At, false, "factor");
+        Expression* tmp = constructor(hint ? hint->getType() : 0);
         tmp->anonymous = true; // this also represents an anonymous local variable
         // TODO: who allocates and initializes the local? Here we would just deref a desig to it
 
@@ -3270,12 +3271,14 @@ void Parser2::assignmentOrProcedureCall() {
     if( la.d_type == Tok_ColonEq ) {
         const Token tok = la;
         expect(Tok_ColonEq, false, "assignmentOrProcedureCall");
-        Expression* rhs = expression(lhs->getType());
-        if( rhs && !assigCompat( lhs->getType(), rhs, tok.toRowCol() ) )
+        Type* lhsT = lhs->getType();
+        Expression* rhs = expression(lhsT);
+        if( rhs && !assigCompat( lhsT, rhs, tok.toRowCol() ) )
         {
-            // assigCompat( lhs->getType(), rhs, tok.toRowCol() ); // TEST
+            // assigCompat( lhsT, rhs, tok.toRowCol() ); // TEST
+            Type* rhsT = rhs->getType();
             error(tok, QString("right side is not assignment compatible with left side (%1, %2)")
-                  .arg(lhs->getType()->getName()).arg(rhs->getType()->getName()));
+                  .arg(lhsT ? lhsT->getName() : "?").arg(rhsT ? rhsT->getName() : "?"));
         }
         if( !lhs->isAssignable() )
             error(t, "cannot assign to lhs" );
@@ -3924,7 +3927,7 @@ void Parser2::ProcedureDeclaration() {
                 }
             }
             out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
-                           mdl->getTopScope()->kind == Declaration::Module &&
+                           procDecl->outer->kind == Declaration::Module &&
                            procDecl->visi > 0, procDecl->ffi_ ? Mil::ProcData::Foreign : Mil::ProcData::Extern);
 
             if( procDecl->ffi_ )
@@ -3977,7 +3980,7 @@ void Parser2::ProcedureDeclaration() {
                 binding = ev->toQuali(cls).second;
             }
             out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
-                           mdl->getTopScope()->kind == Declaration::Module &&
+                           procDecl->outer->kind == Declaration::Module &&
                            procDecl->visi > 0, kind, binding);
 
             const QList<Declaration*> params = procDecl->getParams(true);
