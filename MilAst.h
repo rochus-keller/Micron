@@ -397,9 +397,7 @@ namespace Mil
         static BitFieldUnit collectBitFields(const DeclList& fields, int start, quint8 pointerWidth);
 
     protected:
-        void walkImports(Declaration* module, DeclList& done, quint8 pointerWidth,
-                         quint8 stackAlignment, quint8 firstParamOffset);
-        void calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth,
+        void calcMemoryLayoutOf(Declaration* module, DeclList &done, quint8 pointerWidth,
                                 quint8 stackAlignment, quint8 firstParamOffset);
         void calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth,
                                     quint8 stackAlignment, quint8 firstParamOffset);

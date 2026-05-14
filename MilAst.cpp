@@ -187,25 +187,10 @@ void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment, qui
         if( done.contains(m) )
             continue;
         done << m;
-        walkImports(m, done, pointerWidth, stackAlignment, firstParamOffset);
-        calcMemoryLayoutOf(m, pointerWidth, stackAlignment, firstParamOffset);
-    }
-}
-
-void AstModel::walkImports(Declaration* m, DeclList& done, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset)
-{
-    Declaration* sub = m->subs;
-    while(sub)
-    {
-        if( sub->kind == Declaration::Import )
-        {
-            if( sub->imported && !done.contains(sub->imported) )
-            {
-                done << sub->imported;
-                calcMemoryLayoutOf(sub->imported, pointerWidth, stackAlignment, firstParamOffset);
-            }
-        }
-        sub = sub->next;
+        // walkImports cannot be a separate run because it can depend on layout information calculated before the import
+        // appears in the module order which is not yet calculated at this point:
+        // walkImports(m, done, pointerWidth, stackAlignment, firstParamOffset);
+        calcMemoryLayoutOf(m, done, pointerWidth, stackAlignment, firstParamOffset);
     }
 }
 
@@ -248,7 +233,7 @@ AstModel::BitFieldUnit AstModel::collectBitFields(const DeclList& fields, int st
     return res;
 }
 
-void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset)
+void AstModel::calcMemoryLayoutOf(Declaration* module, DeclList& done, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset)
 {
     // RISK: this function assumes that declaration order reflects dependency order, besides pointers
     Declaration* sub = module->subs;
@@ -257,6 +242,14 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, quint8 pointerWidth, quin
         Type* type = sub->getType();
         switch(sub->kind)
         {
+        case Declaration::Import:
+            if( sub->imported && !done.contains(sub->imported) )
+            {
+                done << sub->imported;
+                calcMemoryLayoutOf(sub->imported, done, pointerWidth, stackAlignment, firstParamOffset);
+            }
+            break;
+
         case Declaration::TypeDecl:
             switch( type->kind )
             {

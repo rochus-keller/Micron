@@ -454,6 +454,7 @@ begin
   M.new_cons_segment()
   M.new_vec_segment()
   M.gc()
+  M.init_gc_roots()
   
   (* Initialize special symbols *)
   G.S_arrow := IO.symbol_ref("=>")

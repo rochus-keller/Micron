@@ -152,97 +152,39 @@ begin
 end new_vec_segment
 
 (* Mark nodes which can be accessed through N.
- * Using the Deutsch/Schorr/Waite pointer reversal algorithm.
- * S0: M==0, S==0, unvisited, process CAR (vectors: process 1st slot);
- * S1: M==1, S==1, CAR visited, process CDR (vectors: process next slot);
- * S2: M==1, S==0, completely visited, return to parent.
+ * Simple recursive mark - replaces Deutsch/Schorr/Waite which had
+ * pointer reversal bugs causing heap corruption after GC.
  *)
 procedure mark*(n: S9Types.cell)
 var
-  p: S9Types.cell
-  parent: S9Types.cell
-  v, v1: pointer to S9Types.cell
   i: int32
+  v: pointer to S9Types.cell
 begin
-  parent := S9Types._NIL
+  if G.special_value_p(n) then return end
+  if band(ord(G.Tag[n]), S9Types.MarkTag) # 0 then return end
   
-  loop
-    if G.special_value_p(n) or (band(ord(G.Tag[n]), S9Types.MarkTag) # 0) then
-      if parent = S9Types._NIL then
-        exit
-      end
-      
-      if band(ord(G.Tag[parent]), S9Types.VectorTag) # 0 then
-        (* S1 --> S1|done *)
-        i := val(int32, G.vector_index(parent))
-        v := G.vector(parent)
-        if (band(ord(G.Tag[parent]), S9Types.StateTag) # 0) &
-           (i + 1 < G.vector_len(parent)) then
-          (* S1 --> S1 *)
-          inc(v,i)
-          v1 := v
-          inc(v1,1)
-          p := v1^
-          v^ := n
-          n := p
-          G.Vectors[G.Cdr[parent] - 2] := i + 1
-        else
-          (* S1 --> done *)
-          p := parent
-          inc(v,i)
-          parent := v^
-          v^ := n
-          n := p
-        end
-      elsif band(ord(G.Tag[parent]), S9Types.StateTag) # 0 then
-        (* S1 --> S2 *)
-        p := G.Cdr[parent]
-        G.Cdr[parent] := G.Car[parent]
-        G.Car[parent] := n
-        G.Tag[parent] := chr(band(ord(G.Tag[parent]), bnot(S9Types.StateTag)))
-        G.Tag[parent] := chr(bor(ord(G.Tag[parent]), S9Types.MarkTag))
-        n := p
-      else
-        (* S2 --> done *)
-        p := parent
-        parent := G.Cdr[p]
-        G.Cdr[p] := n
-        n := p
-      end
-    else
-      if band(ord(G.Tag[n]), S9Types.VectorTag) # 0 then
-        (* S0 --> S1|S2 *)
-        G.Tag[n] := chr(bor(ord(G.Tag[n]), S9Types.MarkTag))
-        G.Vectors[G.Cdr[n] - 3] := n  (* vector_link *)
-        if (G.Car[n] = S9Types.T_VECTOR) & (G.vector_len(n) # 0) then
-          G.Tag[n] := chr(bor(ord(G.Tag[n]), S9Types.StateTag))
-          G.Vectors[G.Cdr[n] - 2] := 0  (* vector_index *)
-          v := G.vector(n)
-          p := v^
-          v^ := parent
-          parent := n
-          n := p
-        end
-      elsif band(ord(G.Tag[n]), S9Types.AtomTag) # 0 then
-        (* S0 --> S2 *)
-        if G.input_port_p(n) or G.output_port_p(n) then
-          G.Port_flags[G.port_no(n)] := chr(bor(ord(G.Port_flags[G.port_no(n)]), S9Types.UsedTag))
-        end
-        p := G.Cdr[n]
-        G.Cdr[n] := parent
-        parent := n
-        n := p
-        G.Tag[parent] := chr(bor(ord(G.Tag[parent]), S9Types.MarkTag))
-      else
-        (* S0 --> S1 *)
-        p := G.Car[n]
-        G.Car[n] := parent
-        G.Tag[n] := chr(bor(ord(G.Tag[n]), S9Types.MarkTag))
-        parent := n
-        n := p
-        G.Tag[parent] := chr(bor(ord(G.Tag[parent]), S9Types.StateTag))
+  G.Tag[n] := chr(bor(ord(G.Tag[n]), S9Types.MarkTag))
+  
+  if band(ord(G.Tag[n]), S9Types.VectorTag) # 0 then
+    (* Vector node: mark link for gcv, then recurse into slots if T_VECTOR *)
+    G.Vectors[G.Cdr[n] - 3] := n  (* vector_link *)
+    if (G.Car[n] = S9Types.T_VECTOR) & (G.vector_len(n) # 0) then
+      v := G.vector(n)
+      for i := 0 to G.vector_len(n) - 1 do
+        mark(v^)
+        inc(v)
       end
     end
+  elsif band(ord(G.Tag[n]), S9Types.AtomTag) # 0 then
+    (* Atom node: mark port if applicable, then recurse into cdr *)
+    if G.input_port_p(n) or G.output_port_p(n) then
+      G.Port_flags[G.port_no(n)] := chr(bor(ord(G.Port_flags[G.port_no(n)]), S9Types.UsedTag))
+    end
+    mark(G.Cdr[n])
+  else
+    (* Pair node: recurse into car and cdr *)
+    mark(G.Car[n])
+    mark(G.Cdr[n])
   end
 end mark
 

@@ -373,6 +373,7 @@ begin
       n := n div 10
     end
     (* Reverse the digits *)
+    n := i  (* save end position *)
     j := start
     dec(i)
     while j < i do
@@ -382,7 +383,7 @@ begin
       inc(j)
       dec(i)
     end
-    inc(i)
+    i := n  (* restore end position *)
   end
   buf[i] := 0X
   return IO.symbol_ref(@buf)
@@ -792,6 +793,7 @@ begin
   c := 0
   
   loop
+    
     if G.Error_flag # 0 then
       G.Stack := G.Stack_bottom
       G.Stack_bottom := M.unsave(1)

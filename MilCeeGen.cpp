@@ -122,7 +122,7 @@ bool CeeGen::requiresBody(Declaration* module)
                 return true;
             break;
         case Declaration::TypeDecl:
-            if( sub->getType()->kind == Type::Object )
+            if( sub->getType()->kind == Type::Object || sub->getType()->kind == Type::Struct )
             {
                 foreach( Declaration* d, sub->getType()->subs )
                 {
