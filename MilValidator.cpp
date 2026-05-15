@@ -40,7 +40,7 @@ bool Validator::validate(Declaration* module)
     {
         Type* t = deref(sub->getType());
 
-        if( !sub->forward )
+        if( !sub->forward && sub->kind != Declaration::Placeholder )
         {
             Declaration* d = module->findSubByName(sub->name);
             if( d && d != sub )
@@ -93,6 +93,17 @@ bool Validator::validate(Declaration* module)
                     if( d->kind == Declaration::Field )
                         if( deref(d->getType())->kind == Type::Object )
                             error(d, "union fields cannot be of object type");
+                }
+            if (t->kind == Type::Struct || t->kind == Type::Union)
+                // Check for direct cyclic value inclusion (Structs/Unions)
+                foreach( Declaration* f, t->subs )
+                {
+                    if( f->kind == Declaration::Field ) {
+                        Type* ft = deref(f->getType());
+                        if (ft == t) {
+                            error(f, "struct/union cannot contain itself by value (use a pointer)");
+                        }
+                    }
                 }
             t->objectInit = checkIfObjectInit(t);
             t->pointerInit = checkIfPointerInit(t);
@@ -158,6 +169,8 @@ void Validator::visitProcedure(Declaration* proc)
         if( entryPointFound )
             error(proc, "the module has more than one entry point");
         entryPointFound = true;
+        if (proc->getParams(true).size() > 0)
+            error(proc, "entry point procedures cannot have parameters");
     }
 
     if( proc->typebound )
@@ -172,6 +185,7 @@ void Validator::visitProcedure(Declaration* proc)
         if( !firstIsSelf )
             error(proc, "the 'self' parameter must point to the receiver");
     }
+
     // TODO: check that
     gotos.clear(); labels.clear();
     visitStatSeq(proc->body);
@@ -185,7 +199,12 @@ void Validator::visitProcedure(Declaration* proc)
             error(proc, QString("cannot find label: '%1'").arg(np.name->name));
         else if( !np.pos.contains( labels[label].pos.last() ) )
             error(proc, QString("cannot cannot jump to this label: '%1'").arg(np.name->name));
+        // TODO: assure nobody is jumping into nested compound statements
     }
+
+    // If the procedure type is not null, it's expected to return a value.
+    if( proc->getType() != 0 && fallsThrough(proc->body) )
+        error(proc, "not all control paths return a value");
 
     curProc = 0;
 }
@@ -201,9 +220,18 @@ static inline bool isInt32(Type* t)
 void Validator::visitStatSeq(Statement* stat)
 {
     blockStack.push_back(stat);
+    bool reachable = true;
 
     while(stat)
     {
+        if( stat->kind == IL_label)
+            reachable = true; // A label makes code reachable again
+#if 0
+        else if(!reachable)
+            error(stat, "unreachable code detected"); // should be a warning
+            // reachable = true; // Suppress cascading warnings
+#endif
+
         switch(stat->kind)
         {
         case Statement::ExprStat:
@@ -234,6 +262,7 @@ void Validator::visitStatSeq(Statement* stat)
             break;
         case IL_goto:
             gotos << NamePos(stat, blockStack);
+            reachable = false;
             break;
         case IL_label:
             labels << NamePos(stat, blockStack);
@@ -244,6 +273,8 @@ void Validator::visitStatSeq(Statement* stat)
         case IL_exit:
             if( loopStack.isEmpty() )
                 error(stat, "exit requires enclosing loop");
+            else
+                loopStack.back()->hasExit = true;
             break;
         case IL_pop:
             expectN(1, stat); // we have no reference type information to check here
@@ -314,6 +345,8 @@ void Validator::visitStatSeq(Statement* stat)
         case IL_loop:
             expectN(0, stat);
             visitLoop(stat);
+            if( !stat->hasExit )
+                reachable = false;
             break;
         case IL_repeat:
             expectN(0, stat);
@@ -330,6 +363,7 @@ void Validator::visitStatSeq(Statement* stat)
                 if( curProc && curProc->getType() )
                     error(stat,"return requires a value");
             }
+            reachable = false;
             break;
         case IL_stelem:
         case IL_stelem_i1:
@@ -531,6 +565,7 @@ Statement*Validator::visitSwitch(Statement* stat)
     Type* t = deref(stat->args->getType());
     if( !isInt32(t) && !t->isInt64() )
         error(stat,"expecting a 32 or 64 bit integer expression");
+    QSet<qint64> caseValues;
     while( stat->next && stat->next->kind == IL_case )
     {
         stat = nextStat(stat);
@@ -539,6 +574,10 @@ Statement*Validator::visitSwitch(Statement* stat)
         {
             Q_ASSERT( e->kind == IL_case );
             // stat->e is a list of integers, each as an Expression
+
+            if (caseValues.contains(e->i))
+                error(stat, QString("duplicate case value: %1").arg(e->i));
+            caseValues.insert(e->i);
 #if 0
             // there is no type information
             Type* tt = deref(e->getType());
@@ -1888,3 +1927,86 @@ int Validator::findLabel(const char* name) const
     return -1;
 }
 
+bool Validator::fallsThrough(Statement* stat)
+{
+    bool reachable = true;
+    while(stat)
+    {
+        if( stat->kind == IL_label )
+            reachable = true;
+
+        if( reachable )
+        {
+            switch( stat->kind )
+            {
+            case IL_ret:
+            case IL_goto:
+                reachable = false;
+                break;
+            case IL_exit:
+                reachable = false;
+                break;
+            case IL_if: {
+                const bool thenFalls = fallsThrough(stat->body);
+                bool elseFalls = true;
+
+                Statement* nextStat = stat->next;
+                if (nextStat && nextStat->kind == IL_else) {
+                    elseFalls = fallsThrough(nextStat->body);
+                    stat = nextStat;
+                }
+                reachable = thenFalls || elseFalls;
+                break;
+            }
+            case IL_switch: {
+                bool anyCaseFalls = false;
+                bool hasElse = false;
+                Statement* nextStat = stat->next;
+
+                while (nextStat && nextStat->kind == IL_case) {
+                    if (fallsThrough(nextStat->body)) anyCaseFalls = true;
+                    stat = nextStat;
+                    nextStat = stat->next;
+                }
+                if (nextStat && nextStat->kind == IL_else) {
+                    hasElse = true;
+                    if (fallsThrough(nextStat->body)) anyCaseFalls = true;
+                    stat = nextStat;
+                }
+                reachable = anyCaseFalls || !hasElse;
+                break;
+            }
+            case IL_loop:
+                reachable = stat->hasExit;
+                break;
+            case IL_while:
+            case IL_repeat:
+                fallsThrough(stat->body);
+                reachable = true;
+                break;
+            default:
+                break;
+            }
+        }else
+        {
+            if( stat->kind == IL_if )
+            {
+                Statement* nextStat = stat->next;
+                if (nextStat && nextStat->kind == IL_else)
+                    stat = nextStat;
+            }else if( stat->kind == IL_switch )
+            {
+                Statement* nextStat = stat->next;
+                while (nextStat && nextStat->kind == IL_case) {
+                    stat = nextStat;
+                    nextStat = stat->next;
+                }
+                if( nextStat && nextStat->kind == IL_else )
+                    stat = nextStat;
+            }
+        }
+
+        stat = stat->next;
+    }
+    return reachable;
+}

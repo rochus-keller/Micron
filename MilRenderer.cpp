@@ -879,6 +879,9 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
 
         if( !proc.binding.isEmpty() )
         {
+            // special treating for bound procedures; they are owned by the type they're bound to, not by the
+            // module; this causes the procedure to be moved back to the declaration of the type, out of their
+            // order in the module.
             decl->typebound = true;
             Declaration* receiver = module->findSubByName(proc.binding);
             if( receiver == 0 || receiver->kind != Declaration::TypeDecl ||
@@ -917,6 +920,12 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
                 rt->typebound = true;
                 rt->subs.append(decl);
                 decl->outer = receiver;
+                // remember where the method was in the original declaration order
+                Declaration* placeholder = new Declaration();
+                placeholder->kind = Declaration::Placeholder;
+                placeholder->forwardTo = decl;
+                placeholder->outer = module;
+                module->appendSub(placeholder);
             }
         }else
         {
@@ -1529,7 +1538,11 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
 bool IlAstRenderer::expect(const QList<ProcData::Op>& ops, quint32& pc, int op)
 {
     // pc is not changed in here!
-    if( pc >= ops.size() || ops[pc].op != op )
+    if( pc >= ops.size() )
+    {
+        error(curProc, QString("expecting '%1', pc is out of the operation sequence").arg(s_opName[op]), pc);
+        return false;
+    }else if( ops[pc].op != op )
     {
         error(curProc, QString("expecting '%1', instead got '%2'").arg(s_opName[op]).arg(s_opName[ops[pc].op]), pc);
         return false;

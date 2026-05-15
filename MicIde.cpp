@@ -1329,6 +1329,8 @@ void Ide::onErrors()
         Project2::File* f = d_pro->findFile(errs[i].path);
         if( f && f->d_mod )
             item->setText(0, f->d_mod->name );
+        else if( errs[i].path.contains('!') )
+            item->setText(0, errs[i].path );
         else
             item->setText(0, QFileInfo(errs[i].path).completeBaseName() );
         item->setToolTip(0, errs[i].path );
@@ -3106,7 +3108,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.26");
+    a.setApplicationVersion("0.4.27");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

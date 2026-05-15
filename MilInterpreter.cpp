@@ -534,6 +534,8 @@ bool Interpreter::run(Declaration* proc)
     DeclList modules = imp->mdl->getModules();
     foreach(Declaration* module, modules)
     {
+        if( module->generic )
+            continue;
         DeclList vars = module->getVars();
         foreach( Declaration* d, vars )
         {

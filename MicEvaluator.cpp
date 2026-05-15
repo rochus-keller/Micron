@@ -1280,12 +1280,14 @@ bool Evaluator::error(const QString &msg, const RowCol &pos)
 
 Qualident Evaluator::toQuali(Type * t)
 {
-    return toQuali(t, mdl->getTopModule());
+    return qualiOfType(t, mdl->getTopModule());
 }
 
 Qualident Evaluator::toQuali(Declaration * d)
 {
-    return toQuali(d, mdl->getTopModule());
+    if( d && (d->kind == Declaration::Procedure || d->kind == Declaration::ForwardDecl) && d->typebound )
+        return Qualident(QByteArray(), d->name); // bound procs are type members, i.e. quali of type '.' name (trident), here only name
+    return qualiOfDecl(d, mdl->getTopModule());
 }
 
 void Evaluator::notOp(Value& v, const RowCol& pos)
@@ -1994,33 +1996,35 @@ void Evaluator::unaryPlusOp(Value& v, const RowCol& pos)
     }
 }
 
-Qualident Evaluator::toQuali(Declaration* d, Declaration *module)
+Qualident Evaluator::qualiOfDecl(Declaration* d, Declaration *module)
 {
     Q_ASSERT( d && d->kind != Declaration::Field ); // use toTriple for fields
 
     QByteArray desig;
     Declaration* last = 0;
-    bool doSymbol = false;
+    bool getSymbol = false;
     while( d && d->kind != Declaration::Module )
     {
         Q_ASSERT(d->kind != Declaration::Field);
-        if( d->kind == Declaration::LocalDecl ||
-                d->kind == Declaration::ParamDecl )
+        if( d->kind == Declaration::LocalDecl || d->kind == Declaration::ParamDecl )
             return qMakePair(QByteArray(),d->name); // locals and params have no desig
+#if 0
+        // this is now done directly in toQuali(Decl*)
         if( (d->kind == Declaration::Procedure || d->kind == Declaration::ForwardDecl) && d->typebound )
-            return qMakePair(QByteArray(),d->name); // bound procs are in the namespace of the type
+            return qMakePair(QByteArray(),d->name);
+#endif
         if( d->kind == Declaration::TypeDecl && d->outer == 0 && last == 0 )
-            return toQuali(d->getType(), module); // this is a built-in type
+            return qualiOfType(d->getType(), module); // this is a built-in type
         if( !desig.isEmpty() )
         {
             desig = "$" + desig;
-            doSymbol = true;
+            getSymbol = true;
         }
         desig = d->name + desig;
         last = d;
         d = d->outer;
     }
-    if( doSymbol )
+    if( getSymbol )
         desig = Token::getSymbol(desig);
 
     Q_ASSERT( d && d->kind == Declaration::Module );
@@ -2033,7 +2037,7 @@ Qualident Evaluator::toQuali(Declaration* d, Declaration *module)
     return qMakePair(md.fullName, desig);
 }
 
-Qualident Evaluator::toQuali(Type* t, Declaration *module)
+Qualident Evaluator::qualiOfType(Type* t, Declaration *module)
 {
     static QByteArray symbols[Type::MaxBasicType];
 
@@ -2065,7 +2069,7 @@ Qualident Evaluator::toQuali(Type* t, Declaration *module)
     }else if( t->decl)
     {
         Q_ASSERT( t && t->decl );
-        return toQuali(t->decl, module);
+        return qualiOfDecl(t->decl, module);
     }
     return Qualident();
 }
@@ -2261,6 +2265,9 @@ bool Evaluator::recursiveRun(Expression* e)
                     ? e->lhs->lhs->getFormals()
                     : e->lhs->getFormals(); // no receiver here because args doesn't include it
             const int bi = e->lhs->kind == Expression::Builtin ? e->lhs->val.toInt() : 0;
+
+            if( bi == 0 && args.size() != formals.size() )
+                return error("number of actual and formal arguments don't fit", e->pos);
 
             bool allConst = true;
             for(int i = 0; i < args.size(); i++ )

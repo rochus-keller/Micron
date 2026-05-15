@@ -53,8 +53,8 @@ public:
     const QString& getErr() const { return err; }
     const RowCol getErrPos() const { return errPos; }
 
-    static Qualident toQuali(Declaration*, Declaration* module);
-    static Qualident toQuali(Type*, Declaration* module);
+    static Qualident qualiOfDecl(Declaration*, Declaration* module);
+    static Qualident qualiOfType(Type*, Declaration* module);
     Qualident toQuali(Type*);
     Qualident toQuali(Declaration*);
     static QByteArray dequote(const QByteArray& str);

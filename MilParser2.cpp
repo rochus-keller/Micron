@@ -1390,6 +1390,13 @@ void Parser2::ProcedureDeclaration() {
                 cls->subs.append(proc);
                 proc->outer = cls->decl;
                 cls->typebound = true;
+
+                // remember where the method was in the original declaration order
+                Declaration* placeholder = new Declaration();
+                placeholder->kind = Declaration::Placeholder;
+                placeholder->forwardTo = proc;
+                placeholder->outer = scopeStack.back();
+                scopeStack.back()->appendSub(placeholder);
             }
         }else
             error(tok, "cannot find the receiver type");

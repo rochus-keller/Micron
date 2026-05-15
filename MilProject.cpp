@@ -158,6 +158,8 @@ void Project::generateC()
         module->nobody = !CeeGen::requiresBody(module);
     foreach( Declaration* module, mdl->getModules() )
     {
+        if( module->generic )
+            continue;
         CeeGen cg(mdl);
         QFile header( CeeGen::escapeFilename(module->name) + ".h");
         header.open(QFile::WriteOnly);
@@ -184,6 +186,8 @@ void Project::interpret(bool dump)
     for(int i = modules.size()-1; i >= 0; i--)
     {
         Mil::Declaration* module = modules[i];
+        if( module->generic )
+            continue;
         if( !r.precompile(module) )
             return;
     }

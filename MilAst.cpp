@@ -184,7 +184,7 @@ void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment, qui
     DeclList done;
     foreach( Declaration* m, modules )
     {
-        if( done.contains(m) )
+        if( done.contains(m) || m->generic )
             continue;
         done << m;
         // walkImports cannot be a separate run because it can depend on layout information calculated before the import
@@ -279,6 +279,7 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, DeclList& done, quint8 po
                                 // a normal field
                                 Type* t = field->getType();
                                 const int size = t->getByteSize(pointerWidth);
+                                reportIfSize0(field,size);
                                 alig = t->getAlignment(pointerWidth);
                                 if( i != 0 )
                                     off += AstModel::padding(off, alig);
@@ -291,11 +292,14 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, DeclList& done, quint8 po
                         i++;
                     }
                     type->bytesize = off + AstModel::padding(off, maxAlig);
+#if 0
+                    // no longer here, instead via Placeholder; otherwise we could use structs before their size is known
                     foreach( Declaration* sub, type->subs )
                     {
                         if( sub->kind == Declaration::Procedure )
                             calcParamsLocalsLayout(sub, pointerWidth, stackAlignment, firstParamOffset);
                     }
+#endif
                 }
                 break;
             case Type::Union:
@@ -307,6 +311,7 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, DeclList& done, quint8 po
                         {
                             Type* t = field->getType();
                             const int s = t->getByteSize(pointerWidth);
+                            reportIfSize0(field,s);
                             if( s > size )
                                 size = s;
                         }
@@ -324,6 +329,7 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, DeclList& done, quint8 po
                         Q_ASSERT( field->kind == Declaration::Field );
                         Type* t = field->getType();
                         const int size = t->getByteSize(pointerWidth);
+                        reportIfSize0(field,size);
                         const int alig = t->getAlignment(pointerWidth);
                         if( alig > maxAlig )
                             maxAlig = alig;
@@ -332,11 +338,14 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, DeclList& done, quint8 po
                         off += size;
                     }
                     type->bytesize = off + AstModel::padding(off, maxAlig);
+#if 0
+                    // no longer here, instead via Placeholder
                     foreach( Declaration* sub, type->subs )
                     {
                         if( sub->kind == Declaration::Procedure )
                             calcParamsLocalsLayout(sub, pointerWidth, stackAlignment, firstParamOffset);
                     }
+#endif
                 }
                 break;
             case Type::Pointer:
@@ -347,10 +356,14 @@ void AstModel::calcMemoryLayoutOf(Declaration* module, DeclList& done, quint8 po
         case Declaration::Procedure:
             calcParamsLocalsLayout(sub, pointerWidth, stackAlignment, firstParamOffset);
             break;
+        case Declaration::Placeholder:
+            calcParamsLocalsLayout(sub->forwardTo, pointerWidth, stackAlignment, firstParamOffset);
+            break;
         case Declaration::VarDecl:
             {
                 Type* t = sub->getType();
                 const int size = t->getByteSize(pointerWidth);
+                reportIfSize0(sub,size);
                 const int alig = t->getAlignment(pointerWidth);
                 varOff += AstModel::padding(varOff, alig);
                 sub->off = varOff;
@@ -379,6 +392,7 @@ void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, qu
         case Declaration::LocalDecl:
             {
                 const int size = t->getByteSize(pointerWidth);
+                reportIfSize0(subsub,size);
                 const int alig = t->getAlignment(pointerWidth);
                 off_l += AstModel::padding(off_l, alig);
                 subsub->off = off_l;
@@ -398,6 +412,7 @@ void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, qu
     {
         Type* t = p->getType();
         const int size = t->getByteSize(pointerWidth);
+        reportIfSize0(p,size);
 #if 0
         const int alig = t->getAlignment(pointerWidth);
         off_p += AstModel::padding(off_p, alig);
@@ -410,6 +425,14 @@ void AstModel::calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth, qu
         off_p += qMax(size,(int)stackAlignment);
 #endif
     }
+}
+
+void AstModel::reportIfSize0(Declaration *var, int size)
+{
+#ifdef _DEBUG
+    if( size == 0 )
+        qWarning() << "WARNING: member with size 0:" << var->toPath();
+#endif
 }
 
 Node::~Node()

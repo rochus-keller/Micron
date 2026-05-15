@@ -67,6 +67,7 @@ namespace Mil
         bool checkIfObjectInit(Type* t);
         bool checkIfPointerInit(Type* t);
         int findLabel(const char* name) const;
+        bool fallsThrough(Statement* stat);
 
     private:
         AstModel* mdl;

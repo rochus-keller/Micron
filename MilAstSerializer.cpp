@@ -82,20 +82,26 @@ static void renderType(const Declaration* d, AbstractRenderer* r, AstSerializer:
                 r->addField(f->name,toQuali(f->getType()), f->public_, f->f.bw);
             }
             r->endType();
+#if 0
+            // no longer here, but instead via Placeholder
             DeclList methods = t->getMethodTable(false);
             foreach( Declaration* p, methods )
             {
                 lineout(r, p->pos, dbi);
                 renderProc(p, r, dbi);
             }
+#endif
         } break;
     case Type::Interface:
         r->addType(d->name, d->public_, Quali(), Mil::EmiTypes::Interface);
+#if 0
+        // no longer here, but instead via Placeholder
         foreach( Declaration* p, t->getMethodTable(false) )
         {
             lineout(r, p->pos, dbi);
             renderProc(p, r, dbi);
         }
+#endif
         break;
     case Type::Proc:
         {
@@ -479,6 +485,9 @@ bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, 
             break;
         case Declaration::Procedure:
             renderProc(sub, r, dbi);
+            break;
+        case Declaration::Placeholder:
+            renderProc(sub->forwardTo, r, dbi);
             break;
         case Declaration::Import:
             r->addImport(sub->imported->name);

@@ -499,7 +499,7 @@ bool Project2::parse()
 bool Project2::generateC(const QString &outDir)
 {
     QStringList cFiles;
-    copyCResources(outDir, cFiles);
+    copyCResources(outDir, cFiles, false);
 
     QDir dir(outDir);
     // TODO: check if files can be created and written
@@ -768,13 +768,16 @@ bool Project2::generateX86(const QString &outDir, QStringList& objFiles, bool in
      return !hasErrors;
 }
 
-bool Project2::copyCResources(const QString &outDir, QStringList &cFiles)
+bool Project2::copyCResources(const QString &outDir, QStringList &cFiles, bool withInit)
 {
     cFiles << writeC("runtime", "MIC+", outDir);
 
-    const QString to = QDir(outDir).absoluteFilePath("mic_init_glibc.c");
-    QFile::copy(":/runtime/mic_init_glibc.c", to);
-    cFiles << to;
+    if( withInit )
+    {
+        const QString to = QDir(outDir).absoluteFilePath("mic_init_glibc.c");
+        QFile::copy(":/runtime/mic_init_glibc.c", to);
+        cFiles << to;
+    }
 
     if( useBuiltInOakwood() )
     {
@@ -813,6 +816,8 @@ bool Project2::interpret(const QString& outDir)
     for(int i = mods.size()-1; i >= 0; i--)
     {
         Mil::Declaration* module = mods[i];
+        if( module->generic )
+            continue;
         if( !r.precompile(module) ) {
             qCritical() << "error precompiling" << module->name;
             return false;
@@ -891,7 +896,7 @@ Declaration *Project2::loadModule(const Import &imp)
 //#define _SPLITTER_ // TEST
 #ifdef _SPLITTER_
     Mil::IlAstRenderer ast(&loader.getModel());
-    QFile out("test.mil");
+    QFile out(file->d_filePath + ".dump.mil");
     out.open(QIODevice::WriteOnly);
     Mil::IlAsmRenderer asm_(&out,false);
     Mil::RenderSplitter imr(QList<Mil::AbstractRenderer*>() << &ast << &asm_);

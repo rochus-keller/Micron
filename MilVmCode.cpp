@@ -1968,7 +1968,8 @@ bool Code::dumpAll(QTextStream& out)
 {
     const DeclList& modules = mdl->getModules();
     foreach( Declaration* module, modules )
-        dumpModule(out, module);
+        if( !module->generic )
+            dumpModule(out, module);
     return true;
 }
 

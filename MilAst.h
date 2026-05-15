@@ -39,7 +39,7 @@ namespace Mil
             kind(0),
     #endif
             meta(m),anonymous(false),objectInit(false),typebound(false),
-            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),validated(false),generic(0),hasErrors(0),
+            ownstype(false),inline_(false),invar(false),extern_(false),forward(false),validated(false),generic(0),hasErrors(0),hasExit(0),
             type(0),public_(0),entryPoint(0),owned(0),nobody(0),pointerInit(0),override_(0),translated(0),foreign_(0),subsborrowed(0) {}
         virtual ~Node();
 
@@ -78,7 +78,9 @@ namespace Mil
         uint entryPoint : 1; // procedure: begin$; module: top entry
         uint hasErrors : 1; // module
 
-        // 30 bits
+        // statement
+        uint hasExit : 1;
+        // 31 bits
 
         Mic::RowCol pos; // Declaration, Expression
 
@@ -192,7 +194,7 @@ namespace Mil
     public:
         enum Kind { NoMode, Module, TypeDecl, ConstDecl, Import, Importer,
                     Field, VarDecl, LocalDecl, ParamDecl,
-                    Procedure,
+                    Procedure, Placeholder,
                     Max };
 #ifdef _DEBUG
         Kind kind;
@@ -209,7 +211,7 @@ namespace Mil
                 uint off : 24; // Field offset in bytes
             } f;
             int off;  // LocalDecl & ParamDecl offset in bytes
-            Declaration* forwardTo; // Procedure: if forward==true, not owned
+            Declaration* forwardTo; // Procedure: if forward==true or Placeholder, not owned
             ProcedureData* pd; // Procedure: if forward==false, optionally, owned
             Declaration* imported; // Import, Importer, not owned
             ModuleData* md; // Module
@@ -401,6 +403,7 @@ namespace Mil
                                 quint8 stackAlignment, quint8 firstParamOffset);
         void calcParamsLocalsLayout(Declaration* proc, quint8 pointerWidth,
                                     quint8 stackAlignment, quint8 firstParamOffset);
+        void reportIfSize0(Declaration* var, int size);
 
     private:
         DeclList modules;
