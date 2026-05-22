@@ -228,10 +228,10 @@ static inline bool isAllPrintable(const QString& str)
 
 static void renderComponents( QTextStream& out, const QVariant& data )
 {
-    if( data.canConvert<RecordLiteral>() )
+    if( data.canConvert<StructuredLiteral>() )
     {
         out << "{";
-        RecordLiteral m = data.value<RecordLiteral>();
+        StructuredLiteral m = data.value<StructuredLiteral>();
         for( int i = 0; i < m.size(); i++ )
         {
             out << m[i].first << "=";
@@ -1463,6 +1463,10 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
                 Declaration* d = resolve(cl.typeRef);
                 Q_ASSERT(d);
                 tmp->c->c->type = d->getType();
+            }else
+            {
+                if( tmp == 0 || tmp->kind == Constant::Invalid )
+                    error(tmp->getType(), "invalid literal value");
             }
             } break;
         case IL_ldstr: {
@@ -1583,7 +1587,7 @@ void IlAstRenderer::error(Declaration* d, const QString& msg, int pc)
 
 void IlAstRenderer::error(Type *t, const QString & msg, int pc)
 {
-    if( t->decl )
+    if( t && t->decl )
         error(t->decl, msg, pc);
     else
     {
@@ -1655,12 +1659,14 @@ QVariant ConstrLiteral::toVariant(Constant* c, Type* t)
         return ConstrLiteral::toVariant(c->r->c, c->r->getType());
     case Constant::C: {
             ComponentList* cl = c->c;
-            if( !cl->c.isEmpty() && !cl->c.first().name.isEmpty() )
+            if( cl->c.isEmpty() )
+                return QVariant::fromValue(StructuredLiteral());
+            else if( !cl->c.isEmpty() && !cl->c.first().name.isEmpty() )
             {
                 // named
-                RecordLiteral r;
+                StructuredLiteral r;
                 for( int i = 0; i < cl->c.size(); i++ )
-                    r.append(FieldData(cl->c[i].name, toVariant(cl->c[i].c, 0 )));
+                    r.append(ElementData(cl->c[i].name, toVariant(cl->c[i].c, 0 )));
                 return QVariant::fromValue(r);
             }else if( !cl->c.isEmpty() && cl->c.first().c->kind == Constant::P )
             {
@@ -1675,7 +1681,7 @@ QVariant ConstrLiteral::toVariant(Constant* c, Type* t)
             }
         } break;
     default:
-        Q_ASSERT(false);
+       break;
     }
     return QVariant();
 }
@@ -1690,9 +1696,9 @@ Constant * ConstrLiteral::toConst(const QVariant & data)
         return 0;
     }
     Constant* c = new Constant();
-    if( data.canConvert<RecordLiteral>() )
+    if( data.canConvert<StructuredLiteral>() )
     {
-        RecordLiteral m = data.value<RecordLiteral>();
+        StructuredLiteral m = data.value<StructuredLiteral>();
         c->c = new ComponentList();
         c->kind = Constant::C;
         for( int i = 0; i < m.size(); i++ )
@@ -1763,7 +1769,8 @@ Constant * ConstrLiteral::toConst(const QVariant & data)
         c->d = data.toDouble();
         break;
     default:
-        Q_ASSERT(false);
+        c->kind = Constant::Invalid;
+        break;
     }
     return c;
 }

@@ -130,6 +130,7 @@ namespace Mic
         bool copyCResources(const QString& outDir, QStringList& cFiles, bool withInit = true);
 
         bool interpret(const QString &outDir = QString());
+        bool generateMrl(const QString &outDir);
 
         const FileHash& getFiles() const { return d_files; }
         const FileGroups& getFileGroups() const { return d_groups; }

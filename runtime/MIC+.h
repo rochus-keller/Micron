@@ -25,6 +25,7 @@ extern void MIC$$assert(unsigned char cond, unsigned int line, char* file);
 extern void MIC$$begin$();
 extern void MIC$$exit(int res);
 extern unsigned int MIC$$strlen(char* str);
+extern void MIC$$strcpy(char* to, char* from, int n);
 
 extern void* MIC$$alloc(unsigned int size);
 extern void MIC$$free(void* ptr);

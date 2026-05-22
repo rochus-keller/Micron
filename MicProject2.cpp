@@ -37,6 +37,7 @@
 #include "MilAstSerializer.h"
 #include "MilInterpreter.h"
 #include "MilVmOakwood.h"
+#include "MilRlCode.h"
 using namespace Mic;
 
 struct HitTest
@@ -830,7 +831,7 @@ bool Project2::interpret(const QString& outDir)
         {
             // we have to dump here because when doing it in the precompile loop only the begin$ is ready
             Mil::Declaration* module = mods[i];
-            QFile body( QDir(outDir).absoluteFilePath(QString::fromLatin1(module->name) + ".ll"));
+            QFile body( QDir(outDir).absoluteFilePath(QString::fromLatin1(module->name) + ".mll"));
             body.open(QFile::WriteOnly);
             QTextStream out(&body);
             r.dumpModule(out, module);
@@ -857,6 +858,44 @@ bool Project2::interpret(const QString& outDir)
         // each run gets its freshly initialized module variables
         if( !r.run(module) )
             return false; // TODO: error handling
+    }
+    return true;
+}
+
+bool Project2::generateMrl(const QString &outDir)
+{
+    Mil::Interpreter r(&loader.getModel());
+
+    if( d_useBuiltInOakwood )
+        Mil::VmOakwood::addTo(&r);
+
+    loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
+
+    QList<Mil::Declaration*> mods = loader.getModel().getModules();
+    for(int i = mods.size()-1; i >= 0; i--)
+    {
+        Mil::Declaration* module = mods[i];
+        if( module->generic )
+            continue;
+        if( !r.precompile(module) ) {
+            qCritical() << "error precompiling" << module->name;
+            return false;
+        }
+    }
+
+    Mil::Rl::Code mrl(*r.getCode(), sizeof(void*));
+    if( !mrl.compile() )
+        qWarning() << "Mil::Rl::Code::compile failed";
+    if( !mrl.compactAll() )
+        qWarning() << "Mil::Rl::Code::compactAll failed";
+
+    for(int i = mods.size()-1; i >= 0; i--)
+    {
+        Mil::Declaration* module = mods[i];
+        QFile body( QDir(outDir).absoluteFilePath(QString::fromLatin1(module->name) + ".mrl"));
+        body.open(QFile::WriteOnly);
+        QTextStream out(&body);
+        mrl.dumpModule(out, module);
     }
     return true;
 }

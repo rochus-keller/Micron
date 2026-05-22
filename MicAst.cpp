@@ -31,6 +31,7 @@ const char* Builtin::name[] = {
     "ASSERT", "DEC", "DISPOSE", "EXCL", "HALT", "INC",
     "INCL", "NEW", "PCALL", "PRINT", "PRINTLN", "RAISE", "SETENV",
     "CLI", "GETREG", "NEWGC", "NEWINIT", "NOP", "PUTREG", "STI",
+    "COPY",
 };
 
 const char* Type::name[] = {
@@ -178,6 +179,7 @@ AstModel::AstModel():helper(0),helperId(0)
         addBuiltin(Builtin::NOP);
         addBuiltin(Builtin::PUTREG);
         addBuiltin(Builtin::STI);
+        addBuiltin(Builtin::COPY);
     }
 }
 

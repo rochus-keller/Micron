@@ -697,6 +697,8 @@ Symbol* Parser2::markRef(Declaration* d, const RowCol& pos, quint8 what)
     s->len = d->name.size();
     if( d->kind == Declaration::Module )
         s->len -= d->data.value<ModuleData>().suffix.size();
+    //else
+    //    d->used = true;
     xref[d].append(s);
     last->next = s;
     last = last->next;
@@ -778,6 +780,7 @@ Expression *Parser2::createSelector(Declaration *field, Expression *prev, bool n
         error(cur, "expecting a field, variant or method");
 
     Expression* tmp = Expression::create(k, pos );
+    field->used = true;
     tmp->val = QVariant::fromValue(field);
     tmp->lhs = prev;
     tmp->setType(getGuardedType(field));
@@ -2569,12 +2572,12 @@ Expression* Parser2::maybeQualident(Symbol** s)
     Declaration* d = findDecl(cur);
     if( d )
     {
+        d->used = true;
         quint8 visi = Declaration::NA; // symbol is local, no read/write restriction
         if( la.d_type == Tok_Dot && d->kind == Declaration::Import )
         {
             // this is the one and only qualident case
             markRef(d, tok.toRowCol());
-            d->used = true;
             expect(Tok_Dot, false, "selector");
             expect(Tok_ident, false, "selector");
             tok = cur;
@@ -2589,6 +2592,7 @@ Expression* Parser2::maybeQualident(Symbol** s)
                           arg(cur.d_val.constData()).arg(d->name.constData()) );
                 d = d2;
                 visi = d->visi;
+                d->used = true;
             }
         }
         *s = markRef(d, tok.toRowCol());
@@ -2725,7 +2729,10 @@ void Parser2::checkForwards()
         Declaration* orig = forward->deforward();
 
         if( !forward->used )
+        {
+            qWarning() << "unused forward declaration:" << thisMod->name << forward->name << forward->pos.d_row << forward->pos.d_col;
             ; // error(forward->pos, "unused forward declaration" ); // TODO: warning instead of error, or ignore
+        }
         else if( orig == 0 || orig == forward )
             error(forward->pos, "forward is referenced, but there is no implementation" );
     }
@@ -2966,7 +2973,7 @@ Expression* Parser2::constructor(Type* hint) {
         Expression* c = res->rhs;
         while(c)
         {
-            Q_ASSERT( c->kind == Expression::NameValue);
+            Q_ASSERT( c->kind == Expression::NameValue || c->kind == Expression::Value);
             Declaration* name = c->val.value<Declaration*>();
             if( test.contains(name) )
                 error(c->pos, "value for this field was already defined");
@@ -2991,7 +2998,7 @@ Expression* Parser2::constructor(Type* hint) {
             Expression* c = res->rhs;
             while(c)
             {
-                Q_ASSERT( c->kind == Expression::IndexValue);
+                Q_ASSERT( c->kind == Expression::IndexValue || c->kind == Expression::Value);
                 if( !c->isConst() )
                 {
                     error(res->pos, "open array constructor only supported for contant expression components");
@@ -3024,6 +3031,7 @@ Expression* Parser2::constructor(Type* hint) {
 Expression* Parser2::component(Type* constrType, int& index) {
     Expression* res;
     if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Colon )  ) {
+        // a named component
         expect(Tok_ident, false, "component");
         // TODO: limited access for Object inherited fields
         if( constrType->kind != Type::Record  && constrType->kind != Type::Object)
@@ -3049,6 +3057,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
             error(rhs->pos, "incompatible value");
         index = constrType->subs.indexOf(field);
     } else if( la.d_type == Tok_Lbrack ) {
+        // an indexed component
         expect(Tok_Lbrack, false, "component");
         if( constrType->kind != Type::Array )
         {
@@ -3075,6 +3084,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
         if( !assigCompat(constrType->getType(), rhs, rhs->pos ) )
             error(rhs->pos, "incompatible value");
     } else if( FIRST_expression(la.d_type) ) {
+        // an anonymous component
         if( constrType->isPointerProcType() )
         {
             res = ConstExpression(0);
@@ -3112,7 +3122,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
                 error(res->pos, "component cannot be associated with record field");
                 return 0;
             }
-            Expression* res2 = Expression::create(Expression::NameValue, res->pos);
+            Expression* res2 = Expression::create(Expression::Value, res->pos);
             res2->val = QVariant::fromValue(constrType->subs[index]);
             res2->rhs = res;
             if( !assigCompat(constrType->subs[index]->getType(), res, res->pos ) )
@@ -3145,7 +3155,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
             }
             if( constrType->len && index >= constrType->len || index < 0 )
                 error(res->pos, "component is out of range of the array");
-            Expression* res2 = Expression::create(Expression::IndexValue, res->pos);
+            Expression* res2 = Expression::create(Expression::Value, res->pos);
             res2->val = index;
             res2->rhs = res;
             if( !assigCompat(constrType->getType(), res, res->pos ) )
@@ -4034,11 +4044,11 @@ Parser2::NameAndType Parser2::Receiver() {
     if( d == 0 )
         return res; // already reported
     if( d->kind != Declaration::TypeDecl || d->getType() == 0 ||
-            (d->getType()->kind != Type::Object && d->getType()->kind != Type::Pointer ) ||
-            (d->getType()->kind == Type::Pointer && ( d->getType()->getType() == 0 ||
-                                                      d->getType()->getType()->kind != Type::Object)))
+            (d->getType()->kind != Type::Object && d->getType()->kind != Type::Pointer && d->getType()->kind != Type::Record ) ||
+            (d->getType()->kind == Type::Pointer &&
+                ( d->getType()->getType() == 0 || (d->getType()->getType()->kind != Type::Object && d->getType()->getType()->kind != Type::Record))))
     {
-        error(res.tn, "receiver must be an object or pointer to object type");
+        error(res.tn, "receiver must be an object or record or pointer to object or record type");
         return res;
     }else
         res.t = d->getType(); // res is an object or pointer to object

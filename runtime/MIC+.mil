@@ -20,5 +20,6 @@ proc printSet(s: u4) extern
 proc assert(cond: u1; line: u4; file: _$2) extern
 proc exit(res: i4) extern
 proc strlen(str: _$3): u4 extern
+proc strcpy(to,from: _$3; n: i4) extern
 
 end MIC$

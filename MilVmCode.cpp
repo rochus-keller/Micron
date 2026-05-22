@@ -127,6 +127,8 @@ bool Code::translateModule(Declaration* module)
 
 bool Code::translateProcDecl(Declaration* proc)
 {
+    if( proc == 0 )
+        return false;
     if( proc->validated )
         return true; // the proc was already translated
     proc->validated = true;

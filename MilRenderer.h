@@ -86,12 +86,12 @@ namespace Mil
     {
         Quali typeRef;
         QVariant data; // note that array of byte can be either QByteArray or QVariantList
-        // expected values: QByteArray, QVariantList, RecordLiteral, PointerLiteral, quint32 (set)
+        // expected values: QByteArray, QVariantList, StructuredLiteral, PointerLiteral, quint32 (set)
         static Constant* toConst(const QVariant & data);
         static QVariant toVariant(Constant*, Type *t);
     };
-    typedef QPair<QByteArray,QVariant> FieldData;
-    typedef QList<FieldData> RecordLiteral;
+    typedef QPair<QByteArray,QVariant> ElementData;
+    typedef QList<ElementData> StructuredLiteral; // struct (by name), array (by number), sparse
     struct PointerLiteral // used for both regular pointers and procedure types
     {
         quint64 ptr;
@@ -272,7 +272,7 @@ namespace Mil
 Q_DECLARE_METATYPE(Mil::ConstrLiteral)
 Q_DECLARE_METATYPE(Mil::CaseLabelList)
 Q_DECLARE_METATYPE(Mil::Trident)
-Q_DECLARE_METATYPE(Mil::RecordLiteral)
+Q_DECLARE_METATYPE(Mil::StructuredLiteral)
 Q_DECLARE_METATYPE(Mil::PointerLiteral)
 
 #endif // _MILRENDERER_H

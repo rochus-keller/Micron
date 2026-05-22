@@ -10,6 +10,7 @@ SOURCES += \
     $$PWD/MilElfLinker.cpp \
     $$PWD/MilElfReader.cpp \
     $$PWD/MilElfWriter.cpp \
+    $$PWD/MilRlCode.cpp \
     $$PWD/MilRv32Emitter.cpp \
     $$PWD/MilRv32Fixup.cpp \
     $$PWD/MilRv32Renderer.cpp \
@@ -47,6 +48,7 @@ HEADERS += \
     $$PWD/MilElfLinker.h \
     $$PWD/MilElfReader.h \
     $$PWD/MilElfWriter.h \
+    $$PWD/MilRlCode.h \
     $$PWD/MilRv32Emitter.h \
     $$PWD/MilRv32Fixup.h \
     $$PWD/MilRv32Renderer.h \

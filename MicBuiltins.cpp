@@ -420,6 +420,16 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::STI:
         expectingNArgs(args,0);
         break;
+    case Builtin::COPY:
+        expectingNArgs(args,3);
+        if( args[0]->getType()->kind != Type::Pointer || !args[0]->getType()->getType()->isCharArray() )
+            throw "expecting a pointer to char array as the first argument";
+        if( (args[1]->getType()->kind != Type::Pointer || !args[1]->getType()->getType()->isCharArray()) &&
+                args[1]->getType()->kind != Type::StrLit )
+            throw "expecting a pointer to char array or string literal as the second argument";
+        if( !args[2]->getType()->isInteger() )
+            throw "expecting an integer as the third argument";
+        break;
     }
     }catch( const QString& err )
     {
@@ -546,11 +556,11 @@ void Builtins::doDefault()
         v.val = 0; // TODO Pointer/Proc
     else if( v.type->kind == Type::Interface || (v.type->kind == Type::Proc && v.type->typebound) )
     {
-        Mil::RecordLiteral rec;
+        Mil::StructuredLiteral rec;
         v.val = QVariant::fromValue(rec); // TODO
     }else if( v.type->kind == Type::Record || v.type->kind == Type::Object )
     {
-        Mil::RecordLiteral rec;
+        Mil::StructuredLiteral rec;
         v.val = QVariant::fromValue(rec); // TODO
     }else if( v.type->kind == Type::Array )
     {
@@ -859,6 +869,14 @@ void Builtins::doChr(const RowCol &pos)
     }
     ev->stack.push_back(v);
 
+}
+
+void Builtins::COPY(const RowCol &pos)
+{
+    Value n = ev->stack.takeLast();
+    Value from = ev->stack.takeLast();
+    Value to = ev->stack.takeLast();
+    ev->out->call_(coreName("strcpy"),3,false);
 }
 
 void Builtins::checkNumOfActuals(int nArgs, int min, int max)
@@ -1494,6 +1512,12 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         checkNumOfActuals(nArgs, 2);
         pushActualsToMilStack(nArgs,pos);
         PUTREG(pos);
+        handleStack = false;
+        break;
+    case Builtin::COPY:
+        checkNumOfActuals(nArgs, 3);
+        pushActualsToMilStack(nArgs,pos);
+        COPY(pos);
         handleStack = false;
         break;
 

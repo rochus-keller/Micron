@@ -490,6 +490,11 @@ void Interpreter::registerProc(const QByteArray& module, const QByteArray& procN
                           Mic::Atom::getAtom(procName).constData(), id);
 }
 
+Code *Interpreter::getCode() const
+{
+    return &imp->code;
+}
+
 bool Interpreter::precompile(Declaration* proc)
 {
     Q_ASSERT(proc && (proc->kind == Declaration::Procedure || proc->kind == Declaration::Module));

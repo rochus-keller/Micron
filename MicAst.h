@@ -37,6 +37,7 @@ namespace Mic
             ASSERT, DEC, DISPOSE, EXCL, HALT, INC,
             INCL, NEW, PCALL, PRINT, PRINTLN, RAISE, SETENV,
             CLI, GETREG, NEWGC, NEWINIT, NOP, PUTREG, STI,
+            COPY,
             // end
             Max
         };
@@ -218,7 +219,7 @@ namespace Mic
             Cast, AutoConv,
             Call,
             Literal,
-            Constructor, Range, NameValue, IndexValue,
+            Constructor, Range, NameValue, IndexValue, Value,
             Super,   // ^ supercall
             MAX
         };

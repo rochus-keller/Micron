@@ -26,6 +26,11 @@ class QTextStream;
 
 namespace Mil
 {
+    namespace Vm
+    {
+        class Code;
+    }
+
     class Interpreter
     {
     public:
@@ -46,6 +51,7 @@ namespace Mil
         static int stackAligned(int off);
         enum { StackAlign = 8 };
         void registerProc(const QByteArray& module, const QByteArray& procName, FfiProc proc);
+        Vm::Code* getCode() const;
 
         // proc is either a procedure or a module
         bool precompile(Declaration* proc);

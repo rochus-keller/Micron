@@ -2321,6 +2321,7 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Range:
     case Expression::NameValue:
     case Expression::IndexValue:
+    case Expression::Value:
         break;
     case Expression::Constructor:
         constructor(e);
@@ -2369,11 +2370,11 @@ bool Evaluator::recurseConstConstructor(Expression* e)
     {
     case Type::Record:
     case Type::Object: {
-            Mil::RecordLiteral rec;
+            Mil::StructuredLiteral rec;
             Expression* c = e->rhs;
             while( c )
             {
-                Q_ASSERT( c->kind == Expression::NameValue );
+                Q_ASSERT( c->kind == Expression::NameValue || c->kind == Expression::Value );
                 if( !evaluate(c->rhs) )
                     return false;
                 Value v = stack.takeLast();
@@ -2383,38 +2384,42 @@ bool Evaluator::recurseConstConstructor(Expression* e)
             }
             Value v;
             v.mode = Value::Const;
-            v.val = QVariant::fromValue(rec); // v.val = Mil::RecordLiteral
+            v.val = QVariant::fromValue(rec); // v.val = Mil::StructuredLiteral
             v.type = e->getType();
             stack.push_back(v);
             break;
         }
     case Type::Array: {
             Q_ASSERT( e->getType()->len > 0 );
-            QVector<QVariant> arr(e->getType()->len);
+            Value res;
+            res.mode = Value::Const;
             Expression* c = e->rhs;
             if( (e->getType()->isCharArray() && c->getType()->kind == Type::StrLit) ||
                     (e->getType()->isByteArray() && c->getType() && c->getType()->kind == Type::ByteArrayLit))
             {
                 // special case: char array constructor initialized with string literal
+                QVector<QVariant> arr(e->getType()->len);
                 const QByteArray str = c->val.toByteArray();
                 for( int i = 0; i < str.size(); i++ )
                     arr[i] = QVariant::fromValue((char)str[i]);
+                res.val = QVariant::fromValue(arr.toList()); // v.val = QVariantList
             }else
+            {
+                Mil::StructuredLiteral arr;
                 while( c )
                 {
-                    Q_ASSERT( c->kind == Expression::IndexValue );
+                    Q_ASSERT( c->kind == Expression::IndexValue || c->kind == Expression::Value );
                     if( !evaluate(c->rhs) )
                         return false;
                     Value v = stack.takeLast();
                     Q_ASSERT( v.isConst() );
-                    arr[c->val.toLongLong()] = v.val;
+                    arr.append(qMakePair(c->val.toByteArray(), v.val));
                     c = c->next;
                 }
-            Value v;
-            v.mode = Value::Const;
-            v.val = QVariant::fromValue(arr.toList()); // v.val = QVariantList
-            v.type = e->getType();
-            stack.push_back(v);
+                res.val = QVariant::fromValue(arr);
+            }
+            res.type = e->getType();
+            stack.push_back(res);
             break;
         }
     case Type::Pointer:

@@ -73,7 +73,7 @@ static inline bool FIRST_type(int tt) {
 }
 
 static inline bool FIRST_NamedType(int tt) {
-	return tt == Tok_ident;
+    return tt == Tok_ident;
 }
 
 static inline bool FIRST_ArrayType(int tt) {
@@ -2812,7 +2812,7 @@ Constant* Parser2::ConstExpression2() {
 }
 
 Constant* Parser2::constructor() {
-	if( FIRST_NamedType(la.d_type) ) {
+    if( FIRST_NamedType(la.d_type) ) {
         Type* t = NamedType();
         ComponentList* cl = component_list();
         cl->type = t;
@@ -2861,7 +2861,11 @@ void Parser2::component(Component& cp) {
 		expect(Tok_ident, false, "component");
         cp.name = cur.d_val;
 		expect(Tok_Eq, false, "component");
-	}
+    }else if( ( peek(1).d_type == Tok_unsigned && peek(2).d_type == Tok_Eq )  ) {
+        expect(Tok_unsigned, false, "component");
+        cp.name = cur.d_val;
+        expect(Tok_Eq, false, "component");
+    }
 	if( FIRST_ConstExpression(la.d_type) ) {
         cp.c = ConstExpression();
 	} else if( FIRST_component_list(la.d_type) ) {

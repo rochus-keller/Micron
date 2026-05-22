@@ -139,6 +139,17 @@ unsigned int MIC$$strlen(char* str)
 	return strlen(str);
 }
 
+void MIC$$strcpy(char* to, char* from, int n)
+{
+    if( n <= 0 )
+        return;
+    int len = strlen(from) + 1;
+    if( len < n )
+        n = len;
+    strncpy(to, from, n);
+    to[n] = 0;
+}
+
 void* MIC$$alloc(unsigned int size)
 {
     return malloc(size);

@@ -790,7 +790,8 @@ void Ide::createMenuBar()
     pop->addCommand( "Show dependency order...", this, SLOT(onShowDepOrder()) );
     pop->addSeparator();
     pop->addCommand( "Export MIL...", this, SLOT(onExportMil()) );
-    pop->addCommand( "Export low-level bytecode...", this, SLOT(onExportLl()) );
+    pop->addCommand( "Export MLL...", this, SLOT(onExportLl()) );
+    pop->addCommand( "Export MRL...", this, SLOT(onExportRl()) );
     pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
     //pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
@@ -871,12 +872,24 @@ void Ide::onExportLl()
 {
     ENABLED_IF( !d_pro->getFiles().isEmpty() && d_status == Idle );
 
-    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save Micron Low-Level Bytecode (LL)"), d_pro->getBuildDir(true) );
+    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save Micron Low-Level Bytecode (MLL)"), d_pro->getBuildDir(true) );
 
     if (dirPath.isEmpty())
         return;
 
     d_pro->interpret(dirPath);
+}
+
+void Ide::onExportRl()
+{
+    ENABLED_IF( !d_pro->getFiles().isEmpty() && d_status == Idle );
+
+    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save Micron register-Level Bytecode (MRL)"), d_pro->getBuildDir(true) );
+
+    if (dirPath.isEmpty())
+        return;
+
+    d_pro->generateMrl(dirPath);
 }
 
 void Ide::onAbort()
@@ -1048,7 +1061,7 @@ void Ide::onExportLlvm()
 {
     ENABLED_IF( d_pro->errors.isEmpty() );
 
-    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save LLVM Intermediate Language (LL)"), d_pro->getBuildDir(true) );
+    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save LLVM Intermediate Language"), d_pro->getBuildDir(true) );
 
     if (dirPath.isEmpty())
         return;
@@ -3108,7 +3121,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.27");
+    a.setApplicationVersion("0.4.28");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 
