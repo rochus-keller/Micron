@@ -131,7 +131,7 @@ struct LowerState {
         quint32 argOff = 0;
         for (size_t i = 0; i < args.size(); i++)
         {
-            emitOp(RL_arg, args[i].vreg, NO_REG, NO_REG, argOff);
+            emitOp(RL_arg, args[i].vreg, NO_REG, NO_REG, argOff, args[i].size);
             argOff += args[i].size;
         }
         quint16 retReg = NO_REG;

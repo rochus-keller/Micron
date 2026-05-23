@@ -1320,14 +1320,6 @@ Expression* Parser2::ConstExpression(Type* hint) {
     return res;
 }
 
-static inline Mil::Quali toMilQuali(const QPair<Token,Token>& in)
-{
-    Mil::Quali out;
-    out.first = in.first.d_val;
-    out.second = in.second.d_val;
-    return out;
-}
-
 void Parser2::TypeDeclaration() {
     const IdentDef id = identdef();
 	expect(Tok_Eq, false, "TypeDeclaration");
@@ -1379,12 +1371,25 @@ void Parser2::TypeDeclaration() {
     }
 
     thisDecl = 0;
-    if( t && !q.second.d_val.isEmpty() )
+    if( t && !q.second.d_val.isEmpty() ) {
         // handle the case where the declaration points to a named type, i.e. the name of this declaration is associated with
         // an existing declaration
-        out->addType(d->name,d->pos,t->decl->isPublic(),toMilQuali(q), Mil::EmiTypes::Alias);
-        // before, wrong: out->addType(ev->toQuali(t).second,d->pos,t->decl->isPublic(),toMilQuali(q), Mil::EmiTypes::Alias);
-    else
+        Mil::Quali milq;
+        milq.second = q.second.d_val;
+        if( !q.first.d_val.isEmpty() )
+        {
+            Declaration* import = mdl->findDecl(q.first.d_val);
+            if( import && import->kind == Declaration::Import )
+            {
+                Declaration* impmod = import->data.value<Import>().resolved;
+                if( impmod )
+                    milq.first = impmod->data.value<ModuleData>().fullName;
+            }
+            if( milq.first.isEmpty() )
+                milq.first = q.first.d_val;
+        }
+        out->addType(d->name,d->pos,t->decl->isPublic(),milq, Mil::EmiTypes::Alias);
+    } else
         emitType(t);
 }
 
@@ -4146,7 +4151,10 @@ void Parser2::ReturnStatement() {
         if( e && !ev->evaluate(e) )
             errorEv(); // value is pushed on stack by prepareRhs
         if( e && !assigCompat( retType, e, e->pos ) )
-            error(tok,"expression is not compatible with the return type");
+        {
+            error(tok,QString("expression is not compatible with the return type (%1, %2)")
+                  .arg(Type::name[retType->kind]).arg(Type::name[e->getType()->kind]));
+        }
         if( e && !ev->prepareRhs(retType, false, e->pos) )
             errorEv();
         ev->pop();

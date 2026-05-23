@@ -556,7 +556,7 @@ bool Evaluator::desigVar(bool byVal, const RowCol& pos)
 
 #if 1
     // don't copy char arrays to stack by value eagerly to support relation ops
-    if( byVal && v.type->isCharArray() )
+    if( byVal && v.type && v.type->isCharArray() )
         byVal = false;
 #endif
 

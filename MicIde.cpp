@@ -2409,8 +2409,9 @@ static void createModItem(T* parent, Declaration* n, Type* t, bool nonbound, boo
         if( n != t->decl )
         {
             // this is a type alias
-            if( t->kind == Type::Record || t->kind == Type::Object )
-                createModItem(parent,n,t,nonbound, sort, idx, pro);
+            // TODO: crash
+            //if( t->kind == Type::Record || t->kind == Type::Object )
+            //    createModItem(parent,n,t,nonbound, sort, idx, pro);
         }else
             switch( t->kind )
             {
@@ -3121,7 +3122,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.28");
+    a.setApplicationVersion("0.4.29");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

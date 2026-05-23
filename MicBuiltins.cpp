@@ -385,9 +385,13 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::NEWGC:
     case Builtin::NEWINIT:
         expectingNMArgs(args,1,2);
-        break;
         if( args[0]->getType()->kind != Type::Pointer )
             throw "expecting a pointer as the first argument";
+        if( args.size() == 2 )
+        {
+            if( args[0]->getType()->getType()->kind != Type::Array || args[0]->getType()->getType()->len != 0 )
+                throw "second argument only supported for open arrays";
+        }
         break;
     case Builtin::PCALL:
         break;
