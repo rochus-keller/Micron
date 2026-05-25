@@ -313,7 +313,7 @@ void IlAsmRenderer::render(const ProcData& m)
     {
         out << ws() << "procedure ";
         lineout();
-        if( !m.binding.isEmpty() )
+        if( (m.kind == ProcData::Normal || m.kind == ProcData::Abstract || m.kind == ProcData::Inline) && !m.binding.isEmpty() )
             out << m.binding << ".";
         out << m.name;
         state = Proc;
@@ -347,8 +347,8 @@ void IlAsmRenderer::render(const ProcData& m)
         break;
     case ProcData::Foreign:
         out << " extern c ";
-        if( !m.origName.isEmpty() )
-            out << "\"" << m.origName << "\" ";
+        if( !m.binding.isEmpty() )
+            out << "\"" << m.binding << "\" ";
         break;
     case ProcData::Inline:
         out << " inline ";
@@ -838,7 +838,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
             break;
         case ProcData::Foreign:
             decl->foreign_ = true;
-            decl->getPd()->origName = proc.origName;
+            decl->getPd()->externalName = proc.binding;
             break;
         case ProcData::Inline:
             decl->inline_ = true;
@@ -877,7 +877,7 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
             p->setType( derefType(local.type) );
         }
 
-        if( !proc.binding.isEmpty() )
+        if( (proc.kind == ProcData::Normal || proc.kind == ProcData::Forward || proc.kind == ProcData::Abstract || proc.kind == ProcData::Inline) && !proc.binding.isEmpty() )
         {
             // special treating for bound procedures; they are owned by the type they're bound to, not by the
             // module; this causes the procedure to be moved back to the declaration of the type, out of their

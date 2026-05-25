@@ -548,6 +548,86 @@ void CeeGen::pointerTo(QTextStream& out, Type* ptr)
     out << typeRef(ptr->getType()) << "*";
 }
 
+static inline bool isPrintableAscii(unsigned char c)
+{
+    return c >= 0x20 && c <= 0x7e;
+}
+
+static inline char octDigit(unsigned int v)
+{
+    return char('0' + (v & 7));
+}
+
+static QByteArray toCStringLiteral(const QByteArray &in)
+{
+    QByteArray out;
+    out += '"';
+
+    bool lastWasOctalEscape = false;
+
+    for (int i = 0; i < in.size(); ++i) {
+        unsigned char c = static_cast<unsigned char>(in.at(i));
+
+        if (lastWasOctalEscape && c >= '0' && c <= '9') {
+            out += "\"\"";
+        }
+
+        switch (c) {
+        case '\\':
+            out += "\\\\";
+            lastWasOctalEscape = false;
+            break;
+        case '\"':
+            out += "\\\"";
+            lastWasOctalEscape = false;
+            break;
+        case '\a':
+            out += "\\a";
+            lastWasOctalEscape = false;
+            break;
+        case '\b':
+            out += "\\b";
+            lastWasOctalEscape = false;
+            break;
+        case '\f':
+            out += "\\f";
+            lastWasOctalEscape = false;
+            break;
+        case '\n':
+            out += "\\n";
+            lastWasOctalEscape = false;
+            break;
+        case '\r':
+            out += "\\r";
+            lastWasOctalEscape = false;
+            break;
+        case '\t':
+            out += "\\t";
+            lastWasOctalEscape = false;
+            break;
+        case '\v':
+            out += "\\v";
+            lastWasOctalEscape = false;
+            break;
+        default:
+            if (isPrintableAscii(c)) {
+                out += QChar(c);
+                lastWasOctalEscape = false;
+            } else {
+                out += '\\';
+                out += QChar(octDigit(c >> 6));
+                out += QChar(octDigit(c >> 3));
+                out += QChar(octDigit(c));
+                lastWasOctalEscape = true;
+            }
+            break;
+        }
+    }
+
+    out += '"';
+    return out;
+}
+
 void CeeGen::constValue(QTextStream& out, Constant* c, Type* hint)
 {
     if( c == 0 )
@@ -566,12 +646,9 @@ void CeeGen::constValue(QTextStream& out, Constant* c, Type* hint)
     case Constant::P:
         out << "0x" << QByteArray::number(c->p,16);
         break;
-    case Constant::S: {
-            QByteArray tmp = c->s;
-            tmp.replace("\\", "\\\\");
-            tmp.replace("\"", "\\\"");
-            out << "\"" << tmp << "\"";
-        } break;
+    case Constant::S:
+        out << toCStringLiteral(c->s);
+        break;
     case Constant::B:
         {
             const ByteString* ba = c->b;
@@ -610,7 +687,12 @@ void CeeGen::constValue(QTextStream& out, Constant* c, Type* hint)
                 if( i != 0 )
                     out << ", ";
                 if( !c->c->c[i].name.isEmpty() )
-                    out << "." << c->c->c[i].name << "=";
+                {
+                    if( c->c->type->kind == Type::Array )
+                        out << "[" << c->c->c[i].name << "]=";
+                    else
+                        out << "." << c->c->c[i].name << "=";
+                }
                 constValue(out, c->c->c[i].c, 0);
             }
             if( fixArray )

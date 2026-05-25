@@ -46,7 +46,8 @@ static inline bool FIRST_ConstDeclaration(int tt) {
 static inline bool FIRST_ConstExpression(int tt) {
 	switch(tt){
 	case Tok_Tilde:
-	case Tok_TRUE:
+    case Tok_NOT:
+    case Tok_TRUE:
 	case Tok_NIL:
 	case Tok_Lpar:
 	case Tok_FALSE:
@@ -97,7 +98,8 @@ static inline bool FIRST_ArrayType(int tt) {
 static inline bool FIRST_length(int tt) {
 	switch(tt){
 	case Tok_Tilde:
-	case Tok_VAR:
+    case Tok_NOT:
+    case Tok_VAR:
 	case Tok_TRUE:
 	case Tok_NIL:
 	case Tok_Lpar:
@@ -172,7 +174,8 @@ static inline bool FIRST_selector(int tt) {
 static inline bool FIRST_expression(int tt) {
 	switch(tt){
 	case Tok_Tilde:
-	case Tok_TRUE:
+    case Tok_NOT:
+    case Tok_TRUE:
 	case Tok_NIL:
 	case Tok_Lpar:
 	case Tok_FALSE:
@@ -210,7 +213,8 @@ static inline bool FIRST_relation(int tt) {
 static inline bool FIRST_SimpleExpression(int tt) {
 	switch(tt){
 	case Tok_Tilde:
-	case Tok_TRUE:
+    case Tok_NOT:
+    case Tok_TRUE:
 	case Tok_NIL:
 	case Tok_Lpar:
 	case Tok_FALSE:
@@ -236,7 +240,8 @@ static inline bool FIRST_AddOperator(int tt) {
 static inline bool FIRST_term(int tt) {
 	switch(tt){
 	case Tok_Tilde:
-	case Tok_TRUE:
+    case Tok_NOT:
+    case Tok_TRUE:
 	case Tok_NIL:
 	case Tok_Lpar:
 	case Tok_FALSE:
@@ -289,11 +294,11 @@ static inline bool FIRST_component(int tt) {
     case Tok_Lpar:
     case Tok_Minus:
     case Tok_NIL:
-    case Tok_NOT:
     case Tok_Plus:
     case Tok_real:
     case Tok_string:
     case Tok_Tilde:
+    case Tok_NOT:
     case Tok_TRUE:
         return true;
     default: return false;
@@ -328,7 +333,8 @@ static inline bool FIRST_variableOrFunctionCall(int tt) {
 static inline bool FIRST_element(int tt) {
 	switch(tt){
 	case Tok_Tilde:
-	case Tok_TRUE:
+    case Tok_NOT:
+    case Tok_TRUE:
 	case Tok_NIL:
 	case Tok_Lpar:
 	case Tok_FALSE:
@@ -413,7 +419,8 @@ static inline bool FIRST_CaseStatement(int tt) {
 static inline bool FIRST_Case(int tt) {
 	switch(tt){
 	case Tok_Tilde:
-	case Tok_TRUE:
+    case Tok_NOT:
+    case Tok_TRUE:
 	case Tok_NIL:
 	case Tok_Lpar:
 	case Tok_FALSE:
@@ -435,7 +442,8 @@ static inline bool FIRST_Case(int tt) {
 static inline bool FIRST_CaseLabelList(int tt) {
 	switch(tt){
 	case Tok_Tilde:
-	case Tok_TRUE:
+    case Tok_NOT:
+    case Tok_TRUE:
 	case Tok_NIL:
 	case Tok_Lpar:
 	case Tok_FALSE:
@@ -457,7 +465,8 @@ static inline bool FIRST_CaseLabelList(int tt) {
 static inline bool FIRST_LabelRange(int tt) {
 	switch(tt){
 	case Tok_Tilde:
-	case Tok_TRUE:
+    case Tok_NOT:
+    case Tok_TRUE:
 	case Tok_NIL:
 	case Tok_Lpar:
 	case Tok_FALSE:
@@ -479,6 +488,7 @@ static inline bool FIRST_LabelRange(int tt) {
 static inline bool FIRST_label(int tt) {
 	switch(tt){
 	case Tok_Tilde:
+    case Tok_NOT:
 	case Tok_TRUE:
 	case Tok_NIL:
 	case Tok_Lpar:
@@ -3911,7 +3921,6 @@ void Parser2::ProcedureDeclaration() {
 	if( ( ( peek(1).d_type == Tok_PROC || peek(1).d_type == Tok_PROCEDURE ) && peek(2).d_type == Tok_Hat )  ) {
         ForwardDeclaration();
     } else if( FIRST_ProcedureHeading(la.d_type) ) {
-        // inlined ProcedureHeading();
         procedure();
 
         QByteArray receiverType;
@@ -3921,8 +3930,8 @@ void Parser2::ProcedureDeclaration() {
 
         ev->pushCurProc(procDecl);
 
-        if( peek(1).d_type == Tok_EXTERN ||
-                ( peek(1).d_type == Tok_Semi && peek(2).d_type == Tok_EXTERN ) ) {
+        if( peek(1).d_type == Tok_EXTERN || ( peek(1).d_type == Tok_Semi && peek(2).d_type == Tok_EXTERN ) ) {
+            // EXTERN procedure
             if( la.d_type == Tok_Semi ) {
                 expect(Tok_Semi, false, "ProcedureDeclaration");
             }
@@ -3933,20 +3942,22 @@ void Parser2::ProcedureDeclaration() {
             if( la.d_type == Tok_ident ) {
                 expect(Tok_ident, true, "ProcedureDeclaration");
                 if( cur.d_val == "C" || cur.d_val == "c" )
-                    procDecl->ffi_;
+                    procDecl->ffi_ = true;
                 else
                     error(cur, "expecting 'C' after EXTERN");
                 if( la.d_type == Tok_string ) {
                     expect(Tok_string, true, "ProcedureDeclaration");
                     procDecl->data = cur.d_val;
                 }
+            }else if( la.d_type == Tok_string )
+            {
+                expect(Tok_string, true, "ProcedureDeclaration");
+                procDecl->ffi_ = true;
+                procDecl->data = cur.d_val;
             }
             out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
                            procDecl->outer->kind == Declaration::Module &&
-                           procDecl->visi > 0, procDecl->ffi_ ? Mil::ProcData::Foreign : Mil::ProcData::Extern);
-
-            if( procDecl->ffi_ )
-                out->setOrigName(cur.d_val.mid(1, cur.d_val.size()-2));
+                           procDecl->visi > 0, procDecl->ffi_ ? Mil::ProcData::Foreign : Mil::ProcData::Extern, procDecl->data.toByteArray());
 
             const QList<Declaration*> params = procDecl->getParams(true);
             foreach( Declaration* p, params )
@@ -3955,8 +3966,7 @@ void Parser2::ProcedureDeclaration() {
                 out->setReturnType(ev->toQuali(procDecl->getType()));
 
             out->endProc(cur.toRowCol());
-        } else if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR ||
-                   la.d_type == Tok_Semi || FIRST_ProcedureBody(la.d_type) ) {
+        } else if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR || la.d_type == Tok_Semi || FIRST_ProcedureBody(la.d_type) ) {
             quint8 kind = langLevel == 0 ?
                         Mil::ProcData::Inline // on langLevel 0 all procedures are implicitly inline
                       : Mil::ProcData::Normal;
@@ -3993,6 +4003,10 @@ void Parser2::ProcedureDeclaration() {
                         subs[super].append(procDecl);
                 }
                 binding = ev->toQuali(cls).second;
+                if( kind == Mil::ProcData::Invar )
+                    error(procDecl->pos, "invar procedures cannot be type-bound");
+                else if( kind == Mil::ProcData::Inline && cls->kind != Type::Record )
+                    error(procDecl->pos, "inline procedures can only be bound to record types");
             }
             out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
                            procDecl->outer->kind == Declaration::Module &&

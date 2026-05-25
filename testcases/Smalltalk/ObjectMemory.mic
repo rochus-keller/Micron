@@ -1,0 +1,1003 @@
+(*
+* Copyright 2026 Rochus Keller <mailto:me@rochus-keller.ch>
+*
+* This file is part of the Micron Smalltalk-80 VM.
+*
+* The following is the license that applies to this copy of the
+* application. For a license to use the application under conditions
+* other than those described here, please email to me@rochus-keller.ch.
+*
+* GNU General Public License Usage
+* This file may be used under the terms of the GNU General Public
+* License (GPL) versions 2.0 or 3.0 as published by the Free Software
+* Foundation and appearing in the file LICENSE.GPL included in
+* the packaging of this file. Please review the following information
+* to ensure GNU General Public Licensing requirements will be met:
+* http://www.fsf.org/licensing/licenses/info/GPLv2.html and
+* http://www.gnu.org/copyleft/gpl.html.
+*)
+
+module ObjectMemory
+
+import Files
+
+const
+  // Objects known to the interpreter:
+  
+  // small integers:
+  objectMinusOne* = 65535
+  objectZero* = 1
+  objectOne* = 3
+  objectTwo* = 5
+  
+  // undefined, boolean
+  objectNil* = 02h
+  objectFalse* = 04h
+  objectTrue* = 06h
+  
+  // root:
+  processor* = 08h // an Association whose value field is Processor, SchedulerAssociationPointer
+  smalltalk* = 012h // an Association whose value field is SystemDirectory
+  
+  // classes:
+  classSmallInteger* = 0ch // max 16383 (16384), min -16384 (-16385), bits 14, bytes 2
+  classString* = 0eh
+  classArray* = 10h
+  classFloat* = 014h
+  classMethodContext* = 016h
+  classBlockContext* = 018h
+  classPoint* = 01ah
+  classLargePositiveInteger* = 01ch
+  classDisplayBitmap* = 01eh
+  classMessage* = 020h
+  classCompiledMethod* = 022h
+  classSemaphore* = 026h
+  classCharacter* = 028h
+  
+  // symbols:
+  symbolTable* = 00ah // symbol class variable USTable
+  symbolDoesNotUnderstand* = 02ah
+  symbolCannotReturn* = 02ch
+  symbolMonitor* = 02eh
+  symbolUnusedOop18* = 024h
+  symbolMustBeBoolean* = 034h
+  
+  // selectors:
+  specialSelectors* = 030h // SystemDictionary class variable, the array of selectors for bytecodes 260-317 octal
+  characterTable* = 032h // Character class variable, table of characters
+  
+  // extra knowns:
+  classSymbol* = 038h
+  classMethodDictionary* = 04ch
+  classLargeNegativeInteger* = 01da0h
+  classProcess* = 07a4h
+  classAssociation* = 084h
+  currentSelection* = 02392h // ParagraphEditor.CurrentSelection
+  
+  // compiled method flags:
+  ZeroArguments* = 0
+  OneArgument* = 1
+  TwoArguments* = 2
+  ThreeArguments* = 3
+  FourArguments* = 4
+  ZeroArgPrimitiveReturnSelf* = 5 // no bytecode
+  ZeroArgPrimitiveReturnVar* = 6 // methodTemporaryCount returns index of the instance var to return, no bytecode
+  HeaderExtension* = 7
+  
+  ValueIndex = 1
+  methHdrByteLen = 2
+  
+  numOfSlots = shr(0ffffh, 1)
+  strLen* = 64
+
+type
+  OOP* = uint16
+  Slot* = uint16
+  Int* = int16
+  ByteArray* = pointer to ByteArrayDesc
+  ByteArrayDesc* = record
+                  bytes: pointer to array of byte
+                  len_: uint16
+               end
+  Object* = record 
+              cls: OOP; 
+              isOdd, isPtr, marked: boolean
+              data: ByteArrayDesc
+           end
+  String = array strLen of char
+  
+var
+  slots : pointer to array of Object
+  registers : array 10 of Slot
+  temps : array 30 of OOP // contains valid OOP or 0
+<* IF ~ORIG_BLUEBOOK THEN *>
+  markStack : pointer to array of OOP
+  markTop : uint32
+<* END *>
+  freeHint : int32
+
+procedure readU32(data: ^[]byte; off: uint32):uint32 inline
+begin
+    return shl(data[0+off], 24 ) + shl(data[1+off], 16 ) +
+          shl(data[2+off], 8 ) + data[3+off];
+end readU32
+
+procedure readU16(data: ^[]byte; off: uint32): uint16 inline
+begin
+  //assert(off+1 < len(data))
+  return val(uint16,shl(data[off], 8) + data[off+1])
+end readU16
+  
+procedure allocate(slot: Slot; numOfBytes: uint16; cls: OOP; isPtr, isOdd: boolean): ^Object
+var byteLen: uint16; obj: ^Object
+begin 
+  // header
+  // 1: cls msb
+  // 2: cls lsb
+  // 3: isodd
+  // 4: isptr
+  // ... bytes of object
+  assert( (slot < numOfSlots) and (slots[slot].cls = 0) )
+  obj := @slots[slot]
+  byteLen := numOfBytes
+  newinit(obj.data.bytes, byteLen) 
+  obj.data.len_ := byteLen
+  obj.isOdd := isOdd
+  obj.isPtr := isPtr
+  obj.marked := false
+  obj.cls := val(OOP,shr(cls, 1))
+  return obj
+end allocate
+
+procedure loadFromFile*(const path: pointer to array of char):boolean
+var f: Files.File; bytes: array 10 of byte; objectSpace, objectTable: ^[]byte
+    objectSpaceLenWords, objectSpaceLenBytes, 
+    objectTableLenWords, objectTableLenBytes,
+    numOfPages, off, i, size_: uint32
+    
+  procedure readSlot( objectTable, objectSpace: ^[]byte; i: uint32 ) // i is the byte index
+  var flags, loc, seg, wordLen, cls, slotNr: Slot
+      addr: uint32; byteLen: uint16
+      obj: ^Object
+  
+    procedure isFree(flag: Slot):boolean inline
+    begin
+      return band(flag, 020h) # 0
+    end isFree
+
+    procedure isPtr(flag: Slot):boolean inline
+    begin
+      return band(flag, 040h) # 0
+    end isPtr
+  
+    procedure isOdd(flag: Slot):boolean inline
+    begin
+      return band(flag, 080h) # 0
+    end isOdd
+  
+  begin
+    flags := objectTable[i+1]
+    if not isFree(flags) then
+      loc := readU16(objectTable,i+2) // loc is the word index, not byte index
+      
+      seg := band(flags, 0fh) // segment number
+      
+      // in Bits of History page 49: each segment contains 64k words (not bytes)
+      addr := shl(seg, 17) + shl(loc, 1)
+      wordLen := readU16(objectSpace, addr) - 2 // without header
+      assert(wordLen < shr(0ffffh, 1))
+      byteLen := wordLen * 2
+      
+      cls := readU16(objectSpace, addr + 2 )
+      
+      // OOP are only even number, slotNr are also odd number, so OOP/2, i.e. i/4
+      slotNr := val(Slot,shr(i, 2))
+      
+      obj := allocate( slotNr, byteLen, cls, isPtr(flags), isOdd(flags) )        
+      // copy bytes
+      if byteLen > 0 then
+        for i := 0 to byteLen-1 do
+          obj.data.bytes[i] := objectSpace[addr+4+i]
+        end
+      end
+    end
+  end readSlot
+  
+begin
+  f := Files.Open(path, Files.ReadOnly)
+  if f = nil then
+    println("cannot open file")
+    return false
+  end
+  
+  Files.ReadBytes(f, @bytes, 4)
+  objectSpaceLenWords := readU32(@bytes,0)
+  objectSpaceLenBytes := objectSpaceLenWords * 2
+  Files.ReadBytes(f, @bytes, 4)
+  objectTableLenWords := readU32(@bytes,0)
+  objectTableLenBytes := objectTableLenWords * 2
+  
+  size_ := Files.ReadBytes(f, @bytes, 2)  
+  if (size_ # 2) or (bytes[0] # 0) or (bytes[1] # 0) then
+    return false // not in interchange format
+  end
+
+  Files.Set(f, Files.Length(f) - 10)
+  size_ := Files.ReadBytes(f, @bytes, 10)
+  
+  if (size_ # 10) or (bytes[3] # 020h) or (bytes[6] # 001h) or
+          (bytes[7] # 043h) or (bytes[8] # 0f3h) or (bytes[9] # 03bh) then
+    return false
+  end
+
+  Files.Set(f, 512)
+  
+  // Object Space format:
+  // | xxxxxxxx xxxxxxxx | word length
+  // | xxxxxxxx xxxxxxxx | class
+  // | payload of word lenght - 2
+  new(objectSpace,objectSpaceLenBytes)
+  size_ := Files.ReadBytes(f, objectSpace, objectSpaceLenBytes)
+  if size_ # objectSpaceLenBytes then return false end
+  
+  numOfPages := objectSpaceLenBytes div 512
+  off := 512 + ( numOfPages + 1 ) * 512
+  Files.Set(f, off)
+
+  // Object Table format:
+  // | xxxxxxxx | count, unused
+  // | ffffssss | flags, segment
+  // | llllllll llllllll | location
+  new(objectTable, objectTableLenBytes)
+  size_ := Files.ReadBytes(f, objectTable, objectTableLenBytes)
+  if size_ # objectTableLenBytes then return false end
+  
+  for i := 0 to objectTableLenBytes-1 by 4 do
+    readSlot(objectTable, objectSpace, i)
+  end
+
+  // count used/free slots after loading
+  off := 0
+  for i := 1 to numOfSlots-1 do
+    if slots[i].cls = 0 then inc(off) end
+  end
+  print("image loaded: used=") print(numOfSlots - 1 - off) 
+  print(" free=") print(off)
+  print(" total=") println(numOfSlots)
+
+  return true
+end loadFromFile
+
+procedure getClass(obj: ^Object): OOP inline
+begin
+  return shl(obj.cls, 1)
+end getClass
+
+procedure writeU16(data: ^[]byte; off: uint32; value: Slot)
+begin
+  //assert(off+1 < len(data))
+  data[off] := val(byte, shr(value,8))
+  data[off+1] := val(byte, band(value,0ffh))
+end writeU16
+
+procedure isInt(ptr: Slot ): boolean inline
+begin
+  return band(ptr, 1) # 0 
+end isInt
+
+procedure getSlot(oop: OOP): ^Object inline
+begin
+  return @slots[ shr(oop,1) ]
+end getSlot
+
+procedure fetchClassOf*(objectPointer: OOP): OOP
+var obj : ^Object
+begin
+  if isInt(objectPointer) then return classSmallInteger end
+  obj := getSlot(objectPointer)
+  if obj # nil then 
+    return shl(obj.cls,1) 
+  else return 0 end
+end fetchClassOf
+
+procedure getWordLen(obj: ^Object): uint16 inline
+begin
+  return val(uint16,obj.data.len_ div 2)
+end getWordLen
+
+procedure fetchWordLenghtOf*(objectPointer: OOP): uint16 
+var obj : ^Object
+begin
+  if isInt(objectPointer) then return 0 end
+  obj := getSlot(objectPointer)
+  if obj = nil then return 0 end
+  return getWordLen(obj)
+end fetchWordLenghtOf
+
+procedure getByteLen(obj: ^Object): uint16
+var res: uint16
+begin
+  res := obj.data.len_ 
+  if obj.isOdd then dec(res) end
+  return res
+end getByteLen
+
+procedure fetchByteLenghtOf*(objectPointer: OOP): uint16 
+var obj : ^Object; off: uint16
+begin
+  if isInt(objectPointer) then return 0 end
+  obj := getSlot(objectPointer)
+  if obj = nil then return 0 end
+  return getByteLen(obj)
+end fetchByteLenghtOf
+
+procedure fetchWordOfObject*(fieldIndex: uint16; objectPointer: OOP): uint16 
+var obj : ^Object
+begin
+  if objectPointer = objectNil then return 0 end
+  obj := getSlot(objectPointer)
+  if obj = nil then return 0 end
+  return readU16( obj.data.bytes, fieldIndex * 2 )
+end fetchWordOfObject
+
+procedure fetchPointerOfObject*(fieldIndex: uint16; objectPointer: OOP): OOP 
+var obj : ^Object; off: uint32; oop: OOP
+begin
+  if objectPointer = objectNil then return objectNil end
+  obj := getSlot(objectPointer)
+  if obj = nil then return objectNil end
+  off := fieldIndex * 2
+  oop := readU16( obj.data.bytes, off );
+  if oop = 0 then // BB (implicitly?) assumes that unused members are nil
+    return objectNil
+  else
+    return oop
+  end
+end fetchPointerOfObject
+
+procedure storePointerOfObject*(fieldIndex: Slot; objectPointer, withValue: OOP) 
+var obj : ^Object; off: uint32
+begin
+  assert(objectPointer # 0)
+  if objectPointer = objectNil then return end
+  obj := getSlot(objectPointer)
+  if obj = nil then return end
+  off := fieldIndex * 2
+  writeU16(obj.data.bytes, off, withValue)
+end storePointerOfObject
+
+procedure fetchByteOfObject*(byteIndex: Slot; objectPointer: OOP): byte 
+var obj : ^Object; off: uint32
+begin
+  if objectPointer = objectNil then return 0 end
+  obj := getSlot(objectPointer)
+  if obj = nil then return 0 end
+  off := byteIndex
+  assert( (not obj.isPtr) and (off < obj.data.len_ ) )
+  return obj.data.bytes[off]
+end fetchByteOfObject
+  
+procedure storeByteOfObject*(byteIndex: Slot; objectPointer: OOP; withValue: byte) 
+var obj : ^Object; off: uint32
+begin
+  obj := getSlot(objectPointer)
+  if obj = nil then return end
+  off := byteIndex
+  assert( (not obj.isPtr) and (off < obj.data.len_ ) )
+  obj.data.bytes[off] := withValue
+end storeByteOfObject
+
+procedure storeWordOfObject*(fieldIndex: uint32; objectPointer: OOP; withValue: Slot) 
+var obj : ^Object; off: uint32
+begin
+  obj := getSlot(objectPointer)
+  if obj = nil then return end
+  off := fieldIndex * 2
+  writeU16(obj.data.bytes, off, withValue)
+end storeWordOfObject
+
+procedure swapPointersOf*(firstPointer, secondPointer: OOP) 
+var i1, i2: uint32; tmp : Object
+begin
+  i1 := shr(firstPointer, 1)
+  i2 := shr(secondPointer, 1)
+  assert( (i1 < numOfSlots) and (i2 < numOfSlots) )
+  tmp := slots[i1]
+  slots[i1] := slots[i2]
+  slots[i2] := tmp
+end swapPointersOf
+
+procedure hasObject*(ptr: OOP): boolean 
+var i: uint32
+begin
+  i := shr(ptr,1)
+  if i < numOfSlots then
+    return slots[i].cls # 0
+  else
+    return false
+  end
+end hasObject
+
+procedure headerOf(methodPointer: OOP): OOP
+begin
+      return fetchPointerOfObject(0,methodPointer) // HeaderIndex
+end headerOf
+
+procedure extractBits*( from, to_, of_: uint16 ): uint16
+begin
+  assert( (from <= to_) and (to_ <= 15) )
+  return band( shr(of_, 15 - to_), 
+               shl(1, to_ - from + 1) - 1) 
+end extractBits
+
+procedure literalCountOf(methodPointer: OOP):uint16
+var header: OOP
+begin
+  header := headerOf(methodPointer)
+  return extractBits(9,14,header);
+end literalCountOf
+
+procedure ^literalOfMethod*(index: uint16; methodPointer: OOP): OOP 
+
+procedure methodClassOf*(methodPointer: OOP): OOP 
+var literalCount: uint16; association: OOP
+begin
+  literalCount := literalCountOf(methodPointer)
+  association := literalOfMethod(literalCount-1, methodPointer)
+  return fetchPointerOfObject(ValueIndex,association)
+end methodClassOf
+
+procedure getMethodFlags(data: uint16 ): uint16 inline
+begin
+  return band(shr( data, 5 ), 07h)
+end getMethodFlags
+
+procedure flagValueOf*(methodPointer: OOP): uint16 // returns compiled method flags 
+var obj: ^Object
+begin
+  assert(methodPointer # 0)
+  obj := getSlot(methodPointer)
+  if obj = nil then return 0 end    
+  assert( getClass(obj) = classCompiledMethod )
+  return getMethodFlags( obj.data.bytes[0] )
+end flagValueOf
+
+procedure largeContextFlagOf*(methodPointer: OOP): boolean 
+var header: OOP
+begin
+  assert(methodPointer # 0)
+  header := headerOf(methodPointer)
+  return extractBits(8,8,header) # 0
+end largeContextFlagOf
+
+procedure getLiteralByteCount( obj: ^Object ): uint16 inline
+
+begin
+  return 2 * band(shr(obj.data.bytes[1], 1), 03fh)
+end getLiteralByteCount
+
+procedure primitiveIndexOf*(methodPointer: OOP): uint16 
+var obj: ^Object; flags, literalByteCount, extension: uint16
+begin
+  obj := getSlot(methodPointer)
+  if obj = nil then return 0 end    
+  assert( getClass(obj) = classCompiledMethod )
+  flags := getMethodFlags( obj.data.bytes[0] )
+  if flags # HeaderExtension then return 0 end
+  literalByteCount := getLiteralByteCount(obj)
+  extension := readU16(obj.data.bytes, methHdrByteLen
+                            + literalByteCount - 4 ); // next to the last literal
+  return band(shr(extension, 1), 0ffh)
+end primitiveIndexOf
+
+procedure literalOfMethod*(index: Slot; methodPointer: OOP): OOP 
+var obj: ^Object; literalByteCount, byteIndex: uint16
+begin
+  obj := getSlot(methodPointer)
+  if obj = nil then return 0 end    
+  assert( getClass(obj) = classCompiledMethod )
+  literalByteCount := getLiteralByteCount(obj)
+  byteIndex := 2 * index
+  return readU16( obj.data.bytes, methHdrByteLen + byteIndex )
+end literalOfMethod
+
+procedure initialInstructionPointerOfMethod*(methodPointer: OOP): uint16 inline
+begin
+  return ( literalCountOf(methodPointer) + ValueIndex ) * 2 + 1
+end initialInstructionPointerOfMethod
+
+procedure temporaryCountOf*(methodPointer: OOP): uint16 
+var header: OOP
+begin
+  header := headerOf(methodPointer)
+  return extractBits(3,7,header)
+end temporaryCountOf
+
+procedure fieldIndexOf*(methodPointer: OOP): uint16 inline
+begin
+  return temporaryCountOf(methodPointer)
+end fieldIndexOf
+
+procedure objectPointerCountOf*(methodPointer: OOP): uint16 inline
+begin
+  return literalCountOf(methodPointer) + 1
+end objectPointerCountOf
+
+procedure argumentCountOf*(methodPointer: OOP): uint16 
+var obj: ^Object; flags, literalByteCount, extension: uint16
+begin
+  obj := getSlot(methodPointer)
+  if obj = nil then return 0 end    
+  assert( getClass(obj) = classCompiledMethod )
+  flags := getMethodFlags(obj.data.bytes[0])
+  if flags <= FourArguments then
+    return flags
+  elsif (flags = ZeroArgPrimitiveReturnSelf) or (flags = ZeroArgPrimitiveReturnVar) then
+    return 0
+  end
+  assert( flags = HeaderExtension )
+  literalByteCount := getLiteralByteCount(obj)
+  extension := readU16( obj.data.bytes, methHdrByteLen
+                                    + literalByteCount - 4 ) // next to the last literal
+  return band(shr(extension, 9), 01fh)
+end argumentCountOf
+
+procedure toTwoComp*(value: Slot): Slot
+var res: Slot
+begin
+  // ST integers have 15 bit range
+  if value >= 0 then
+    res := band(value, 0011_1111_1111_1111b)
+  else
+    res := bnot(abs(value)) + 1
+    res := band(res, 0111_1111_1111_1111b)
+    res := bor(res, 0100_0000_0000_0000b)
+  end
+  return res
+end toTwoComp
+
+procedure integerObjectOf*(value: Slot): OOP 
+var res: OOP
+begin
+  res := toTwoComp(value)
+  res := bor(shl( res, 1 ), 1)
+  return res
+end integerObjectOf
+
+procedure fromTwoComp*(value: Slot): Slot
+var negative: boolean; res: Slot
+begin
+  negative := band(value, 0100_0000_0000_0000b) # 0
+  if negative then 
+    res := val(Slot,-band( bnot(value), 0111_1111_1111_1111b ) - 1)
+  else
+    res := band(value, 0011_1111_1111_1111b)
+  end
+  return res;
+end fromTwoComp
+
+procedure integerValueOf*(objectPointer: OOP): Int 
+var res: Slot
+begin
+  if isInt(objectPointer) then
+    res := shr(objectPointer, 1)
+    res := fromTwoComp(res)
+    return sig(res)
+  end
+  // else
+  return 0
+end integerValueOf
+
+procedure isIntegerObject*(objectPointer: OOP): boolean inline
+begin
+  return isInt(objectPointer)
+end isIntegerObject
+
+procedure isIntegerValue*(valueWord: Slot): boolean
+begin
+  // BB description: Return true if value can be represented as an instance of SmallInteger, false if not
+  // BB states "valueWord <= -16384 && valueWord > 16834;" which contradicts with the description
+  // Note the additional typo error in "16834" which should state "16384"!
+  return (sig(valueWord) >= -16384) and (sig(valueWord) <= 16383)
+end isIntegerValue
+
+procedure fetchByteString*(objectPointer: OOP): ByteArray 
+var obj : ^Object; res: ByteArray; s, i: uint32
+begin
+  if isInt(objectPointer) then return nil end
+  obj := getSlot(objectPointer)
+  if obj = nil then return nil end
+  return @obj.data
+end fetchByteString
+
+procedure intToString(i: Int): String
+var tmp: String
+begin
+  // TODO
+  tmp := "?"
+  return tmp
+end intToString
+
+procedure fetchString*(objectPointer: OOP):String
+var obj : ^Object; str: String; s, i: uint32; c: byte
+begin
+  if isInt(objectPointer) then 
+    return intToString(integerValueOf(objectPointer))
+  end
+  obj := getSlot(objectPointer)
+  if obj = nil then return "nil" end
+  s := getByteLen(obj) + 1
+  if s >= len(str) then s := len(str)-1 end 
+  for i := 0 to s-2 do
+    c := obj.data.bytes[i]
+    if c = 0h then str[i] := 20x
+    elsif (c <= 01fh) or (c >= 07fh) then str[i] := 03fx // "?" 
+    else str[i] := chr(c)
+    end
+  end
+  str[s-1] := 0x
+  return str
+end fetchString
+
+procedure realToInt(x: real): uint32 inline
+begin
+  return cast(uint32,x)
+end realToInt
+
+procedure storeFloat*(objectPointer: OOP; v: real) 
+var i: uint32
+begin
+  assert( fetchByteLenghtOf(objectPointer) = 4 )
+  i := realToInt(v)
+  storeWordOfObject(0,objectPointer,val(Slot,band(shr(i, 16), 0ffffh)))
+  storeWordOfObject(1,objectPointer, val(Slot, band(i, 0ffffh)))
+end storeFloat
+
+procedure intToReal(x: uint32): real inline
+begin
+  return cast(real,x)
+end intToReal
+
+procedure fetchFloat*(objectPointer: OOP): real 
+var i: uint32
+begin
+  assert( fetchByteLenghtOf(objectPointer) = 4 )
+  i := bor(
+        shl(fetchWordOfObject(0,objectPointer), 16),
+        fetchWordOfObject(1,objectPointer)
+      )
+  return intToReal(i)
+end fetchFloat
+  
+procedure getRegister*(index: uint32): Slot 
+begin
+  return registers[index]
+end getRegister
+
+procedure setRegister*(index, value: Slot) 
+begin
+  assert(index < len(registers))
+  registers[index] := value
+end setRegister
+
+procedure addTemp*(oop: OOP) 
+var i: uint16
+begin
+  for i := 0 to len(temps)-1 do
+    if temps[i] = 0 then
+      temps[i] := oop
+      return
+    end
+  end
+  assert(false)
+end addTemp
+
+procedure removeTemp*(oop: OOP) 
+var i: uint16
+begin
+  for i := 0 to len(temps)-1 do
+    if temps[i] = oop then
+      temps[i] := 0
+      return
+    end
+  end
+  assert(false)
+end removeTemp
+
+procedure findFreeSlot(): int32
+var i: int32
+begin
+  for i := freeHint to numOfSlots-1 do
+    if slots[i].cls = 0 then 
+      freeHint := i + 1
+      return i 
+    end
+  end
+  for i := 1 to freeHint-1 do
+    if slots[i].cls = 0 then 
+      freeHint := i + 1
+      return i 
+    end
+  end
+  return -1
+end findFreeSlot
+
+<* IF ORIG_BLUEBOOK THEN *>
+// Original Blue Book recursive mark (may overflow the stack on deep object graphs)
+procedure mark(oop: OOP)
+var obj: ^Object; s, i: uint16; cls, sub: OOP
+begin
+  if (oop = 0) or isInt(oop) then return end
+  obj := getSlot(oop)
+  if obj = nil then return end
+  if obj.marked then return end
+  obj.marked := true
+  cls := shl(obj.cls,1)
+  if obj.isPtr then
+    s := getWordLen(obj)
+    if s > 0 then
+      for i := 0 to s-1 do
+        sub := fetchPointerOfObject(i, oop)
+        mark( sub )
+      end
+    end
+  elsif cls = classCompiledMethod then
+    s := literalCountOf(oop)
+    if s > 0 then
+      for i := 0 to s-1 do
+        sub := literalOfMethod(i, oop)
+        mark( sub )
+      end
+    end
+  end
+  mark( cls )
+end mark
+
+<* ELSE *>
+// Iterative mark using explicit stack to avoid stack overflow on deep object graphs
+procedure markEnqueue(oop: OOP) inline
+var obj: ^Object
+begin
+  if (oop = 0) or isInt(oop) then return end
+  obj := getSlot(oop)
+  if obj = nil then return end
+  if obj.marked then return end
+  obj.marked := true
+  assert(markTop < numOfSlots)
+  markStack[markTop] := oop
+  inc(markTop)
+end markEnqueue
+
+procedure mark(root: OOP)
+var obj: ^Object; s, i: uint16; cls, oop: OOP
+begin
+  markTop := 0
+  markEnqueue(root)
+  while markTop > 0 do
+    dec(markTop)
+    oop := markStack[markTop]
+    obj := getSlot(oop)
+    cls := shl(obj.cls,1)
+    if obj.isPtr then
+      s := getWordLen(obj)
+      if s > 0 then
+        for i := 0 to s-1 do
+          markEnqueue(fetchPointerOfObject(i, oop))
+        end
+      end
+    elsif cls = classCompiledMethod then
+      s := literalCountOf(oop)
+      if s > 0 then
+        for i := 0 to s-1 do
+          markEnqueue(literalOfMethod(i, oop))
+        end
+      end
+    end
+    markEnqueue(cls)
+  end
+end mark
+<* END *>
+
+procedure collectGarbage()
+var i, count: uint32; obj: ^Object
+begin 
+  count := 0
+  for i := 0 to len(registers)-1 do mark(registers[i]) end
+  for i := 0 to len(temps)-1 do mark(temps[i]) end
+  for i := 0 to classSymbol by 2 do mark(val(OOP,i)) end
+
+  for i := 0 to len(slots)-1 do
+    obj := @slots[i]
+    if (obj # nil) and (not obj.marked) then
+      if obj.data.bytes # nil then
+        dispose(obj.data.bytes)
+        obj.data.bytes := nil
+        obj.data.len_ := 0
+      end
+      obj.isPtr := false
+      obj.isOdd := false
+      slots[i].cls := 0
+      inc(count)
+    end
+    if obj # nil then
+      obj.marked := false
+    end
+  end
+  freeHint := 1
+  //print("GC collected ") println(count)
+end collectGarbage
+
+procedure instantiateClass(cls: OOP; byteLen: uint16; isPtr: boolean): OOP
+var slot: int32; isOdd: boolean
+begin
+  slot := findFreeSlot()
+  if slot < 0 then
+      collectGarbage()
+      slot := findFreeSlot()
+  end
+  if slot < 0 then
+      println("ERROR: cannot allocate object, no free object table slots")
+      assert(false)
+  end
+  isOdd := band(byteLen, 1) # 0
+  if isOdd then inc(byteLen) end
+  if allocate( val(Slot,slot), byteLen, cls, isPtr, isOdd ) = nil then
+      println("ERROR: cannot allocate object, no free memory")
+      assert(false)
+  end
+  return shl(val(Slot,slot), 1)
+end instantiateClass
+
+procedure instantiateClassWithPointers*(classPointer: OOP; instanceSize: uint16): OOP inline
+begin
+  return instantiateClass( classPointer, shl(instanceSize, 1), true )
+end instantiateClassWithPointers
+
+procedure instantiateClassWithWords*(classPointer: OOP; instanceSize: uint16): OOP 
+begin
+  return instantiateClass( classPointer, shl(instanceSize, 1), false )
+end instantiateClassWithWords
+
+procedure instantiateClassWithBytes*(classPointer: OOP; instanceByteSize: uint16): OOP 
+begin
+  return instantiateClass( classPointer, instanceByteSize, false )
+end instantiateClassWithBytes
+
+procedure getNextInstance*(cls, cur: OOP): OOP 
+var start, i: uint32
+begin
+  start := 0
+  if cur # 0 then
+    start := shr( cur, 1 ) + 1
+  end
+  for i := start to numOfSlots-1 do
+    if (slots[i].cls # 0) and (getClass(@slots[i]) = cls)  then
+      return val(OOP,shl(i, 1))
+    end
+  end
+  return 0
+end getNextInstance
+
+procedure prettyValue*(oop: OOP): String 
+var cls: OOP
+begin
+  case oop of
+  | objectNil:
+      return "nil"
+  | objectFalse:
+      return "false"
+  | objectTrue:
+      return "true"
+  | processor:
+      return "processor"
+  | smalltalk:
+      return "smalltalk"
+  | symbolTable:
+      return "symbolTable"
+  | symbolDoesNotUnderstand:
+      return "symbolDoesNotUnderstand"
+  | symbolCannotReturn:
+      return "symbolCannotReturn"
+  | symbolMonitor:
+      return "symbolMonitor"
+  | symbolUnusedOop18:
+      return "symbolUnusedOop18"
+  | symbolMustBeBoolean:
+      return "symbolMustBeBoolean"
+  | specialSelectors:
+      return "specialSelectors"
+  | characterTable:
+      return "characterTable"
+  | 0:
+      return "<invalid oop>"
+  end
+  cls := fetchClassOf(oop)
+  (* TODO
+  case cls of
+  | classSmallInteger:
+      return intToString( integerValueOf(oop) )
+  | classLargePositiveInteger:
+      return "oop(" + intToString(oop) + ") " + 
+              tostring( largeIntegerValueOf(oop) ) + "L"
+  | classLargeNegativeInteger:
+      return "oop(" + tostring(oop) + ") " +
+              tostring( -largeIntegerValueOf(oop) ) + "L"
+  | classString:
+      return '"' + fetchString(oop) + '"'
+  | classFloat:
+      return tostring( fetchFloat(oop) )
+  | classPoint:
+      return prettyValue(fetchPointerOfObject( 0, oop )) + "@" + 
+            prettyValue(fetchPointerOfObject( 1, oop ))
+  | classCharacter:
+      return tostring(fetchWordOfObject(0,oop))
+  | classSymbol:
+      return "#" + fetchString(oop)
+  | classAssociation:
+      return prettyValue( fetchPointerOfObject( 0, oop ) ) + " = " +
+                  prettyValue( fetchPointerOfObject( 1, oop ) )
+  | 0:
+      return "<instance " + tostring(oop) + " with invalid class oop>"
+  end
+  return "oop(" + tostring(oop) + ") cls(" + tostring(cls) + ")"
+  *)
+  return "?"
+end prettyValue
+
+procedure largeIntegerValueOf(integerPointer: OOP): int32
+var value, length: uint32; cls: OOP
+begin
+  if isIntegerObject(integerPointer) then
+    return integerValueOf(integerPointer)
+  end
+  value := 0
+  // only large positive and negative integers arrive here
+  length := fetchByteLenghtOf(integerPointer)
+  case length of
+  | 0:
+      value := 0 // this obviously can happen
+  | 1:
+      value := fetchByteOfObject(0,integerPointer)
+  | 2:
+      value := fetchByteOfObject(0, integerPointer)
+      value := value + shl(fetchByteOfObject(1, integerPointer), 8)
+  | 3: 
+      // empirically found from examples
+      value := fetchByteOfObject(0, integerPointer)
+      value := value + shl(fetchByteOfObject(1, integerPointer), 8)
+      value := value + shl(fetchByteOfObject(2, integerPointer), 16)
+  | 4:
+      // happens in Delay preSnapshot postSnapshot millisecondClockValue
+      // see Time millisecondClockInto and primitive99 for format description
+      // Milliseconds 1.1.1901 to 9.6.2020: 3'769'154'954
+      // e.g. ac9fbf66 = 1723834284L 1'723'834'284
+      value := fetchByteOfObject(0, integerPointer) +
+              shl( fetchByteOfObject(1, integerPointer), 8 ) +
+              shl( fetchByteOfObject(2, integerPointer), 16 ) +
+              shl( fetchByteOfObject(3, integerPointer), 24 )
+  else
+      print("WARNING: large uint32 with ")
+      print(length)
+      println(" bytes not supported")
+      value := 0ffffffffh
+  end
+  return sig(value)
+end largeIntegerValueOf
+  
+procedure initOm
+var i: uint32
+begin
+  temps := {} // init with zero
+  registers := {}
+  newinit(slots, numOfSlots)
+<* IF ~ORIG_BLUEBOOK THEN *>
+  newinit(markStack, numOfSlots)
+  markTop := 0
+<* END *>
+  freeHint := 1
+end initOm
+
+begin
+  initOm
+  
+end ObjectMemory

@@ -408,7 +408,12 @@ static void renderProc(const Declaration* p, AbstractRenderer* r, AstSerializer:
         proc.kind = p->inline_ ? ProcData::ModuleEntry : ProcData::ModuleInit;
     else if(p->extern_ )
         proc.kind = ProcData::Extern;
-    else if(p->forward )
+    else if(p->foreign_ )
+    {
+        proc.kind = ProcData::Foreign;
+        if( p->pd )
+            proc.binding = p->pd->externalName;
+    }else if(p->forward )
         proc.kind = ProcData::Forward;
     else if(p->inline_ )
         proc.kind = ProcData::Inline;

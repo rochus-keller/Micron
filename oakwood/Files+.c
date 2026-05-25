@@ -63,6 +63,8 @@ unsigned char Files$Eof(struct Files$Handle* f)
 
 unsigned char Files$Read(struct Files$Handle* f, unsigned char* x)
 {
+    assert(f);
+    assert(f->f);
     const int count = fread(x, 1, 1, f->f);
     return count == 1;
 }
@@ -73,6 +75,46 @@ unsigned char Files$Write(struct Files$Handle* f, unsigned char x)
     assert(f->f);
     const int count = fwrite(&x, 1, 1, f->f);
     return count == 1;
+}
+
+unsigned int Files$ReadBytes(struct Files$Handle* f, unsigned char* x, unsigned int n)
+{
+    assert(f);
+    assert(f->f);
+    const int count = fread(x, 1, n, f->f);
+    if( count >= 0 )
+        return count;
+    else
+        return 0;
+}
+
+unsigned char Files$Set(struct Files$Handle* f, unsigned int pos)
+{
+    assert(f);
+    assert(f->f);
+    const int res = fseek(f->f, pos, SEEK_SET);
+    return res == 0;
+}
+
+unsigned int Files$Length(struct Files$Handle* f)
+{
+    assert(f);
+    assert(f->f);
+    
+    const long pos = ftell(f->f);
+    
+    if (fseek(f->f, 0, SEEK_END) != 0) {   
+        return 0;
+    }
+
+    const long size = ftell(f->f);               
+
+    fseek(f->f, pos, SEEK_SET);
+    
+    if( size >= 0 )
+        return size;   
+    else
+        return 0;                     
 }
 
 

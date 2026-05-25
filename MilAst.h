@@ -186,7 +186,7 @@ namespace Mil
         quint32 slot;
         Statement* finally; // optionally, owned
         Mic::RowCol end;
-        QByteArray origName; // original name in the external C library
+        QByteArray externalName; // original name in the external C library
     };
 
     class Declaration : public Node

@@ -73,17 +73,18 @@ void Emitter::addConst(const Quali& typeRef, const QByteArray& name, const RowCo
     d_out->addConst(typeRef, name, val);
 }
 
-void Emitter::beginProc(const QByteArray& procName, const RowCol & pos, bool isPublic, quint8 kind, const QByteArray& objectType)
+void Emitter::beginProc(const QByteArray& procName, const RowCol & pos, bool isPublic, quint8 kind, const QByteArray& binding)
 {
     Q_ASSERT( d_typeKind == 0 );
     Q_ASSERT(!procName.isEmpty());
+    Q_ASSERT(binding.isEmpty() || kind == ProcData::Abstract || kind == ProcData::Normal || kind == ProcData::Forward || kind == ProcData::Inline || kind == ProcData::Foreign);
 
     firstLine = lineset(pos);
     d_proc.append(ProcData());
     d_proc.back().name = procName;
     d_proc.back().isPublic = isPublic;
     d_proc.back().kind = kind;
-    d_proc.back().binding = objectType;
+    d_proc.back().binding = binding;
     d_stackDepth = 0;
     d_maxStackDepth = 0;
     ops = &d_proc.back().body;
@@ -185,12 +186,6 @@ void Emitter::setReturnType(const Quali& typeRef)
     Q_ASSERT( !d_proc.isEmpty()  || d_typeKind == EmiTypes::ProcType || d_typeKind == EmiTypes::MethType );
     Q_ASSERT( d_proc.back().retType.second.isEmpty() );
     d_proc.back().retType = typeRef;
-}
-
-void Emitter::setOrigName(const QByteArray& origName)
-{
-    Q_ASSERT( d_proc.back().kind == ProcData::Foreign );
-    d_origName = origName;
 }
 
 QByteArray Emitter::typeSymbol1(EmiTypes::Basic t)
@@ -1088,14 +1083,14 @@ void Emitter::stelem_(const Quali& typeRef)
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
     if( typeRef.first.isEmpty() )
     {
-        if( equals( typeRef.second,  EmiTypes::I1) ||
+        if( equals( typeRef.second,  EmiTypes::I1) || equals( typeRef.second,  EmiTypes::U1) ||
                 typeRef.second.constData() == char_sym || typeRef.second.constData() == bool_sym)
             ops->append(ProcData::Op(IL_stelem_i1));
-        else if( equals( typeRef.second,  EmiTypes::I2) )
+        else if( equals( typeRef.second,  EmiTypes::I2) || equals( typeRef.second,  EmiTypes::U2) )
             ops->append(ProcData::Op(IL_stelem_i2));
-        else if( equals( typeRef.second,  EmiTypes::I4) )
+        else if( equals( typeRef.second,  EmiTypes::I4) || equals( typeRef.second,  EmiTypes::U4) )
             ops->append(ProcData::Op(IL_stelem_i4));
-        else if( equals( typeRef.second,  EmiTypes::I8) )
+        else if( equals( typeRef.second,  EmiTypes::I8) || equals( typeRef.second,  EmiTypes::U8) )
             ops->append(ProcData::Op(IL_stelem_i8));
         else if( equals( typeRef.second,  EmiTypes::R4) )
             ops->append(ProcData::Op(IL_stelem_r4));

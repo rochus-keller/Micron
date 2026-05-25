@@ -508,7 +508,8 @@ bool Evaluator::desigField(Declaration* field, bool byVal, const RowCol& pos)
 
     // TODO: desig const record
 
-    Q_ASSERT(lhs.ref && lhs.type && (lhs.type->kind == Type::Record || lhs.type->kind == Type::Object));
+    if( !(lhs.ref && lhs.type && (lhs.type->kind == Type::Record || lhs.type->kind == Type::Object)) )
+        return false;
 
     Q_ASSERT(field);
     out->line_(pos);

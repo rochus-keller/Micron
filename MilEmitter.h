@@ -44,7 +44,7 @@ namespace Mil
         void addConst(const Quali& typeRef, const QByteArray& name, const RowCol&, const QVariant& val ); // always public
 
         void beginProc(const QByteArray& procName, const RowCol&, bool isPublic = true, quint8 kind = ProcData::Normal,
-                       const QByteArray& objectType = QByteArray() );
+                       const QByteArray& binding = QByteArray() ); // object type for methods, proc name for foreign
         void toFinallySection(bool, const RowCol&);
         void endProc(const RowCol&);
 
@@ -63,7 +63,6 @@ namespace Mil
         quint32 addLocal( const Quali& typeRef, QByteArray name = QByteArray(), const RowCol& = RowCol() );
         quint32 addArgument(const Quali& typeRef, QByteArray name = QByteArray(), const RowCol& = RowCol() ); // SELF is explicit
         void setReturnType(const Quali& typeRef);
-        void setOrigName( const QByteArray& origName = QByteArray() ); // in case of foreign
 
         static QByteArray typeSymbol1(EmiTypes::Basic);
         static QByteArray typeSymbol2(EmiTypes::Basic);
@@ -174,7 +173,6 @@ namespace Mil
         quint16 d_maxStackDepth;
         QList<ProcData> d_proc; // proc stack
         QList<ProcData::Op>* ops;
-        QByteArray d_library, d_origName;
         AbstractRenderer* d_out;
         quint32 lastLine, firstLine;
         DbgInfo dbgInfo;

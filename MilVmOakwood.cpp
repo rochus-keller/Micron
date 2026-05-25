@@ -26,6 +26,9 @@ extern "C" {
 #include "oakwood/Out.h"
 #include "oakwood/Files.h"
 #include "oakwood/Args.h"
+#ifdef _MIC_HAVE_ST80_DISPLAY_
+#include "St80Display.h"
+#endif
 }
 using namespace Mil;
 
@@ -398,6 +401,32 @@ static bool Files_Write(void* args, void* ret)
     return true;
 }
 
+// unsigned int Files$ReadBytes(struct Files$Handle* f, unsigned char* x, unsigned int n)
+static bool Files_ReadBytes(void* args, void* ret)
+{
+    const int res = Files$ReadBytes((struct Files$Handle*)Interpreter::toP(args,0),
+                                    (unsigned char*)Interpreter::toP(args,Interpreter::StackAlign),
+                                    Interpreter::toI4(args,2*Interpreter::StackAlign));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+// unsigned char Files$Set(struct Files$Handle* f, unsigned int pos)
+static bool Files_Set(void* args, void* ret)
+{
+    const int res = Files$Set((struct Files$Handle*)Interpreter::toP(args,0), Interpreter::toI4(args,Interpreter::StackAlign));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+// unsigned int Files$Length(struct Files$Handle* f)
+static bool Files_Length(void* args, void* ret)
+{
+    const unsigned int res = Files$Length((struct Files$Handle*)Interpreter::toP(args,0));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
 // unsigned int Args$Count()
 static bool Args_Count(void* args, void* ret)
 {
@@ -411,6 +440,79 @@ static bool Args_Arg(void* args, void* ret)
     Interpreter::retP(ret,Args$Arg(Interpreter::toI4(args,0)));
     return true;
 }
+
+#ifdef _MIC_HAVE_ST80_DISPLAY_
+
+// void Display$setScreenBuffer(uint8_t* b, int32_t len, int32_t w, int32_t h)
+static bool Display_setScreenBuffer(void* args, void* ret)
+{
+    Display$setScreenBuffer((uint8_t*)Interpreter::toP(args,0), Interpreter::toI4(args,1*Interpreter::StackAlign),
+                            Interpreter::toI4(args,2*Interpreter::StackAlign), Interpreter::toI4(args,3*Interpreter::StackAlign));
+    return true;
+}
+
+// int32_t Display$processEvents()
+static bool Display_processEvents(void* args, void* ret)
+{
+    int32_t res = Display$processEvents();
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+// uint16_t Display$nextEvent()
+static bool Display_nextEvent(void* args, void* ret)
+{
+    uint16_t res = Display$nextEvent();
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+// void Display$setCursorPos(int32_t x, int32_t y)
+static bool Display_setCursorPos(void* args, void* ret)
+{
+    Display$setCursorPos(Interpreter::toI4(args,0*Interpreter::StackAlign),
+                         Interpreter::toI4(args,1*Interpreter::StackAlign));
+    return true;
+}
+
+// void Display$setCursorBuffer(uint8_t* b, int32_t w, int32_t h)
+static bool Display_setCursorBuffer(void* args, void* ret)
+{
+    Display$setCursorBuffer((uint8_t*)Interpreter::toP(args,0), Interpreter::toI4(args,1*Interpreter::StackAlign),
+                            Interpreter::toI4(args,2*Interpreter::StackAlign));
+    return true;
+}
+
+// void Display$updateArea(int32_t x,int32_t y,int32_t w,int32_t h,int32_t cx,int32_t cy,int32_t cw,int32_t ch)
+static bool Display_updateArea(void* args, void* ret)
+{
+    Display$updateArea(Interpreter::toI4(args,0*Interpreter::StackAlign),
+                            Interpreter::toI4(args,1*Interpreter::StackAlign),
+                            Interpreter::toI4(args,2*Interpreter::StackAlign),
+                            Interpreter::toI4(args,3*Interpreter::StackAlign),
+                            Interpreter::toI4(args,4*Interpreter::StackAlign),
+                            Interpreter::toI4(args,5*Interpreter::StackAlign),
+                            Interpreter::toI4(args,6*Interpreter::StackAlign),
+                            Interpreter::toI4(args,7*Interpreter::StackAlign));
+    return true;
+}
+
+// void Display$close()
+static bool Display_close(void* args, void* ret)
+{
+    Display$close();
+    return true;
+}
+
+// uint32_t Display$getTicks()
+static bool Display_getTicks(void* args, void* ret)
+{
+    uint32_t res = Display$getTicks();
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+#endif
 
 void VmOakwood::addTo(Interpreter* ip)
 {
@@ -468,7 +570,21 @@ void VmOakwood::addTo(Interpreter* ip)
     ip->registerProc("Files", "Eof", Files_Eof);
     ip->registerProc("Files", "Read", Files_Read);
     ip->registerProc("Files", "Write", Files_Write);
+    ip->registerProc("Files", "ReadBytes", Files_ReadBytes);
+    ip->registerProc("Files", "Set", Files_Set);
+    ip->registerProc("Files", "Length", Files_Length);
+
     ip->registerProc("Args", "Count", Args_Count);
     ip->registerProc("Args", "Arg", Args_Arg);
 
+#ifdef _MIC_HAVE_ST80_DISPLAY_
+    ip->registerProc("Display", "setScreenBuffer", Display_setScreenBuffer);
+    ip->registerProc("Display", "processEvents", Display_processEvents);
+    ip->registerProc("Display", "nextEvent", Display_nextEvent);
+    ip->registerProc("Display", "setCursorPos", Display_setCursorPos);
+    ip->registerProc("Display", "setCursorBuffer", Display_setCursorBuffer);
+    ip->registerProc("Display", "updateArea", Display_updateArea);
+    ip->registerProc("Display", "close", Display_close);
+    ip->registerProc("Display", "getTicks", Display_getTicks);
+#endif
 }

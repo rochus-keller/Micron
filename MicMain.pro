@@ -8,6 +8,9 @@ CONFIG   -= app_bundle
 TEMPLATE = app
 
 INCLUDEPATH += ..
+DEFINES += _MIC_HAVE_ST80_DISPLAY_
+INCLUDEPATH += testcases/Smalltalk
+LIBS += -lSDL2
 
 CONFIG(debug, debug|release) {
         #DEFINES += _DEBUG
@@ -16,7 +19,8 @@ CONFIG(debug, debug|release) {
 include(MicParser.pri)
 
 SOURCES += \
-    MicMain.cpp
+    MicMain.cpp \
+    testcases/Smalltalk/St80SdlDisplay.c
 
 
 include( MicUtils.pri )

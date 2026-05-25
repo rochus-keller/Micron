@@ -25,20 +25,24 @@ TEMPLATE = app
 INCLUDEPATH += .. 
 
 #DEFINES += _MIC_IDE_USE_ELFLINKER_MUSL_
+DEFINES += _MIC_HAVE_ST80_DISPLAY_
+INCLUDEPATH += testcases/Smalltalk
 
 SOURCES +=  MicProject2.cpp \
     MicHighlighter.cpp \
     MicIde.cpp \
     ../GuiTools/CodeEditor.cpp \
     ../GuiTools/DocSelector.cpp \
-    ../GuiTools/DocTabWidget.cpp
+    ../GuiTools/DocTabWidget.cpp \
+    testcases/Smalltalk/St80QtDisplay.cpp
 
 HEADERS  += MicProject2.h \
     MicHighlighter.h \
     MicIde.h \
     ../GuiTools/CodeEditor.h \
     ../GuiTools/DocSelector.h \
-    ../GuiTools/DocTabWidget.h
+    ../GuiTools/DocTabWidget.h \
+    testcases/Smalltalk/St80QtDisplay.h
 
 include( MicUtils.pri )
 include( MicParser.pri )

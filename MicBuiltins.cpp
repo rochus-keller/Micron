@@ -298,6 +298,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::SIG:
         expectingNArgs(args,1);
+        ev->bindUniInt(args[0], false);
         *ret = args[0]->getType(); // to avoid crash
         switch(args.first()->getType()->kind)
         {
@@ -336,6 +337,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         } break;
     case Builtin::USIG:
         expectingNArgs(args,1);
+        ev->bindUniInt(args[0], true);
         *ret = args[0]->getType(); // to avoid crash
         switch(args.first()->getType()->kind)
         {

@@ -1,0 +1,115 @@
+(*
+* Copyright 2026 Rochus Keller <mailto:me@rochus-keller.ch>
+*
+* This file is part of the Micron Smalltalk-80 VM.
+*
+* The following is the license that applies to this copy of the
+* application. For a license to use the application under conditions
+* other than those described here, please email to me@rochus-keller.ch.
+*
+* GNU General Public License Usage
+* This file may be used under the terms of the GNU General Public
+* License (GPL) versions 2.0 or 3.0 as published by the Free Software
+* Foundation and appearing in the file LICENSE.GPL included in
+* the packaging of this file. Please review the following information
+* to ensure GNU General Public Licensing requirements will be met:
+* http://www.fsf.org/licensing/licenses/info/GPLv2.html and
+* http://www.gnu.org/copyleft/gpl.html.
+*)
+
+module Display
+
+type 
+  Bitmap* = record 
+              pixWidth, pixHeight: int16
+              buffer: pointer to array of byte
+              buflen: uint32
+            end
+  
+  Str = pointer to array of char
+              
+var 
+  run* : boolean
+  bitmap*: Bitmap
+
+  procedure setScreenBuffer(bytes: ^[]byte; l, w, h: int32) extern
+  procedure processEvents*(): int32 extern // number of pending events or -1 for finish
+  procedure nextEvent*(): uint16 extern  
+  procedure setCursorPos*(x,y: int32) extern
+  procedure setCursorBuffer(bytes: ^[]byte; l, w, h: int32) extern
+  procedure updateArea*(x,y,w,h: int32; cx, cy, cw, ch: int32) extern
+  procedure close*() extern
+  procedure getTicks*(): uint32 extern
+
+  procedure setCursorBitmap*(bm: Bitmap)
+  begin
+    setCursorBuffer(bm.buffer, sig(bm.buflen), bm.pixWidth, bm.pixHeight)
+  end setCursorBitmap
+     
+  procedure setScreenBitmap*(bm: Bitmap)
+  begin
+    bitmap := bm
+    setScreenBuffer(bm.buffer, sig(bm.buflen), bm.pixWidth, bm.pixHeight)
+  end setScreenBitmap
+       
+  procedure createBitmap*(bs: pointer to array of byte; bslen: uint32; pixWidth, pixHeight: int16): Bitmap
+  var bm: Bitmap; expected: uint32
+  begin
+    bm.buffer := bs
+    bm.buflen := bslen
+    bm.pixWidth := pixWidth
+    bm.pixHeight := pixHeight
+    return bm
+  end createBitmap
+  
+  procedure wordAt*(bm: ^Bitmap; i: int16): uint16
+  begin
+    dec(i) // Smalltalk array indexes start with 1
+    i := i * 2 // i comes as number of words
+    if usig(i+1) >= bm.buflen then return 0 end
+    return shl(bm.buffer[i], 8 ) + bm.buffer[i+1]
+  end wordAt
+  
+  procedure wordAtPut*(bm: ^Bitmap; i: int16; v: uint16)
+  begin
+    dec(i)
+    i := i * 2 
+    if usig(i+1) >= bm.buflen then return end
+    bm.buffer[i] := val(byte,band( shr( v, 8 ), 0ffh ))
+    bm.buffer[i+1] := val(byte,band( v, 0ffh ))
+  end wordAtPut
+  
+const
+  DeltaTime = 0
+  XLocation = 1
+  YLocation = 2
+  BiStateOn = 3
+  BiStateOff = 4
+  AbsoluteTime = 5 // followed by two words
+  
+  procedure getEventType(e: uint16): uint16 inline
+  begin
+    return shr(e,12)
+  end getEventType
+  
+  procedure getEventName(t: uint16; str: Str; slen: uint32) inline
+  begin
+    case t of
+    | DeltaTime: copy(str, "DeltaTime", slen)
+    | XLocation: copy(str, "XLocation", slen)
+    | YLocation: copy(str, "YLocation", slen)
+    | BiStateOn: copy(str, "BiStateOn", slen)
+    | BiStateOff: copy(str, "BiStateOff", slen)
+    | AbsoluteTime: copy(str, "AbsoluteTime", slen)
+    end
+  end getEventName
+  
+  procedure getEventValue(e: uint16): uint16 inline
+  begin
+    return band(e, 1111_1111_1111b)
+  end getEventValue
+
+begin
+  bitmap := {}
+  run := true
+end Display

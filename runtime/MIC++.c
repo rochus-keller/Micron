@@ -17,8 +17,10 @@ static int my_printf(const char *fmt, ...) {
     int result;
     if( MIC$$printf )
         result = MIC$$printf(fmt, args);
-    else
-        result = vfprintf(stdout, fmt, args);
+    else {
+        result = vfprintf(stderr, fmt, args);
+        fflush(stderr);
+    }
     va_end(args);
     return result;
 }

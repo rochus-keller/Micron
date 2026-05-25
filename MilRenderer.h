@@ -73,8 +73,7 @@ namespace Mil
         QList<Var> params;
         QList<Var> locals;
         Quali retType;
-        QByteArray binding; // if not empty, the first param is receiver
-        QByteArray origName; // extern
+        QByteArray binding; // if Normal and not empty, the first param is receiver
         ProcData():kind(Invalid),isPublic(0),endLine(0) {}
     };
 

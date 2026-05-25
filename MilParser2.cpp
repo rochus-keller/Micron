@@ -1486,7 +1486,7 @@ void Parser2::ProcedureDeclaration() {
             p->foreign_ = true;
             if( la.d_type == Tok_string ) {
                 expect(Tok_string, false, "ProcedureDeclaration");
-                p->getPd()->origName = cur.d_val.mid(1, cur.d_val.size()-2);
+                p->getPd()->externalName = cur.d_val.mid(1, cur.d_val.size()-2);
             }
         } else if( la.d_code == Tok_FORWARD || ( la.d_type == Tok_Semi && peek(2).d_code == Tok_FORWARD ) ) {
             if( la.d_type == Tok_Semi ) {
