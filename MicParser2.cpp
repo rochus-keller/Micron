@@ -3318,7 +3318,7 @@ void Parser2::assignmentOrProcedureCall() {
     }else
     {
         if( lhs->kind == Expression::ProcDecl || lhs->kind == Expression::MethSelect || lhs->kind == Expression::Super ||
-                lhs->kind == Expression::IntfSelect || lhs->getType() && lhs->getType()->kind == Type::Proc )
+                lhs->kind == Expression::IntfSelect || (lhs->getType() && lhs->getType()->kind == Type::Proc) )
         {
             // something to call
             Expression* decl = lhs;

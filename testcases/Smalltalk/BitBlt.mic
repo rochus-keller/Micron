@@ -43,7 +43,7 @@ var
   skew, nWords, vDir, hDir: int16
   mask1, mask2, skewMask: uint16
   sx, sy, dx, dy, w, h: int16 // pixel
-  sourceIndex, destIndex, sourceDelta, destDelta: int16
+  sourceIndex, destIndex, sourceDelta, destDelta: int32
   preload: boolean
   RightMasks: array 20 of int16
   
@@ -157,13 +157,15 @@ const
   end checkOverlap
   
   procedure calculateOffsets()
+  var p: int32
   begin 
     preload := (ctx.sourceBits # nil) and (skew # 0) and (skew <= band( sx, 15 ) )
     if hDir < 0 then preload := preload = false end
-    sourceIndex := sy * sourceRaster + ( sx div 16 )
-    destIndex := dy * destRaster + ( dx div 16 )
-    sourceDelta := ( sourceRaster * vDir ) - ( (nWords + sig(ord(preload)) ) * hDir )
-    destDelta := ( destRaster * vDir ) - ( nWords * hDir )
+    if preload then p := 1 else p := 0 end
+    sourceIndex := val(int32, sy) * val(int32, sourceRaster) + val(int32, sx div 16)
+    destIndex := val(int32, dy) * val(int32, destRaster) + val(int32, dx div 16)
+    sourceDelta := ( val(int32, sourceRaster) * val(int32, vDir) ) - ( (val(int32, nWords) + p) * val(int32, hDir) )
+    destDelta := ( val(int32, destRaster) * val(int32, vDir) ) - ( val(int32, nWords) * val(int32, hDir) )
   end calculateOffsets
   
   procedure merge(combinationRule, source, destination: int16): int16
@@ -221,7 +223,7 @@ const
         skewWord := halftoneWord
         if preload and (ctx.sourceBits # nil) then
             prevWord := D.wordAt(ctx.sourceBits, sourceIndex + 1 )
-            sourceIndex := sourceIndex + hDir
+            sourceIndex := sourceIndex + val(int32, hDir)
         else
             prevWord := 0
         end
@@ -230,7 +232,7 @@ const
             if ctx.sourceBits # nil then
                 prevWord := band(prevWord, skewMask)
                 if (+word <= sourceRaster) and (sourceIndex >= 0) 
-                        and (usig(sourceIndex) < ctx.sourceBits.buflen div 2 ) then
+                        and (val(uint32, sourceIndex) < ctx.sourceBits.buflen div 2 ) then
                     thisWord := D.wordAt(ctx.sourceBits, sourceIndex + 1 ) 
                 else
                     thisWord := 0
@@ -240,13 +242,13 @@ const
                 skewWord := bor( shl( skewWord, usig(skew) ), 
                                 shr( skewWord, usig(-( skew - 16 )) ) )
             end
-            if usig(destIndex) >= ctx.destBits.buflen div 2 then return end
+            if (destIndex < 0) or (val(uint32, destIndex) >= ctx.destBits.buflen div 2) then return end
             destWord := D.wordAt(ctx.destBits, destIndex + 1 )
             mergeWord := usig(merge( ctx.combinationRule, sig(band(skewWord, halftoneWord)), sig(destWord) ) )
             D.wordAtPut(ctx.destBits, destIndex + 1, 
                 bor( band(mergeMask, mergeWord), band( bnot(mergeMask), destWord ) ) )
-            sourceIndex := sourceIndex + hDir
-            destIndex := destIndex + hDir
+            sourceIndex := sourceIndex + val(int32, hDir)
+            destIndex := destIndex + val(int32, hDir)
             if word = usig(( nWords - 1 )) then
                 mergeMask := mask2
             else

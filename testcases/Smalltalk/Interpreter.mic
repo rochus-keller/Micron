@@ -141,7 +141,7 @@ var    newProcessWaiting : boolean
   var integerPointer: OOP
   begin 
     if OM.isIntegerValue(integerValue) then
-      integerPointer := OM.integerObjectOf(integerValue)
+      integerPointer := OM.integerObjectOf(sig(integerValue))
       OM.storePointerOfObject(fieldIndex, objectPointer, integerPointer)
     else
       primitiveFail()
@@ -389,7 +389,7 @@ var    newProcessWaiting : boolean
         lastUpdate := cur
         res := D.processEvents() 
         if res < 0 then D.run := false 
-        else pendingEvents := usig(res)
+        elsif res > 0 then pendingEvents := pendingEvents + val(uint32, res)
         end
       end
       if pendingEvents > 0 then
@@ -410,7 +410,7 @@ var    newProcessWaiting : boolean
         ticks := D.getTicks()
         if waitUntil - ticks <= 0 then 
           waitUntil := 0
-          print("onTimeout ")println(toSignal) // TEST
+          // print("onTimeout ")println(toSignal) // TEST
           if toSignal # 0 then
             asynchronousSignal(toSignal)
 
@@ -711,21 +711,20 @@ var    newProcessWaiting : boolean
     fetchContextRegisters()
   end returnToActiveContext
 
-  procedure positive16BitIntegerFor(integerValue: Int): OOP
+  procedure positive16BitIntegerFor(integerValue: int32): OOP
   var newLargeInteger: OOP
   begin
     assert( integerValue >= 0 )
 
-    if OM.isIntegerValue(usig(integerValue)) then
-      return OM.integerObjectOf(usig(integerValue))
+    if (integerValue >= -16384) and (integerValue <= 16383) then
+      return OM.integerObjectOf(val(Int, integerValue))
     end
 
     newLargeInteger := OM.instantiateClassWithBytes(OM.classLargePositiveInteger, 2)
 
-    OM.storeByteOfObject( 0, newLargeInteger, val(byte, usig(integerValue)) )
-    OM.storeByteOfObject( 1, newLargeInteger, val(byte, shr(usig(integerValue), 8)) )
+    OM.storeByteOfObject( 0, newLargeInteger, val(byte, band(integerValue, 0ffh)) )
+    OM.storeByteOfObject( 1, newLargeInteger, val(byte, band(shr(integerValue, 8), 0ffh)) )
     
-    assert(integerValue=sig(positive16BitValueOf(newLargeInteger)))
     return newLargeInteger
   end positive16BitIntegerFor
 
@@ -775,7 +774,7 @@ var    newProcessWaiting : boolean
 
   procedure pushInteger(integerValue: Int)
   begin
-    push( OM.integerObjectOf(usig(integerValue)))
+    push( OM.integerObjectOf(integerValue))
   end pushInteger
 
   procedure pushLiteralConstantBytecode()
@@ -1091,6 +1090,8 @@ var    newProcessWaiting : boolean
     end
   end lengthOf
 
+  var absoluteTimeState : integer
+
   procedure subscriptWithStoring(arr: OOP; index: Slot; value: OOP)
   var cls: OOP
   begin
@@ -1116,8 +1117,6 @@ var    newProcessWaiting : boolean
     end
   end subscriptWithStoring
 
-  var absoluteTimeState : integer
-
   procedure primitiveInputWord() 
   var e, et: Slot
   begin 
@@ -1139,7 +1138,7 @@ var    newProcessWaiting : boolean
       dec(absoluteTimeState)
     end*)
 
-    push( positive16BitIntegerFor( sig(e) ) )
+    push( positive16BitIntegerFor( val(int32, e) ) )
   end primitiveInputWord
 
   procedure subscriptWith(arr: OOP; index: Slot): OOP
@@ -1150,12 +1149,12 @@ var    newProcessWaiting : boolean
         if isPointers(cls) then
             return OM.fetchPointerOfObject(index-1,arr)
         else
-            value := OM.fromTwoComp(OM.fetchWordOfObject(index-1,arr))
-            return positive16BitIntegerFor(sig(value))
+            value := OM.fetchWordOfObject(index-1,arr)
+            return positive16BitIntegerFor(val(int32, value))
         end
     else
         value := OM.fetchByteOfObject(index-1,arr)
-        return OM.integerObjectOf(value)
+        return OM.integerObjectOf(sig(value))
     end
   end subscriptWith
 
@@ -1218,7 +1217,7 @@ var    newProcessWaiting : boolean
   var cursor: OOP; bitmap: D.Bitmap
   begin 
     TRACE_PRIMITIVE()
-    cursor := popStack()
+    cursor := stackTop()
     bitmap := fetchBitmap(cursor)
     D.setCursorBitmap(bitmap)
   end primitiveBeCursor
@@ -1227,7 +1226,7 @@ var    newProcessWaiting : boolean
   var displayScreen: OOP
   begin 
     TRACE_PRIMITIVE()
-    displayScreen := popStack()
+    displayScreen := stackTop()
     D.setScreenBitmap( fetchBitmap(displayScreen) )
   end primitiveBeDisplay
 
@@ -1260,7 +1259,7 @@ var    newProcessWaiting : boolean
     end
     contextSize := OM.fetchWordLenghtOf(methodContext)
     newContext := OM.instantiateClassWithPointers( OM.classBlockContext, contextSize )
-    initialIP := OM.integerObjectOf(instructionPointer+3)
+    initialIP := OM.integerObjectOf(sig(instructionPointer+3))
     OM.storePointerOfObject(InitialIPIndex, newContext, initialIP)
     OM.storePointerOfObject(InstructionPointerIndex, newContext, initialIP)
     storeStackPointerValueInContext(0,newContext)
@@ -1347,10 +1346,11 @@ var    newProcessWaiting : boolean
   end primitiveNew
 
   procedure primitiveNewWithArg() 
-  var size: Slot; cls: OOP
+  var size: Slot; cls: OOP; sizeArg: OOP
   begin 
     TRACE_PRIMITIVE()
-    size := positive16BitValueOf( popStack() )
+    sizeArg := popStack()
+    size := positive16BitValueOf( sizeArg )
     cls := popStack()
     successUpdate( isIndexable(cls) )
     if success then
@@ -1680,11 +1680,13 @@ var    newProcessWaiting : boolean
   end primitiveAtEnd
 
   procedure primitiveSize() 
-  var arr, cls, length: OOP
+  var arr, cls, length: OOP; rawLen, fixed: int32
   begin 
     arr := popStack()
     cls := OM.fetchClassOf(arr)
-    length := positive16BitIntegerFor( sig(lengthOf(arr) - fixedFieldsOf(cls)) )
+    rawLen := val(int32, lengthOf(arr))
+    fixed := val(int32, fixedFieldsOf(cls))
+    length := positive16BitIntegerFor( rawLen - fixed )
     TRACE_PRIMITIVE()
     if success then
       push(length)
@@ -1823,18 +1825,21 @@ var    newProcessWaiting : boolean
   end primitiveTruncated
 
 	procedure primitiveAdd()
-	var integerArgument, integerReceiver, integerResult: Int
+	var integerArgument, integerReceiver: Int
+	    integerResult: int32
 	begin 
     integerArgument := popInteger()
     integerReceiver := popInteger()
     integerResult := 0
     if success then
-      integerResult := integerReceiver + integerArgument
-      successUpdate( OM.isIntegerValue(usig(integerResult)) )
+      integerResult := val(int32, integerReceiver) + val(int32, integerArgument)
+      successUpdate( (integerResult >= -16384) and (integerResult <= 16383) )
     end
     if success then
-        pushInteger( integerResult )
-    else unPop(2) end
+      pushInteger( val(Int, integerResult) )
+    else 
+      unPop(2) 
+    end
 	end primitiveAdd
 
   procedure primitiveAsFloat()
@@ -1892,7 +1897,9 @@ var    newProcessWaiting : boolean
     end
     if success then
       pushInteger( integerResult )
-    else unPop(2) end
+    else 
+      unPop(2) 
+    end
 	end primitiveBitShift
 
   procedure primitiveBitXor()
@@ -1938,7 +1945,7 @@ var    newProcessWaiting : boolean
       successUpdate( OM.isIntegerValue(usig(integerResult)) )
     end
     if success then
-      push( OM.integerObjectOf( usig(integerResult) ) )
+      push( OM.integerObjectOf( integerResult ) )
     else unPop(2) end
 	end primitiveDivide
 
@@ -2020,18 +2027,21 @@ var    newProcessWaiting : boolean
 	end primitiveMod
 
 	procedure primitiveMultiply()
-	var integerArgument, integerReceiver, integerResult: Int
+	var integerArgument, integerReceiver: Int
+	    integerResult: int32
 	begin 
     integerArgument := popInteger()
     integerReceiver := popInteger()
     integerResult := 0
     if success then
-      integerResult := integerReceiver * integerArgument
-      successUpdate( OM.isIntegerValue(usig(integerResult)) )
+      integerResult := val(int32, integerReceiver) * val(int32, integerArgument)
+      successUpdate( (integerResult >= -16384) and (integerResult <= 16383) )
     end
     if success then
-        pushInteger( integerResult )
-    else unPop(2) end
+      pushInteger( val(Int, integerResult) )
+    else 
+      unPop(2) 
+    end
 	end primitiveMultiply
 
   procedure primitiveNewMethod() 
@@ -2114,18 +2124,21 @@ var    newProcessWaiting : boolean
   end primitiveQuo
 
 	procedure primitiveSubtract()
-	var integerArgument, integerReceiver, integerResult: Int
+	var integerArgument, integerReceiver: Int
+	    integerResult: int32
 	begin 
     integerArgument := popInteger()
     integerReceiver := popInteger()
     integerResult := 0
     if success then
-      integerResult := integerReceiver - integerArgument
-      successUpdate( OM.isIntegerValue(usig(integerResult)) )
+      integerResult := val(int32, integerReceiver) - val(int32, integerArgument)
+      successUpdate( (integerResult >= -16384) and (integerResult <= 16383) )
     end
     if success then
-        pushInteger( integerResult )
-    else unPop(2) end
+      pushInteger( val(Int, integerResult) )
+    else 
+      unPop(2) 
+    end
 	end primitiveSubtract
 
   procedure extendedStoreAndPopBytecode()

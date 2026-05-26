@@ -280,7 +280,7 @@ begin
   data[off+1] := val(byte, band(value,0ffh))
 end writeU16
 
-procedure isInt(ptr: Slot ): boolean inline
+procedure isInt(ptr: Slot): boolean inline
 begin
   return band(ptr, 1) # 0 
 end isInt
@@ -542,21 +542,21 @@ begin
   return band(shr(extension, 9), 01fh)
 end argumentCountOf
 
-procedure toTwoComp*(value: Slot): Slot
+procedure toTwoComp*(value: Int): Slot
 var res: Slot
 begin
   // ST integers have 15 bit range
   if value >= 0 then
-    res := band(value, 0011_1111_1111_1111b)
+    res := band(usig(value), 0011_1111_1111_1111b)
   else
-    res := bnot(abs(value)) + 1
+    res := bnot(usig(abs(value))) + 1
     res := band(res, 0111_1111_1111_1111b)
     res := bor(res, 0100_0000_0000_0000b)
   end
   return res
 end toTwoComp
 
-procedure integerObjectOf*(value: Slot): OOP 
+procedure integerObjectOf*(value: Int): OOP 
 var res: OOP
 begin
   res := toTwoComp(value)
@@ -800,13 +800,13 @@ end mark
 
 procedure collectGarbage()
 var i, count: uint32; obj: ^Object
-begin 
+begin
   count := 0
   for i := 0 to len(registers)-1 do mark(registers[i]) end
   for i := 0 to len(temps)-1 do mark(temps[i]) end
   for i := 0 to classSymbol by 2 do mark(val(OOP,i)) end
 
-  for i := 0 to len(slots)-1 do
+  for i := 0 to numOfSlots-1 do
     obj := @slots[i]
     if (obj # nil) and (not obj.marked) then
       if obj.data.bytes # nil then
@@ -910,6 +910,7 @@ begin
       return "characterTable"
   | 0:
       return "<invalid oop>"
+  else
   end
   cls := fetchClassOf(oop)
   (* TODO

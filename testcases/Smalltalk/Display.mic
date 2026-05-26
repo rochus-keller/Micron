@@ -36,14 +36,14 @@ var
   procedure processEvents*(): int32 extern // number of pending events or -1 for finish
   procedure nextEvent*(): uint16 extern  
   procedure setCursorPos*(x,y: int32) extern
-  procedure setCursorBuffer(bytes: ^[]byte; l, w, h: int32) extern
+  procedure setCursorBuffer(bytes: ^[]byte; w, h: int32) extern
   procedure updateArea*(x,y,w,h: int32; cx, cy, cw, ch: int32) extern
   procedure close*() extern
   procedure getTicks*(): uint32 extern
 
   procedure setCursorBitmap*(bm: Bitmap)
   begin
-    setCursorBuffer(bm.buffer, sig(bm.buflen), bm.pixWidth, bm.pixHeight)
+    setCursorBuffer(bm.buffer, bm.pixWidth, bm.pixHeight)
   end setCursorBitmap
      
   procedure setScreenBitmap*(bm: Bitmap)
@@ -62,19 +62,21 @@ var
     return bm
   end createBitmap
   
-  procedure wordAt*(bm: ^Bitmap; i: int16): uint16
+  procedure wordAt*(bm: ^Bitmap; idx: int32): uint16
+  var i: int32
   begin
-    dec(i) // Smalltalk array indexes start with 1
+    i := idx - 1 // Smalltalk array indexes start with 1
     i := i * 2 // i comes as number of words
-    if usig(i+1) >= bm.buflen then return 0 end
-    return shl(bm.buffer[i], 8 ) + bm.buffer[i+1]
+    if (i < 0) or (val(uint32, i+1) >= bm.buflen) then return 0 end
+    return val(uint16, shl(bm.buffer[i], 8 ) + bm.buffer[i+1])
   end wordAt
   
-  procedure wordAtPut*(bm: ^Bitmap; i: int16; v: uint16)
+  procedure wordAtPut*(bm: ^Bitmap; idx: int32; v: uint16)
+  var i: int32
   begin
-    dec(i)
+    i := idx - 1
     i := i * 2 
-    if usig(i+1) >= bm.buflen then return end
+    if (i < 0) or (val(uint32, i+1) >= bm.buflen) then return end
     bm.buffer[i] := val(byte,band( shr( v, 8 ), 0ffh ))
     bm.buffer[i+1] := val(byte,band( v, 0ffh ))
   end wordAtPut
@@ -101,6 +103,7 @@ const
     | BiStateOn: copy(str, "BiStateOn", slen)
     | BiStateOff: copy(str, "BiStateOff", slen)
     | AbsoluteTime: copy(str, "AbsoluteTime", slen)
+    else
     end
   end getEventName
   

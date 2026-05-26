@@ -603,6 +603,7 @@ bool Code::translateStat(Procedure &proc, Statement *& s)
     case IL_switch: {
         // TODO: true jump table instead of ifs
 
+            // this puts case expr on stack
             if( !translateStatExpr(proc, s) )
                 return false;
 
@@ -617,6 +618,11 @@ bool Code::translateStat(Procedure &proc, Statement *& s)
                 QList<int> toBody, afterBody;
                 while( e )
                 {
+                    // for each case label:
+                    // dup, ldc(e->i), ceq,
+                    // br next cond if false,
+                    // pop,
+                    // jump to body
                     emitOp(proc, LL_dup, is64 ? 8 : 4); // duplicate the case expression value on stack
                     emitOp(proc, is64 ? LL_ldc_i8 : LL_ldc_i4, addInt(e->i));
                     emitOp(proc, is64 ? LL_ceq_i8 : LL_ceq_i4);
@@ -647,7 +653,8 @@ bool Code::translateStat(Procedure &proc, Statement *& s)
                 emitOp(proc, LL_pop, is64 ? 8 : 4); // remove case expression
                 if( !translateStatSeq(proc, s->body) )
                     return false;
-            }
+            }else
+                emitOp(proc, LL_pop, is64 ? 8 : 4); // remove case expression
 
             foreach( int pc, after )
                 branch_here(proc,pc);

@@ -1,5 +1,5 @@
 /*
-* Copyright 2021-2024 Rochus Keller <mailto:me@rochus-keller.ch>
+* Copyright 2021-2026 Rochus Keller <mailto:me@rochus-keller.ch>
 *
 * This file is part of the Luon runtime library.
 *
