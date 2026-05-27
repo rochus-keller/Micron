@@ -4,6 +4,7 @@ BuildDir=
 BuiltInOakwood=true
 MainModule=@ByteArray()
 MainProc=@ByteArray()
+OakwoodScreen=true
 Options=@ByteArray()
 Suffixes=@Invalid()
 WorkingDir=
@@ -12,13 +13,13 @@ WorkingDir=
 size=0
 
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Versteck/Smalltalk80/ObjectMemory.mic
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Smalltalk/ObjectMemory.mic
 1\RelPath=ObjectMemory.mic
-2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Versteck/Smalltalk80/Display.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Smalltalk/Display.mic
 2\RelPath=Display.mic
-3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Versteck/Smalltalk80/BitBlt.mic
+3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Smalltalk/BitBlt.mic
 3\RelPath=BitBlt.mic
-4\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Versteck/Smalltalk80/Interpreter.mic
+4\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Smalltalk/Interpreter.mic
 4\RelPath=Interpreter.mic
 size=4
 

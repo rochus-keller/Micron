@@ -26,8 +26,8 @@ extern "C" {
 #include "oakwood/Out.h"
 #include "oakwood/Files.h"
 #include "oakwood/Args.h"
-#ifdef _MIC_HAVE_ST80_DISPLAY_
-#include "St80Display.h"
+#ifdef _MIC_HAVE_SCREEN_
+#include "oakwood/Screen.h"
 #endif
 }
 using namespace Mil;
@@ -441,80 +441,88 @@ static bool Args_Arg(void* args, void* ret)
     return true;
 }
 
-#ifdef _MIC_HAVE_ST80_DISPLAY_
+#ifdef _MIC_HAVE_SCREEN_
 
-// void Display$setScreenBuffer(uint8_t* b, int32_t len, int32_t w, int32_t h)
-static bool Display_setScreenBuffer(void* args, void* ret)
+// int32_t Screen$Open(uint8_t* buf, int32_t bLen, int32_t w, int32_t h, int32_t fl)
+static bool Screen_open(void* args, void* ret)
 {
-    Display$setScreenBuffer((uint8_t*)Interpreter::toP(args,0), Interpreter::toI4(args,1*Interpreter::StackAlign),
-                            Interpreter::toI4(args,2*Interpreter::StackAlign), Interpreter::toI4(args,3*Interpreter::StackAlign));
+    Screen$Open((uint8_t*)Interpreter::toP(args,0), Interpreter::toI4(args,1*Interpreter::StackAlign),
+                            Interpreter::toI4(args,2*Interpreter::StackAlign), Interpreter::toI4(args,3*Interpreter::StackAlign),
+                            Interpreter::toI4(args,4*Interpreter::StackAlign));
     return true;
 }
 
-// int32_t Display$processEvents()
-static bool Display_processEvents(void* args, void* ret)
+// void Screen$Close();
+static bool Screen_close(void* args, void* ret)
 {
-    int32_t res = Display$processEvents();
+    Screen$Close();
+    return true;
+}
+
+// int32_t Screen$ProcessEvents(int32_t sleep)
+static bool Screen_processEvents(void* args, void* ret)
+{
+    int32_t res = Screen$ProcessEvents(Interpreter::toI4(args,0));
     Interpreter::retI4(ret,res);
     return true;
 }
 
-// uint16_t Display$nextEvent()
-static bool Display_nextEvent(void* args, void* ret)
+// int32_t Screen$NextEvent()
+static bool Screen_nextEvent(void* args, void* ret)
 {
-    uint16_t res = Display$nextEvent();
+    int32_t res = Screen$NextEvent();
     Interpreter::retI4(ret,res);
     return true;
 }
 
-// void Display$setCursorPos(int32_t x, int32_t y)
-static bool Display_setCursorPos(void* args, void* ret)
+// void Screen$SetCursorPos(int32_t x, int32_t y)
+static bool Screen_setCursorPos(void* args, void* ret)
 {
-    Display$setCursorPos(Interpreter::toI4(args,0*Interpreter::StackAlign),
+    Screen$SetCursorPos(Interpreter::toI4(args,0*Interpreter::StackAlign),
                          Interpreter::toI4(args,1*Interpreter::StackAlign));
     return true;
 }
 
-// void Display$setCursorBuffer(uint8_t* b, int32_t w, int32_t h)
-static bool Display_setCursorBuffer(void* args, void* ret)
+// void Screen$SetCursor(uint8_t* bits, int32_t w, int32_t h, int32_t hotX, int32_t hotY)
+static bool Screen_setCursorBuffer(void* args, void* ret)
 {
-    Display$setCursorBuffer((uint8_t*)Interpreter::toP(args,0), Interpreter::toI4(args,1*Interpreter::StackAlign),
-                            Interpreter::toI4(args,2*Interpreter::StackAlign));
-    return true;
-}
-
-// void Display$updateArea(int32_t x,int32_t y,int32_t w,int32_t h,int32_t cx,int32_t cy,int32_t cw,int32_t ch)
-static bool Display_updateArea(void* args, void* ret)
-{
-    Display$updateArea(Interpreter::toI4(args,0*Interpreter::StackAlign),
-                            Interpreter::toI4(args,1*Interpreter::StackAlign),
+    Screen$SetCursor((uint8_t*)Interpreter::toP(args,0), Interpreter::toI4(args,1*Interpreter::StackAlign),
                             Interpreter::toI4(args,2*Interpreter::StackAlign),
                             Interpreter::toI4(args,3*Interpreter::StackAlign),
-                            Interpreter::toI4(args,4*Interpreter::StackAlign),
-                            Interpreter::toI4(args,5*Interpreter::StackAlign),
-                            Interpreter::toI4(args,6*Interpreter::StackAlign),
-                            Interpreter::toI4(args,7*Interpreter::StackAlign));
+                            Interpreter::toI4(args,4*Interpreter::StackAlign));
     return true;
 }
 
-// void Display$close()
-static bool Display_close(void* args, void* ret)
+// void Screen$UpdateArea(int32_t x, int32_t y, int32_t w, int32_t h)
+static bool Screen_updateArea(void* args, void* ret)
 {
-    Display$close();
+    Screen$UpdateArea(Interpreter::toI4(args,0*Interpreter::StackAlign),
+                            Interpreter::toI4(args,1*Interpreter::StackAlign),
+                            Interpreter::toI4(args,2*Interpreter::StackAlign),
+                            Interpreter::toI4(args,3*Interpreter::StackAlign));
     return true;
 }
 
-// uint32_t Display$getTicks()
-static bool Display_getTicks(void* args, void* ret)
+// uint32_t Screen$GetTicks()
+static bool Screen_getTicks(void* args, void* ret)
 {
-    uint32_t res = Display$getTicks();
+    const uint32_t res = Screen$GetTicks();
     Interpreter::retI4(ret,res);
     return true;
 }
 
+// int32_t Screen$GetMouseState(int32_t* x, int32_t* y);
+static bool Screen_getMouseState(void* args, void* ret)
+{
+    const int32_t res = Screen$GetMouseState((int32_t*)Interpreter::toP(args,0), (int32_t*)Interpreter::toP(args,Interpreter::StackAlign));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+
 #endif
 
-void VmOakwood::addTo(Interpreter* ip)
+void VmOakwood::addTo(Interpreter* ip, bool useScreen)
 {
     ip->registerProc("Input", "Time", Input_Time);
     ip->registerProc("Out", "Int", Out_Int);
@@ -577,14 +585,18 @@ void VmOakwood::addTo(Interpreter* ip)
     ip->registerProc("Args", "Count", Args_Count);
     ip->registerProc("Args", "Arg", Args_Arg);
 
-#ifdef _MIC_HAVE_ST80_DISPLAY_
-    ip->registerProc("Display", "setScreenBuffer", Display_setScreenBuffer);
-    ip->registerProc("Display", "processEvents", Display_processEvents);
-    ip->registerProc("Display", "nextEvent", Display_nextEvent);
-    ip->registerProc("Display", "setCursorPos", Display_setCursorPos);
-    ip->registerProc("Display", "setCursorBuffer", Display_setCursorBuffer);
-    ip->registerProc("Display", "updateArea", Display_updateArea);
-    ip->registerProc("Display", "close", Display_close);
-    ip->registerProc("Display", "getTicks", Display_getTicks);
+#ifdef _MIC_HAVE_SCREEN_
+    if( useScreen )
+    {
+        ip->registerProc("Screen", "Open", Screen_open);
+        ip->registerProc("Screen", "ProcessEvents", Screen_processEvents);
+        ip->registerProc("Screen", "NextEvent", Screen_nextEvent);
+        ip->registerProc("Screen", "SetCursorPos", Screen_setCursorPos);
+        ip->registerProc("Screen", "SetCursor", Screen_setCursorBuffer);
+        ip->registerProc("Screen", "UpdateArea", Screen_updateArea);
+        ip->registerProc("Screen", "Close", Screen_close);
+        ip->registerProc("Screen", "GetTicks", Screen_getTicks);
+        ip->registerProc("Screen", "GetMouseState", Screen_getMouseState);
+    }
 #endif
 }

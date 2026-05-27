@@ -50,5 +50,8 @@
         <file>oakwood/Args.h</file>
         <file>runtime/libmicron_linux_i386.a</file>
         <file>runtime/mic_init_glibc.c</file>
+        <file>oakwood/Screen.mic</file>
+        <file>oakwood/Screen.h</file>
+        <file>oakwood/ScreenSdl.c</file>
     </qresource>
 </RCC>

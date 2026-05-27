@@ -712,7 +712,11 @@ static void process(const QString& file, const QStringList& searchPaths,
     {
         Mil::Interpreter r(&mgr.loader.getModel());
 
-        Mil::VmOakwood::addTo(&r);
+#ifdef _MIC_HAVE_SCREEN_
+        Mil::VmOakwood::addTo(&r, true);
+#else
+        Mil::VmOakwood::addTo(&r, false);
+#endif
 
         mgr.loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
 

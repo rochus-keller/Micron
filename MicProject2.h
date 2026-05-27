@@ -105,6 +105,8 @@ namespace Mic
         QString renderMain() const;
         void setUseBuiltInOakwood(bool);
         bool useBuiltInOakwood() const { return d_useBuiltInOakwood; }
+        void setOakwoodScreen(bool);
+        bool oakwoodScreen() const { return d_useOakwoodScreen; }
         QString getWorkingDir(bool resolved = false) const;
         void setWorkingDir( const QString& );
         QString getBuildDir(bool resolved = false) const;
@@ -213,6 +215,7 @@ namespace Mic
         qint16 d_level;
         bool d_dirty;
         bool d_useBuiltInOakwood;
+        bool d_useOakwoodScreen;
         bool d_dbg;
     };
 }

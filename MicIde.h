@@ -139,6 +139,7 @@ namespace Mic
         void onErrors();
         void onOpenFile();
         void onOakwood();
+        void onScreen();
         void onAddFiles();
         void onNewModule();
         void onAddDir();

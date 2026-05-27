@@ -1,11 +1,9 @@
 (*
 * Copyright 2026 Rochus Keller <mailto:me@rochus-keller.ch>
 *
-* This file is part of the Micron Smalltalk-80 VM.
-*
-* The following is the license that applies to this copy of the
-* application. For a license to use the application under conditions
-* other than those described here, please email to me@rochus-keller.ch.
+* Smalltalk-80 specific display adapter built on top of the generic Screen module.
+* Implements Alto keyboard mapping, packed 16-bit event queue with timestamps,
+* three-button mouse emulation (Ctrl/Shift+Left), dirty area clipping.
 *
 * GNU General Public License Usage
 * This file may be used under the terms of the GNU General Public
@@ -19,6 +17,8 @@
 
 module Display
 
+import S := Screen
+
 type 
   Bitmap* = record 
               pixWidth, pixHeight: int16
@@ -28,32 +28,310 @@ type
   
   Str = pointer to array of char
               
+const
+  // Smalltalk-80 event types (packed into upper 4 bits of 16-bit event word)
+  DeltaTime* = 0
+  XLocation* = 1
+  YLocation* = 2
+  BiStateOn* = 3
+  BiStateOff* = 4
+  AbsoluteTime* = 5 // followed by two words
+
+  MaxPos = 0fffh // 12 bits
+  
+  // Alto mouse button codes
+  AltoLeft*  = 130
+  AltoMid*   = 128  // BB error, mixed up 129 and 128, VIM fixed
+  AltoRight* = 129
+  
+  // Alto modifier key codes
+  AltoShift*    = 136
+  AltoCtrl*     = 138
+  AltoCapsLock* = 139
+  
+  // Internal event queue size (16-bit words, as consumed by primitiveInputWord)
+  QueueLen = 4096
+  
 var 
   run* : boolean
   bitmap*: Bitmap
+  
+  // Internal Smalltalk event queue (packed 16-bit words)
+  queue: array QueueLen of uint16
+  qHead, qTail, qCount: int32
+  
+  // Timestamp tracking for event encoding
+  lastEventTime: uint32
+  
+  // Modifier state tracking
+  shiftDown, ctrlDown, capsLockDown: boolean
 
-  procedure setScreenBuffer(bytes: ^[]byte; l, w, h: int32) extern
-  procedure processEvents*(): int32 extern // number of pending events or -1 for finish
-  procedure nextEvent*(): uint16 extern  
-  procedure setCursorPos*(x,y: int32) extern
-  procedure setCursorBuffer(bytes: ^[]byte; w, h: int32) extern
-  procedure updateArea*(x,y,w,h: int32; cx, cy, cw, ch: int32) extern
-  procedure close*() extern
-  procedure getTicks*(): uint32 extern
+  // Last known mouse position (for delta detection)
+  lastMouseX, lastMouseY: int32
+  
+  procedure enqueue(w: uint16)
+  begin
+    if qCount >= QueueLen then return end
+    queue[qHead] := w
+    qHead := (qHead + 1) mod QueueLen
+    inc(qCount)
+  end enqueue
+  
+  procedure compose(t: uint16; p: uint16): uint16 inline
+  begin
+    return bor( shl(t, 12), band(p, 0fffh) )
+  end compose
+  
+  // Post a Smalltalk event with optional timestamp prefix
+  procedure postEvent(t: uint16; param: uint16; withTime: boolean)
+  var time, diff: uint32
+  begin
+    if withTime then
+      time := S.GetTicks()
+      diff := time - lastEventTime
+      lastEventTime := time
+      if diff <= val(uint32, MaxPos) then
+        enqueue( compose(DeltaTime, val(uint16, diff)) )
+      else
+        enqueue( compose(AbsoluteTime, 0) )
+        enqueue( val(uint16, band( shr(time, 16), 0ffffh )) )
+        enqueue( val(uint16, band( time, 0ffffh )) )
+      end
+    end
+    enqueue( compose(t, param) )
+  end postEvent
+  
 
+  // The Alto keyboard layout maps shifted characters to their unshifted key
+  // and synthesizes shift press/release events as needed.  
+  procedure toAltoUpper(ch: int32): int32
+  begin
+    case ch of
+    | 43: return 61 // + -> =
+    | 95: return 45 // _ -> left arrow
+    | 124: return 92 // | -> \
+    | 123: return 91 // { -> [
+    | 125: return 93 // } -> ]
+    | 58: return 59 // : -> ;
+    | 34: return 39 // " -> '
+    | 60: return 44 // < -> ,
+    | 62: return 46 // > -> .
+    | 63: return 47 // ? -> /
+    | 33: return 49 // ! -> 1
+    | 64: return 50 // @ -> 2
+    | 35: return 51 // # -> 3
+    | 36: return 52 // $ -> 4
+    | 37: return 53 // % -> 5
+    | 126: return 54 // ~ -> 6
+    | 38: return 55 // & -> 7
+    | 42: return 56 // * -> 8
+    | 40: return 57 // ( -> 9
+    | 41: return 48 // ) -> 0
+    else
+    end
+    if (ch >= 65) and (ch <= 90) then // A..Z -> a..z
+      return ch + 32
+    end
+    return 0
+  end toAltoUpper
+  
+  procedure isAltoLower(ch: int32): boolean
+  begin
+    if (ch >= 97) and (ch <= 122) then return true end // a..z
+    if (ch >= 48) and (ch <= 57) then return true end  // 0..9
+    case ch of
+    | 45 (*-*), 61 (*=*), 92 (*\*), 91 (*[*), 93 (*]*),
+      59 (*;*), 39 (*'*), 44 (*,*), 46 (*.*), 47 (*/*):
+      return true
+    else
+    end
+    return false
+  end isAltoLower
+  
+  procedure sendShift(keyPress, shiftRequired: boolean)
+  var t: uint16
+  begin
+    if shiftRequired and not shiftDown then
+      if keyPress then t := BiStateOn else t := BiStateOff end
+      postEvent(t, AltoShift, true)
+    elsif (not shiftRequired) and shiftDown then
+      if not keyPress then t := BiStateOn else t := BiStateOff end
+      postEvent(t, AltoShift, true)
+    end
+  end sendShift
+
+  // Handle a character input event (from Screen KEY_CHAR)
+  procedure handleChar(ch: int32)
+  var upper: int32
+  begin
+    if (ch >= 33) and (ch <= 126) then
+      if isAltoLower(ch) then
+        sendShift(true, false)
+        postEvent(BiStateOn, val(uint16, ch), true)
+        sendShift(false, false)
+      else
+        upper := toAltoUpper(ch)
+        if upper # 0 then
+          sendShift(true, true)
+          postEvent(BiStateOn, val(uint16, upper), true)
+          sendShift(false, true)
+        end
+      end
+    end
+  end handleChar
+  
+  // Handle a key down/up event (from Screen KEY_DOWN / KEY_UP)
+  procedure handleKey(code: int32; down: boolean)
+  var t: uint16
+  begin
+    if down then t := BiStateOn else t := BiStateOff end
+    case code of
+    | 100h (*KeyBackspace*):  postEvent(t, 8, true)
+    | 101h (*KeyTab*):        postEvent(t, 9, true)
+    | 102h (*KeyReturn*):     postEvent(t, 13, true)
+    | 103h (*KeyEscape*):     postEvent(t, 27, true)
+    | 104h (*KeyDelete*):     postEvent(t, 127, true)
+    | 105h (*KeyLeft*):       postEvent(t, 95, true)   // Alto: ← = ASCII 95
+    | 107h (*KeyUp*):         postEvent(t, 94, true)   // Alto: ↑ = ASCII 94
+    | 110h (*KeyLShift*):     shiftDown := down; postEvent(t, AltoShift, true)
+    | 111h (*KeyRShift*):     shiftDown := down; postEvent(t, AltoShift, true)
+    | 112h (*KeyLCtrl*):      ctrlDown := down; postEvent(t, AltoCtrl, true)
+    | 113h (*KeyRCtrl*):      ctrlDown := down; postEvent(t, AltoCtrl, true)
+    | 114h (*KeyCapsLock*):   capsLockDown := down; postEvent(t, AltoCapsLock, true)
+    | 20h (*space*):          postEvent(t, 32, true)
+    else
+    end
+  end handleKey
+  
+  // Handle a mouse button event with three-button emulation
+  procedure handleMouseButton(btn: int32; down: boolean)
+  var t, altoBtn: uint16
+  begin
+    if down then t := BiStateOn else t := BiStateOff end
+    case btn of
+    | 1: // BtnLeft
+      if (not ctrlDown) and (not shiftDown) then
+        altoBtn := AltoLeft
+      elsif ctrlDown then
+        altoBtn := AltoRight
+      else // shiftDown (no ctrl)
+        altoBtn := AltoMid
+      end
+    | 2: // BtnMiddle
+      altoBtn := AltoMid
+    | 3 : // BtnRight
+      if shiftDown then
+        altoBtn := AltoMid
+      else
+        altoBtn := AltoRight
+      end
+    else return
+    end
+    postEvent(t, altoBtn, true)
+  end handleMouseButton
+  
+  // Handle a mouse move event
+  procedure handleMouseMove(mx, my: int32)
+  begin
+    if mx # lastMouseX then
+      postEvent(XLocation, val(uint16, mx), true)
+      lastMouseX := mx
+    end
+    if my # lastMouseY then
+      postEvent(YLocation, val(uint16, my), true)
+      lastMouseY := my
+    end
+  end handleMouseMove
+  
+  procedure fetchRawEvents()
+  var evt, evtType, evtData, mx, my: int32
+  begin
+    evt := S.NextEvent()
+    while evt # 0 do
+      evtType := band(sig(shr(evt, 24)), 0ffh )
+      evtData := band(evt, 0ffffffh)
+      case evtType of
+      | 1: // EvtMouseMove
+        mx := band(sig(shr(evtData, 12)), 0fffh )
+        my := band( evtData, 0fffh )
+        handleMouseMove(mx, my)
+      | 2: // EvtMouseDown
+        handleMouseButton(evtData, true)
+      | 3: // EvtMouseUp
+        handleMouseButton(evtData, false)
+      | 4: // EvtKeyDown
+        handleKey(evtData, true)
+      | 5: // EvtKeyUp
+        handleKey(evtData, false)
+      | 6: // EvtKeyChar
+        handleChar(evtData)
+      else
+      end
+      evt := S.NextEvent()
+    end
+  end fetchRawEvents
+  
+  procedure nextEvent*(): uint16
+  var res: uint16
+  begin
+    if qCount = 0 then return 0 end
+    res := queue[qTail]
+    qTail := (qTail + 1) mod QueueLen
+    dec(qCount)
+    return res
+  end nextEvent
+  
+  procedure processEvents*(): int32
+  var res: int32
+  begin
+    res := S.ProcessEvents(0)
+    if res < 0 then return -1 end
+    if res > 0 then
+      fetchRawEvents()
+    end
+    return qCount
+  end processEvents
+  
+  procedure getTicks*(): uint32
+  begin
+    return S.GetTicks()
+  end getTicks
+  
+  procedure setCursorPos*(x, y: int32)
+  begin
+    S.SetCursorPos(x, y)
+  end setCursorPos
+  
+  procedure close*()
+  begin
+    S.Close
+  end close
+  
+  procedure updateArea*(x, y, w, h: int32; cx, cy, cw, ch: int32)
+  var left, top, right, bottom: int32
+  begin
+    // Intersect update rect with clip rect
+    if x > cx then left := x else left := cx end
+    if y > cy then top := y else top := cy end
+    if x + w < cx + cw then right := x + w else right := cx + cw end
+    if y + h < cy + ch then bottom := y + h else bottom := cy + ch end
+    if (left >= right) or (top >= bottom) then return end
+    S.UpdateArea(left, top, right - left, bottom - top)
+  end updateArea
+  
   procedure setCursorBitmap*(bm: Bitmap)
   begin
-    setCursorBuffer(bm.buffer, bm.pixWidth, bm.pixHeight)
+    S.SetCursor(bm.buffer, bm.pixWidth, bm.pixHeight, 0, 0)
   end setCursorBitmap
      
   procedure setScreenBitmap*(bm: Bitmap)
   begin
     bitmap := bm
-    setScreenBuffer(bm.buffer, sig(bm.buflen), bm.pixWidth, bm.pixHeight)
+    S.Open(bm.buffer, sig(bm.buflen), bm.pixWidth, bm.pixHeight, {})
   end setScreenBitmap
        
   procedure createBitmap*(bs: pointer to array of byte; bslen: uint32; pixWidth, pixHeight: int16): Bitmap
-  var bm: Bitmap; expected: uint32
+  var bm: Bitmap
   begin
     bm.buffer := bs
     bm.buflen := bslen
@@ -81,20 +359,12 @@ var
     bm.buffer[i+1] := val(byte,band( v, 0ffh ))
   end wordAtPut
   
-const
-  DeltaTime = 0
-  XLocation = 1
-  YLocation = 2
-  BiStateOn = 3
-  BiStateOff = 4
-  AbsoluteTime = 5 // followed by two words
-  
-  procedure getEventType(e: uint16): uint16 inline
+  procedure getEventType*(e: uint16): uint16 inline
   begin
     return shr(e,12)
   end getEventType
   
-  procedure getEventName(t: uint16; str: Str; slen: uint32) inline
+  procedure getEventName*(t: uint16; str: Str; slen: uint32) inline
   begin
     case t of
     | DeltaTime: copy(str, "DeltaTime", slen)
@@ -107,7 +377,7 @@ const
     end
   end getEventName
   
-  procedure getEventValue(e: uint16): uint16 inline
+  procedure getEventValue*(e: uint16): uint16 inline
   begin
     return band(e, 1111_1111_1111b)
   end getEventValue
@@ -115,4 +385,13 @@ const
 begin
   bitmap := {}
   run := true
+  qHead := 0
+  qTail := 0
+  qCount := 0
+  lastEventTime := 0
+  shiftDown := false
+  ctrlDown := false
+  capsLockDown := false
+  lastMouseX := 0
+  lastMouseY := 0
 end Display

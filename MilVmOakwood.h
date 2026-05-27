@@ -27,7 +27,7 @@ class Interpreter;
 class VmOakwood
 {
 public:
-    static void addTo(Interpreter*);
+    static void addTo(Interpreter*, bool useScreen);
 
 private:
     VmOakwood();

@@ -21,28 +21,31 @@ QT       += core gui network widgets
 
 TARGET = MicronIDE
 TEMPLATE = app
+CONFIG += HAVE_SCREEN
 
 INCLUDEPATH += .. 
 
 #DEFINES += _MIC_IDE_USE_ELFLINKER_MUSL_
-DEFINES += _MIC_HAVE_ST80_DISPLAY_
-INCLUDEPATH += testcases/Smalltalk
 
 SOURCES +=  MicProject2.cpp \
     MicHighlighter.cpp \
     MicIde.cpp \
     ../GuiTools/CodeEditor.cpp \
     ../GuiTools/DocSelector.cpp \
-    ../GuiTools/DocTabWidget.cpp \
-    testcases/Smalltalk/St80QtDisplay.cpp
+    ../GuiTools/DocTabWidget.cpp
 
 HEADERS  += MicProject2.h \
     MicHighlighter.h \
     MicIde.h \
     ../GuiTools/CodeEditor.h \
     ../GuiTools/DocSelector.h \
-    ../GuiTools/DocTabWidget.h \
-    testcases/Smalltalk/St80QtDisplay.h
+    ../GuiTools/DocTabWidget.h
+
+HAVE_SCREEN {
+    DEFINES += _MIC_HAVE_SCREEN_
+    HEADERS += oakwood/ScreenQt.h
+    SOURCES += oakwood/ScreenQt.cpp
+}
 
 include( MicUtils.pri )
 include( MicParser.pri )

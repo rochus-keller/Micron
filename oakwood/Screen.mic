@@ -1,0 +1,105 @@
+(*
+* Copyright 2026 Rochus Keller <mailto:me@rochus-keller.ch>
+*
+* A single window with a 1bpp framebuffer, raw input events,
+* mouse state polling, hardware cursor, and a millisecond timer.
+*
+* GNU General Public License Usage
+* This file may be used under the terms of the GNU General Public
+* License (GPL) versions 2.0 or 3.0 as published by the Free Software
+* Foundation and appearing in the file LICENSE.GPL included in
+* the packaging of this file. Please review the following information
+* to ensure GNU General Public Licensing requirements will be met:
+* http://www.fsf.org/licensing/licenses/info/GPLv2.html and
+* http://www.gnu.org/copyleft/gpl.html.
+*)
+
+MODULE Screen [visibility="*"];
+
+CONST
+  // Flags for Open (bit positions for SET type)
+  LsbFirst*   = 0;    // bit 0: LSB-first pixel order (e.g. Oberon); absent = MSB-first (e.g. Smalltalk-80)
+  BottomUp*   = 1;    // bit 1: Y=0 is bottom row (e.g. Oberon); absent = top-down (e.g. Smalltalk-80)
+
+  // Raw event types stored in bits 27..24 of the int32 returned by NextEvent
+  EvtNone*       = 0;
+  EvtMouseMove*  = 1;   // data: x in bits 11..0 of upper half, y in bits 11..0 of lower half 
+  EvtMouseDown*  = 2;   // data: button code 1=left, 2=mid, 3=right 
+  EvtMouseUp*    = 3;   // data: button code 
+  EvtKeyDown*    = 4;   // data: abstract key code, see below 
+  EvtKeyUp*      = 5;   // data: abstract key code 
+  EvtKeyChar*    = 6;   // data: Unicode codepoint / ASCII code 
+
+  // Mouse button codes used in EvtMouseDown/EvtMouseUp data 
+  BtnLeft*   = 1;
+  BtnMiddle* = 2;
+  BtnRight*  = 3;
+
+  (* Abstract key codes for EvtKeyDown / EvtKeyUp.
+     Printable ASCII keys use their lowercase ASCII value (32..126).
+     Special keys use codes >= 100H. *)
+  KeyBackspace*  = 100H;
+  KeyTab*        = 101H;
+  KeyReturn*     = 102H;
+  KeyEscape*     = 103H;
+  KeyDelete*     = 104H;
+  KeyLeft*       = 105H;
+  KeyRight*      = 106H;
+  KeyUp*         = 107H;
+  KeyDown*       = 108H;
+  KeyLShift*     = 110H;
+  KeyRShift*     = 111H;
+  KeyLCtrl*      = 112H;
+  KeyRCtrl*      = 113H;
+  KeyCapsLock*   = 114H;
+
+  // Bit masks for GetMouseState return value
+  MouseLeft*   = 4;    (* bit 2 *)
+  MouseMid*    = 2;    (* bit 1 *)
+  MouseRight*  = 1;    (* bit 0 *)
+
+
+(* Create or resize the display window.
+   buf: pointer to a caller-owned 1bpp framebuffer.
+   bufLen: size of buf in bytes.
+   w, h: pixel dimensions.
+   flags: SET of LsbFirst, BottomUp (empty set = MSB-first, top-down).
+   Returns 1 on success, 0 on failure.
+   May be called again to change buffer, size, or flags (window is recreated). *)
+PROCEDURE Open (buf: POINTER TO ARRAY OF BYTE; bufLen, w, h: INT32; flags: SET): INT32 EXTERN;
+
+(* Close the window and release platform resources. *)
+PROCEDURE Close EXTERN;
+
+(* Mark a rectangle as dirty; rendering happens during ProcessEvents.
+   Coordinates are in framebuffer pixel space (before any Y-flip).
+   Passing (0, 0, w, h) marks the whole screen. Clamped internally. *)
+PROCEDURE UpdateArea (x, y, w, h: INT32) EXTERN;
+
+(* Poll OS events, render dirty areas to the window, fill raw event queue.
+   sleep: max milliseconds to wait for an event (0 = non-blocking poll).
+   Returns: -1 = quit requested, 0 = no new input events, >0 = number of raw events queued. *)
+PROCEDURE ProcessEvents (sleep: INT32): INT32 EXTERN;
+
+(* Dequeue the next raw event. Returns 0 if the queue is empty.
+   Bits 27..24 = event type (see EvtXxx constants).
+   Bits 23..0  = event data (meaning depends on type). *)
+PROCEDURE NextEvent (): INT32 EXTERN;
+
+(* Get current mouse position and button state (for polling-based systems).
+   x, y are written via out-pointers; coordinates are raw (top-down).
+   Returns button state as a bitmask: bit 2=left, bit 1=mid, bit 0=right. *)
+PROCEDURE GetMouseState (x, y: POINTER TO INT32): INT32 EXTERN;
+
+(* Set a custom hardware cursor from a 1bpp bitmap (MSB-first).
+   hotX, hotY: hotspot offset within the bitmap.
+   Pass NIL with w=0, h=0 to restore the default cursor. *)
+PROCEDURE SetCursor (img: POINTER TO ARRAY OF BYTE; w, h, hotX, hotY: INT32) EXTERN;
+
+(* Warp the mouse cursor to position (x, y) in window coordinates. *)
+PROCEDURE SetCursorPos (x, y: INT32) EXTERN;
+
+(* Milliseconds elapsed since module initialisation. *)
+PROCEDURE GetTicks (): UINT32 EXTERN;
+
+END Screen.

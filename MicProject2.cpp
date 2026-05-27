@@ -113,7 +113,8 @@ public:
     QString source() const { return sourcePath; }
 };
 
-Project2::Project2(QObject *parent) : QObject(parent),d_dirty(false),d_useBuiltInOakwood(false),d_level(0)
+Project2::Project2(QObject *parent) : QObject(parent),d_dirty(false),
+    d_useBuiltInOakwood(false),d_level(0),d_useOakwoodScreen(false)
 {
     d_suffixes << ".mic";
 }
@@ -201,6 +202,12 @@ QString Project2::renderMain() const
 void Project2::setUseBuiltInOakwood(bool on)
 {
     d_useBuiltInOakwood = on;
+    touch();
+}
+
+void Project2::setOakwoodScreen(bool on)
+{
+    d_useOakwoodScreen = on;
     touch();
 }
 
@@ -472,6 +479,10 @@ bool Project2::parse()
         parseLib("Math");
         parseLib("MathL");
         parseLib("Strings");
+#ifdef _MIC_HAVE_SCREEN_
+        if( oakwoodScreen() )
+            parseLib("Screen");
+#endif
     }
 
     bool res = false;
@@ -500,7 +511,11 @@ bool Project2::parse()
 bool Project2::generateC(const QString &outDir)
 {
     QStringList cFiles;
-    copyCResources(outDir, cFiles, false);
+    bool haveScreen = false;
+#ifdef _MIC_HAVE_SCREEN_
+    haveScreen = true;
+#endif
+    copyCResources(outDir, cFiles, haveScreen);
 
     QDir dir(outDir);
     // TODO: check if files can be created and written
@@ -535,10 +550,13 @@ bool Project2::generateC(const QString &outDir)
     foreach( Mil::Declaration* module, roots )
         out << "#include \"" <<  escapeFilename(module->name) << ".h\"" << endl;
 
+    if( haveScreen )
+        out << "#include \"Args.h\"" << endl;
     out << endl;
 
     out << "int main(int argc, char** argv) {" << endl;
-
+    if( haveScreen )
+        out << "    Args_setArgcArgv(argc, argv);" << endl;
     foreach( Mil::Declaration* module, roots )
         // if a module is not in "used", it is never imported and thus a root module
         out << "    " <<  module->name << "$begin$();" << endl;
@@ -790,6 +808,14 @@ bool Project2::copyCResources(const QString &outDir, QStringList &cFiles, bool w
         cFiles << writeC("oakwood", "Math", outDir);
         cFiles << writeC("oakwood", "MathL", outDir);
         cFiles << writeC("oakwood", "Strings", outDir);
+#ifdef _MIC_HAVE_SCREEN_
+        if( oakwoodScreen() )
+        {
+            const QString to = QDir(outDir).absoluteFilePath("ScreenSdl.c");
+            QFile::copy(":/oakwood/ScreenSdl.c", to);
+            cFiles << to;
+        }
+#endif
     }else
     {
         QFile f(QDir(outDir).absoluteFilePath("mic_args_dummy+.c"));
@@ -809,7 +835,7 @@ bool Project2::interpret(const QString& outDir)
     Mil::Interpreter r(&loader.getModel());
 
     if( d_useBuiltInOakwood )
-        Mil::VmOakwood::addTo(&r);
+        Mil::VmOakwood::addTo(&r,d_useOakwoodScreen);
 
     loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
 
@@ -867,7 +893,7 @@ bool Project2::generateMrl(const QString &outDir)
     Mil::Interpreter r(&loader.getModel());
 
     if( d_useBuiltInOakwood )
-        Mil::VmOakwood::addTo(&r);
+        Mil::VmOakwood::addTo(&r, d_useOakwoodScreen);
 
     loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
 
@@ -1164,6 +1190,7 @@ bool Project2::save()
 
     out.setValue("Suffixes", d_suffixes );
     out.setValue("BuiltInOakwood", d_useBuiltInOakwood );
+    out.setValue("OakwoodScreen", d_useOakwoodScreen );
     out.setValue("MainModule", d_main.first );
     out.setValue("MainProc", d_main.second );
     out.setValue("WorkingDir", d_workingDir );
@@ -1224,6 +1251,7 @@ bool Project2::loadFrom(const QString& filePath)
 
     d_suffixes = in.value("Suffixes").toStringList();
     d_useBuiltInOakwood = in.value("BuiltInOakwood").toBool();
+    d_useOakwoodScreen = in.value("OakwoodScreen").toBool();
     d_main.first = in.value("MainModule").toByteArray();
     d_main.second = in.value("MainProc").toByteArray();
     d_workingDir = in.value("WorkingDir").toString();

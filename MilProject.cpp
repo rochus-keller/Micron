@@ -178,7 +178,7 @@ void Project::interpret(bool dump)
 {
     Interpreter r(mdl);
 
-    VmOakwood::addTo(&r);
+    VmOakwood::addTo(&r,false);
 
     mdl->calcMemoryLayouts(sizeof(void*), 8);
 

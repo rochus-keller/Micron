@@ -695,6 +695,7 @@ void Ide::createModsMenu()
     pop->addSeparator();
     pop->addCommand( "Set Build Directory...", this, SLOT( onBuildDir() ) );
     pop->addCommand( "Built-in Oakwood", this, SLOT(onOakwood()) );
+    pop->addCommand( "Use Screen", this, SLOT(onScreen()) );
     pop->addCommand( "Set Micron File System Root...", this, SLOT( onWorkingDir() ) );
     pop->addSeparator();
     pop->addCommand( "Check Syntax", this, SLOT(onParse()), tr("CTRL+T"), false );
@@ -777,6 +778,7 @@ void Ide::createMenuBar()
     pop->addSeparator();
     pop->addCommand( "Set Build Directory...", this, SLOT( onBuildDir() ) );
     pop->addCommand( "Built-in Oakwood", this, SLOT(onOakwood()) );
+    pop->addCommand( "Use Screen", this, SLOT(onScreen()) );
     pop->addCommand( "Set Configuration Variables...", this, SLOT( onSetOptions()) );
     pop->addCommand( "Set Micron File System Root...", this, SLOT( onWorkingDir() ) );
 
@@ -1375,6 +1377,13 @@ void Ide::onOakwood()
     CHECKED_IF( true, d_pro->useBuiltInOakwood() );
 
     d_pro->setUseBuiltInOakwood( !d_pro->useBuiltInOakwood() );
+}
+
+void Ide::onScreen()
+{
+    CHECKED_IF( true, d_pro->oakwoodScreen() );
+
+    d_pro->setOakwoodScreen( !d_pro->oakwoodScreen() );
 }
 
 void Ide::onAddFiles()
@@ -3122,7 +3131,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.31");
+    a.setApplicationVersion("0.4.32");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 
