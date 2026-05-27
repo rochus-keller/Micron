@@ -276,6 +276,6 @@ begin
       0, 01h, 03h, 07h, 0fh,
       01fh, 03fh, 07fh, 0ffh,
       01ffh, 03ffh, 07ffh, 0fffh,
-      01fffh, 03fffh, 07fffh, sig(0ffffhu) }
+      01fffh, 03fffh, 07fffh, sig(0ffffh) }
        
 end BitBlt

@@ -91,7 +91,7 @@ var    newProcessWaiting : boolean
 
   procedure asynchronousSignal(aSemaphore: OOP)
   begin
-    if semaphoreIndex >= semaphoreListLen then
+    if semaphoreIndex >= semaphoreListLen - 1i then
       println("WARNING semaphore list overflow")
       return
     end
@@ -389,7 +389,7 @@ var    newProcessWaiting : boolean
         lastUpdate := cur
         res := D.processEvents() 
         if res < 0 then D.run := false 
-        elsif res > 0 then pendingEvents := pendingEvents + val(uint32, res)
+        elsif res > 0 then pendingEvents := val(uint32, res)
         end
       end
       if pendingEvents > 0 then
@@ -1082,11 +1082,17 @@ var    newProcessWaiting : boolean
   end suspendActive
 
   procedure lengthOf(arr: OOP): Slot
+  var l: uint32
   begin
     if isWords( OM.fetchClassOf(arr) ) then
       return OM.fetchWordLenghtOf(arr)
     else
-      return OM.fetchByteLenghtOf(arr)
+      l := OM.fetchByteLenghtOf(arr)
+      if l > 65535 then 
+        println("Interpreter.lengthOf overflow")
+        l := 65535
+      end
+      return val(uint16,l)
     end
   end lengthOf
 

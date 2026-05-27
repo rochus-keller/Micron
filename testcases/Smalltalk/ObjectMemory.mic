@@ -97,7 +97,7 @@ type
   ByteArray* = pointer to ByteArrayDesc
   ByteArrayDesc* = record
                   bytes: pointer to array of byte
-                  len_: uint16
+                  len_: uint32
                end
   Object* = record 
               cls: OOP; 
@@ -128,8 +128,8 @@ begin
   return val(uint16,shl(data[off], 8) + data[off+1])
 end readU16
   
-procedure allocate(slot: Slot; numOfBytes: uint16; cls: OOP; isPtr, isOdd: boolean): ^Object
-var byteLen: uint16; obj: ^Object
+procedure allocate(slot: Slot; numOfBytes: uint32; cls: OOP; isPtr, isOdd: boolean): ^Object
+var byteLen: uint32; obj: ^Object
 begin 
   // header
   // 1: cls msb
@@ -314,15 +314,15 @@ begin
   return getWordLen(obj)
 end fetchWordLenghtOf
 
-procedure getByteLen(obj: ^Object): uint16
-var res: uint16
+procedure getByteLen(obj: ^Object): uint32
+var res: uint32
 begin
   res := obj.data.len_ 
   if obj.isOdd then dec(res) end
   return res
 end getByteLen
 
-procedure fetchByteLenghtOf*(objectPointer: OOP): uint16 
+procedure fetchByteLenghtOf*(objectPointer: OOP): uint32 
 var obj : ^Object; off: uint16
 begin
   if isInt(objectPointer) then return 0 end
@@ -827,7 +827,7 @@ begin
   //print("GC collected ") println(count)
 end collectGarbage
 
-procedure instantiateClass(cls: OOP; byteLen: uint16; isPtr: boolean): OOP
+procedure instantiateClass(cls: OOP; byteLen: uint32; isPtr: boolean): OOP
 var slot: int32; isOdd: boolean
 begin
   slot := findFreeSlot()
@@ -855,7 +855,7 @@ end instantiateClassWithPointers
 
 procedure instantiateClassWithWords*(classPointer: OOP; instanceSize: uint16): OOP 
 begin
-  return instantiateClass( classPointer, shl(instanceSize, 1), false )
+  return instantiateClass( classPointer, shl(val(uint32,instanceSize), 1), false )
 end instantiateClassWithWords
 
 procedure instantiateClassWithBytes*(classPointer: OOP; instanceByteSize: uint16): OOP 

@@ -383,7 +383,7 @@ void Display::inputMethodEvent(QInputMethodEvent* event)
 
 QString Display::renderTitle() const
 {
-    return QString("%1 v%2").arg( QApplication::applicationName() ).arg( QApplication::applicationVersion() );
+    return "Smalltalk 80 Human Interface (Qt)"; // QString("%1 v%2").arg( QApplication::applicationName() ).arg( QApplication::applicationVersion() );
 }
 
 static inline quint16 compose( quint8 t, quint16 p )

@@ -80,14 +80,15 @@ DllExport void Display$setScreenBuffer(uint8_t* b, int32_t len, int32_t w, int32
             return;
         }
         sdlInitialized = 1;
+
+        SDL_version v;
+        SDL_GetVersion(&v);
+        SDL_Log("Loaded SDL version %d.%d.%d\n", v.major, v.minor, v.patch );
     }
-    SDL_version v;
-    SDL_GetVersion(&v);
-    SDL_Log("Loaded SDL version %d.%d.%d\n", v.major, v.minor, v.patch );
     disposeWindow();
     WIDTH = w;
     HEIGHT = h;
-    window = SDL_CreateWindow("Luon PAL on SDL",
+    window = SDL_CreateWindow("Smalltalk 80 Human Interface (SDL)",
                               SDL_WINDOWPOS_UNDEFINED,
                               SDL_WINDOWPOS_UNDEFINED,
                               WIDTH,
