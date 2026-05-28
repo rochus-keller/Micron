@@ -100,6 +100,9 @@ protected:
     bool recursiveRun(Expression*);
     void constructor(Expression*);
     bool recurseConstConstructor(Expression*);
+    bool dynamicSetConstructor(Expression*);
+    bool dynamicStructConstructor(Expression* e);
+    Declaration* addTemp(Type* t, const RowCol& pos);
 
     // assign
     bool stind(Expression* lhs, Expression* rhs, const RowCol &pos);

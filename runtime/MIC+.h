@@ -13,6 +13,7 @@ extern unsigned int MIC$$relop3(char lhs, char* rhs, int op);
 extern unsigned int MIC$$relop4(char lhs, char rhs, int op);
 extern unsigned int MIC$$SetDiv(unsigned int lhs, unsigned int rhs);
 extern unsigned int MIC$$SetIn(unsigned int lhs, unsigned int rhs);
+extern unsigned int MIC$$SetRange(unsigned int lhs, unsigned int rhs);
 extern void MIC$$printI8(long long i);
 extern void MIC$$printU8(unsigned long long u);
 extern void MIC$$printF8(double f);

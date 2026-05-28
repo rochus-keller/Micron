@@ -1692,7 +1692,9 @@ bool Ide::generate(bool useGnu)
             args << QFileInfo(file).fileName();
         args << "-o" << name;
         args << "-lc" <<  "-lm" << "-dynamic-linker" << "/lib/ld-linux.so.2";
-        //qDebug() << "ld" << args; // TEST
+        if( d_pro->oakwoodScreen() && d_pro->useBuiltInOakwood() )
+            args << "-L/usr/local/lib" << "-lSDL2" << "-rpath=/usr/local/lib";
+        // qDebug() << "ld" << args; // TEST
         const int res = QProcess::execute("ld", args);
         QDir::setCurrent(old);
         if( res != 0 )
@@ -3131,7 +3133,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.32");
+    a.setApplicationVersion("0.4.33");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

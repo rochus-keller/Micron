@@ -84,6 +84,18 @@ uint32_t MIC$$SetIn( uint32_t lhs, uint32_t rhs )
     return ((1<<lhs)&rhs) != 0;
 }
 
+uint32_t MIC$$SetRange( uint32_t lhs, uint32_t rhs )
+{
+    uint32_t res = 0;
+    if( lhs <= rhs )
+        for( uint32_t i = lhs; i <= rhs; i++ )
+            res |= ( 1 << i );
+    else
+        for( uint32_t i = rhs; i <= lhs; i++ )
+            res |= ( 1 << i );
+    return res;
+}
+
 void MIC$$printI8(int64_t i)
 {
     my_printf("%lld", i);

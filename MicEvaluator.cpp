@@ -185,9 +185,10 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         // a byte array literal is saved on the stack the same way as an array constructor
         Mil::ConstrLiteral obj;
         obj.typeRef = toQuali(lhs);
-        QVector<QVariant> arr(lhs->len);
+        QVector<QVariant> arr(lhs->len); // automatically zeroed
         const QByteArray str = rhs.val.toByteArray();
-        Q_ASSERT(str.size() == arr.size());
+        if(str.size() > arr.size())
+            return false; // already reported
         for( int i = 0; i < str.size(); i++ )
             arr[i] = QVariant::fromValue((char)str[i]);
         obj.data = QVariant::fromValue(arr.toList());
@@ -766,7 +767,7 @@ bool Evaluator::castPtr(Type* to, const RowCol& pos)
 
 bool Evaluator::convNum(Type* to, const RowCol& pos)
 {
-    Q_ASSERT( to && to->isNumber() );
+    // Q_ASSERT( to && to->isNumber() );
     err.clear();
     if( stack.size() < 1 )
     {
@@ -924,7 +925,10 @@ bool Evaluator::castNum(Type* to, const RowCol& pos)
 {
     err.clear();
     if( to == 0 || !to->isNumber() )
-        return error("cannot cast to this type",pos);
+    {
+        Type* t = to ? to : mdl->getType(Type::NoType);
+        return error(QString("cannot cast to this type (%1)").arg(Type::name[t->kind]),pos);
+    }
     if( stack.size() < 1 )
         return error("expecting a value on the stack",pos);
     if( stack.back().isConst() )
@@ -2187,6 +2191,7 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Addr:
         if( !recursiveRun(e->lhs) )
             return false;
+        // TODO: @constructor creates a temporary variable
         stack.back().type = e->getType(); // NOP otherwise
         break;
     case Expression::Literal:
@@ -2353,16 +2358,202 @@ bool Evaluator::recursiveRun(Expression* e)
     return err.isEmpty();
 }
 
+bool Evaluator::dynamicSetConstructor(Expression* e)
+{
+    out->line_(e->pos);
+    out->ldc_i4(0);
+
+    Expression* c = e->rhs;
+    while( c )
+    {
+        if( c->kind == Expression::Range )
+        {
+            // Evaluate lower bound
+
+            bindUniInt(c->lhs, false);
+            if( !evaluate(c->lhs) )
+                return false;
+            assureTopOnMilStack(true, c->lhs->pos);
+
+            // Evaluate upper bound
+            bindUniInt(c->rhs, false);
+            if( !evaluate(c->rhs) )
+                return false;
+            assureTopOnMilStack(true, c->rhs->pos);
+            out->line_(c->pos);
+            out->call_(coreName("SetRange"), 2, true);
+            out->or_();
+        }
+        else
+        {
+            out->line_(c->pos);
+            bindUniInt(c, false);
+            if( !evaluate(c) )
+                return false;
+            assureTopOnMilStack(true, c->pos);
+            out->ldc_i4(1);
+            out->shl_();
+            out->or_();
+        }
+        c = c->next;
+    }
+
+    Value v;
+    v.mode = Value::Val;
+    v.type = e->getType(); // Type::SET
+    stack.push_back(v);
+
+    return true;
+}
+
+bool Evaluator::dynamicStructConstructor(Expression* e)
+{
+    // TODO: this code is new with little testing so far!
+
+    // Allocate the shared temporary local variable
+    Declaration* temp = addTemp(e->getType(), e->pos);
+    quint32 temp_id = temp->id;
+
+    // TODO: initialize temp with zero by constant constructor and ldc_obj
+
+    // Iterate through the constructor components and populate the temp
+    Expression* c = e->rhs;
+    while( c )
+    {
+        // Load the address of the temp variable to prepare for stfld / stelem
+        out->line_(c->pos);
+        out->ldloca_(temp_id);
+
+        if( e->getType()->kind == Type::Record || e->getType()->kind == Type::Object )
+        {
+            Q_ASSERT( c->kind == Expression::NameValue || c->kind == Expression::Value );
+            Declaration* field = c->val.value<Declaration*>();
+
+            if( !evaluate(c->rhs) )
+                return false;
+            assureTopOnMilStack(true, c->rhs->pos);
+
+            // Copy of Variant/Field logic from stfld()
+            Mil::Trident td;
+            if( field->kind == Declaration::Variant )
+            {
+                td = qMakePair(toQuali(e->getType()), Token::getSymbol("$"));
+                out->ldflda_(td);
+                Qualident q = toQuali(e->getType());
+                q.second = Token::getSymbol(q.second + "$Var$");
+                td = qMakePair(q, field->name);
+            }else
+                td = qMakePair(toQuali(e->getType()), field->name);
+
+            out->line_(c->pos);
+            out->stfld_(td);
+        }else if( e->getType()->kind == Type::Array )
+        {
+            Q_ASSERT( c->kind == Expression::IndexValue || c->kind == Expression::Value );
+
+            // Push index (const, pre-calculated)
+            out->line_(c->pos);
+            out->ldc_i4(c->val.toUInt());
+
+            if( !evaluate(c->rhs) )
+                return false;
+            assureTopOnMilStack(true, c->rhs->pos);
+
+            out->line_(c->pos);
+            out->stelem_(toQuali(e->getType()->getType()));
+        }
+
+        c = c->next;
+    }
+
+    Value res;
+    res.type = e->getType();
+
+    // If anonymous (@), or if it's evaluated as an L-value
+    if( e->anonymous || !e->byVal )
+    {
+        out->line_(e->pos);
+        out->ldloca_(temp_id); // get the address of the temporary
+        res.ref = true;
+        res.mode = Value::LocalDecl; // treat it as a local reference
+        res.val = temp_id;
+    }else
+    {
+        out->line_(e->pos);
+        out->ldloc_(temp_id); // get the value of the temporary
+        res.ref = false;
+        res.mode = Value::Val;
+    }
+
+    stack.push_back(res);
+    return true;
+}
+
 void Evaluator::constructor(Expression* e)
 {
-    // Expression::create(Expression::Literal, ttok.toRowCol());
-    if( e->isConst() )
+    if( e->getType()->isSet() )
     {
-        recurseConstConstructor(e);
+        if( e->isConst() )
+            recurseConstConstructor(e);
+        else if( !dynamicSetConstructor(e) )
+            error("error calculating SET constructor", e->pos);
         return;
     }
-    // else TODO
-    error("dynamic constructors not yet supported by code generator", e->pos);
+
+    // Constant Array/Record constructors
+    if( e->isConst() )
+    {
+        if( !e->anonymous )
+        {
+            // Normal value literal: No local variable needed.
+            recurseConstConstructor(e);
+        }else
+        {
+            // @Constructor (Address required), but purely constant.
+            Declaration* temp = addTemp(e->getType(), e->pos);
+
+            // Push the destination address of the new local
+            out->line_(e->pos);
+            out->ldloca_(temp->id);
+
+            // Generate the constant blob and emit ldc_obj to load it
+            recurseConstConstructor(e);
+            Value blob = stack.takeLast();
+            pushMilStack(blob, e->pos);
+
+            // Copy the blob directly into the local variable
+            out->stind_(toQuali(e->getType()));
+
+            // Yield the address of the local back to the expression
+            out->line_(e->pos);
+            out->ldloca_(temp->id);
+
+            Value res;
+            res.type = e->getType();
+            res.ref = true;
+            res.mode = Value::LocalDecl;
+            res.val = temp->id;
+            stack.push_back(res);
+        }
+        return;
+    }
+
+    // Fully dynamic Array/Record constructors
+    // Contains variables/runtime expressions, requires field-by-field construction
+    if( !dynamicStructConstructor(e) )
+        error("error calculating dynamic constructor", e->pos);
+}
+
+Declaration* Evaluator::addTemp(Type* t, const RowCol& pos)
+{
+    Declaration* decl = mdl->addDecl(mdl->getTempName());
+    decl->kind = Declaration::LocalDecl;
+    decl->setType(t);
+    decl->pos = pos;
+    Declaration::append(curProcs.back()->link, decl);
+    decl->outer = curProcs.back();
+    decl->id = out->addLocal(toQuali(t), decl->name, decl->pos);
+    return decl;
 }
 
 bool Evaluator::recurseConstConstructor(Expression* e)
@@ -2425,7 +2616,8 @@ bool Evaluator::recurseConstConstructor(Expression* e)
         }
     case Type::Pointer:
     case Type::Proc: {
-            Q_ASSERT(e->rhs);
+            if(e->rhs == 0 )
+                break; // reported elsewhere
             Q_ASSERT(!e->getType()->typebound);
             if( !evaluate(e->rhs) )
                 return false;

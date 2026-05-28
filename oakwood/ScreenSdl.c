@@ -295,10 +295,12 @@ static void disposeWindow(void)
     texture  = NULL;
 }
 
+#ifndef _MIC_NO_BEGIN_
 DllExport void Screen$begin$(void)
 {
     // NOP; SDL is initialized lazily in Open
 }
+#endif
 
 DllExport int32_t Screen$Open(uint8_t* buf, int32_t bLen, int32_t w, int32_t h, unsigned int fl)
 {

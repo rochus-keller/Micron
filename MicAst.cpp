@@ -647,6 +647,17 @@ Declaration *Declaration::deforward()
     return this;
 }
 
+void Declaration::append(Declaration *list, Declaration *next)
+{
+    while( list && list->next )
+        list = list->next;
+    if( list )
+    {
+        Q_ASSERT(list->next == 0);
+        list->next = next;
+    }
+}
+
 Declaration *Declaration::getModule()
 {
     if( kind == Module )

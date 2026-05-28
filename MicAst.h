@@ -196,6 +196,7 @@ namespace Mic
         Declaration* getModule();
         Declaration* find(const QByteArray& name, bool recursive = true);
         Declaration *deforward();
+        static void append(Declaration* list, Declaration* next);
     };
     typedef QList<Declaration*> DeclList;
 

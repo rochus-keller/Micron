@@ -923,7 +923,7 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs, const RowCol& pos)
     // and their element types are equal, or
     if( lhs->kind == Type::Pointer && lhs->getType()->kind == Type::Array &&
             lhs->getType()->len == 0 && lhs->getType()->getType()->kind != Type::Array &&
-            rhs->kind == Type::Pointer && rhs->getType()->kind == Type::Array )
+            rhs->kind == Type::Pointer && rhs->getType() && rhs->getType()->kind == Type::Array )
     {
         Type* base = rhs->getType()->getType();
         while( base && base->kind == Type::Array )
@@ -1031,7 +1031,7 @@ bool Parser2::assigCompat(Type* lhs, Expression* rhs, const RowCol& pos)
         return rhs->strLitLen() < lhs->len;
 
     if( lhs->isByteArray() && lhs->len > 0 && rhs->getType()->kind == Type::ByteArrayLit )
-        return rhs->val.toByteArray().size() == lhs->len;
+        return rhs->val.toByteArray().size() <= lhs->len;
 
 
     // A string of length 1 can be used wherever a character constant is allowed and vice versa.
@@ -1397,7 +1397,8 @@ void Parser2::TypeDeclaration() {
             }
             if( milq.first.isEmpty() )
                 milq.first = q.first.d_val;
-        }
+        }else if( t->isNumber() && t->decl )
+            milq.second = t->decl->name; // otherwise sends names like INTEGER or LONGINT
         out->addType(d->name,d->pos,t->decl->isPublic(),milq, Mil::EmiTypes::Alias);
     } else
         emitType(t);
@@ -2168,7 +2169,7 @@ bool Parser2::checkArithOp(Expression* e)
         switch(e->kind)
         {
         case Expression::Mul:
-        case Expression::Div:
+        case Expression::Fdiv:
         case Expression::Add:
         case Expression::Sub:
             e->setType(e->lhs->getType());

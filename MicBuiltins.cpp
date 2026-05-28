@@ -752,6 +752,7 @@ void Builtins::doOrd(const RowCol& pos)
             v.type = ev->mdl->getType(Type::UINT8);
             break;
         case Type::SET:
+            v.type = ev->mdl->getType(Type::UINT32);
             break;
         case Type::Pointer:
         case Type::Proc:
@@ -762,7 +763,7 @@ void Builtins::doOrd(const RowCol& pos)
             // identity, enums
             break;
         default:
-            Q_ASSERT(false);
+            break; // already reported
         }
     }
     ev->stack.push_back(v);
@@ -1479,6 +1480,11 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
     case Builtin::CHR:
         checkNumOfActuals(nArgs, 1);
         doChr(pos);
+        handleStack = false;
+        break;
+    case Builtin::BSET:
+        checkNumOfActuals(nArgs, 1);
+        ev->stack.back().type = ev->mdl->getType(Type::SET);
         handleStack = false;
         break;
     case Builtin::STRLEN:
