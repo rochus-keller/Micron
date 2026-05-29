@@ -136,6 +136,7 @@ public:
     const char* getString(quint32 n) const { return strings[n].c_str(); }
     const std::vector<char>& getObject(quint32 n) const { return objects[n]; }
     const Template& getTemplate(quint32 n) const { return templates[n]; }
+    int templateCount() const { return templates.size(); }
 
     int procCount() const { return procs.size(); }
     int vtableCount() const { return vtables.size(); }

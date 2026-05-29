@@ -17,6 +17,8 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
+// adopted from Oberon+ ObSdl.obx and ObFiles.c
+
 #include <SDL2/SDL.h>
 #include <assert.h>
 #include <string.h>

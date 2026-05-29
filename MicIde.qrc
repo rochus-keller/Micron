@@ -52,6 +52,7 @@
         <file>runtime/mic_init_glibc.c</file>
         <file>oakwood/Screen.mic</file>
         <file>oakwood/Screen.h</file>
-        <file>oakwood/ScreenSdl.c</file>
+        <file>oakwood/ScreenXcb.c</file>
+        <file>runtime/libscreen_linux_i386.a</file>
     </qresource>
 </RCC>

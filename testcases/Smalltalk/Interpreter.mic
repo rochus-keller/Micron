@@ -420,7 +420,7 @@ var    newProcessWaiting : boolean
     end checkTimeout
    
   begin
-    println("Started Smalltalk interpreter")
+    Out.String("Started Smalltalk interpreter"); Out.Ln
     if Args.Count() < 2 then
       println("No image provided")
       return
@@ -446,7 +446,7 @@ var    newProcessWaiting : boolean
       checkTimeout()
     end
     D.close()
-    println("Finished Smalltalk interpreter")
+    Out.String("Finished Smalltalk interpreter"); Out.Ln
   end interpret
 
   procedure jump(offset: Int)

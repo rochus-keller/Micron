@@ -31,9 +31,7 @@
 #include "MilParser.h"
 #include "MilToken.h"
 #include "MilCeeGen.h"
-#include "MilCilAsmGen.h"
 #include "MilX86Renderer.h"
-//#include "MilLlvmGen.h"
 #include "MilAstSerializer.h"
 #include "MilInterpreter.h"
 #include "MilVmOakwood.h"
@@ -583,7 +581,6 @@ bool Project2::generateCil(const QString &outDir)
         writeC("oakwood", "MathL", outDir);
         writeC("oakwood", "Strings", outDir);
     }
-#endif
 
     QSet<Mil::Declaration*> used;
     QDir dir(outDir);
@@ -623,6 +620,7 @@ bool Project2::generateCil(const QString &outDir)
     QFile config(dir.absoluteFilePath("Main$.runtimeconfig.json"));
     config.open(QFile::WriteOnly);
     cg.generateConfig(&config);
+#endif
 
     return true;
 }
@@ -811,8 +809,8 @@ bool Project2::copyCResources(const QString &outDir, QStringList &cFiles, bool w
 #ifdef _MIC_HAVE_SCREEN_
         if( oakwoodScreen() )
         {
-            const QString to = QDir(outDir).absoluteFilePath("ScreenSdl.c");
-            QFile::copy(":/oakwood/ScreenSdl.c", to);
+            const QString to = QDir(outDir).absoluteFilePath("ScreenXcb.c");
+            QFile::copy(":/oakwood/ScreenXcb.c", to);
             cFiles << to;
         }
 #endif

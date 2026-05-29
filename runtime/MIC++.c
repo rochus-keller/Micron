@@ -331,5 +331,11 @@ int64_t __divmoddi4(int64_t num, int64_t den, int64_t *rem_p) {
     return __mic$div_i8(num, den);
 }
 
+int __popcountsi2(unsigned int x) {
+    x = x - ((x >> 1) & 0x55555555);
+    x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+    return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+}
+
 #endif /* __GNUC__ */
 

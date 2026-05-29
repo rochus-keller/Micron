@@ -794,7 +794,7 @@ void Ide::createMenuBar()
     pop->addCommand( "Export MIL...", this, SLOT(onExportMil()) );
     pop->addCommand( "Export MLL...", this, SLOT(onExportLl()) );
     pop->addCommand( "Export MRL...", this, SLOT(onExportRl()) );
-    pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
+    //pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
     //pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
     pop->addSeparator();
@@ -1649,7 +1649,7 @@ bool Ide::generate(bool useGnu)
     if( !buildDir.mkpath(buildPath) )
     {
         QMessageBox::critical(this, tr("Generating X86"), tr("Cannot create build directory '%1'").arg(buildPath));
-        return false;
+        return true;
     }
 
     const QTime start = QTime::currentTime();
@@ -1659,7 +1659,7 @@ bool Ide::generate(bool useGnu)
         if( !d_pro->copyCResources(buildPath, cFiles) )
         {
             QMessageBox::critical(this, tr("Generating X86"), tr("Cannot copy embedded libraries to build directory"));
-            return false;
+            return true;
         }
         const QTime start = QTime::currentTime();
         QStringList objFiles;
@@ -1676,7 +1676,7 @@ bool Ide::generate(bool useGnu)
             if( res != 0 )
             {
                 QMessageBox::critical(this, tr("Generating X86"), tr("error compiling '%1'").arg(file));
-                return false;
+                return true;
             }
             file += ".o";
         }
@@ -1693,14 +1693,14 @@ bool Ide::generate(bool useGnu)
         args << "-o" << name;
         args << "-lc" <<  "-lm" << "-dynamic-linker" << "/lib/ld-linux.so.2";
         if( d_pro->oakwoodScreen() && d_pro->useBuiltInOakwood() )
-            args << "-L/usr/local/lib" << "-lSDL2" << "-rpath=/usr/local/lib";
+            args << "-lxcb";
         // qDebug() << "ld" << args; // TEST
         const int res = QProcess::execute("ld", args);
         QDir::setCurrent(old);
         if( res != 0 )
         {
             QMessageBox::critical(this, tr("Generating X86"), tr("error linking application"));
-            return false;
+            return true;
         }
     } else
     {
@@ -1718,7 +1718,7 @@ bool Ide::generate(bool useGnu)
             if( !linker.addFile(objFiles[i]) )
             {
                 QMessageBox::critical(this, tr("Linking"), tr("error adding object file %1: %2").arg(objFiles[i]).arg(linker.errorMessage()));
-                return false;
+                return true;
             }
         }
 
@@ -1728,15 +1728,22 @@ bool Ide::generate(bool useGnu)
         if( !linker.addArchive(":/runtime/libmicron_linux_i386.a") )
         {
             QMessageBox::critical(this, tr("Linking"), tr("error adding libmicron: %1").arg(linker.errorMessage()));
-            return false;
+            return true;
+        }
+
+        if( d_pro->oakwoodScreen() && d_pro->useBuiltInOakwood() && !linker.addArchive(":/runtime/libscreen_linux_i386.a") )
+        {
+            QMessageBox::critical(this, tr("Linking"), tr("error adding libscreen: %1").arg(linker.errorMessage()));
+            return true;
         }
 
         const QString exePath = QDir(buildPath).absoluteFilePath(name);
         qDebug() << "#### linking" << exePath;
         if( !linker.link(exePath) )
         {
-            QMessageBox::critical(this, tr("Linking"), tr("error linking: %1").arg(linker.errorMessage()));
-            return false;
+            logMessage(linker.errorMessage(), LogError, true);
+            QMessageBox::critical(this, tr("Linking"), tr("There are linker errors, see log window"));
+            return true;
         }
     }
 
@@ -1945,7 +1952,7 @@ void Ide::createModsMenu(Ide::Editor* edit)
     pop->addCommand( "Build (with glibc)", this, SLOT(onCompile()), tr("CTRL+B"), false );
     pop->addCommand( "Build (with musl)", this, SLOT(onCompile2()) );
     pop->addCommand( "Export MIL...", this, SLOT(onExportMil()) );
-    pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
+    //pop->addCommand( "Export ECMA-335 CIL...", this, SLOT(onExportCil()) );
     //pop->addCommand( "Export LLVM IR...", this, SLOT(onExportLlvm()) );
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
     pop->addSeparator();
@@ -3119,12 +3126,12 @@ void Ide::onIncremental()
 
 void Ide::onReadyStdout()
 {
-    onConsole(d_run->readAllStandardOutput());
+    logMessage(d_run->readAllStandardOutput(), LogInfo, false );
 }
 
 void Ide::onReadyStderr()
 {
-    onError(d_run->readAllStandardError());
+    logMessage(d_run->readAllStandardError(), LogError, false );
 }
 
 int main(int argc, char *argv[])
@@ -3133,7 +3140,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.33");
+    a.setApplicationVersion("0.4.34");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

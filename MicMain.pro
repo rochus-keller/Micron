@@ -4,7 +4,7 @@ QT       -= gui
 TARGET = micc
 CONFIG   += console
 CONFIG   -= app_bundle
-CONFIG += HAVE_SCREEN
+CONFIG += HAVE_SCREEN_XCB
 
 TEMPLATE = app
 
@@ -19,10 +19,16 @@ include(MicParser.pri)
 SOURCES += \
     MicMain.cpp
 
-HAVE_SCREEN {
+HAVE_SCREEN_SDL {
     DEFINES += _MIC_HAVE_SCREEN_
     LIBS += -lSDL2
     SOURCES += oakwood/ScreenSdl.c
+}
+
+HAVE_SCREEN_XCB {
+    DEFINES += _MIC_HAVE_SCREEN_
+    SOURCES += oakwood/ScreenXcb.c
+    LIBS += -lxcb
 }
 
 include( MicUtils.pri )

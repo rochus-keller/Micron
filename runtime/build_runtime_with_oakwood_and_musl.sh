@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ 
 SOURCES=(
-  "/home/me/Entwicklung/Modules/Micron/runtime/MIC++.c"
-  "/home/me/Entwicklung/Modules/Micron/runtime/mic_init_musl.c"
-  "/home/me/Entwicklung/Modules/Micron/oakwood/Args+.c"
-  "/home/me/Entwicklung/Modules/Micron/oakwood/Files+.c"
-  "/home/me/Entwicklung/Modules/Micron/oakwood/In+.c"
-  "/home/me/Entwicklung/Modules/Micron/oakwood/Input+.c"
-  "/home/me/Entwicklung/Modules/Micron/oakwood/Math+.c"
-  "/home/me/Entwicklung/Modules/Micron/oakwood/MathL+.c"
-  "/home/me/Entwicklung/Modules/Micron/oakwood/Out+.c"
-  "/home/me/Entwicklung/Modules/Micron/oakwood/Strings+.c"
+  "$SCRIPT_DIR/MIC++.c"
+  "$SCRIPT_DIR/mic_init_musl.c"
+  "$SCRIPT_DIR/../oakwood/Args+.c"
+  "$SCRIPT_DIR/../oakwood/Files+.c"
+  "$SCRIPT_DIR/../oakwood/In+.c"
+  "$SCRIPT_DIR/../oakwood/Input+.c"
+  "$SCRIPT_DIR/../oakwood/Math+.c"
+  "$SCRIPT_DIR/../oakwood/MathL+.c"
+  "$SCRIPT_DIR/../oakwood/Out+.c"
+  "$SCRIPT_DIR/../oakwood/Strings+.c"
 )
 
 MUSL_ROOT="/home/me/Entwicklung/Libraries/musl_i386"

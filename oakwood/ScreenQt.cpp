@@ -17,6 +17,10 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
+// Adopted from Luon LnPAL3.cpp, and before that from
+// StDisplay.cpp/h from the Smalltalk repository
+// This is a platform abstraction for the Smalltalk and Oberon System example
+
 #include "ScreenQt.h"
 #include <QPainter>
 #include <QApplication>

@@ -19,7 +19,7 @@
 
 module ObjectMemory
 
-import Files
+import Files, Out
 
 const
   // Objects known to the interpreter:
@@ -261,9 +261,9 @@ begin
   for i := 1 to numOfSlots-1 do
     if slots[i].cls = 0 then inc(off) end
   end
-  print("image loaded: used=") print(numOfSlots - 1 - off) 
-  print(" free=") print(off)
-  print(" total=") println(numOfSlots)
+  Out.String("image loaded: used=") Out.Int(sig(numOfSlots - 1 - off),0) 
+  Out.String(" free=") Out.Int(sig(off),0)
+  Out.String(" total=") Out.Int(sig(numOfSlots),0) Out.Ln
 
   return true
 end loadFromFile
