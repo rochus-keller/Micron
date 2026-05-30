@@ -60,7 +60,7 @@ begin
   G.Error_flag := 1
   G.Output_port := G.Error_port
   if G.File_list # T._NIL then
-    IO.pr(G.string(G.car(G.File_list))(Str))
+    IO.pr(cast(@Str,G.string(G.car(G.File_list))))
     IO.pr(": ")
   end
   IO.ntoa(@G.Buf, G.Line_no, 0)
@@ -100,7 +100,7 @@ begin
   if val(int32, G.string_len(G.cadr(x))) > T.TokenLength then
     return G.error("load: path too long", G.cadr(x))
   end
-  if load(G.string(G.cadr(x))(Str)) < 0 then
+  if load(cast(@Str,G.string(G.cadr(x)))) < 0 then
     return G.error("load: cannot open file", G.cadr(x))
   end
   return T._UNSPECIFIC
@@ -640,7 +640,7 @@ begin
   IO.pr(" (Micron port)")
   IO.nl()
   IO.pr("library path:  ")
-  IO.pr(G.string(G.box_value(G.S_library_path))(Str))
+  IO.pr(cast(@Str,G.string(G.box_value(G.S_library_path))))
   IO.nl()
   IO.pr("memory limit:  ")
   if G.Memory_limit_kn # 0 then

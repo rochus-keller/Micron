@@ -1065,7 +1065,7 @@ var
   n: T.cell
   k: T.int
 begin
-  y := IO.find_symbol(G.string(G.cadr(x))(Str))
+  y := IO.find_symbol(cast(@Str,G.string(G.cadr(x))))
   if y # T._NIL then return y end
   k := G.string_len(G.cadr(x))
   n := IO.make_symbol("", val(int32,k - 1))
@@ -1315,7 +1315,7 @@ var
   p: int32
 type Str = array of char
 begin
-  p := open_port(G.string(G.cadr(x))(Str), true)
+  p := open_port(cast(@Str,G.string(G.cadr(x))), true)
   if p < 0 then
     return G.error("open-input-file: could not open file", G.cadr(x))
   end
@@ -1328,12 +1328,12 @@ var
   f: Files.File
 type Str = array of char
 begin
-  f := Files.Open(G.string(G.cadr(x))(Str), Files.ReadOnly) // Files.Open(G.string(G.cadr(x)), "r")
+  f := Files.Open(cast(@Str,G.string(G.cadr(x))), Files.ReadOnly) // Files.Open(G.string(G.cadr(x)), "r")
   if f # nil then
     Files.Close(f)
     return G.error("open-output-file: file already exists", G.cadr(x))
   end
-  p := open_port(G.string(G.cadr(x))(Str), false)
+  p := open_port(cast(@Str,G.string(G.cadr(x))), false)
   if p < 0 then
     return G.error("open-output-file: could not open file", G.cadr(x))
   end
@@ -1608,7 +1608,7 @@ var
   f: Files.File
 type Str = array of char
 begin
-  f := Files.Open(G.string(G.cadr(x))(Str), Files.ReadOnly) // Open(G.string(G.cadr(x)), "r")
+  f := Files.Open(cast(@Str,G.string(G.cadr(x))), Files.ReadOnly) // Open(G.string(G.cadr(x)), "r")
   if f = nil then
     return T._FALSE
   end
@@ -1619,7 +1619,7 @@ end pp_file_exists_p
 procedure pp_delete_file*(x: T.cell): T.cell
 type Str = array of char
 begin
-  if ~Files.Delete(G.string(G.cadr(x))(Str)) then
+  if ~Files.Delete(cast(@Str,G.string(G.cadr(x)))) then
     return G.error("delete-file: file does not exist", G.cadr(x))
   end
   return T._UNSPECIFIC

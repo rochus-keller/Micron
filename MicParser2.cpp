@@ -2284,6 +2284,7 @@ bool Parser2::checkRelOp(Expression* e)
             return error(e->pos.d_row, e->pos.d_col, "operation not supported for given operands");
     }else if( e->lhs->getType()->isInteger() && e->rhs->getType()->isSet() )
     {
+        ev->bindUniInt(e->lhs, false);
         if( e->kind != Expression::In )
             return error(e->pos.d_row, e->pos.d_col, "operation not supported for given operands");
     }else
@@ -2467,7 +2468,8 @@ Expression* Parser2::designator(bool needsLvalue) {
                 if( arg == 0 )
                     return 0;
                 args.append(arg);
-                isTypeCast = arg->kind == Expression::TypeDecl && proc->kind != Expression::Builtin;
+                isTypeCast = (arg->kind == Expression::TypeDecl || (arg->kind == Expression::Addr &&
+                              arg->lhs && arg->lhs->kind == arg->kind == Expression::TypeDecl)) && proc->kind != Expression::Builtin;
                 if( !isTypeCast && proc->kind != Expression::Builtin )
                     prepareParam(formals,args);
                 while( la.d_type == Tok_Comma || FIRST_expression(la.d_type) ) {
@@ -2529,11 +2531,14 @@ Expression* Parser2::designator(bool needsLvalue) {
                 {
                     error(lpar,"type guard requires a single argument");
                     hasError = true;
-                }else if( proc->getType()->kind != Type::Pointer )
+                }else if( proc->getType()->kind != Type::Pointer || proc->getType()->getType()->kind != Type::Object ||
+                          retType->kind != Type::Pointer || retType->getType()->kind != Type::Object )
                 {
-                    error(lpar,"type guard only applicable to pointer types");
+                    error(lpar,"type guard only applicable to pointer to object types");
                     hasError = true;
                 }
+#if 0
+                // TODO check that retType must be an extension of the static type of proc.
                 if( !hasError &&
                         ((retType->isObjectOrObjectPointer() && !proc->getType()->isObjectOrObjectPointer() ) ||
                          (!retType->isObjectOrObjectPointer() && proc->getType()->isObjectOrObjectPointer() ) ) )
@@ -2541,11 +2546,11 @@ Expression* Parser2::designator(bool needsLvalue) {
                     error(lpar,"type guard cannot cast object to other types or vice versa");
                     hasError = true;
                 }
+#endif
 
                 Expression* tmp = Expression::create(Expression::Cast, lpar.toRowCol() );
                 tmp->lhs = proc;
-                Type* t = addHelperType(Type::Pointer, 0, retType, tmp->pos);
-                tmp->setType(t);
+                tmp->setType(retType);
                 res = tmp;
 
 #if 0
@@ -3234,8 +3239,9 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
         if( tmp == 0 )
             return 0; // reported elsewhere
 
-        if( !tmp->hasAddress() )
-            error(tok,"cannot take address of this object");
+        // TODO: The address operator @ cannot be applied to a record field declared with a BITS specification.
+        if( !tmp->hasAddress() && tmp->kind != Expression::TypeDecl )
+            error(tok,"cannot use address operator on this object");
 
         res = Expression::create(Expression::Addr, cur.toRowCol());
         res->lhs = tmp;
@@ -3319,7 +3325,7 @@ void Parser2::assignmentOrProcedureCall() {
     }else
     {
         if( lhs->kind == Expression::ProcDecl || lhs->kind == Expression::MethSelect || lhs->kind == Expression::Super ||
-                lhs->kind == Expression::IntfSelect || (lhs->getType() && lhs->getType()->kind == Type::Proc) )
+                lhs->kind == Expression::IntfSelect || (lhs->kind != Expression::Call && lhs->getType() && lhs->getType()->kind == Type::Proc) )
         {
             // something to call
             Expression* decl = lhs;

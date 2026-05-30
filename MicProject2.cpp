@@ -513,7 +513,7 @@ bool Project2::generateC(const QString &outDir)
 #ifdef _MIC_HAVE_SCREEN_
     haveScreen = true;
 #endif
-    copyCResources(outDir, cFiles, haveScreen);
+    copyCResources(outDir, cFiles, false, true);
 
     QDir dir(outDir);
     // TODO: check if files can be created and written
@@ -785,7 +785,7 @@ bool Project2::generateX86(const QString &outDir, QStringList& objFiles, bool in
      return !hasErrors;
 }
 
-bool Project2::copyCResources(const QString &outDir, QStringList &cFiles, bool withInit)
+bool Project2::copyCResources(const QString &outDir, QStringList &cFiles, bool withInit, bool sdl)
 {
     cFiles << writeC("runtime", "MIC+", outDir);
 
@@ -809,8 +809,9 @@ bool Project2::copyCResources(const QString &outDir, QStringList &cFiles, bool w
 #ifdef _MIC_HAVE_SCREEN_
         if( oakwoodScreen() )
         {
-            const QString to = QDir(outDir).absoluteFilePath("ScreenXcb.c");
-            QFile::copy(":/oakwood/ScreenXcb.c", to);
+            const QString what = sdl ? "ScreenSdl.c" : "ScreenXcb.c";
+            const QString to = QDir(outDir).absoluteFilePath(what);
+            const bool res = QFile::copy(QString(":/oakwood/%1").arg(what), to);
             cFiles << to;
         }
 #endif

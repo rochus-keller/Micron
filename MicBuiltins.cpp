@@ -169,7 +169,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::CAST:
         expectingNArgs(args,2);
-        if( args.first()->kind != Expression::TypeDecl ||
+        if( !(args.first()->kind == Expression::TypeDecl || (args.first()->kind == Expression::Addr && args.first()->lhs->kind == Expression::TypeDecl)) ||
                 !(args.first()->getType()->isNumber() || args.first()->getType()->kind == Type::Pointer) )
             throw QString("expecting declaration of number or pointer type as first argument");
         if( !args.last()->getType()->isNumber() && args.last()->getType()->kind != Type::Pointer )
@@ -587,7 +587,11 @@ void Builtins::doCast(const RowCol &pos)
     if( type.type->isNumber() )
         ev->castNum(type.type, pos);
     else
-        ev->out->castptr_(ev->toQuali(type.type));
+    {
+        if(type.type == 0 || type.type->kind != Type::Pointer)
+            return; // reported elsewhere
+        ev->out->castptr_(ev->toQuali(type.type->getType()));
+    }
     ev->stack.back().type = type.type;
 }
 

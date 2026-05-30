@@ -561,8 +561,8 @@ var
   fp: ^FP
   functionWork: ^Packet
 begin
-  dataRecord := wordArg(DeviceTaskDataRecord)
-  fp := me(FP)
+  dataRecord := cast(@DeviceTaskDataRecord,wordArg)
+  fp := cast(@FP,me)
   functionWork := workArg
   if functionWork = NO_WORK then
   	functionWork := DeviceTaskDataRecord_getPending(dataRecord)
@@ -608,8 +608,8 @@ var
   workPacket, devicePacket: ^Packet
   count: integer
 begin
-  dataRecord := word(HandlerTaskDataRecord)
-  fp := me(FP)
+  dataRecord := cast(@HandlerTaskDataRecord,word)
+  fp := cast(@FP,me)
   if work # NO_WORK then
     if Packet_getKind(work) = WORK_PACKET_KIND then
       HandlerTaskDataRecord_workInAdd(dataRecord, work)
@@ -655,8 +655,8 @@ var
   dataRecord: ^IdleTaskDataRecord
   fp: ^FP
 begin
-  dataRecord := wordArg(IdleTaskDataRecord)
-  fp := me(FP)
+  dataRecord := cast(@IdleTaskDataRecord,wordArg)
+  fp := cast(@FP,me)
   IdleTaskDataRecord_setCount(dataRecord, IdleTaskDataRecord_getCount(dataRecord) - 1)
   if IdleTaskDataRecord_getCount(dataRecord) = 0 then
     return Scheduler_holdSelf(fp.s)
@@ -692,8 +692,8 @@ var
   fp: ^FP
   i: integer
 begin
-  data := word(WorkerTaskDataRecord)
-  fp := me(FP)
+  data := cast(@WorkerTaskDataRecord,word)
+  fp := cast(@FP,me)
   if work = NO_WORK then
     return Scheduler_markWaiting(fp.s)
   else

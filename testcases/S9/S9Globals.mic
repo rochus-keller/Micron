@@ -275,7 +275,7 @@ var
   tmp: pointer to S9Types.cell
 begin
   tmp := @Vectors[Cdr[n]]
-  return tmp(char)
+  return cast(@char,tmp)
 end string
 
 procedure string_len*(n: S9Types.cell): S9Types.cell
@@ -288,7 +288,7 @@ var
   tmp: pointer to S9Types.cell
 begin
   tmp := @Vectors[Cdr[n]]
-  return tmp(char)
+  return cast(@char,tmp)
 end symbol_name
 
 procedure symbol_len*(n: S9Types.cell): S9Types.cell

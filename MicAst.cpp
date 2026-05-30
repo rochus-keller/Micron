@@ -418,7 +418,7 @@ Declaration*Type::findMember(const QByteArray& name, bool recurseSuper) const
 {
     Declaration* res = findSub(name);
     if( type && res == 0 && recurseSuper )
-        res = type->findSub(name);
+        res = type->findMember(name,recurseSuper);
     return res;
 }
 
@@ -796,6 +796,11 @@ bool Expression::isLvalue() const
 
 bool Expression::hasAddress() const
 {
+    if( kind == FieldSelect )
+    {
+        Declaration* f = val.value<Declaration*>();
+        return f->id == 0; // no BITS
+    }
     return isAssignable();
 }
 

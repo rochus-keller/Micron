@@ -751,12 +751,11 @@ bool Evaluator::castPtr(Type* to, const RowCol& pos)
 {
     err.clear();
     if( stack.size() < 1 )
-    {
         return error("expecting a value on the stack", pos);
-    }
+    if( to == 0 || to->kind != Type::Pointer)
+        return error("can only cast to pointer types", pos);
     Value lhs = stack.takeLast(); // object
     // TODO
-    Q_ASSERT(to && to->kind == Type::Pointer);
     out->line_(pos);
     out->castptr_(toQuali(to->getType()));
     // TODO restrict to pointers, add to MIL
@@ -1148,14 +1147,16 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
                 out->ldc_r8(v.val.toDouble());
                 break;
             case Type::UniInt: {
-                    qWarning() << "pushMilStack cannot handle universal integer" << pos.d_row; // TODO
+                    Declaration* module = curProcs.back()->getModule();
+                    qWarning() << "pushMilStack cannot handle universal integer" << module->name << pos.d_row << pos.d_col; // TODO
                     Value vv = v;
                     vv.type = smallestUIntType(vv.val);
                     pushMilStack(vv, pos);
                 }
                 break;
             case Type::ByteArrayLit: {
-                qWarning() << "WARNING: load byte array literals not yet implemented";
+                Declaration* module = curProcs.back()->getModule();
+                qWarning() << "WARNING: load byte array literals not yet implemented" << module->name << pos.d_row << pos.d_col;
                 //out->ldstr_( v.val.toByteArray().toHex() );
                 Mil::ConstrLiteral obj;
                 obj.data = v.val;
@@ -2189,6 +2190,7 @@ bool Evaluator::recursiveRun(Expression* e)
         derefPointer(e->byVal, e->pos);
         break;
     case Expression::Addr:
+        // also works for @typename
         if( !recursiveRun(e->lhs) )
             return false;
         // TODO: @constructor creates a temporary variable

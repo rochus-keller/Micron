@@ -129,7 +129,7 @@ namespace Mic
         bool generateLlvm(const QString& outDir);
         bool generateMil(const QString& outDir);
         bool generateX86(const QString& outDir, QStringList &objFiles, bool indirectMain);
-        bool copyCResources(const QString& outDir, QStringList& cFiles, bool withInit = true);
+        bool copyCResources(const QString& outDir, QStringList& cFiles, bool withInit = true, bool sdl = false);
 
         bool interpret(const QString &outDir = QString());
         bool generateMrl(const QString &outDir);

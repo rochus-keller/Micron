@@ -54,5 +54,6 @@
         <file>oakwood/Screen.h</file>
         <file>oakwood/ScreenXcb.c</file>
         <file>runtime/libscreen_linux_i386.a</file>
+        <file>oakwood/ScreenSdl.c</file>
     </qresource>
 </RCC>
