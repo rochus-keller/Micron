@@ -1078,8 +1078,12 @@ bool Parser2::matchFormals(const QList<Declaration*>& a, const QList<Declaration
 
 bool Parser2::matchResultType(Type* lhs, Type* rhs) const
 {
-    if( lhs == 0 || rhs == 0 ) // TODO: is this a valid state?
-        return false;
+    if( lhs == 0 && rhs == 0 )
+        return true;
+    if( lhs == 0 )
+        return rhs->kind == Type::NoType;
+    if( rhs == 0 )
+        return lhs->kind != Type::NoType;
     return equalTypes(lhs,rhs) || (lhs->kind == Type::NoType && rhs->kind == Type::NoType);
 }
 
@@ -4166,6 +4170,8 @@ void Parser2::ReturnStatement() {
         if( mdl->getTopScope()->getType() == 0 || mdl->getTopScope()->getType()->kind == Type::NoType )
                 error(cur,"this return statement doesn't expect an expression");
         Type* retType = mdl->getTopScope()->getType();
+        if( retType == 0 )
+            return; // reported elsewhere
         const Token tok = la;
         Expression* e = expression(retType);
         ev->bindUniInt(e, retType->isInt());

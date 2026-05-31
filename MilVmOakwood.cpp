@@ -377,6 +377,14 @@ static bool Files_Delete(void* args, void* ret)
     return true;
 }
 
+// unsigned char Files$Rename(char* old, char* new_)
+static bool Files_Rename(void* args, void* ret)
+{
+    const int res = Files$Rename((char*)Interpreter::toP(args,0), (char*)Interpreter::toP(args,Interpreter::StackAlign));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
 // unsigned char Files$Eof(struct Files$Handle* f)
 static bool Files_Eof(void* args, void* ret)
 {
@@ -424,6 +432,40 @@ static bool Files_Length(void* args, void* ret)
 {
     const unsigned int res = Files$Length((struct Files$Handle*)Interpreter::toP(args,0));
     Interpreter::retI4(ret,res);
+    return true;
+}
+
+// unsigned int Files$Pos(struct Files$Handle* f);
+static bool Files_Pos(void* args, void* ret)
+{
+    const unsigned int res = Files$Pos((struct Files$Handle*)Interpreter::toP(args,0));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+// struct Files$DirHandle* Files$OpenDir(const char* path)
+static bool Files_OpenDir(void* args, void* ret)
+{
+    struct Files$DirHandle* res = Files$OpenDir((const char*)Interpreter::toP(args,0));
+    Interpreter::retP(ret,res);
+    return true;
+}
+
+// unsigned char Files$ReadDir(struct Files$DirHandle* d, char* name, unsigned int maxLen, unsigned char* isDir)
+static bool Files_ReadDir(void* args, void* ret)
+{
+    const unsigned char res = Files$ReadDir((struct Files$DirHandle*)Interpreter::toP(args,0),
+                                          (char*)Interpreter::toP(args,Interpreter::StackAlign),
+                                          Interpreter::toI4(args,2*Interpreter::StackAlign),
+                                          (unsigned char*)Interpreter::toP(args,3*Interpreter::StackAlign));
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
+// void Files$CloseDir(struct Files$DirHandle* d)
+static bool Files_CloseDir(void* args, void* ret)
+{
+    Files$CloseDir((struct Files$DirHandle*)Interpreter::toP(args,0));
     return true;
 }
 
@@ -575,12 +617,17 @@ void VmOakwood::addTo(Interpreter* ip, bool useScreen)
     ip->registerProc("Files", "System", Files_System);
     ip->registerProc("Files", "Close", Files_Close);
     ip->registerProc("Files", "Delete", Files_Delete);
+    ip->registerProc("Files", "Rename", Files_Rename);
     ip->registerProc("Files", "Eof", Files_Eof);
     ip->registerProc("Files", "Read", Files_Read);
     ip->registerProc("Files", "Write", Files_Write);
     ip->registerProc("Files", "ReadBytes", Files_ReadBytes);
     ip->registerProc("Files", "Set", Files_Set);
     ip->registerProc("Files", "Length", Files_Length);
+    ip->registerProc("Files", "Pos", Files_Pos);
+    ip->registerProc("Files", "OpenDir", Files_OpenDir);
+    ip->registerProc("Files", "ReadDir", Files_ReadDir);
+    ip->registerProc("Files", "CloseDir", Files_CloseDir);
 
     ip->registerProc("Args", "Count", Args_Count);
     ip->registerProc("Args", "Arg", Args_Arg);

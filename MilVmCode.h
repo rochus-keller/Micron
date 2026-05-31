@@ -177,7 +177,7 @@ public:
         return AstModel::align(off, stackAlignment );
     }
 
-    void initMemory(char* mem, Type* t, bool doPointerInit );
+    bool initMemory(char* mem, Type* t, bool doPointerInit );
 
     bool dumpAll(QTextStream& out);
     bool dumpModule(QTextStream& out, Declaration* module);

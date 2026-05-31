@@ -1,6 +1,7 @@
 module ProcType1
 
 	var p : proc (const str: ^array of char)
+	    p2 : proc
 
 	
 	proc outer()
@@ -15,7 +16,8 @@ module ProcType1
 
 begin
 	println("ProcType1 start")
-	outer()
+	p2 := outer
+	p2
 	p("1234")
 
 	println("ProcType1 done")

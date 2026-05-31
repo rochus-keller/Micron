@@ -191,6 +191,8 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
             return false; // already reported
         for( int i = 0; i < str.size(); i++ )
             arr[i] = QVariant::fromValue((char)str[i]);
+        for( int i = str.size(); i < arr.size(); i++ )
+            arr[i] = QVariant::fromValue((char)0);
         obj.data = QVariant::fromValue(arr.toList());
         out->line_(pos);
         out->ldc_obj(obj);

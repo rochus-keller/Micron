@@ -189,7 +189,8 @@ bool Code::translateProcSlot(Procedure& proc)
                 proc.locals[i].second.type = t;
                 const int len = t->getByteSize(pointerWidth);
                 proc.locals[i].second.mem.resize(len);
-                initMemory((char*)proc.locals[i].second.mem.data(), t,true);
+                if( !initMemory((char*)proc.locals[i].second.mem.data(), t,true) )
+                    return false;
             }
         }
     }
@@ -1526,7 +1527,8 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
                 Template& temp = templates.back();
                 temp.type = tt;
                 temp.mem.resize(len);
-                initMemory(temp.mem.data(), tt, true);
+                if( !initMemory(temp.mem.data(), tt, true) )
+                    return false;
             }
             emitOp(proc,op, id, true); // minus -> template id
         }else
@@ -1982,19 +1984,20 @@ bool Code::dumpAll(QTextStream& out)
     return true;
 }
 
-void Code::initMemory(char* mem, Type* t, bool doPointerInit )
+bool Code::initMemory(char* mem, Type* t, bool doPointerInit )
 {
     if( doPointerInit && t->pointerInit )
         memset(mem, 0, t->getByteSize(pointerWidth));
     if( !t->objectInit )
-        return;
+        return true;
     if( t->kind == Type::Struct || t->kind == Type::Object )
     {
         if( t->kind == Type::Object )
         {
             // set the vtable pointer at offset 0 of object instance
             Vtable* vt = getVtable(t);
-            Q_ASSERT(vt);
+            if( vt == 0 )
+                return false;
             memcpy(mem, &vt, sizeof(vt));
             foreach( Declaration* d, t->subs )
             {
@@ -2009,7 +2012,8 @@ void Code::initMemory(char* mem, Type* t, bool doPointerInit )
 
             Type* tt = deref(field->getType());
             if( tt->objectInit )
-                initMemory(mem + field->f.off, tt, false);
+                if( !initMemory(mem + field->f.off, tt, false) )
+                    return false;
         }
     }else if( t->kind == Type::Array && t->len != 0)
     {
@@ -2017,8 +2021,10 @@ void Code::initMemory(char* mem, Type* t, bool doPointerInit )
         int off = 0;
         for(int i = 0; i < t->len; i++ )
         {
-            initMemory(mem + off, et, false);
+            if( !initMemory(mem + off, et, false) )
+                return false;
             off += et->getByteSize(pointerWidth);
         }
     }
+    return true;
 }

@@ -10,6 +10,7 @@ TYPE
   	Create, // Creates a new file or truncates an existing file to zero length, for read/write. C: "wb+"
   	Modify // Opens an existing file for reading and writing without truncating; fails if not exist. C: "rb+"
   	)
+  	Dir = POINTER TO Handle;
 	
 PROCEDURE Open (name: POINTER TO ARRAY OF CHAR; mode: Mode): File EXTERN; // returns pointer or nil in case of error
 PROCEDURE Close (f: File) EXTERN;
@@ -40,5 +41,10 @@ PROCEDURE WriteString (f: File; x: POINTER TO ARRAY OF CHAR):UINT32 EXTERN;
 PROCEDURE WriteSet (f: File; x: SET):BOOLEAN EXTERN;
 PROCEDURE WriteBool (f: File; x: BOOLEAN):BOOLEAN EXTERN;
 PROCEDURE WriteBytes (f: File; x: POINTER TO ARRAY OF BYTE;n: UINT32):UINT32 EXTERN;
+
+PROCEDURE OpenDir (path: POINTER TO ARRAY OF CHAR): Dir EXTERN;
+PROCEDURE ReadDir (d: Dir; name: POINTER TO ARRAY OF CHAR; maxLen: UINT32; isDir: POINTER TO BOOLEAN): BOOLEAN EXTERN;
+PROCEDURE CloseDir (d: Dir) EXTERN;
+
 END Files.
 

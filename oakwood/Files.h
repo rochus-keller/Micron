@@ -54,5 +54,10 @@ extern unsigned char Files$WriteBool(struct Files$Handle* f, unsigned char x);
 extern unsigned int Files$WriteBytes(struct Files$Handle* f, unsigned char* x, unsigned int n);
 extern void Files$begin$();
 
+struct Files$DirHandle;
+extern struct Files$DirHandle* Files$OpenDir(const char* path);
+extern unsigned char Files$ReadDir(struct Files$DirHandle* d, char* name, unsigned int maxLen, unsigned char* isDir);
+extern void Files$CloseDir(struct Files$DirHandle* d);
+
 #endif // __FILES_INCLUDED__
 

@@ -288,6 +288,14 @@ static bool MIC_SetIn(void* args, void* ret)
     return true;
 }
 
+static bool MIC_SetRange(void* args, void* ret)
+{
+    // uint32_t MIC$$SetRange( uint32_t lhs, uint32_t rhs )
+    quint32 res = MIC$$SetRange(Interpreter::toI4(args,0), Interpreter::toI4(args,8) );
+    Interpreter::retI4(ret,res);
+    return true;
+}
+
 static bool MIC_printI8(void* args, void* ret)
 {
     MIC$$printI8(*(qint64*)args);
@@ -380,6 +388,7 @@ struct Interpreter::Imp
         REGISTER_MICPROC(relop4);
         REGISTER_MICPROC(SetDiv);
         REGISTER_MICPROC(SetIn);
+        REGISTER_MICPROC(SetRange);
         REGISTER_MICPROC(printI8);
         REGISTER_MICPROC(printU8);
         REGISTER_MICPROC(printF8);
@@ -545,7 +554,8 @@ bool Interpreter::run(Declaration* proc)
         foreach( Declaration* d, vars )
         {
             Type* t = d->getType()->deref();
-            imp->code.initMemory(imp->moduleData.data()+d->off, t,true);
+            if( !imp->code.initMemory(imp->moduleData.data()+d->off, t,true) )
+                return false;
         }
     }
 
