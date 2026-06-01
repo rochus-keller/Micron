@@ -30,7 +30,11 @@
 #include "MilRv32Renderer.h"
 #include "MilX86Renderer.h"
 #include "MilElfLinker.h"
+#ifdef _MIC_HAVE_SCREEN_QT_
+#include <QApplication>
+#else
 #include <QCoreApplication>
+#endif
 #include <QFile>
 #include <QStringList>
 #include <QtDebug>
@@ -718,13 +722,8 @@ static void process(const QString& file, const QStringList& searchPaths,
         Mil::VmOakwood::addTo(&r, false);
 #endif
 
-        mgr.loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
-
-        foreach( Mil::Declaration* module, mgr.loader.getModel().getModules() )
-        {
-            if( !r.precompile(module) )
-                return;
-        }
+        if( !r.compile() )
+            return;
         if( dumpLL )
         {
             QTextStream out(stdout);
@@ -751,18 +750,18 @@ static void process(const QString& file, const QStringList& searchPaths,
 
         Args_setArgcArgv( argv.size(), argv.data() );
 
-        foreach( Mil::Declaration* module, mgr.loader.getModel().getModules() )
-        {
-            if( !r.run(module) )
-                break;
-        }
+        r.run();
     }
 }
 
 
 int main(int argc, char *argv[])
 {
+#ifdef _MIC_HAVE_SCREEN_QT_
+    QApplication a(argc, argv);
+#else
     QCoreApplication a(argc, argv);
+#endif
 
     QCommandLineParser cp;
     cp.setApplicationDescription("Micron compiler");

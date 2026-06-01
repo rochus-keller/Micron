@@ -650,9 +650,18 @@ DllExport int32_t Screen$ProcessEvents(int32_t sleep)
             int btn = 0;
             switch( be->detail )
             {
-            case 1: btn = BTN_LEFT;   btnLeft  = down; break;
-            case 2: btn = BTN_MIDDLE; btnMid   = down; break;
-            case 3: btn = BTN_RIGHT;  btnRight = down; break;
+            case 1:
+                btn = BTN_LEFT;
+                btnLeft  = down;
+                break;
+            case 2:
+                btn = BTN_MIDDLE;
+                btnMid   = down;
+                break;
+            case 3:
+                btn = BTN_RIGHT;
+                btnRight = down;
+                break;
             }
             if( btn )
             {

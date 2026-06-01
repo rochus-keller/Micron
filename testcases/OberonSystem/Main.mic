@@ -1,0 +1,55 @@
+MODULE Main;
+
+IMPORT Modules, Oberon, System, Edit, Hilbert, Sierpinski, Stars, Hennessy;
+
+BEGIN
+  // Register System commands
+  Modules.Register("System", "SetUser", System.SetUser);
+  Modules.Register("System", "SetFont", System.SetFont);
+  Modules.Register("System", "SetColor", System.SetColor);
+  Modules.Register("System", "SetOffset", System.SetOffset);
+  Modules.Register("System", "Date", System.Date);
+  Modules.Register("System", "Collect", System.Collect);
+  Modules.Register("System", "Open", System.Open);
+  Modules.Register("System", "Clear", System.Clear);
+  Modules.Register("System", "Close", System.Close);
+  Modules.Register("System", "CloseTrack", System.CloseTrack);
+  Modules.Register("System", "Recall", System.Recall);
+  Modules.Register("System", "Copy", System.Copy);
+  Modules.Register("System", "Grow", System.Grow);
+  Modules.Register("System", "Free", System.Free);
+  Modules.Register("System", "FreeFonts", System.FreeFonts);
+  Modules.Register("System", "Directory", System.Directory);
+  Modules.Register("System", "CopyFiles", System.CopyFiles);
+  Modules.Register("System", "RenameFiles", System.RenameFiles);
+  Modules.Register("System", "DeleteFiles", System.DeleteFiles);
+  Modules.Register("System", "Watch", System.Watch);
+  Modules.Register("System", "ShowModules", System.ShowModules);
+  Modules.Register("System", "ShowCommands", System.ShowCommands);
+  Modules.Register("System", "ShowFonts", System.ShowFonts);
+  Modules.Register("System", "ExtendDisplay", System.ExtendDisplay);
+
+  // Register Edit commands
+  Modules.Register("Edit", "Open", Edit.Open);
+  Modules.Register("Edit", "Store", Edit.Store);
+  Modules.Register("Edit", "CopyLooks", Edit.CopyLooks);
+  Modules.Register("Edit", "ChangeFont", Edit.ChangeFont);
+  Modules.Register("Edit", "ChangeColor", Edit.ChangeColor);
+  Modules.Register("Edit", "ChangeOffset", Edit.ChangeOffset);
+  Modules.Register("Edit", "Search", Edit.Search);
+  Modules.Register("Edit", "Locate", Edit.Locate);
+  Modules.Register("Edit", "Recall", Edit.Recall);
+
+  // Register application commands
+  Modules.Register("Hilbert", "Draw", Hilbert.Draw);
+  Modules.Register("Sierpinski", "Draw", Sierpinski.Draw);
+  Modules.Register("Stars", "Open", Stars.Open);
+  Modules.Register("Stars", "Run", Stars.Run);
+  Modules.Register("Stars", "Stop", Stars.Stop);
+  Modules.Register("Stars", "Close", Stars.Close);
+  Modules.Register("Stars", "Step", Stars.Step);
+  Modules.Register("Stars", "SetPeriod", Stars.SetPeriod);
+  Modules.Register("Hennessy", "Do", Hennessy.Do);
+
+  Oberon.Loop
+END Main.

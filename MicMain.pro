@@ -4,14 +4,14 @@ QT       -= gui
 TARGET = micc
 CONFIG   += console
 CONFIG   -= app_bundle
-CONFIG += HAVE_SCREEN_XCB
+CONFIG += HAVE_SCREEN_SDL
 
 TEMPLATE = app
 
 INCLUDEPATH += ..
 
 CONFIG(debug, debug|release) {
-        #DEFINES += _DEBUG
+    DEFINES += _DEBUG
 }
 
 include(MicParser.pri)
@@ -31,6 +31,14 @@ HAVE_SCREEN_XCB {
     LIBS += -lxcb
 }
 
+HAVE_SCREEN_QT {
+    QT += gui widgets
+    DEFINES += _MIC_HAVE_SCREEN_ _MIC_HAVE_SCREEN_QT_
+    SOURCES += oakwood/ScreenQt.cpp
+    HEADERS += \
+        oakwood/ScreenQt.h
+}
+
 include( MicUtils.pri )
 include( MilParser2.pri )
 
@@ -42,4 +50,6 @@ RESOURCES += \
     QMAKE_CXXFLAGS += -Wno-reorder -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-switch \
         -Wno-deprecated-declarations -Wno-sign-compare -Wno-parentheses -Wno-unused-parameter -Werror=return-type
 }
+
+
 

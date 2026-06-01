@@ -1,0 +1,101 @@
+MODULE Modules;  (*Link and load on RISC; NW 20.10.2013 / 9.4.2016*)
+  IMPORT Files := Flies;
+  CONST versionkey = 1X; MT = 12; DescSize = 80;
+    MAX_COMMANDS = 200;
+
+  TYPE Module* = POINTER TO ModDesc;
+    Command* = PROCEDURE;
+    ModuleName* = ARRAY 32 OF CHAR;
+
+    ModDesc* = RECORD
+        name*: ModuleName;
+        next*: Module;
+        key*, num*, size*, refcnt*: INTEGER;
+        data*, code*, imp*, cmd*, ent*, ptr*, unused: INTEGER  (*addresses*)
+      END ;
+    
+    CmdEntry = RECORD
+      modName: ModuleName;
+      cmdName: ModuleName;
+      cmd: Command
+    END;
+
+  VAR root*, M: Module;
+    AllocPtr*, res*: INTEGER;
+    importing*, imported*: ModuleName;
+    cmds: ARRAY MAX_COMMANDS OF CmdEntry;
+    cmdCount: INTEGER;
+
+  PROCEDURE error(n: INTEGER; CONST name: POINTER TO ARRAY OF CHAR);
+  BEGIN res := n; importing := name^
+  END error;
+  
+  PROCEDURE Find(CONST name: POINTER TO ARRAY OF CHAR): Module;
+	  VAR cur: Module;
+  BEGIN
+	  cur := root;
+	  WHILE cur # NIL DO
+	    IF cur.name = name^ THEN RETURN cur END;
+	    cur := cur.next
+	  END;
+	  RETURN NIL
+  END Find;
+
+  PROCEDURE Load*(CONST name: POINTER TO ARRAY OF CHAR; newmod: POINTER TO Module);
+    (*search module in list; if not found, load module.
+      res = 0: already present or loaded; res = 2: file not available; res = 3: key conflict;
+      res = 4: bad file version; res = 5: corrupted file; res = 7: no space*)
+    VAR m: Module; i: INTEGER;
+  BEGIN res := 0; 
+    importing := name^;
+    m := Find(name);
+    IF m = NIL THEN  
+      // check if any command is registered for this module name
+      res := 2;  // assume not found
+      FOR i := 0 TO cmdCount - 1 DO
+        IF cmds[i].modName = name^ THEN res := 0 END
+      END;
+      IF res = 0 THEN
+        imported := name^;
+        NEW(m);
+        m.name := name^;
+        m.next := root;
+        root := m
+      END
+    END;
+    newmod^ := m;
+  END Load;
+
+  PROCEDURE ThisCommand*(m: Module; CONST name: POINTER TO ARRAY OF CHAR): Command;
+  VAR i: INTEGER;
+  BEGIN
+    FOR i := 0 TO cmdCount - 1 DO
+      IF (cmds[i].modName = m.name) & (cmds[i].cmdName = name^) THEN
+        RETURN cmds[i].cmd
+      END
+    END;
+    RETURN NIL
+  END ThisCommand;
+
+  PROCEDURE Register*(CONST modName, cmdName: POINTER TO ARRAY OF CHAR; cmd: Command);
+  BEGIN
+    IF cmdCount < MAX_COMMANDS THEN
+      cmds[cmdCount].modName := modName^;
+      cmds[cmdCount].cmdName := cmdName^;
+      cmds[cmdCount].cmd := cmd;
+      INC(cmdCount)
+    END
+  END Register;
+
+  PROCEDURE Free*(CONST name: POINTER TO ARRAY OF CHAR);
+  BEGIN res := 0;
+    // NOP
+  END Free;
+
+  PROCEDURE Init*;
+  BEGIN // Files.Init; 
+	  AllocPtr := 0
+  END Init;
+
+BEGIN Init; cmdCount := 0
+END Modules.

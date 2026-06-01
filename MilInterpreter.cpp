@@ -504,6 +504,68 @@ Code *Interpreter::getCode() const
     return &imp->code;
 }
 
+bool Interpreter::compile()
+{
+    imp->mdl->calcMemoryLayouts(sizeof(void*), 8);
+
+    QList<Mil::Declaration*> mods = imp->mdl->getModules();
+    for(int i = mods.size()-1; i >= 0; i--)
+    {
+        Mil::Declaration* module = mods[i];
+        if( module->generic )
+            continue;
+        if( !precompile(module) ) {
+            qCritical() << "error precompiling" << module->name;
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Interpreter::run()
+{
+    // allocate and init module variables
+    imp->moduleData.resize(imp->mdl->getVarMemSize());
+    DeclList modules = imp->mdl->getModules();
+    foreach(Declaration* module, modules)
+    {
+        if( module->generic )
+            continue;
+        if( !module->translated )
+        {
+            qCritical() << "error module not compiled" << module->name;
+            return false;
+        }
+        // qDebug() << "init module vars of " << module->name;
+        DeclList vars = module->getVars();
+        foreach( Declaration* d, vars )
+        {
+            Type* t = d->getType()->deref();
+            if( !imp->code.initMemory(imp->moduleData.data()+d->off, t,true) )
+            {
+                qCritical() << "error initializing variables of" << module->name;
+                return false;
+            }
+        }
+    }
+
+
+    Mil::DeclList roots = imp->mdl->getRootModules();
+
+    foreach( Mil::Declaration* module, roots )
+    {
+        if( module->name == "MIC$" )
+            continue;
+        // each run gets its freshly initialized module variables
+        if( !run(module) )
+        {
+            qCritical() << "error running module" << module->name;
+            return false;
+        }
+    }
+    return true;
+}
+
 bool Interpreter::precompile(Declaration* proc)
 {
     Q_ASSERT(proc && (proc->kind == Declaration::Procedure || proc->kind == Declaration::Module));
@@ -537,27 +599,6 @@ bool Interpreter::run(Declaration* proc)
 
     Declaration* module = proc->getModule();
     Q_ASSERT(module);
-    if( !module->validated )
-        return false;
-
-    if( !module->translated && !precompile(module) )
-        return false;
-
-    // allocate and init module variables
-    imp->moduleData.resize(imp->mdl->getVarMemSize());
-    DeclList modules = imp->mdl->getModules();
-    foreach(Declaration* module, modules)
-    {
-        if( module->generic )
-            continue;
-        DeclList vars = module->getVars();
-        foreach( Declaration* d, vars )
-        {
-            Type* t = d->getType()->deref();
-            if( !imp->code.initMemory(imp->moduleData.data()+d->off, t,true) )
-                return false;
-        }
-    }
 
     try
     {

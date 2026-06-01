@@ -182,25 +182,15 @@ void Project::interpret(bool dump)
 
     mdl->calcMemoryLayouts(sizeof(void*), 8);
 
-    QList<Mil::Declaration*> modules = mdl->getModules();
-    for(int i = modules.size()-1; i >= 0; i--)
-    {
-        Mil::Declaration* module = modules[i];
-        if( module->generic )
-            continue;
-        if( !r.precompile(module) )
-            return;
-    }
+    if( !r.compile() )
+        return;
+
     if( false ) // dump )
     {
         QTextStream out(stdout);
         r.dumpAll(out);
     }
-    foreach( Declaration* module, modules )
-    {
-        if( !r.run(module) )
-            return; // TODO: error handling
-    }
+    r.run();
 }
 
 void Project::dumpMil()

@@ -836,22 +836,12 @@ bool Project2::interpret(const QString& outDir)
     if( d_useBuiltInOakwood )
         Mil::VmOakwood::addTo(&r,d_useOakwoodScreen);
 
-    loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
-
-    QList<Mil::Declaration*> mods = loader.getModel().getModules();
-    for(int i = mods.size()-1; i >= 0; i--)
-    {
-        Mil::Declaration* module = mods[i];
-        if( module->generic )
-            continue;
-        if( !r.precompile(module) ) {
-            qCritical() << "error precompiling" << module->name;
-            return false;
-        }
-    }
+    if( !r.compile() )
+        return false;
 
     if( !outDir.isEmpty() )
     {
+        QList<Mil::Declaration*> mods = loader.getModel().getModules();
         for(int i = mods.size()-1; i >= 0; i--)
         {
             // we have to dump here because when doing it in the precompile loop only the begin$ is ready
@@ -878,13 +868,7 @@ bool Project2::interpret(const QString& outDir)
     }
     Args_setArgcArgv( argv.size(), argv.data() );
 
-    foreach( Mil::Declaration* module, mods )
-    {
-        // each run gets its freshly initialized module variables
-        if( !r.run(module) )
-            return false; // TODO: error handling
-    }
-    return true;
+    return r.run();
 }
 
 bool Project2::generateMrl(const QString &outDir)
@@ -896,17 +880,8 @@ bool Project2::generateMrl(const QString &outDir)
 
     loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
 
-    QList<Mil::Declaration*> mods = loader.getModel().getModules();
-    for(int i = mods.size()-1; i >= 0; i--)
-    {
-        Mil::Declaration* module = mods[i];
-        if( module->generic )
-            continue;
-        if( !r.precompile(module) ) {
-            qCritical() << "error precompiling" << module->name;
-            return false;
-        }
-    }
+    if( !r.compile() )
+        return false;
 
     Mil::Rl::Code mrl(*r.getCode(), sizeof(void*));
     if( !mrl.compile() )
@@ -914,6 +889,7 @@ bool Project2::generateMrl(const QString &outDir)
     if( !mrl.compactAll() )
         qWarning() << "Mil::Rl::Code::compactAll failed";
 
+    QList<Mil::Declaration*> mods = loader.getModel().getModules();
     for(int i = mods.size()-1; i >= 0; i--)
     {
         Mil::Declaration* module = mods[i];

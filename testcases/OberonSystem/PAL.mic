@@ -1,0 +1,382 @@
+module PAL 
+
+  import Args, Screen, Files
+
+  const
+    MAX_FILES = 100
+    MAX_DIR = 500
+    KBD_QUEUE_LEN = 100
+
+  type 
+    Buffer* = POINTER TO ARRAY OF INTEGER
+    ByteBuffer = POINTER TO ARRAY OF BYTE
+    String = POINTER TO ARRAY OF CHAR
+    InputState* = record keys: set; x, y: integer end
+
+  var 
+    fileDir : array 256 of char
+    screenW, screenH: integer
+    
+    fileSlots: array MAX_FILES of Files.File
+    
+    dirNames: array MAX_DIR of array 64 of char
+    dirCount: integer
+    
+    kbdQueue: array KBD_QUEUE_LEN of char
+    kbdHead, kbdTail, kbdCount: integer
+    
+    shiftDown, ctrlDown: boolean
+
+  
+  proc kbdEnqueue(ch: char)
+  begin
+    if kbdCount >= KBD_QUEUE_LEN then return end
+    kbdQueue[kbdHead] := ch
+    kbdHead := (kbdHead + 1) mod KBD_QUEUE_LEN
+    inc(kbdCount)
+  end kbdEnqueue
+  
+  proc kbdDequeue(): char
+  var ch: char
+  begin
+    if kbdCount = 0 then return 0x end
+    ch := kbdQueue[kbdTail]
+    kbdTail := (kbdTail + 1) mod KBD_QUEUE_LEN
+    dec(kbdCount)
+    return ch
+  end kbdDequeue
+
+  
+  proc strLen(const s: pointer to array of char): integer
+  var i: integer
+  begin
+    i := 0
+    while s[i] # 0x do inc(i) end
+    return i
+  end strLen
+
+  proc buildPath(const name: String; path: pointer to array of char; pathLen: integer)
+  var i, j, n: integer
+  begin
+    // copy fileDir
+    i := 0
+    while (i < pathLen - 2) and (fileDir[i] # 0x) do
+      path[i] := fileDir[i]
+      inc(i)
+    end
+    // append separator
+    if (i > 0) and (i < pathLen - 1) then
+      path[i] := "/"
+      inc(i)
+    end
+    // copy name
+    j := 0
+    while (i < pathLen - 1) and (name[j] # 0x) do
+      path[i] := name[j]
+      inc(i)
+      inc(j)
+    end
+    path[i] := 0x
+  end buildPath
+
+  proc findFreeSlot(): integer
+  var i: integer
+  begin
+    for i := 0 to MAX_FILES - 1 do
+      if fileSlots[i] = nil then return i end
+    end
+    return -1
+  end findFreeSlot
+
+
+
+  proc createRasterBuffer*(length, w, h: integer): Buffer
+  var b: Buffer; blankCursor: array 1 of byte
+  begin
+    new(b, length)
+    screenW := w
+    screenH := h
+
+    if Screen.Open(CAST(ByteBuffer, b), length * 4, w, h, {Screen.LsbFirst, Screen.BottomUp}) = 0 then
+      println("PAL: failed to open screen")
+    end;
+    // hide system cursor
+    blankCursor[0] := 0;
+    Screen.SetCursor(@blankCursor, 8, 1, 0, 0);
+    return b
+  end createRasterBuffer
+
+  proc getTime*(): integer 
+  begin
+    return SIG(Screen.GetTicks())
+  end getTime
+
+  proc drainEvents()
+  var evt, evtType, evtData: integer
+  begin
+    evt := Screen.NextEvent()
+    while evt # 0 do
+      evtType := BAND(SIG(SHR(evt, 24)), 0FFH)
+      evtData := BAND(evt, 0FFFFFFH)
+      
+      if evtType = Screen.EvtKeyChar then
+        // printable character
+        if (evtData > 0) and (evtData < 128) then
+          kbdEnqueue(CHR(evtData))
+        end
+      elsif evtType = Screen.EvtKeyDown then
+        // special keys -> enqueue as control characters
+        if evtData = Screen.KeyReturn then kbdEnqueue(0DX)
+        elsif evtData = Screen.KeyBackspace then kbdEnqueue(08X)
+        elsif evtData = Screen.KeyTab then kbdEnqueue(09X)
+        elsif evtData = Screen.KeyEscape then kbdEnqueue(1BX)
+        elsif evtData = Screen.KeyDelete then kbdEnqueue(7FX)
+        elsif evtData = Screen.KeyLShift then shiftDown := true
+        elsif evtData = Screen.KeyRShift then shiftDown := true
+        elsif evtData = Screen.KeyLCtrl then ctrlDown := true
+        elsif evtData = Screen.KeyRCtrl then ctrlDown := true
+        end
+      elsif evtType = Screen.EvtKeyUp then
+        if evtData = Screen.KeyLShift then shiftDown := false
+        elsif evtData = Screen.KeyRShift then shiftDown := false
+        elsif evtData = Screen.KeyLCtrl then ctrlDown := false
+        elsif evtData = Screen.KeyRCtrl then ctrlDown := false
+        end
+      end
+      
+      evt := Screen.NextEvent()
+    end
+  end drainEvents
+
+  proc processEvents*(sleep: integer): boolean
+  var res: integer
+  begin
+    // mark whole screen dirty so Screen renders the framebuffer
+    Screen.UpdateArea(0, 0, screenW, screenH)
+    res := Screen.ProcessEvents(sleep)
+    if res < 0 then return true end
+    if res > 0 then drainEvents() end
+    return false
+  end processEvents
+
+
+  proc listFiles*(): integer
+  var d: Files.Dir; name: array 64 of char; isDir: boolean; i: integer
+  begin
+    dirCount := 0
+    d := Files.OpenDir(@fileDir)
+    if d = nil then return 0 end
+    while (dirCount < MAX_DIR) and Files.ReadDir(d, @name, 64, @isDir) do
+      if not isDir then
+        dirNames[dirCount] := name
+        inc(dirCount)
+      end
+    end
+    Files.CloseDir(d)
+    return dirCount
+  end listFiles
+
+  proc fileName*(i: integer): String
+  begin
+    if (i >= 0) and (i < dirCount) then
+      return @dirNames[i]
+    end
+    return nil
+  end fileName
+
+
+  proc openFile*(const filename: String): integer
+  var slot: integer; path: array 512 of char; f: Files.File
+  begin
+    if filename[0] = 0x then return -1 end
+    slot := findFreeSlot()
+    if slot < 0 then return -1 end
+    buildPath(filename, @path, 512)
+    f := Files.Open(@path, Files.Modify)
+    if f = nil then 
+      // try read-only
+      f := Files.Open(@path, Files.ReadOnly)
+    end
+    if f = nil then return -1 end
+    fileSlots[slot] := f
+    return slot
+  end openFile
+
+  proc newFile*(): integer
+  var slot: integer; f: Files.File
+      tmpName: array 64 of char
+      path: array 512 of char
+      i, n: integer
+  begin
+    slot := findFreeSlot()
+    if slot < 0 then return -1 end
+    // create a temp file in the fileDir
+    tmpName := ".PAL_tmp_000"
+    // encode slot number into filename
+    n := slot
+    tmpName[11] := CHR(+ORD("0") + n MOD 10); n := n DIV 10
+    tmpName[10] := CHR(+ORD("0") + n MOD 10); n := n DIV 10
+    tmpName[9] := CHR(+ORD("0") + n MOD 10)
+    buildPath(@tmpName, @path, 512)
+    f := Files.Open(@path, Files.Create)
+    if f = nil then return -1 end
+    fileSlots[slot] := f
+    return slot
+  end newFile
+
+  proc freeFile*(buffer: integer)
+  begin
+    if (buffer >= 0) and (buffer < MAX_FILES) and (fileSlots[buffer] # nil) then
+      Files.Close(fileSlots[buffer])
+      fileSlots[buffer] := nil
+    end
+  end freeFile
+
+  proc saveFile*(const filename: String; buffer: integer): boolean
+  var path: array 512 of char
+      dst: Files.File
+      b: byte
+      ok: boolean
+  begin
+    if (buffer < 0) or (buffer >= MAX_FILES) or (fileSlots[buffer] = nil) then return false end
+    buildPath(filename, @path, 512)
+    dst := Files.Open(@path, Files.Create)
+    if dst = nil then return false end
+    // copy contents from source to destination
+    ok := Files.Set(fileSlots[buffer], 0)
+    while not Files.Eof(fileSlots[buffer]) do
+      if Files.Read(fileSlots[buffer], @b) then
+        ok := Files.Write(dst, b)
+      else
+        // read failed
+        Files.Close(dst)
+        return false
+      end
+    end
+    Files.Close(dst)
+    return true
+  end saveFile
+
+  proc removeFile*(const filename: String): boolean
+  var path: array 512 of char
+  begin
+    buildPath(filename, @path, 512)
+    return Files.Delete(@path)
+  end removeFile
+
+  proc renameFile*(const oldName, newName: String): boolean
+  var oldPath, newPath: array 512 of char
+  begin
+    buildPath(oldName, @oldPath, 512)
+    buildPath(newName, @newPath, 512)
+    return Files.Rename(@oldPath, @newPath)
+  end renameFile
+
+  proc length*(buffer: integer): integer
+  begin
+    if (buffer >= 0) and (buffer < MAX_FILES) and (fileSlots[buffer] # nil) then
+      return SIG(Files.Length(fileSlots[buffer]))
+    end
+    return 0
+  end length
+
+  proc setPos*(buffer, pos: integer): boolean
+  begin
+    if (buffer >= 0) and (buffer < MAX_FILES) and (fileSlots[buffer] # nil) then
+      return Files.Set(fileSlots[buffer], USIG(pos))
+    end
+    return false
+  end setPos
+
+  proc getPos*(buffer: integer): integer
+  begin
+    if (buffer >= 0) and (buffer < MAX_FILES) and (fileSlots[buffer] # nil) then
+      return SIG(Files.Pos(fileSlots[buffer]))
+    end
+    return 0
+  end getPos
+
+  proc atEnd*(buffer: integer): boolean
+  begin
+    if (buffer >= 0) and (buffer < MAX_FILES) and (fileSlots[buffer] # nil) then
+      return Files.Eof(fileSlots[buffer])
+    end
+    return true
+  end atEnd
+
+  proc writeByte*(buffer: integer; byte_: byte): boolean
+  begin
+    if (buffer >= 0) and (buffer < MAX_FILES) and (fileSlots[buffer] # nil) then
+      return Files.Write(fileSlots[buffer], byte_)
+    end
+    return false
+  end writeByte
+
+  proc readByte*(buffer: integer): byte
+  var b: byte
+  begin
+    if (buffer >= 0) and (buffer < MAX_FILES) and (fileSlots[buffer] # nil) then
+      if Files.Read(fileSlots[buffer], @b) then return b end
+    end
+    return 0
+  end readByte
+
+
+  proc getState*(state: ^InputState) 
+  var mx, my: INT32; buttons: INT32; res: INT32
+  begin
+    // flush framebuffer so tracking loops show visual feedback
+    Screen.UpdateArea(0, 0, screenW, screenH)
+    // pump events so mouse/keyboard state is up-to-date
+    res := Screen.ProcessEvents(0)
+    if res > 0 then drainEvents() end
+    buttons := Screen.GetMouseState(@mx, @my)
+    state.x := mx
+    // flip Y for Oberon bottom-up convention
+    state.y := screenH - 1 - my
+    // buttons: bit2=left, bit1=mid, bit0=right
+    // apply 3-button emulation (Ctrl=mid, Ctrl+Shift=right)
+    state.keys := {}
+    if BAND(buttons, Screen.MouseLeft) # 0 then
+      if ctrlDown and shiftDown then
+        state.keys := {0}  // right
+      elsif ctrlDown then
+        state.keys := {1}  // mid
+      else
+        state.keys := {2}  // left
+      end
+    end
+    if BAND(buttons, Screen.MouseMid) # 0 then
+      state.keys := state.keys + {1}
+    end
+    if BAND(buttons, Screen.MouseRight) # 0 then
+      if ctrlDown then
+        state.keys := state.keys + {1}
+      else
+        state.keys := state.keys + {0}
+      end
+    end
+  end getState
+
+  proc nextKey*(): char 
+  begin
+    return kbdDequeue()
+  end nextKey
+
+begin
+  screenW := 0
+  screenH := 0
+  dirCount := 0
+  kbdHead := 0
+  kbdTail := 0
+  kbdCount := 0
+  shiftDown := false
+  ctrlDown := false
+
+  if Args.Count() >= 2 then
+    fileDir := Args.Arg(1)^
+  else
+    fileDir := "Files"
+  end
+    
+end PAL

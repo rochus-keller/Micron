@@ -49,15 +49,19 @@ namespace Mil
         static void retR8(void* ret, double val);
         static void retP(void* ret, void* val);
         static int stackAligned(int off);
+
         enum { StackAlign = 8 };
         void registerProc(const QByteArray& module, const QByteArray& procName, FfiProc proc);
         Vm::Code* getCode() const;
 
-        // proc is either a procedure or a module
-        bool precompile(Declaration* proc);
+        bool compile();
+        bool run();
+
         bool dumpProc(QTextStream& out, Declaration* proc);
         bool dumpModule(QTextStream& out, Declaration* module);
         bool dumpAll(QTextStream& out);
+    protected:
+        bool precompile(Declaration* proc);
         bool run(Declaration* proc);
 
     private:
