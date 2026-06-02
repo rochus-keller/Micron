@@ -94,6 +94,8 @@ quint32 Renderer::getOrCreateExtSymbol(int procIdx)
     return symIdx;
 }
 
+static const int MaxExtensions = 16;
+
 quint32 Renderer::getOrEmitVtable(int vtableIdx)
 {
     if (d_vtableOffsets.contains(vtableIdx))
@@ -102,6 +104,25 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
     Vm::Vtable* vt = d_code.getVtable(vtableIdx);
     Q_ASSERT(vt);
 
+    // Collect ancestor vtable indices (self at index 0, parent at 1, etc.)
+    QList<int> ancestors;
+    {
+        Vm::Vtable* cur = vt;
+        while (cur) {
+            int idx = -1;
+            for (int i = 0; i < d_code.vtableCount(); i++) {
+                if (d_code.getVtable(i) == cur) { idx = i; break; }
+            }
+            if (idx >= 0) {
+                // Ensure ancestor vtable is emitted first
+                if (idx != vtableIdx)
+                    getOrEmitVtable(idx);
+                ancestors.append(idx);
+            }
+            cur = cur->parent;
+        }
+    }
+
     // Align to 4 bytes
     quint32 curSize = d_elf.sectionSize(d_sections.data);
     quint32 pad = (4 - (curSize & 3)) & 3;
@@ -109,6 +130,27 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
         char zeros[4] = {0};
         d_elf.appendToSection(d_sections.data, zeros, pad);
     }
+
+    // Emit extension level array (MaxExtensions entries at negative offsets).
+    // Entry at offset -(k+1)*4 from vtableOff = vtable pointer for ancestor at extlev k.
+    // extlev 0 = most ancestral (root), extlev N = self.
+    // Unused entries are zero (NIL).
+    int extlev = ancestors.size() - 1; // self's extension level
+    for (int k = MaxExtensions - 1; k >= 0; k--) {
+        quint32 entryPos = d_elf.sectionSize(d_sections.data);
+        quint32 zero = 0;
+        d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
+        if (k <= extlev) {
+            // ancestors list is [self, parent, grandparent, ...] so reverse index
+            int ancestorIdx = ancestors[extlev - k];
+            quint32 ancestorOff = d_vtableOffsets.value(ancestorIdx, 0);
+            d_elf.addRelocation(d_sections.relData, entryPos, d_dataSymIdx, R_386_32);
+            // Write the ancestor offset as addend (linker adds .data base)
+            d_elf.patchWord(d_sections.data, entryPos, ancestorOff);
+        }
+    }
+
+    // vtableOff points to methods start (after the extension level array)
     quint32 vtableOff = d_elf.sectionSize(d_sections.data);
 
     // Emit method pointers (zeros with relocations)
@@ -862,6 +904,40 @@ bool Renderer::renderProcedure(Procedure& proc, int procIdx)
 
     scanBranchTargets(proc);
     emitPrologue(d_localsSize);
+
+    // Initialize local object variables (vtable pointers + template data)
+    for (size_t i = 0; i < proc.locals.size(); i++) {
+        const Vm::Template& tmpl = proc.locals[i].second;
+        if (tmpl.type && tmpl.type->objectInit && !tmpl.mem.empty()) {
+            quint32 localOff = proc.locals[i].first;
+            // Emit template data into .rodata and copy to local
+            quint32 tmplSize = tmpl.mem.size();
+            quint32 tmplOff;
+            quint32 curSize = d_elf.sectionSize(d_sections.rodata);
+            quint32 pad = (4 - (curSize & 3)) & 3;
+            if (pad > 0) {
+                char zeros[4] = {0};
+                d_elf.appendToSection(d_sections.rodata, zeros, pad);
+            }
+            tmplOff = d_elf.sectionSize(d_sections.rodata);
+            d_elf.appendToSection(d_sections.rodata, tmpl.mem.data(), tmplSize);
+
+            // Load local address into EAX
+            loadLocalAddr(EAX, localOff);
+            // Load template source into ECX
+            d_emitter.mov_ri(ECX, tmplOff);
+            quint32 immOff = d_emitter.currentPosition() - 4;
+            d_elf.addRelocation(d_sections.relText, immOff, d_rodataSymIdx, R_386_32);
+            // Copy word by word
+            quint32 aligned = (tmplSize + 3) & ~3;
+            for (quint32 j = 0; j < aligned; j += 4) {
+                d_emitter.mov_rm(EDX, ECX, j);
+                d_emitter.mov_mr(EAX, j, EDX);
+            }
+            // Fix vtable pointers
+            emitVtableFixups(EAX, tmpl);
+        }
+    }
 
     int pc = 0;
     while (pc < (int)proc.ops.size()) {
@@ -3029,11 +3105,64 @@ int Renderer::emitOp(Procedure& proc, int pc)
     }
 
     case LL_isinst: {
-        qWarning() << "X86Renderer: isinst type check not fully implemented";
-        popReg(EAX);
+        // Runtime type check using OP2-style extension level array.
+        // val = vtable index of the target type.
+        // The target type's extension level (extlev) is computed at compile time.
+        // At runtime: load object's vtable, index into its ancestor array at
+        // [vtable - (extlev+1)*4], compare with target vtable address. O(1).
+        Vm::Vtable* refVt = d_code.getVtable(val);
+
+        // Compute target type's extension level
+        int extlev = 0;
+        {
+            Vm::Vtable* cur = refVt;
+            while (cur->parent) { extlev++; cur = cur->parent; }
+        }
+        popReg(EAX); // EAX = object pointer
+
+        // if obj == NULL, result is 0
         em.test_rr(EAX, EAX);
-        em.setcc(CC_NE, EAX);
-        em.movzx_rb_reg(EAX, EAX);
+        Label nullLabel;
+        em.jcc(CC_E, nullLabel);
+
+        // ECX = object's vtable pointer (loaded from [obj+0])
+        em.mov_rm(ECX, EAX, 0);
+
+        // Load ancestor pointer from object's vtable extension level array:
+        // [ECX - (extlev+1)*4]
+        qint32 ancestorOff = -(qint32)(extlev + 1) * 4;
+        em.mov_rm(ECX, ECX, ancestorOff);
+
+        // Compare with target vtable address (must use 32-bit immediate form
+        // because the value is subject to relocation; cmp_ri may emit a short
+        // 8-bit form if the pre-link offset fits in a byte, which the linker
+        // would then corrupt by writing 4 bytes over a 1-byte slot).
+        quint32 refVtOff = getOrEmitVtable(val);
+        // Emit CMP ECX, imm32 using the 32-bit form always: 81 F9 <imm32>
+        em.emitByte(0x81);
+        em.emitByte(0xF9);
+        quint32 immOff = em.currentPosition();
+        em.emitByte(refVtOff & 0xFF);
+        em.emitByte((refVtOff >> 8) & 0xFF);
+        em.emitByte((refVtOff >> 16) & 0xFF);
+        em.emitByte((refVtOff >> 24) & 0xFF);
+        d_elf.addRelocation(d_sections.relText, immOff, d_dataSymIdx, R_386_32);
+
+        // Set result based on comparison
+        Label matchLabel;
+        em.jcc(CC_E, matchLabel);
+
+        // No match: result = 0
+        em.bind(nullLabel);
+        em.mov_ri(EAX, 0);
+        Label doneLabel;
+        em.jmp(doneLabel);
+
+        // Match: result = 1
+        em.bind(matchLabel);
+        em.mov_ri(EAX, 1);
+
+        em.bind(doneLabel);
         pushReg(EAX);
         return 1;
     }

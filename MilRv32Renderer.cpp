@@ -96,6 +96,8 @@ quint32 Renderer::getOrCreateExtSymbol(int procIdx)
     return symIdx;
 }
 
+static const int MaxExtensions = 16;
+
 quint32 Renderer::getOrEmitVtable(int vtableIdx)
 {
     if (d_vtableOffsets.contains(vtableIdx))
@@ -104,12 +106,46 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
     Vm::Vtable* vt = d_code.getVtable(vtableIdx);
     Q_ASSERT(vt);
 
+    // Collect ancestor vtable indices (self at index 0, parent at 1, etc.)
+    QList<int> ancestors;
+    {
+        Vm::Vtable* cur = vt;
+        while (cur) {
+            int idx = -1;
+            for (int i = 0; i < d_code.vtableCount(); i++) {
+                if (d_code.getVtable(i) == cur) { idx = i; break; }
+            }
+            if (idx >= 0) {
+                if (idx != vtableIdx)
+                    getOrEmitVtable(idx);
+                ancestors.append(idx);
+            }
+            cur = cur->parent;
+        }
+    }
+
     quint32 curSize = d_elf.sectionSize(d_sections.data);
     quint32 pad = (4 - (curSize & 3)) & 3;
     if (pad > 0) {
         char zeros[4] = {0};
         d_elf.appendToSection(d_sections.data, zeros, pad);
     }
+
+    // Emit extension level array (MaxExtensions entries at negative offsets).
+    int extlev = ancestors.size() - 1;
+    for (int k = MaxExtensions - 1; k >= 0; k--) {
+        quint32 entryPos = d_elf.sectionSize(d_sections.data);
+        quint32 zero = 0;
+        d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
+        if (k <= extlev) {
+            int ancestorIdx = ancestors[extlev - k];
+            quint32 ancestorOff = d_vtableOffsets.value(ancestorIdx, 0);
+            // RV32 uses RELA relocations (explicit addend)
+            d_fixups.recordDataRef(entryPos, d_dataSymIdx, ancestorOff);
+        }
+    }
+
+    // vtableOff points to methods start (after the extension level array)
     quint32 vtableOff = d_elf.sectionSize(d_sections.data);
 
     for (size_t i = 0; i < vt->methods.size(); i++) {
@@ -3665,9 +3701,48 @@ int Renderer::emitOp(Procedure& proc, int pc)
     }
 
     case LL_isinst: {
-        qWarning() << "Rv32Renderer: isinst type check not fully implemented (always returns 1 if non-null)";
-        popReg(T0);
-        em.snez(T0, T0);
+        // Runtime type check using OP2-style extension level array.
+        // val = vtable index of the target type.
+        // O(1): load ancestor pointer from [vtable - (extlev+1)*4], compare with target.
+        Vm::Vtable* refVt = d_code.getVtable(val);
+
+        // Compute target type's extension level
+        int extlev = 0;
+        {
+            Vm::Vtable* cur = refVt;
+            while (cur->parent) { extlev++; cur = cur->parent; }
+        }
+
+        popReg(T0); // T0 = object pointer
+
+        // if obj == NULL, result is 0
+        Label nullLabel, matchLabel, doneLabel;
+        em.beq(T0, Zero, nullLabel);
+
+        // T1 = object's vtable pointer (loaded from [obj+0])
+        em.lw(T1, T0, 0);
+
+        // Load ancestor pointer from [T1 - (extlev+1)*4]
+        qint32 ancestorOff = -(qint32)(extlev + 1) * 4;
+        em.lw(T1, T1, ancestorOff);
+
+        // T2 = target vtable address
+        quint32 refVtOff = getOrEmitVtable(val);
+        loadAddr(T2, d_dataSymIdx, refVtOff);
+
+        // Compare
+        em.beq(T1, T2, matchLabel);
+
+        // No match: result = 0
+        em.bind(nullLabel);
+        em.addi(T0, Zero, 0);
+        em.j(doneLabel);
+
+        // Match: result = 1
+        em.bind(matchLabel);
+        em.addi(T0, Zero, 1);
+
+        em.bind(doneLabel);
         pushReg(T0);
         return 1;
     }
@@ -3744,6 +3819,36 @@ bool Renderer::renderProcedure(Procedure& proc, int procIdx)
     scanBranchTargets(proc);
 
     emitPrologue(d_localsSize);
+
+    // Initialize local object variables (vtable pointers + template data)
+    for (size_t i = 0; i < proc.locals.size(); i++) {
+        const Vm::Template& tmpl = proc.locals[i].second;
+        if (tmpl.type && tmpl.type->objectInit && !tmpl.mem.empty()) {
+            quint32 localOff = proc.locals[i].first;
+            quint32 tmplSize = tmpl.mem.size();
+            // Emit template into .rodata
+            quint32 curSize = d_elf.sectionSize(d_sections.rodata);
+            quint32 pad = (4 - (curSize & 3)) & 3;
+            if (pad > 0) {
+                char zeros[4] = {0};
+                d_elf.appendToSection(d_sections.rodata, zeros, pad);
+            }
+            quint32 tmplOff = d_elf.sectionSize(d_sections.rodata);
+            d_elf.appendToSection(d_sections.rodata, tmpl.mem.data(), tmplSize);
+            // T0 = local address
+            loadLocalAddr(T0, localOff);
+            // T1 = template source
+            loadAddr(T1, d_rodataSymIdx, tmplOff);
+            // Word-by-word copy
+            quint32 aligned = (tmplSize + 3) & ~3;
+            for (quint32 j = 0; j < aligned; j += 4) {
+                d_emitter.lw(T4, T1, (qint32)j);
+                d_emitter.sw(T4, T0, (qint32)j);
+            }
+            // Fix vtable pointers
+            emitVtableFixups(T0, tmpl);
+        }
+    }
 
     int pc = 0;
     while (pc < (int)proc.ops.size()) {

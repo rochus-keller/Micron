@@ -151,7 +151,6 @@ MODULE TextFrames [LEVEL=4]; (*JG 8.10.90 / NW 10.5.2013 / 11.2.2017*)
     Validate(F.text, @F.org);
     botY := F.Y + F.bot + dsr;
     Texts.OpenReader(@R, F.text, F.org); Texts.Read(@R, @nextCh);
-
     L := F.trailer; curY := F.Y + F.H - F.top - asr;
     WHILE ~L.eot & (curY >= botY) DO
       NEW(l);
@@ -268,7 +267,7 @@ MODULE TextFrames [LEVEL=4]; (*JG 8.10.90 / NW 10.5.2013 / 11.2.2017*)
     Texts.OpenReader(@R, F.text, loc.org); Texts.Read(@R, @nextCh);
     REPEAT
       WHILE (pos # lim) & (nextCh > " ") DO (*scan string*)
-        Fonts.GetPat(R.fnt, nextCh, @dx, @x, @y, @w, @h, @patadr);
+        Fonts.GetPat(R.fnt, nextCh, @dx, @u, @v, @w, @h, @patadr);
         INC(pos); ox := ox + dx; Texts.Read(@R, @nextCh)
       END;
       ex := ox;
@@ -827,8 +826,7 @@ MODULE TextFrames [LEVEL=4]; (*JG 8.10.90 / NW 10.5.2013 / 11.2.2017*)
     VAR T: Texts.Text;
   BEGIN NEW(T); T.notify := NotifyDisplay;  Texts.Open(T, "");
     Texts.WriteString(@W, name); Texts.WriteString(@W, " | ");  Texts.WriteString(@W, commands);
-    Texts.Append(T, W.buf);
-    RETURN T
+    Texts.Append(T, W.buf); RETURN T
   END Menu;
 
   PROCEDURE Text* (CONST name: POINTER TO ARRAY OF CHAR): Texts.Text;

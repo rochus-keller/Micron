@@ -120,8 +120,11 @@ module PAL
       evtData := BAND(evt, 0FFFFFFH)
       
       if evtType = Screen.EvtKeyChar then
-        // printable character
-        if (evtData > 0) and (evtData < 128) then
+        if ctrlDown then
+          if (evtData >= 61H) and (evtData <= 7AH) then kbdEnqueue(CHR(evtData - 60H))
+          elsif (evtData >= 41H) and (evtData <= 5AH) then kbdEnqueue(CHR(evtData - 40H))
+          end
+        elsif (evtData >= 20H) and (evtData < 7FH) then
           kbdEnqueue(CHR(evtData))
         end
       elsif evtType = Screen.EvtKeyDown then

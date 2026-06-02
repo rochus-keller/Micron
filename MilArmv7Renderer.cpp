@@ -94,6 +94,8 @@ quint32 Renderer::getOrCreateExtSymbol(int procIdx)
     return symIdx;
 }
 
+static const int MaxExtensions = 16;
+
 quint32 Renderer::getOrEmitVtable(int vtableIdx)
 {
     if (d_vtableOffsets.contains(vtableIdx))
@@ -102,6 +104,24 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
     Vm::Vtable* vt = d_code.getVtable(vtableIdx);
     Q_ASSERT(vt);
 
+    // Collect ancestor vtable indices (self at index 0, parent at 1, etc.)
+    QList<int> ancestors;
+    {
+        Vm::Vtable* cur = vt;
+        while (cur) {
+            int idx = -1;
+            for (int i = 0; i < d_code.vtableCount(); i++) {
+                if (d_code.getVtable(i) == cur) { idx = i; break; }
+            }
+            if (idx >= 0) {
+                if (idx != vtableIdx)
+                    getOrEmitVtable(idx);
+                ancestors.append(idx);
+            }
+            cur = cur->parent;
+        }
+    }
+
     // Align to 4 bytes
     quint32 curSize = d_elf.sectionSize(d_sections.data);
     quint32 pad = (4 - (curSize & 3)) & 3;
@@ -109,6 +129,22 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
         char zeros[4] = {0};
         d_elf.appendToSection(d_sections.data, zeros, pad);
     }
+
+    // Emit extension level array (MaxExtensions entries at negative offsets).
+    int extlev = ancestors.size() - 1;
+    for (int k = MaxExtensions - 1; k >= 0; k--) {
+        quint32 entryPos = d_elf.sectionSize(d_sections.data);
+        quint32 zero = 0;
+        d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
+        if (k <= extlev) {
+            int ancestorIdx = ancestors[extlev - k];
+            quint32 ancestorOff = d_vtableOffsets.value(ancestorIdx, 0);
+            d_fixups.recordDataRef(entryPos, d_dataSymIdx);
+            d_elf.patchWord(d_sections.data, entryPos, ancestorOff);
+        }
+    }
+
+    // vtableOff points to methods start (after the extension level array)
     quint32 vtableOff = d_elf.sectionSize(d_sections.data);
 
     // Emit method pointers (zeros with relocations)
@@ -681,6 +717,43 @@ bool Renderer::renderProcedure(Procedure& proc, int procIdx)
     scanBranchTargets(proc);
 
     emitPrologue(d_localsSize);
+
+    // Initialize local object variables (vtable pointers + template data)
+    {
+        Emitter& em = d_emitter;
+        FixupTracker& fix = d_fixups;
+        for (size_t i = 0; i < proc.locals.size(); i++) {
+            const Vm::Template& tmpl = proc.locals[i].second;
+            if (tmpl.type && tmpl.type->objectInit && !tmpl.mem.empty()) {
+                quint32 localOff = proc.locals[i].first;
+                quint32 tmplSize = tmpl.mem.size();
+                // Emit template into .rodata
+                quint32 curSize = d_elf.sectionSize(d_sections.rodata);
+                quint32 pad = (4 - (curSize & 3)) & 3;
+                if (pad > 0) {
+                    char zeros[4] = {0};
+                    d_elf.appendToSection(d_sections.rodata, zeros, pad);
+                }
+                quint32 tmplOff = d_elf.sectionSize(d_sections.rodata);
+                d_elf.appendToSection(d_sections.rodata, tmpl.mem.data(), tmplSize);
+                // R0 = local address
+                loadLocalAddr(R0, localOff);
+                // R1 = template source
+                quint32 movwOff = em.currentPosition();
+                em.movw_(AL, R1, tmplOff & 0xFFFF);
+                em.movt_(AL, R1, (tmplOff >> 16) & 0xFFFF);
+                fix.recordExternalAddr(movwOff, d_rodataSymIdx);
+                // Word-by-word copy
+                quint32 aligned = (tmplSize + 3) & ~3;
+                for (quint32 j = 0; j < aligned; j += 4) {
+                    em.ldr_(AL, R2, MemOp(R1, j));
+                    em.str_(AL, R2, MemOp(R0, j));
+                }
+                // Fix vtable pointers
+                emitVtableFixups(R0, tmpl);
+            }
+        }
+    }
 
     int pc = 0;
     while (pc < (int)proc.ops.size()) {
@@ -3324,14 +3397,53 @@ int Renderer::emitOp(Procedure& proc, int pc)
     }
 
     case LL_isinst: {
-        // Pop object pointer, check if obj's vtable type matches ref type.
-        // For now: if obj != NULL, return 1 (assume type matches).
-        // Full implementation would need Type::isA with runtime type info.
-        qWarning() << "Armv7Renderer: isinst type check not fully implemented (always returns 1 if non-null)";
-        popReg(R0);
+        // Runtime type check using OP2-style extension level array.
+        // val = vtable index of the target type.
+        // O(1): load ancestor pointer from [vtable - (extlev+1)*4], compare with target.
+        Vm::Vtable* refVt = d_code.getVtable(val);
+
+        // Compute target type's extension level
+        int extlev = 0;
+        {
+            Vm::Vtable* cur = refVt;
+            while (cur->parent) { extlev++; cur = cur->parent; }
+        }
+
+        popReg(R0); // R0 = object pointer
+
+        // if obj == NULL, result is 0
         em.cmp(R0, Operand2((quint32)0));
-        em.mov_(AL, false, R0, Operand2((quint32)0));  // R0 = 0 (default: false)
-        em.mov_(NE, false, R0, Operand2((quint32)1));  // R0 = 1 if obj != NULL
+        Arm::Label nullLabel, matchLabel, doneLabel;
+        em.b_(EQ, nullLabel);
+
+        // R1 = object's vtable pointer (loaded from [obj+0])
+        em.ldr_(AL, R1, MemOp(R0, 0));
+
+        // Load ancestor pointer from [R1 - (extlev+1)*4]
+        qint32 ancestorOff = -(qint32)(extlev + 1) * 4;
+        em.ldr_(AL, R1, MemOp(R1, ancestorOff));
+
+        // R2 = target vtable address
+        quint32 refVtOff = getOrEmitVtable(val);
+        quint32 movwOff = em.currentPosition();
+        em.movw_(AL, R2, refVtOff & 0xFFFF);
+        em.movt_(AL, R2, (refVtOff >> 16) & 0xFFFF);
+        fix.recordExternalAddr(movwOff, d_dataSymIdx);
+
+        // Compare
+        em.cmp(R1, Operand2(R2));
+        em.b_(EQ, matchLabel);
+
+        // No match: result = 0
+        em.bind(nullLabel);
+        em.mov_(AL, false, R0, Operand2((quint32)0));
+        em.b_(AL, doneLabel);
+
+        // Match: result = 1
+        em.bind(matchLabel);
+        em.mov_(AL, false, R0, Operand2((quint32)1));
+
+        em.bind(doneLabel);
         pushReg(R0);
         return 1;
     }
