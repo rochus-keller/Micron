@@ -190,14 +190,18 @@ namespace Rv32
         QMap<int,quint32> d_extProcSymbols;
 
         QMap<int,quint32> d_vtableOffsets;
+        QMap<int,quint32> d_vtableSymbols; // vtableIdx -> canonical ELF symbol index
 
         QMap<int,quint32> d_templateOffsets;
+
+        Declaration* d_currentModule;
 
         quint32 getOrCreateExtSymbol(int procIdx);
 
         quint32 emitArgAlignment(Declaration* decl);
 
         quint32 getOrEmitVtable(int vtableIdx);
+        quint32 getOrCreateVtableSymbol(int vtableIdx);
         void emitVtableFixupAt(Rv32::Register destReg, quint32 offset, Type* t, const char* memData, quint32 memSize);
         void emitVtableFixups(Rv32::Register destReg, const Vm::Template& tmpl);
         void initDataVtable(Type* t, quint32 baseOff);

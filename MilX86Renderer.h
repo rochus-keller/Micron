@@ -116,6 +116,7 @@ namespace X86
         void registerExternals();
         quint32 getOrCreateExtSymbol(int procIdx);
         quint32 getOrEmitVtable(int vtableIdx);
+        quint32 getOrCreateVtableSymbol(int vtableIdx);
         void emitVtableFixupAt(X86::Register destReg, quint32 offset, Type* t,
                                const char* memData, quint32 memSize);
         void emitVtableFixups(X86::Register destReg, const Vm::Template& tmpl);
@@ -150,8 +151,10 @@ namespace X86
         QMap<int,quint32> d_doubleOffsets;
         QMap<int,quint32> d_extProcSymbols;
         QMap<int,quint32> d_vtableOffsets;
+        QMap<int,quint32> d_vtableSymbols; // vtableIdx -> canonical ELF symbol index
         QMap<int,quint32> d_templateOffsets;
         QMap<Type*,int> d_typeToVtableIdx;
+        Declaration* d_currentModule;
 
         QMap<int,X86::Label*> d_branchLabels;
         QList<X86::Label*> d_allLabels;

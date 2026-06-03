@@ -162,14 +162,18 @@ namespace Arm
         QMap<int,quint32> d_extProcSymbols; // proc index -> ELF symbol index
 
         QMap<int,quint32> d_vtableOffsets; //  vtable index -> .rodata byte offset
+        QMap<int,quint32> d_vtableSymbols; // vtableIdx -> canonical ELF symbol index
 
         QMap<int,quint32> d_templateOffsets; // template index -> .rodata byte offset
+
+        Declaration* d_currentModule;
 
         quint32 getOrCreateExtSymbol(int procIdx);
 
         quint32 emitArgAlignment(Declaration* decl);
 
         quint32 getOrEmitVtable(int vtableIdx);
+        quint32 getOrCreateVtableSymbol(int vtableIdx);
         void emitVtableFixupAt(Arm::Register destReg, quint32 offset, Type* t, const char* memData, quint32 memSize);
         void emitVtableFixups(Arm::Register destReg, const Vm::Template& tmpl);
         void initDataVtable(Type* t, quint32 baseOff);

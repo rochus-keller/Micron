@@ -41,7 +41,7 @@ static const int FP_TO_ARGS = 8;
 
 Renderer::Renderer(AstModel* mdl)
     : d_mdl(mdl), d_code(mdl, 4, 4), d_hasHwDiv(true), d_emitDwarf(false), d_useAapcs(false),
-      d_dwarf(0), d_localsSize(0), d_argsSize(0), d_returnSize(0), d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0), d_globalsSymIdx(0), d_elf(ElfWriter::ArchARM)
+      d_dwarf(0), d_localsSize(0), d_argsSize(0), d_returnSize(0), d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0), d_globalsSymIdx(0), d_elf(ElfWriter::ArchARM), d_currentModule(0)
 {
     d_code.setReverseArguments(true);
     memset(&d_sections, 0, sizeof(d_sections));
@@ -105,20 +105,20 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
     Q_ASSERT(vt);
 
     // Collect ancestor vtable indices (self at index 0, parent at 1, etc.)
+    // Walk the Type hierarchy instead of Vtable.parent because parent links
+    // are NULL when the base type is from an imported module.
     QList<int> ancestors;
     {
-        Vm::Vtable* cur = vt;
-        while (cur) {
-            int idx = -1;
-            for (int i = 0; i < d_code.vtableCount(); i++) {
-                if (d_code.getVtable(i) == cur) { idx = i; break; }
-            }
+        Type* curType = vt->type;
+        while (curType) {
+            int idx = d_code.findVtableIdx(curType);
             if (idx >= 0) {
                 if (idx != vtableIdx)
                     getOrEmitVtable(idx);
                 ancestors.append(idx);
             }
-            cur = cur->parent;
+            Type* baseType = curType->getType();
+            curType = baseType ? baseType->deref() : nullptr;
         }
     }
 
@@ -130,6 +130,10 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
         d_elf.appendToSection(d_sections.data, zeros, pad);
     }
 
+    // Pre-compute vtableOff so the self entry can reference it
+    quint32 vtableOff = d_elf.sectionSize(d_sections.data) + MaxExtensions * 4;
+    d_vtableOffsets[vtableIdx] = vtableOff;
+
     // Emit extension level array (MaxExtensions entries at negative offsets).
     int extlev = ancestors.size() - 1;
     for (int k = MaxExtensions - 1; k >= 0; k--) {
@@ -138,14 +142,14 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
         d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
         if (k <= extlev) {
             int ancestorIdx = ancestors[extlev - k];
-            quint32 ancestorOff = d_vtableOffsets.value(ancestorIdx, 0);
-            d_fixups.recordDataRef(entryPos, d_dataSymIdx);
-            d_elf.patchWord(d_sections.data, entryPos, ancestorOff);
+            // Use canonical global vtable symbol so cross-module isinst works
+            quint32 vtSym = getOrCreateVtableSymbol(ancestorIdx);
+            d_fixups.recordDataRef(entryPos, vtSym);
+            d_elf.patchWord(d_sections.data, entryPos, 0);
         }
     }
 
-    // vtableOff points to methods start (after the extension level array)
-    quint32 vtableOff = d_elf.sectionSize(d_sections.data);
+    Q_ASSERT(d_elf.sectionSize(d_sections.data) == vtableOff);
 
     // Emit method pointers (zeros with relocations)
     for (size_t i = 0; i < vt->methods.size(); i++) {
@@ -169,6 +173,28 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
     }
     d_vtableOffsets[vtableIdx] = vtableOff;
     return vtableOff;
+}
+
+quint32 Renderer::getOrCreateVtableSymbol(int vtableIdx)
+{
+    if (d_vtableSymbols.contains(vtableIdx))
+        return d_vtableSymbols[vtableIdx];
+
+    Vm::Vtable* vt = d_code.getVtable(vtableIdx);
+    Q_ASSERT(vt && vt->type && vt->type->decl);
+
+    QByteArray symName = elfSymName(vt->type->decl->toPath()) + "$vtab$";
+    Declaration* declaringModule = vt->type->decl->getModule();
+
+    quint32 symIdx;
+    if (declaringModule == d_currentModule) {
+        quint32 vtOff = d_vtableOffsets.value(vtableIdx, 0);
+        symIdx = d_elf.addSymbol(symName, d_sections.data, vtOff, 0, STB_GLOBAL, STT_OBJECT);
+    } else {
+        symIdx = d_elf.addSymbol(symName, 0, 0, 0, STB_GLOBAL, STT_OBJECT);
+    }
+    d_vtableSymbols[vtableIdx] = symIdx;
+    return symIdx;
 }
 
 void Renderer::emitVtableFixupAt(Register destReg, quint32 offset, Type* t,
@@ -424,6 +450,7 @@ Renderer::~Renderer()
 bool Renderer::renderModule(Declaration* module)
 {
     Q_ASSERT(module && module->kind == Declaration::Module);
+    d_currentModule = module;
 
     // Lower MIL AST to VmCode
     if (!d_code.compile(module))
@@ -669,6 +696,16 @@ bool Renderer::renderModule(Declaration* module)
     // via emitGlobalVarVtableInits() emitted in the $begin$ guard block above.
 
     d_elf.appendToSection(d_sections.text, d_emitter.machineCode());
+
+    // Ensure every type declared in this module has its vtable emitted and its
+    // canonical GLOBAL symbol defined, even if no code in this module references it.
+    for (int vi = 0; vi < d_code.vtableCount(); vi++) {
+        Vm::Vtable* vt = d_code.getVtable(vi);
+        if (vt && vt->type && vt->type->decl && vt->type->decl->getModule() == d_currentModule) {
+            getOrEmitVtable(vi);
+            getOrCreateVtableSymbol(vi);
+        }
+    }
 
     d_fixups.generateRelocations(d_elf, d_sections.relText, d_sections.relData);
 
@@ -3402,11 +3439,16 @@ int Renderer::emitOp(Procedure& proc, int pc)
         // O(1): load ancestor pointer from [vtable - (extlev+1)*4], compare with target.
         Vm::Vtable* refVt = d_code.getVtable(val);
 
-        // Compute target type's extension level
+        // Compute target type's extension level via the Type hierarchy
+        // (Vtable.parent may be NULL for imported base types)
         int extlev = 0;
         {
-            Vm::Vtable* cur = refVt;
-            while (cur->parent) { extlev++; cur = cur->parent; }
+            Type* curType = refVt->type;
+            while (curType) {
+                Type* baseType = curType->getType();
+                curType = baseType ? baseType->deref() : nullptr;
+                if (curType) extlev++;
+            }
         }
 
         popReg(R0); // R0 = object pointer
@@ -3423,12 +3465,13 @@ int Renderer::emitOp(Procedure& proc, int pc)
         qint32 ancestorOff = -(qint32)(extlev + 1) * 4;
         em.ldr_(AL, R1, MemOp(R1, ancestorOff));
 
-        // R2 = target vtable address
-        quint32 refVtOff = getOrEmitVtable(val);
+        // R2 = target vtable's canonical global symbol
+        getOrEmitVtable(val); // ensure vtable is emitted
+        quint32 vtSym = getOrCreateVtableSymbol(val);
         quint32 movwOff = em.currentPosition();
-        em.movw_(AL, R2, refVtOff & 0xFFFF);
-        em.movt_(AL, R2, (refVtOff >> 16) & 0xFFFF);
-        fix.recordExternalAddr(movwOff, d_dataSymIdx);
+        em.movw_(AL, R2, 0);
+        em.movt_(AL, R2, 0);
+        fix.recordExternalAddr(movwOff, vtSym);
 
         // Compare
         em.cmp(R1, Operand2(R2));
