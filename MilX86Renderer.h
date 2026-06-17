@@ -113,7 +113,6 @@ namespace X86
         quint32 emitArgAlignment(Declaration* decl);
 
         bool setError(const QString& msg);
-        void registerExternals();
         quint32 getOrCreateExtSymbol(int procIdx);
         quint32 getOrEmitVtable(int vtableIdx);
         quint32 getOrCreateVtableSymbol(int vtableIdx);

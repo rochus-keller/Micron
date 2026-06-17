@@ -36,6 +36,10 @@
 #include "MilInterpreter.h"
 #include "MilVmOakwood.h"
 #include "MilRlCode.h"
+#ifdef _MIC_HAVE_LUAJIT_
+#include "MilLjBcGen.h"
+#include <LjTools/Engine2.h>
+#endif
 using namespace Mic;
 
 struct HitTest
@@ -869,6 +873,165 @@ bool Project2::interpret(const QString& outDir)
     Args_setArgcArgv( argv.size(), argv.data() );
 
     return r.run();
+}
+
+bool Project2::interpret2()
+{
+#ifdef _MIC_HAVE_LUAJIT_
+    loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
+
+    Mil::Vm::Code llCode(&loader.getModel(), sizeof(void*), 8);
+    llCode.setGenerateLines(true);
+
+    llCode.registerExternals();
+
+    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    {
+        if( !llCode.compile(module) )
+        {
+            qCritical() << "error compiling LL code for module" << module->name;
+            return false;
+        }
+    }
+
+    Mil::Rl::Code mrlCode(llCode, 8);
+    if (!mrlCode.compile())
+    {
+        qCritical() << "error compiling MRL code";
+        return false;
+    }
+
+    for (int i = 0; i < mrlCode.procCount(); i++)
+        mrlCode.compactRegisters(i);
+
+#if 0
+    if (dumpMrl)
+    {
+        QTextStream out(stdout);
+        mrlCode.dumpAll(out);
+    }
+#endif
+
+    const quint32 varMemSize = loader.getModel().getVarMemSize();
+    Mil::LjBcGen gen(llCode, mrlCode, varMemSize);
+
+    // Compute initial global variable data (including vtable indices for inline Objects)
+    if( varMemSize > 0 )
+    {
+        QByteArray initData(varMemSize, '\0');
+        foreach( Mil::Declaration* module, loader.getModel().getModules() )
+        {
+            if( module->generic )
+                continue;
+            Mil::DeclList vars = module->getVars();
+            foreach( Mil::Declaration* d, vars )
+            {
+                Mil::Type* t = d->getType()->deref();
+                if( t->objectInit )
+                    llCode.initMemory(initData.data() + d->off, t, true);
+            }
+        }
+        // Replace C++ Vtable* pointers with small integer vtable indices
+        for( int v = 0; v < llCode.vtableCount(); v++ )
+        {
+            Mil::Vm::Vtable* vtPtr = llCode.getVtable(v);
+            // Scan initData for occurrences of this pointer
+            for( int off = 0; off + (int)sizeof(void*) <= (int)varMemSize; off += sizeof(void*) )
+            {
+                void* stored = 0;
+                memcpy(&stored, initData.data() + off, sizeof(void*));
+                if( stored == vtPtr )
+                {
+                    // Replace with vtable index as int32 (zero-extend to pointer size)
+                    memset(initData.data() + off, 0, sizeof(void*));
+                    qint32 idx = v;
+                    memcpy(initData.data() + off, &idx, sizeof(idx));
+                }
+            }
+        }
+        gen.setGlobalVarInit(initData);
+    }
+
+    QByteArray bcData;
+    QBuffer buf(&bcData);
+    buf.open(QIODevice::WriteOnly);
+    if (!gen.generate(&buf))
+    {
+        qCritical() << "error generating LuaJIT bytecode:" << gen.errorMessage();
+        return false;
+    }
+    buf.close();
+
+    qDebug() << "#### generated LuaJIT bytecode:" << bcData.size() << "bytes,"
+             << mrlCode.procCount() << "procedures";
+
+#if 0
+    if (!outPath.isEmpty())
+    {
+        const QString bcFile = QDir(outPath).absoluteFilePath("output.ljbc");
+        QFile f(bcFile);
+        if (f.open(QIODevice::WriteOnly))
+        {
+            f.write(bcData);
+            f.close();
+            qDebug() << "  wrote" << bcFile;
+        }
+    }
+#endif
+
+        Lua::Engine2 lua;
+        lua.addLibrary(Lua::Engine2::PACKAGE);
+        lua.addLibrary(Lua::Engine2::TABLE);
+        lua.addLibrary(Lua::Engine2::STRING);
+        lua.addLibrary(Lua::Engine2::MATH);
+        lua.addLibrary(Lua::Engine2::IO);
+        lua.addLibrary(Lua::Engine2::BIT);
+        lua.addLibrary(Lua::Engine2::FFI);
+        lua.addLibrary(Lua::Engine2::JIT);
+        lua.addLibrary(Lua::Engine2::OS);
+        lua.setPrintToStdout(true);
+        //lua.setJit(false); // uncomment to disable JIT for debugging
+
+        // Load the runtime preamble
+        QByteArray preamble = Mil::LjBcGen::runtimePreamble();
+        if( !lua.addSourceLib(preamble, "micron_runtime") )
+        {
+            qCritical() << "error loading LuaJIT runtime preamble:" << lua.getLastError();
+            return false;
+        }
+
+        // Load extern FFI function setup code
+        QByteArray extSetup = gen.externSetupCode();
+        if( !extSetup.isEmpty() )
+        {
+            if( !lua.addSourceLib(extSetup, "micron_externs") )
+            {
+                qCritical() << "error loading extern setup:" << lua.getLastError();
+                return false;
+            }
+        }
+
+        // Load vtable and template setup code
+        QByteArray vtSetup = gen.vtableSetupCode();
+        if( !vtSetup.isEmpty() )
+        {
+            if( !lua.addSourceLib(vtSetup, "micron_vtables") )
+            {
+                qCritical() << "error loading vtable setup:" << lua.getLastError();
+                return false;
+            }
+        }
+
+        // Load the generated bytecode
+        if (!lua.addSourceLib(bcData, "@micron"))
+        {
+            qCritical() << "error loading generated bytecode:" << lua.getLastError();
+            return false;
+        }
+
+        qDebug() << "#### LuaJIT execution completed";
+#endif
+        return true;
 }
 
 bool Project2::generateMrl(const QString &outDir)

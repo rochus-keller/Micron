@@ -46,6 +46,7 @@
 #include <QProcess>
 #include <QTreeWidget>
 #include <stdarg.h>
+#include <QElapsedTimer>
 #include <GuiTools/AutoMenu.h>
 #include <GuiTools/CodeEditor.h>
 #include <GuiTools/AutoShortcut.h>
@@ -705,6 +706,9 @@ void Ide::createModsMenu()
     pop->addCommand( "Set Arguments...", this, SLOT(onSetArguments()) );
     pop->addSeparator();
     pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
+#ifdef _MIC_HAVE_LUAJIT_
+    pop->addCommand( "Run on LuaJIT", this, SLOT(onInterpret2()));
+#endif
     pop->addCommand( "Run natively", this, SLOT(onRun()), tr("CTRL+R"), false );
     addDebugMenu(pop);
     addTopCommands(pop);
@@ -799,6 +803,9 @@ void Ide::createMenuBar()
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
     pop->addSeparator();
     pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
+#ifdef _MIC_HAVE_LUAJIT_
+    pop->addCommand( "Run on LuaJIT", this, SLOT(onInterpret2()));
+#endif
     pop->addCommand( "Run natively", this, SLOT(onRun()), tr("CTRL+R"), false );
 
     pop = new Gui::AutoMenu( tr("Debug"), this );
@@ -867,7 +874,20 @@ void Ide::onInterpret()
     ENABLED_IF( !d_pro->getFiles().isEmpty() && d_status == Idle );
 
     logMessage("\nStarting application...\n\n",SysInfo,false);
+    QElapsedTimer t;
+    t.start();
     d_pro->interpret();
+    logMessage(QString("\nApplication ende after %1 [ms]...\n\n").arg(t.elapsed()),SysInfo,false);
+}
+
+void Ide::onInterpret2()
+{
+    ENABLED_IF( !d_pro->getFiles().isEmpty() && d_status == Idle );
+    logMessage("\nStarting application...\n\n",SysInfo,false);
+    QElapsedTimer t;
+    t.start();
+    d_pro->interpret2();
+    logMessage(QString("\nApplication ende after %1 [ms]...\n\n").arg(t.elapsed()),SysInfo,false);
 }
 
 void Ide::onExportLl()
@@ -1957,6 +1977,9 @@ void Ide::createModsMenu(Ide::Editor* edit)
     pop->addCommand( "Export C99...", this, SLOT(onExportC()) );
     pop->addSeparator();
     pop->addCommand( "Run on interpreter", this, SLOT(onInterpret()), tr("CTRL+SHIFT+R"), false);
+#ifdef _MIC_HAVE_LUAJIT_
+    pop->addCommand( "Run on LuaJIT", this, SLOT(onInterpret2()));
+#endif
     pop->addCommand( "Run natively", this, SLOT(onRun()), tr("CTRL+R"), false );
     addDebugMenu(pop);
     pop->addSeparator();
@@ -3140,7 +3163,7 @@ int main(int argc, char *argv[])
     a.setOrganizationName("Dr. Rochus Keller");
     a.setOrganizationDomain("www.rochus-keller.ch");
     a.setApplicationName("Micron IDE");
-    a.setApplicationVersion("0.4.39");
+    a.setApplicationVersion("0.4.40");
     a.setStyle("Fusion");    
     QFontDatabase::addApplicationFont(":/font/DejaVuSansMono.ttf"); // "DejaVu Sans Mono"
 

@@ -142,8 +142,6 @@ namespace Rv32
 
         bool setError(const QString& msg);
 
-        void registerExternals();
-
         // Emit an AUIPC+JALR call pair with relocation to symbolIdx
         void emitCall(quint32 symbolIdx);
 

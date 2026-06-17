@@ -110,6 +110,7 @@ namespace Mic
         void onParse();
         void onRun();
         void onInterpret();
+        void onInterpret2();
         void onAbort();
         void onCompile();
         void onCompile2();

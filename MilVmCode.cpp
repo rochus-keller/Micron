@@ -1578,12 +1578,13 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         quint32 calliReturnSize = 0;
         bool calliFpReturn = false;
         if (procType->getType()) {
-            calliReturnSize = stackAligned(procType->getType()->getByteSize(pointerWidth));
+            calliReturnSize = procType->getType()->getByteSize(pointerWidth);
+            if( calliReturnSize & 1 ) calliReturnSize++; // ensure even for fpReturn bit
             calliFpReturn = procType->getType()->isFloat();
         }
-        // Encode: lower 11 bits = argsSize, upper 11 bits = returnSize.
-        // Bit 0 of returnSize encodes fpReturn (safe because returnSize is always
-        // a multiple of 4, so bit 0 is otherwise always 0).
+        // Encode: lower 11 bits = argsSize, upper bits = returnSize|fpReturn.
+        // Bit 0 of returnSize encodes fpReturn (safe because calliReturnSize
+        // is forced to even above).
         quint32 encodedRetSize = calliReturnSize | (calliFpReturn ? 1 : 0);
         emitOp(proc, LL_calli, (encodedRetSize << 11) | (calliArgsSize & 0x7FF));
         break;
@@ -1604,10 +1605,11 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         quint32 callmiReturnSize = 0;
         bool callmiFpReturn = false;
         if (methType->getType()) {
-            callmiReturnSize = stackAligned(methType->getType()->getByteSize(pointerWidth));
+            callmiReturnSize = methType->getType()->getByteSize(pointerWidth);
+            if( callmiReturnSize & 1 ) callmiReturnSize++; // ensure even for fpReturn bit
             callmiFpReturn = methType->getType()->isFloat();
         }
-        // Encode: lower 11 bits = argsSize, upper 11 bits = returnSize.
+        // Encode: lower 11 bits = argsSize, upper bits = returnSize|fpReturn.
         // Bit 0 of returnSize encodes fpReturn (same convention as LL_calli).
         quint32 encodedMethRetSize = callmiReturnSize | (callmiFpReturn ? 1 : 0);
         emitOp(proc, LL_callmi, (encodedMethRetSize << 11) | (callmiArgsSize & 0x7FF));
@@ -1982,6 +1984,31 @@ bool Code::dumpAll(QTextStream& out)
         if( !module->generic )
             dumpModule(out, module);
     return true;
+}
+
+void Code::registerExternals()
+{
+    // Register all extern/foreign procedures from all modules so VmCode::compile()
+    // can resolve cross-module calls. These become external symbol references, resolved at link time.
+
+    quint32 id = 0;
+    foreach (Declaration* mod, mdl->getModules()) {
+        const char* modName = mod->name.constData();
+        for (Declaration* sub = mod->subs; sub; sub = sub->next) {
+            if (sub->kind == Declaration::Procedure && (sub->extern_ || sub->foreign_)) {
+                addExternal(modName, sub->name.constData(), id++);
+            }
+            // Also handle type-bound procedures in structs/objects
+            if (sub->kind == Declaration::TypeDecl && sub->getType()) {
+                Type* t = sub->getType();
+                foreach (Declaration* msub, t->subs) {
+                    if (msub->kind == Declaration::Procedure && (msub->extern_ || msub->foreign_)) {
+                        addExternal(modName, msub->name.constData(), id++);
+                    }
+                }
+            }
+        }
+    }
 }
 
 bool Code::initMemory(char* mem, Type* t, bool doPointerInit )

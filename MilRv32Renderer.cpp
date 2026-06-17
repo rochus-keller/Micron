@@ -54,28 +54,7 @@ Renderer::Renderer(AstModel* mdl)
 {
     d_code.setReverseArguments(true);
     memset(&d_sections, 0, sizeof(d_sections));
-    registerExternals();
-}
-
-void Renderer::registerExternals()
-{
-    quint32 id = 0;
-    foreach (Declaration* mod, d_mdl->getModules()) {
-        const char* modName = mod->name.constData();
-        for (Declaration* sub = mod->subs; sub; sub = sub->next) {
-            if (sub->kind == Declaration::Procedure && (sub->extern_ || sub->foreign_)) {
-                d_code.addExternal(modName, sub->name.constData(), id++);
-            }
-            if (sub->kind == Declaration::TypeDecl && sub->getType()) {
-                Type* t = sub->getType();
-                foreach (Declaration* msub, t->subs) {
-                    if (msub->kind == Declaration::Procedure && (msub->extern_ || msub->foreign_)) {
-                        d_code.addExternal(modName, msub->name.constData(), id++);
-                    }
-                }
-            }
-        }
-    }
+    d_code.registerExternals();
 }
 
 quint32 Renderer::getOrCreateExtSymbol(int procIdx)

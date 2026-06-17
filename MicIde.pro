@@ -47,6 +47,31 @@ HAVE_SCREEN {
     SOURCES += oakwood/ScreenQt.cpp
 }
 
+HAVE_LUAJIT {
+    DEFINES += _MIC_HAVE_LUAJIT_
+    INCLUDEPATH += ../LuaJIT-2.1/src
+    HEADERS += \
+        MilLjBcGen.h \
+        ../LjTools/LuaJitComposer2.h \
+        ../LjTools/LuaJitBytecode2.h \
+        ../LjTools/LuaJitHelper.h \
+        ../LjTools/Engine2.h
+    SOURCES += \
+        MilLjBcGen.cpp \
+        ../LjTools/LuaJitComposer2.cpp \
+        ../LjTools/LuaJitBytecode2.cpp \
+        ../LjTools/LuaJitHelper.cpp \
+        ../LjTools/Engine2.cpp
+linux | macx {
+    LIBS += $$absolute_path(../LuaJIT-2.1/src/libluajit.a, $$_PRO_FILE_PWD_)
+    QMAKE_LFLAGS += -rdynamic -ldl
+    #rdynamic is required so that the LjLibFfi functions are visible to LuaJIT FFI
+}
+win32 {
+    LIBS += -L../LuaJIT-2.1/src -llua51
+}
+}
+
 include( MicUtils.pri )
 include( MicParser.pri )
 include( MilParser2.pri )

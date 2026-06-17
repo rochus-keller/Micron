@@ -179,6 +179,8 @@ public:
 
     bool initMemory(char* mem, Type* t, bool doPointerInit );
 
+    void registerExternals();
+
     bool dumpAll(QTextStream& out);
     bool dumpModule(QTextStream& out, Declaration* module);
     bool dumpProc(QTextStream& out, Declaration* proc);
