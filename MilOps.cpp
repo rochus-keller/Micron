@@ -35,7 +35,7 @@ const char* s_opName[] =
     "ldarga", "ldarga_s",
     "ldc_i4", "ldc_i8", "ldc_i4_s", "ldc_r4", "ldc_r8",
     "ldc_i4_0", "ldc_i4_1", "ldc_i4_2", "ldc_i4_3", "ldc_i4_4", "ldc_i4_5",
-    "ldc_i4_6", "ldc_i4_7", "ldc_i4_8", "ldc_i4_m1", "ldobj",
+    "ldc_i4_6", "ldc_i4_7", "ldc_i4_8", "ldc_i4_m1", "ldc_obj",
     "ldelem", "ldelema", "ldelem_i1", "ldelem_i2",
     "ldelem_i4", "ldelem_i8", "ldelem_u1", "ldelem_u2",
     "ldelem_u4", "ldelem_u8", "ldelem_r4", "ldelem_r8", "ldelem_ip", "ldelem_ipp",

@@ -498,6 +498,36 @@ void Lexer::parseComment( const QByteArray& str, int& pos, int& level )
     }
 }
 
+QByteArrayList Lexer::isMilModule(const QString &sourcePath)
+{
+    Lexer lex;
+    lex.setStream(sourcePath);
+    lex.setIgnoreComments(true);
+    lex.setEnableExt(true);
+    Token t = lex.nextToken();
+    QByteArrayList res;
+    while( t.isValid() )
+    {
+        if( t.d_code == Tok_MODULE )
+        {
+            t = lex.nextToken();
+            if( t.d_code == Tok_LINE )
+            {
+                t = lex.nextToken();
+                if( t.d_code != Tok_unsigned )
+                    return QByteArrayList();
+                t = lex.nextToken();
+            }
+            if( t.d_type != Tok_ident )
+                return QByteArrayList();
+            else
+                res << t.d_val;
+        }
+        t = lex.nextToken();
+    }
+    return res;
+}
+
 static quint32 readUInt32(QIODevice* in)
 {
     const QByteArray buf = in->read(4);

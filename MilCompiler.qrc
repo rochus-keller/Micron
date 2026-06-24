@@ -1,5 +1,26 @@
 <RCC>
     <qresource prefix="/">
         <file>runtime/MIC+.mil</file>
+        <file>runtime/MIC+.h</file>
+        <file>runtime/MIC++.c</file>
+        <file>oakwood/Files.h</file>
+        <file>oakwood/Files+.c</file>
+        <file>oakwood/In.h</file>
+        <file>oakwood/In+.c</file>
+        <file>oakwood/Input.h</file>
+        <file>oakwood/Input+.c</file>
+        <file>oakwood/Math.h</file>
+        <file>oakwood/Math+.c</file>
+        <file>oakwood/MathL.h</file>
+        <file>oakwood/MathL+.c</file>
+        <file>oakwood/Out.h</file>
+        <file>oakwood/Out+.c</file>
+        <file>oakwood/Strings.h</file>
+        <file>oakwood/Strings+.c</file>
+        <file>oakwood/Args+.c</file>
+        <file>oakwood/Args.h</file>
+        <file>oakwood/Screen.h</file>
+        <file>oakwood/ScreenXcb.c</file>
+        <file>oakwood/ScreenSdl.c</file>
     </qresource>
 </RCC>

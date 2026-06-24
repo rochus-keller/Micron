@@ -234,6 +234,8 @@ static void renderComponents( QTextStream& out, const QVariant& data )
         StructuredLiteral m = data.value<StructuredLiteral>();
         for( int i = 0; i < m.size(); i++ )
         {
+            if( i != 0 )
+                out << " ";
             out << m[i].first << "=";
             renderComponents(out,m[i].second);
         }
@@ -439,6 +441,7 @@ void IlAsmRenderer::render(const ProcData& m)
             out << ws() << s_opName[op.op];
             foreach(qint64 i, op.arg.value<CaseLabelList>() )
                 out << " " << i;
+            out << " then";
             level++;
             out << endl;
             break;

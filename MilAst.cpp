@@ -104,6 +104,7 @@ AstModel::~AstModel()
 
 void AstModel::clear()
 {
+    importer.clear();
     foreach( Declaration* module, modules )
         delete module;
     modules.clear();
@@ -111,18 +112,26 @@ void AstModel::clear()
 
 Declaration*AstModel::findModuleByName(const QByteArray& name) const
 {
+    foreach( Declaration* module, importer )
+    {
+        if( module->name.constData() == name.constData() )
+            return module;
+    }
+
     // TODO: consider generic module instances with e.g. a deterministic suffix
     foreach( Declaration* module, modules )
     {
         if( module->name.constData() == name.constData() )
             return module;
     }
+
     return 0;
 }
 
 bool AstModel::addModule(Declaration* module)
 {
     Q_ASSERT(module && module->kind == Declaration::Module);
+    popImporter(module); // if the outer machinery forgot to call this
     if( findModuleByName(module->name) )
         return false;
     //else
@@ -231,6 +240,16 @@ AstModel::BitFieldUnit AstModel::collectBitFields(const DeclList& fields, int st
     else
         res.bytelen = 64;
     return res;
+}
+
+void AstModel::pushImporter(Declaration *module)
+{
+    importer.append(module);
+}
+
+void AstModel::popImporter(Declaration *module)
+{
+    importer.removeAll(module);
 }
 
 void AstModel::calcMemoryLayoutOf(Declaration* module, DeclList& done, quint8 pointerWidth, quint8 stackAlignment, quint8 firstParamOffset)
@@ -850,8 +869,12 @@ QList<Declaration*> Type::getMethodTable(bool recursive) const
 QList<Declaration*> Type::getFieldList(bool recursive) const
 {
     DeclList res;
-    if( recursive && getType() && getType()->kind == Type::Object )
-        res = getType()->getFieldList(recursive);
+    if( recursive )
+    {
+        Type* base = getBaseObject();
+        if( base )
+            res = base->getFieldList(recursive);
+    }
     foreach(Declaration* f, subs)
     {
         if( f->kind == Declaration::Field )

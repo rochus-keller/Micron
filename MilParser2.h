@@ -108,6 +108,7 @@ namespace Mil {
 		bool expect(int tt, bool pkw, const char* where);
         void error( const Token&, const QString& msg);
         void error( const RowCol&, const QString& msg );
+        void clear();
         Declaration* addDecl(const Token& id, Declaration::Kind, bool public_ = false);
         Declaration* addDecl(const QByteArray& name, const RowCol& pos, Declaration::Kind, bool public_ = false);
         Declaration* qualident2(const Quali& q, const RowCol& pos);

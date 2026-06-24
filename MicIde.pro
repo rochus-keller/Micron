@@ -39,7 +39,8 @@ HEADERS  += MicProject2.h \
     MicIde.h \
     ../GuiTools/CodeEditor.h \
     ../GuiTools/DocSelector.h \
-    ../GuiTools/DocTabWidget.h
+    ../GuiTools/DocTabWidget.h \
+    Version.h
 
 HAVE_SCREEN {
     DEFINES += _MIC_HAVE_SCREEN_
@@ -87,6 +88,6 @@ CONFIG(debug, debug|release) {
         -Wno-deprecated-declarations -Wno-sign-compare -Wno-parentheses -Wno-unused-parameter -Werror=return-type
 }
 
-RESOURCES += MicIde.qrc
+RESOURCES += MicIde.qrc MilCompiler.qrc StaticLibs.qrc
 
 

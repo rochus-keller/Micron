@@ -30,6 +30,7 @@
 #include "MilRv32Renderer.h"
 #include "MilX86Renderer.h"
 #include "MilElfLinker.h"
+#include "Version.h"
 #ifdef _MIC_HAVE_SCREEN_QT_
 #include <QApplication>
 #else
@@ -762,9 +763,13 @@ int main(int argc, char *argv[])
 #else
     QCoreApplication a(argc, argv);
 #endif
+    a.setOrganizationName("Dr. Rochus Keller");
+    a.setOrganizationDomain("www.rochus-keller.ch");
+    a.setApplicationName("micc");
+    a.setApplicationVersion(MICRON_VERSION);
 
     QCommandLineParser cp;
-    cp.setApplicationDescription("Micron compiler");
+    cp.setApplicationDescription(QString("Micron compiler, version %1").arg(MICRON_VERSION));
     cp.addHelpOption();
     cp.addVersionOption();
     cp.addPositionalArgument("main", "the main module of the application");
@@ -776,10 +781,8 @@ int main(int argc, char *argv[])
     cp.addOption(run);
     QCommandLineOption dump("d", "dump MIL code");
     cp.addOption(dump);
-    QCommandLineOption dump2("l", "dump low-level bytecode"); // interpreter or eigen
+    QCommandLineOption dump2("l", "dump low-level bytecode");
     cp.addOption(dump2);
-    QCommandLineOption eigen("e", "use Eigen backend");
-    cp.addOption(eigen);
     QCommandLineOption arch("a", "generate code for the given architecture", "arch");
     cp.addOption(arch);
     QCommandLineOption dbg("g", "generate debug information");
@@ -811,6 +814,7 @@ int main(int argc, char *argv[])
         qCritical() << "expecting exactly one source file";
         return -1;
     }
+
     const QStringList searchPaths = cp.values(sp);
     const QStringList outPaths = cp.values(op);
     if( outPaths.size() > 1 )
@@ -822,8 +826,8 @@ int main(int argc, char *argv[])
     if( !outPaths.isEmpty() )
         outPath = outPaths.first();
 
-    process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2),
-            cp.isSet(eigen) || cp.isSet(arch), cp.value(arch), cp.isSet(dbg), cp.isSet(cdeclRet), cp.isSet(aapcs), outPath,
+    process(args.first(), searchPaths, cp.isSet(run), cp.isSet(dump), cp.isSet(dump2), false,
+            cp.value(arch), cp.isSet(dbg), cp.isSet(cdeclRet), cp.isSet(aapcs), outPath,
             cp.values(libs), cp.values(linkLib), cp.values(linkObj), cp.isSet(esp32opt) );
 
     return 0;

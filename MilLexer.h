@@ -53,6 +53,7 @@ namespace Mil
         QString getSourcePath() const { return d_sourcePath; }
 
         static void parseComment( const QByteArray& str, int& pos, int& level );
+        static QByteArrayList isMilModule( const QString& sourcePath ); // returns module names or empty if no module or error
     protected:
         Token nextTokenImp();
         int skipWhiteSpace();

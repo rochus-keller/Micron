@@ -686,7 +686,7 @@ bool Project2::generateMil(const QString &outDir)
     // TODO: check if files can be created and written
     foreach( Mil::Declaration* module, loader.getModel().getModules() )
     {
-        if( module->generic ) // skip not fully instantiated modules
+        if( module->generic || module->name == "MIC$" ) // skip not fully instantiated modules
             continue;
         Mil::Declaration* sub = module->subs;
         while(sub)
@@ -699,14 +699,10 @@ bool Project2::generateMil(const QString &outDir)
             }
             sub = sub->next;
         }
-        module->nobody = !Mil::CeeGen::requiresBody(module);
-        if( !module->nobody )
-        {
-            QFile body( dir.absoluteFilePath(QString::fromLatin1(module->name) + ".mil"));
-            body.open(QFile::WriteOnly);
-            Mil::IlAsmRenderer r(&body, d_dbg);
-            Mil::AstSerializer::render(&r,module, d_dbg ? Mil::AstSerializer::RowsOnly : Mil::AstSerializer::None);
-        } // else TODO
+        QFile body( dir.absoluteFilePath(QString::fromLatin1(module->name) + ".mil"));
+        body.open(QFile::WriteOnly);
+        Mil::IlAsmRenderer r(&body, d_dbg);
+        Mil::AstSerializer::render(&r,module, d_dbg ? Mil::AstSerializer::RowsOnly : Mil::AstSerializer::None);
     }
     return true;
 }

@@ -391,6 +391,9 @@ namespace Mil
         };
         static BitFieldUnit collectBitFields(const DeclList& fields, int start, quint8 pointerWidth);
 
+        void pushImporter(Declaration* module);
+        void popImporter(Declaration* module);
+
     protected:
         void calcMemoryLayoutOf(Declaration* module, DeclList &done, quint8 pointerWidth,
                                 quint8 stackAlignment, quint8 firstParamOffset);
@@ -403,6 +406,7 @@ namespace Mil
         Declaration globals;
         Type* basicTypes[Type::MaxBasicType];
         quint32 varOff;
+        DeclList importer;
     };
 }
 

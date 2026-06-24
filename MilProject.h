@@ -36,16 +36,32 @@ namespace Mil
 
         void setFiles(const QStringList&);
         void collectFilesFrom( const QString& rootPath);
+        void setOakwood(bool on) { haveOakwood = on; }
         bool parse();
         void generateC();
         void interpret(bool dump = false);
         void dumpMil();
+
     protected:
         Declaration* loadModule( const Import& imp );
 
     private:
         AstModel* mdl;
-        QStringList allMilFiles;
+
+        struct ModuleFile
+        {
+            QString path;
+            typedef QPair<QByteArray,Declaration*> Mod;
+            typedef QList<Mod> Mods;
+            Mods mods;
+            ModuleFile(const QString& path = QString(), const Mods& mods = Mods()):path(path), mods(mods){}
+            ModuleFile(const QString& path, const QByteArrayList&);
+            Mod* findByName(const QByteArray& name);
+        };
+        ModuleFile* findByName(const QByteArray&);
+
+        QList<ModuleFile> moduleFiles;
+        bool haveOakwood;
     };
 }
 

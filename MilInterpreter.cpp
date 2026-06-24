@@ -1912,6 +1912,8 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
             proc->beginGuard = true;
         }
         newframe.locals.init(local,PreAllocSize);
+        if( proc->localsSize > PreAllocSize )
+            newframe.locals.resize(proc->localsSize);
 
         for( int i = 0; i < proc->locals.size(); i++ )
         {
@@ -1919,7 +1921,7 @@ bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, 
             if( !temp.mem.empty() )
             {
                 const int off = proc->locals[i].first;
-                memcpy(local+off, temp.mem.data(), temp.mem.size() );
+                memcpy(newframe.locals.data()+off, temp.mem.data(), temp.mem.size() );
             }
         }
 

@@ -1,11 +1,16 @@
 [General]
+Arguments=@ByteArray()
 BuildDir=
 BuiltInOakwood=false
 MainModule=@ByteArray()
 MainProc=@ByteArray()
+OakwoodScreen=false
 Options=@ByteArray()
 Suffixes=@Invalid()
 WorkingDir=
+
+[.]
+size=0
 
 [Modules]
 1\AbsPath=/home/me/Entwicklung/Modules/Micron/oakwood/Args.mic
@@ -24,8 +29,11 @@ WorkingDir=
 7\RelPath=Math.mic
 8\AbsPath=/home/me/Entwicklung/Modules/Micron/oakwood/MathL.mic
 8\RelPath=MathL.mic
-size=8
+9\AbsPath=/home/me/Entwicklung/Modules/Micron/oakwood/Screen.mic
+9\RelPath=Screen.mic
+size=9
 
 [Packages]
 1\Name=@ByteArray()
-size=1
+2\Name=@ByteArray()
+size=2

@@ -391,43 +391,43 @@ static void renderStats(ProcData& proc, Statement* s, quint32& line, AstSerializ
     }
 }
 
-static void renderProc(const Declaration* p, AbstractRenderer* r, AstSerializer::DbgInfo dbi)
+static void renderProc(const Declaration* proc, AbstractRenderer* r, AstSerializer::DbgInfo dbi)
 {
-    p = p->forwardToProc();
+    Declaration* orig = proc->forwardToProc();
 
-    ProcData proc;
-    proc.name = p->name;
-    proc.isPublic = p->public_;
-    if( p->typebound )
-        proc.binding = p->outer->toQuali().second;
+    ProcData pdata;
+    pdata.name = orig->name;
+    pdata.isPublic = proc->public_;
+    if( proc->typebound )
+        pdata.binding = proc->outer->toQuali().second;
 
-    if(p->pd )
-        proc.endLine = lineout(p->pd->end, dbi);
+    if(proc->pd )
+        pdata.endLine = lineout(proc->pd->end, dbi);
 
-    if( p->entryPoint )
-        proc.kind = p->inline_ ? ProcData::ModuleEntry : ProcData::ModuleInit;
-    else if(p->extern_ )
-        proc.kind = ProcData::Extern;
-    else if(p->foreign_ )
+    if( proc->entryPoint )
+        pdata.kind = proc->inline_ ? ProcData::ModuleEntry : ProcData::ModuleInit;
+    else if(proc->extern_ )
+        pdata.kind = ProcData::Extern;
+    else if(proc->foreign_ )
     {
-        proc.kind = ProcData::Foreign;
-        if( p->pd )
-            proc.binding = p->pd->externalName;
-    }else if(p->forward )
-        proc.kind = ProcData::Forward;
-    else if(p->inline_ )
-        proc.kind = ProcData::Inline;
-    else if(p->invar)
-        proc.kind = ProcData::Invar;
-    else if(p->nobody)
-        proc.kind = ProcData::Abstract;
+        pdata.kind = ProcData::Foreign;
+        if( proc->pd )
+            pdata.binding = proc->pd->externalName;
+    }else if(proc->forward )
+        pdata.kind = ProcData::Forward;
+    else if(proc->inline_ )
+        pdata.kind = ProcData::Inline;
+    else if(proc->invar)
+        pdata.kind = ProcData::Invar;
+    else if(proc->nobody)
+        pdata.kind = ProcData::Abstract;
     else
-        proc.kind = ProcData::Normal;
+        pdata.kind = ProcData::Normal;
 
-    if( p->getType() )
-        proc.retType = p->getType()->toQuali();
+    if( proc->getType() )
+        pdata.retType = proc->getType()->toQuali();
 
-    Declaration* sub = p->subs;
+    Declaration* sub = proc->subs;
     while(sub)
     {
         switch( sub->kind )
@@ -437,14 +437,14 @@ static void renderProc(const Declaration* p, AbstractRenderer* r, AstSerializer:
                 param.name = sub->name;
                 param.type = toQuali(sub->getType());
                 param.line = lineout(sub->pos,dbi);
-                proc.params.append(param);
+                pdata.params.append(param);
             } break;
         case Declaration::LocalDecl: {
                 ProcData::Var local;
                 local.name = sub->name;
                 local.type = toQuali(sub->getType());
                 local.line = lineout(sub->pos,dbi);
-                proc.locals.append(local);
+                pdata.locals.append(local);
             } break;
         }
 
@@ -452,9 +452,9 @@ static void renderProc(const Declaration* p, AbstractRenderer* r, AstSerializer:
     }
 
     quint32 line = 0;
-    renderStats(proc, p->body, line, dbi);
+    renderStats(pdata, proc->body, line, dbi);
 
-    r->addProcedure(proc);
+    r->addProcedure(pdata);
 }
 
 bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, DbgInfo dbi)

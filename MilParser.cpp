@@ -7,11 +7,11 @@ static inline bool FIRST_Mil(int tt) {
 }
 
 static inline bool FIRST_integer(int tt) {
-	return tt == Tok_Minus || tt == Tok_unsigned || tt == Tok_Plus;
+	return tt == Tok_Minus || tt == Tok_Plus || tt == Tok_unsigned;
 }
 
 static inline bool FIRST_number(int tt) {
-	return tt == Tok_Minus || tt == Tok_float || tt == Tok_Plus || tt == Tok_unsigned;
+	return tt == Tok_Minus || tt == Tok_Plus || tt == Tok_float || tt == Tok_unsigned;
 }
 
 static inline bool FIRST_qualident(int tt) {
@@ -39,26 +39,26 @@ static inline bool FIRST_Line(int tt) {
 }
 
 static inline bool FIRST_ConstDeclaration(int tt) {
-	return tt == Tok_ident || tt == Tok_LINE;
+	return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_TypeDeclaration(int tt) {
-	return tt == Tok_ident || tt == Tok_LINE;
+	return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_type(int tt) {
 	switch(tt){
-	case Tok_ident:
 	case Tok_ARRAY:
-	case Tok_STRUCT:
-	case Tok_PROCEDURE:
-	case Tok_INTERFACE:
 	case Tok_Hat:
-	case Tok_OBJECT:
-	case Tok_UNION:
-	case Tok_PROC:
-	case Tok_POINTER:
+	case Tok_INTERFACE:
 	case Tok_Lbrack:
+	case Tok_OBJECT:
+	case Tok_POINTER:
+	case Tok_PROC:
+	case Tok_PROCEDURE:
+	case Tok_STRUCT:
+	case Tok_UNION:
+	case Tok_ident:
 		return true;
 	default: return false;
 	}
@@ -81,11 +81,11 @@ static inline bool FIRST_StructUnionType(int tt) {
 }
 
 static inline bool FIRST_FieldList(int tt) {
-	return tt == Tok_ident || tt == Tok_2Dot || tt == Tok_LINE;
+	return tt == Tok_2Dot || tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_IdentList(int tt) {
-	return tt == Tok_ident || tt == Tok_LINE;
+	return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_InterfaceType(int tt) {
@@ -97,7 +97,7 @@ static inline bool FIRST_ObjectType(int tt) {
 }
 
 static inline bool FIRST_MemberList(int tt) {
-	return tt == Tok_ident || tt == Tok_LINE;
+	return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_PointerType(int tt) {
@@ -105,15 +105,15 @@ static inline bool FIRST_PointerType(int tt) {
 }
 
 static inline bool FIRST_ProcedureType(int tt) {
-	return tt == Tok_PROCEDURE || tt == Tok_PROC;
+	return tt == Tok_PROC || tt == Tok_PROCEDURE;
 }
 
 static inline bool FIRST_VariableDeclaration(int tt) {
-	return tt == Tok_ident || tt == Tok_LINE;
+	return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_ProcedureDeclaration(int tt) {
-	return tt == Tok_PROCEDURE || tt == Tok_PROC;
+	return tt == Tok_PROC || tt == Tok_PROCEDURE;
 }
 
 static inline bool FIRST_Binding(int tt) {
@@ -125,7 +125,7 @@ static inline bool FIRST_ProcedureBody(int tt) {
 }
 
 static inline bool FIRST_LocalDeclaration(int tt) {
-	return tt == Tok_ident || tt == Tok_LINE;
+	return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_FormalParameters(int tt) {
@@ -137,7 +137,7 @@ static inline bool FIRST_ReturnType(int tt) {
 }
 
 static inline bool FIRST_FPSection(int tt) {
-	return tt == Tok_ident || tt == Tok_LINE;
+	return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_module(int tt) {
@@ -153,7 +153,7 @@ static inline bool FIRST_ImportList(int tt) {
 }
 
 static inline bool FIRST_import(int tt) {
-	return tt == Tok_ident || tt == Tok_LINE;
+	return tt == Tok_LINE || tt == Tok_ident;
 }
 
 static inline bool FIRST_instantiation(int tt) {
@@ -161,137 +161,137 @@ static inline bool FIRST_instantiation(int tt) {
 }
 
 static inline bool FIRST_DeclarationSequence(int tt) {
-	return tt == Tok_VAR || tt == Tok_TYPE || tt == Tok_PROCEDURE || tt == Tok_CONST || tt == Tok_PROC;
+	return tt == Tok_CONST || tt == Tok_PROC || tt == Tok_PROCEDURE || tt == Tok_TYPE || tt == Tok_VAR;
 }
 
 static inline bool FIRST_Expression(int tt) {
 	switch(tt){
-	case Tok_CALLI:
-	case Tok_CONV_R4:
+	case Tok_ABS:
+	case Tok_ADD:
+	case Tok_AND:
 	case Tok_CALL:
-	case Tok_LDIND_R4:
-	case Tok_INITOBJ:
-	case Tok_LDVAR:
-	case Tok_NEWOBJ0:
-	case Tok_LDC_I4_8:
-	case Tok_SHL:
-	case Tok_LDIND_U1:
+	case Tok_CALLI:
 	case Tok_CALLINST:
-	case Tok_LDLOCA_S:
-	case Tok_LDARGA:
-	case Tok_IIF:
-	case Tok_LDELEM_I1:
-	case Tok_LDIND:
-	case Tok_CLT:
-	case Tok_OR:
-	case Tok_LDC_IP:
-	case Tok_LDNULL:
-	case Tok_LDELEM_U2:
-	case Tok_LDELEM_U8:
-	case Tok_SUB:
-	case Tok_LDC_I4_7:
-	case Tok_NEWARR0:
-	case Tok_LDLOCA:
-	case Tok_LDELEM_R8:
-	case Tok_LDELEM:
-	case Tok_LDELEM_U1:
-	case Tok_DUP:
-	case Tok_LDIFACE:
-	case Tok_NEWARRGC:
-	case Tok_LDELEM_I4:
-	case Tok_CALLVIRT:
-	case Tok_LDARG_1:
-	case Tok_LDLOC_1:
-	case Tok_CAST_R4:
 	case Tok_CALLMI:
-	case Tok_LDLOC_3:
-	case Tok_LDELEM_IP:
-	case Tok_LDC_R8:
-	case Tok_REM_UN:
-	case Tok_LDC_I4_S:
-	case Tok_LDC_I4_4:
-	case Tok_LDIND_I1:
-	case Tok_LDARG_0:
-	case Tok_LDARGA_S:
-	case Tok_CONV_U1:
-	case Tok_LDELEM_I8:
-	case Tok_CONV_R8:
-	case Tok_LDARG_S:
-	case Tok_LDLOC_2:
-	case Tok_NOT:
-	case Tok_LDC_I4_6:
-	case Tok_LDIND_U2:
-	case Tok_LDELEM_U4:
-	case Tok_LDC_I4_5:
-	case Tok_XOR:
-	case Tok_CONV_U2:
+	case Tok_CALLVIRT:
+	case Tok_CASTPTR:
+	case Tok_CAST_I4:
+	case Tok_CAST_I8:
+	case Tok_CAST_R4:
+	case Tok_CAST_R8:
+	case Tok_CEQ:
+	case Tok_CGT:
 	case Tok_CGT_UN:
-	case Tok_LDC_OBJ:
+	case Tok_CLT:
+	case Tok_CLT_UN:
+	case Tok_CONV_I1:
 	case Tok_CONV_I2:
-	case Tok_LDFLD:
-	case Tok_LDC_I4_3:
+	case Tok_CONV_I4:
+	case Tok_CONV_I8:
+	case Tok_CONV_R4:
+	case Tok_CONV_R8:
+	case Tok_CONV_U1:
+	case Tok_CONV_U2:
+	case Tok_CONV_U4:
+	case Tok_CONV_U8:
+	case Tok_DIV:
+	case Tok_DIV_UN:
+	case Tok_DUP:
+	case Tok_GETREG:
+	case Tok_IIF:
+	case Tok_INITOBJ:
+	case Tok_ISINST:
+	case Tok_LDARG:
+	case Tok_LDARGA:
+	case Tok_LDARGA_S:
+	case Tok_LDARG_0:
+	case Tok_LDARG_1:
 	case Tok_LDARG_2:
-	case Tok_NOP:
+	case Tok_LDARG_3:
+	case Tok_LDARG_S:
+	case Tok_LDC_I4:
+	case Tok_LDC_I4_0:
+	case Tok_LDC_I4_1:
+	case Tok_LDC_I4_2:
+	case Tok_LDC_I4_3:
+	case Tok_LDC_I4_4:
+	case Tok_LDC_I4_5:
+	case Tok_LDC_I4_6:
+	case Tok_LDC_I4_7:
+	case Tok_LDC_I4_8:
+	case Tok_LDC_I4_M1:
+	case Tok_LDC_I4_S:
+	case Tok_LDC_I8:
+	case Tok_LDC_IP:
+	case Tok_LDC_OBJ:
+	case Tok_LDC_R4:
+	case Tok_LDC_R8:
+	case Tok_LDELEM:
+	case Tok_LDELEMA:
+	case Tok_LDELEM_I1:
+	case Tok_LDELEM_I2:
+	case Tok_LDELEM_I4:
+	case Tok_LDELEM_I8:
+	case Tok_LDELEM_IP:
+	case Tok_LDELEM_IPP:
+	case Tok_LDELEM_R4:
+	case Tok_LDELEM_R8:
+	case Tok_LDELEM_U1:
+	case Tok_LDELEM_U2:
+	case Tok_LDELEM_U4:
+	case Tok_LDELEM_U8:
+	case Tok_LDFLD:
+	case Tok_LDFLDA:
+	case Tok_LDIFACE:
+	case Tok_LDIND:
+	case Tok_LDIND_I1:
+	case Tok_LDIND_I2:
+	case Tok_LDIND_I4:
+	case Tok_LDIND_I8:
+	case Tok_LDIND_IP:
+	case Tok_LDIND_IPP:
+	case Tok_LDIND_R4:
+	case Tok_LDIND_R8:
+	case Tok_LDIND_U1:
+	case Tok_LDIND_U2:
 	case Tok_LDIND_U4:
-	case Tok_MUL:
+	case Tok_LDIND_U8:
+	case Tok_LDLOC:
+	case Tok_LDLOCA:
+	case Tok_LDLOCA_S:
+	case Tok_LDLOC_0:
+	case Tok_LDLOC_1:
+	case Tok_LDLOC_2:
+	case Tok_LDLOC_3:
 	case Tok_LDLOC_S:
 	case Tok_LDMETH:
-	case Tok_LDFLDA:
-	case Tok_CASTPTR:
-	case Tok_LDSTR:
-	case Tok_CLT_UN:
-	case Tok_PTROFF:
-	case Tok_LDELEMA:
-	case Tok_NEWOBJ:
-	case Tok_NEWOBJGC:
-	case Tok_LINE:
-	case Tok_LDELEM_R4:
-	case Tok_LDELEM_IPP:
-	case Tok_CGT:
-	case Tok_SHR_UN:
-	case Tok_LDIND_IP:
-	case Tok_NEWVLA:
-	case Tok_CAST_R8:
-	case Tok_LDIND_I8:
-	case Tok_LDLOC:
-	case Tok_GETREG:
-	case Tok_LDIND_I4:
+	case Tok_LDNULL:
 	case Tok_LDPROC:
-	case Tok_LDELEM_I2:
-	case Tok_SIZEOF:
-	case Tok_CEQ:
-	case Tok_SHR:
+	case Tok_LDSTR:
+	case Tok_LDVAR:
 	case Tok_LDVARA:
-	case Tok_CAST_I8:
-	case Tok_ISINST:
-	case Tok_LDC_I4_2:
-	case Tok_LDIND_IPP:
-	case Tok_LDIND_R8:
-	case Tok_LDC_R4:
-	case Tok_DIV:
-	case Tok_REM:
+	case Tok_LINE:
+	case Tok_MUL:
 	case Tok_NEG:
-	case Tok_LDC_I8:
-	case Tok_DIV_UN:
-	case Tok_LDLOC_0:
-	case Tok_LDIND_U8:
-	case Tok_LDARG_3:
-	case Tok_CONV_U8:
-	case Tok_ABS:
 	case Tok_NEWARR:
-	case Tok_LDIND_I2:
-	case Tok_CONV_I1:
-	case Tok_CONV_I8:
-	case Tok_LDC_I4:
-	case Tok_CONV_U4:
-	case Tok_AND:
-	case Tok_LDARG:
-	case Tok_CONV_I4:
-	case Tok_LDC_I4_0:
-	case Tok_CAST_I4:
-	case Tok_ADD:
-	case Tok_LDC_I4_1:
-	case Tok_LDC_I4_M1:
+	case Tok_NEWARR0:
+	case Tok_NEWARRGC:
+	case Tok_NEWOBJ:
+	case Tok_NEWOBJ0:
+	case Tok_NEWOBJGC:
+	case Tok_NEWVLA:
+	case Tok_NOP:
+	case Tok_NOT:
+	case Tok_OR:
+	case Tok_PTROFF:
+	case Tok_REM:
+	case Tok_REM_UN:
+	case Tok_SHL:
+	case Tok_SHR:
+	case Tok_SHR_UN:
+	case Tok_SIZEOF:
+	case Tok_SUB:
+	case Tok_XOR:
 		return true;
 	default: return false;
 	}
@@ -299,131 +299,131 @@ static inline bool FIRST_Expression(int tt) {
 
 static inline bool FIRST_ExpInstr(int tt) {
 	switch(tt){
-	case Tok_CALLI:
-	case Tok_CONV_R4:
+	case Tok_ABS:
+	case Tok_ADD:
+	case Tok_AND:
 	case Tok_CALL:
-	case Tok_LDIND_R4:
-	case Tok_INITOBJ:
-	case Tok_LDVAR:
-	case Tok_NEWOBJ0:
-	case Tok_LDC_I4_8:
-	case Tok_SHL:
-	case Tok_LDIND_U1:
+	case Tok_CALLI:
 	case Tok_CALLINST:
-	case Tok_LDLOCA_S:
-	case Tok_LDARGA:
-	case Tok_IIF:
-	case Tok_LDELEM_I1:
-	case Tok_LDIND:
-	case Tok_CLT:
-	case Tok_OR:
-	case Tok_LDC_IP:
-	case Tok_LDNULL:
-	case Tok_LDELEM_U2:
-	case Tok_LDELEM_U8:
-	case Tok_SUB:
-	case Tok_LDC_I4_7:
-	case Tok_NEWARR0:
-	case Tok_LDLOCA:
-	case Tok_LDELEM_R8:
-	case Tok_LDELEM:
-	case Tok_LDELEM_U1:
-	case Tok_DUP:
-	case Tok_LDIFACE:
-	case Tok_NEWARRGC:
-	case Tok_LDELEM_I4:
-	case Tok_CALLVIRT:
-	case Tok_LDARG_1:
-	case Tok_LDLOC_1:
-	case Tok_CAST_R4:
 	case Tok_CALLMI:
-	case Tok_LDLOC_3:
-	case Tok_LDELEM_IP:
-	case Tok_LDC_R8:
-	case Tok_REM_UN:
-	case Tok_LDC_I4_S:
-	case Tok_LDC_I4_4:
-	case Tok_LDIND_I1:
-	case Tok_LDARG_0:
-	case Tok_LDARGA_S:
-	case Tok_CONV_U1:
-	case Tok_LDELEM_I8:
-	case Tok_CONV_R8:
-	case Tok_LDARG_S:
-	case Tok_LDLOC_2:
-	case Tok_NOT:
-	case Tok_LDC_I4_6:
-	case Tok_LDIND_U2:
-	case Tok_LDELEM_U4:
-	case Tok_LDC_I4_5:
-	case Tok_XOR:
-	case Tok_CONV_U2:
+	case Tok_CALLVIRT:
+	case Tok_CASTPTR:
+	case Tok_CAST_I4:
+	case Tok_CAST_I8:
+	case Tok_CAST_R4:
+	case Tok_CAST_R8:
+	case Tok_CEQ:
+	case Tok_CGT:
 	case Tok_CGT_UN:
-	case Tok_LDC_OBJ:
+	case Tok_CLT:
+	case Tok_CLT_UN:
+	case Tok_CONV_I1:
 	case Tok_CONV_I2:
-	case Tok_LDFLD:
-	case Tok_LDC_I4_3:
+	case Tok_CONV_I4:
+	case Tok_CONV_I8:
+	case Tok_CONV_R4:
+	case Tok_CONV_R8:
+	case Tok_CONV_U1:
+	case Tok_CONV_U2:
+	case Tok_CONV_U4:
+	case Tok_CONV_U8:
+	case Tok_DIV:
+	case Tok_DIV_UN:
+	case Tok_DUP:
+	case Tok_GETREG:
+	case Tok_IIF:
+	case Tok_INITOBJ:
+	case Tok_ISINST:
+	case Tok_LDARG:
+	case Tok_LDARGA:
+	case Tok_LDARGA_S:
+	case Tok_LDARG_0:
+	case Tok_LDARG_1:
 	case Tok_LDARG_2:
-	case Tok_NOP:
+	case Tok_LDARG_3:
+	case Tok_LDARG_S:
+	case Tok_LDC_I4:
+	case Tok_LDC_I4_0:
+	case Tok_LDC_I4_1:
+	case Tok_LDC_I4_2:
+	case Tok_LDC_I4_3:
+	case Tok_LDC_I4_4:
+	case Tok_LDC_I4_5:
+	case Tok_LDC_I4_6:
+	case Tok_LDC_I4_7:
+	case Tok_LDC_I4_8:
+	case Tok_LDC_I4_M1:
+	case Tok_LDC_I4_S:
+	case Tok_LDC_I8:
+	case Tok_LDC_IP:
+	case Tok_LDC_OBJ:
+	case Tok_LDC_R4:
+	case Tok_LDC_R8:
+	case Tok_LDELEM:
+	case Tok_LDELEMA:
+	case Tok_LDELEM_I1:
+	case Tok_LDELEM_I2:
+	case Tok_LDELEM_I4:
+	case Tok_LDELEM_I8:
+	case Tok_LDELEM_IP:
+	case Tok_LDELEM_IPP:
+	case Tok_LDELEM_R4:
+	case Tok_LDELEM_R8:
+	case Tok_LDELEM_U1:
+	case Tok_LDELEM_U2:
+	case Tok_LDELEM_U4:
+	case Tok_LDELEM_U8:
+	case Tok_LDFLD:
+	case Tok_LDFLDA:
+	case Tok_LDIFACE:
+	case Tok_LDIND:
+	case Tok_LDIND_I1:
+	case Tok_LDIND_I2:
+	case Tok_LDIND_I4:
+	case Tok_LDIND_I8:
+	case Tok_LDIND_IP:
+	case Tok_LDIND_IPP:
+	case Tok_LDIND_R4:
+	case Tok_LDIND_R8:
+	case Tok_LDIND_U1:
+	case Tok_LDIND_U2:
 	case Tok_LDIND_U4:
-	case Tok_MUL:
+	case Tok_LDIND_U8:
+	case Tok_LDLOC:
+	case Tok_LDLOCA:
+	case Tok_LDLOCA_S:
+	case Tok_LDLOC_0:
+	case Tok_LDLOC_1:
+	case Tok_LDLOC_2:
+	case Tok_LDLOC_3:
 	case Tok_LDLOC_S:
 	case Tok_LDMETH:
-	case Tok_LDFLDA:
-	case Tok_CASTPTR:
-	case Tok_LDSTR:
-	case Tok_CLT_UN:
-	case Tok_PTROFF:
-	case Tok_LDELEMA:
-	case Tok_NEWOBJ:
-	case Tok_NEWOBJGC:
-	case Tok_LDELEM_R4:
-	case Tok_LDELEM_IPP:
-	case Tok_CGT:
-	case Tok_SHR_UN:
-	case Tok_LDIND_IP:
-	case Tok_NEWVLA:
-	case Tok_CAST_R8:
-	case Tok_LDIND_I8:
-	case Tok_LDLOC:
-	case Tok_GETREG:
-	case Tok_LDIND_I4:
+	case Tok_LDNULL:
 	case Tok_LDPROC:
-	case Tok_LDELEM_I2:
-	case Tok_SIZEOF:
-	case Tok_CEQ:
-	case Tok_SHR:
+	case Tok_LDSTR:
+	case Tok_LDVAR:
 	case Tok_LDVARA:
-	case Tok_CAST_I8:
-	case Tok_ISINST:
-	case Tok_LDC_I4_2:
-	case Tok_LDIND_IPP:
-	case Tok_LDIND_R8:
-	case Tok_LDC_R4:
-	case Tok_DIV:
-	case Tok_REM:
+	case Tok_MUL:
 	case Tok_NEG:
-	case Tok_LDC_I8:
-	case Tok_DIV_UN:
-	case Tok_LDLOC_0:
-	case Tok_LDIND_U8:
-	case Tok_LDARG_3:
-	case Tok_CONV_U8:
-	case Tok_ABS:
 	case Tok_NEWARR:
-	case Tok_LDIND_I2:
-	case Tok_CONV_I1:
-	case Tok_CONV_I8:
-	case Tok_LDC_I4:
-	case Tok_CONV_U4:
-	case Tok_AND:
-	case Tok_LDARG:
-	case Tok_CONV_I4:
-	case Tok_LDC_I4_0:
-	case Tok_CAST_I4:
-	case Tok_ADD:
-	case Tok_LDC_I4_1:
-	case Tok_LDC_I4_M1:
+	case Tok_NEWARR0:
+	case Tok_NEWARRGC:
+	case Tok_NEWOBJ:
+	case Tok_NEWOBJ0:
+	case Tok_NEWOBJGC:
+	case Tok_NEWVLA:
+	case Tok_NOP:
+	case Tok_NOT:
+	case Tok_OR:
+	case Tok_PTROFF:
+	case Tok_REM:
+	case Tok_REM_UN:
+	case Tok_SHL:
+	case Tok_SHR:
+	case Tok_SHR_UN:
+	case Tok_SIZEOF:
+	case Tok_SUB:
+	case Tok_XOR:
 		return true;
 	default: return false;
 	}
@@ -435,175 +435,175 @@ static inline bool FIRST_CondOp(int tt) {
 
 static inline bool FIRST_StatementSequence(int tt) {
 	switch(tt){
-	case Tok_STELEM_I2:
-	case Tok_LDARG_0:
-	case Tok_CALLVIRT:
-	case Tok_EXIT:
-	case Tok_LDELEM:
-	case Tok_REM:
-	case Tok_LDLOC_1:
-	case Tok_LABEL:
-	case Tok_NEWARRGC:
-	case Tok_LDIFACE:
-	case Tok_CONV_U8:
-	case Tok_POP:
-	case Tok_LDIND_IP:
-	case Tok_CONV_U4:
-	case Tok_LDLOC:
-	case Tok_FREE:
-	case Tok_MUL:
-	case Tok_LDELEM_R4:
-	case Tok_STLOC_3:
-	case Tok_STARG:
-	case Tok_LDIND_U1:
-	case Tok_ISINST:
-	case Tok_LDNULL:
-	case Tok_LDELEM_I1:
-	case Tok_LDC_I4_1:
-	case Tok_STIND_I8:
-	case Tok_SHL:
-	case Tok_LDELEM_IPP:
-	case Tok_SUB:
-	case Tok_CONV_I2:
-	case Tok_CAST_R4:
-	case Tok_LDARGA_S:
-	case Tok_LDARG:
-	case Tok_STIND_IP:
-	case Tok_STELEM_I8:
-	case Tok_LDIND_R4:
-	case Tok_CALLMI:
-	case Tok_LDARG_2:
-	case Tok_CASTPTR:
-	case Tok_CONV_U1:
-	case Tok_STLOC_0:
-	case Tok_STELEM_R4:
-	case Tok_NEG:
-	case Tok_CGT_UN:
-	case Tok_NEWARR:
-	case Tok_LDC_R8:
-	case Tok_NOT:
-	case Tok_LDPROC:
-	case Tok_PUTREG:
-	case Tok_LDELEM_U2:
-	case Tok_LDELEM_U1:
-	case Tok_CLT_UN:
-	case Tok_LDELEM_I4:
-	case Tok_CONV_I1:
-	case Tok_GETREG:
-	case Tok_LDSTR:
-	case Tok_LDLOC_S:
-	case Tok_STFLD:
-	case Tok_LDARG_1:
-	case Tok_STIND_I1:
-	case Tok_CLT:
-	case Tok_LDMETH:
-	case Tok_LDARG_3:
-	case Tok_STLOC_1:
-	case Tok_LDFLDA:
-	case Tok_CAST_I4:
-	case Tok_CALL:
-	case Tok_LDC_OBJ:
-	case Tok_STLOC_S:
-	case Tok_PTROFF:
-	case Tok_LDC_I4_M1:
-	case Tok_LDC_I4_8:
-	case Tok_LDLOCA_S:
-	case Tok_CONV_I8:
-	case Tok_LDIND_I8:
-	case Tok_CONV_I4:
-	case Tok_LDIND_I4:
-	case Tok_LDC_I4_2:
-	case Tok_CAST_I8:
-	case Tok_LDC_R4:
-	case Tok_NEWOBJ0:
+	case Tok_ABS:
 	case Tok_ADD:
-	case Tok_LDARGA:
-	case Tok_CALLINST:
-	case Tok_CLI:
-	case Tok_STI:
-	case Tok_CEQ:
-	case Tok_STRCPY:
-	case Tok_STIND_I2:
-	case Tok_REM_UN:
-	case Tok_LDELEM_IP:
-	case Tok_STELEM_R8:
-	case Tok_NEWVLA:
-	case Tok_LDC_I4_5:
-	case Tok_LDC_I4_3:
-	case Tok_GOTO:
-	case Tok_LDELEM_I2:
-	case Tok_LDLOC_2:
-	case Tok_DIV:
-	case Tok_STIND_R8:
-	case Tok_SHR:
 	case Tok_AND:
-	case Tok_LDFLD:
-	case Tok_STLOC_2:
-	case Tok_LDVARA:
-	case Tok_STLOC:
-	case Tok_STIND_IPP:
-	case Tok_LDVAR:
-	case Tok_INITOBJ:
-	case Tok_XOR:
-	case Tok_LDIND_IPP:
-	case Tok_LDIND_R8:
-	case Tok_SWITCH:
-	case Tok_LDIND_U8:
-	case Tok_IF:
-	case Tok_STELEM_I4:
-	case Tok_IIF:
-	case Tok_OR:
-	case Tok_STELEM_I1:
-	case Tok_LDC_IP:
-	case Tok_CONV_R8:
-	case Tok_LDLOCA:
-	case Tok_LDC_I4_S:
-	case Tok_LDIND_I1:
-	case Tok_LDLOC_3:
-	case Tok_STIND:
-	case Tok_STARG_S:
+	case Tok_CALL:
+	case Tok_CALLI:
+	case Tok_CALLINST:
+	case Tok_CALLMI:
+	case Tok_CALLVIRT:
+	case Tok_CASTPTR:
+	case Tok_CAST_I4:
+	case Tok_CAST_I8:
+	case Tok_CAST_R4:
 	case Tok_CAST_R8:
-	case Tok_NEWOBJGC:
-	case Tok_LDIND_U2:
-	case Tok_LDC_I4_0:
-	case Tok_LDLOC_0:
+	case Tok_CEQ:
+	case Tok_CGT:
+	case Tok_CGT_UN:
+	case Tok_CLI:
+	case Tok_CLT:
+	case Tok_CLT_UN:
+	case Tok_CONV_I1:
+	case Tok_CONV_I2:
+	case Tok_CONV_I4:
+	case Tok_CONV_I8:
+	case Tok_CONV_R4:
+	case Tok_CONV_R8:
+	case Tok_CONV_U1:
+	case Tok_CONV_U2:
+	case Tok_CONV_U4:
+	case Tok_CONV_U8:
+	case Tok_DIV:
+	case Tok_DIV_UN:
 	case Tok_DUP:
+	case Tok_EXIT:
+	case Tok_FREE:
+	case Tok_GETREG:
+	case Tok_GOTO:
+	case Tok_IF:
+	case Tok_IIF:
+	case Tok_INITOBJ:
+	case Tok_ISINST:
+	case Tok_LABEL:
+	case Tok_LDARG:
+	case Tok_LDARGA:
+	case Tok_LDARGA_S:
+	case Tok_LDARG_0:
+	case Tok_LDARG_1:
+	case Tok_LDARG_2:
+	case Tok_LDARG_3:
+	case Tok_LDARG_S:
+	case Tok_LDC_I4:
+	case Tok_LDC_I4_0:
+	case Tok_LDC_I4_1:
+	case Tok_LDC_I4_2:
+	case Tok_LDC_I4_3:
+	case Tok_LDC_I4_4:
+	case Tok_LDC_I4_5:
+	case Tok_LDC_I4_6:
+	case Tok_LDC_I4_7:
+	case Tok_LDC_I4_8:
+	case Tok_LDC_I4_M1:
+	case Tok_LDC_I4_S:
+	case Tok_LDC_I8:
+	case Tok_LDC_IP:
+	case Tok_LDC_OBJ:
+	case Tok_LDC_R4:
+	case Tok_LDC_R8:
+	case Tok_LDELEM:
+	case Tok_LDELEMA:
+	case Tok_LDELEM_I1:
+	case Tok_LDELEM_I2:
+	case Tok_LDELEM_I4:
+	case Tok_LDELEM_I8:
+	case Tok_LDELEM_IP:
+	case Tok_LDELEM_IPP:
+	case Tok_LDELEM_R4:
+	case Tok_LDELEM_R8:
+	case Tok_LDELEM_U1:
+	case Tok_LDELEM_U2:
+	case Tok_LDELEM_U4:
+	case Tok_LDELEM_U8:
+	case Tok_LDFLD:
+	case Tok_LDFLDA:
+	case Tok_LDIFACE:
+	case Tok_LDIND:
+	case Tok_LDIND_I1:
+	case Tok_LDIND_I2:
+	case Tok_LDIND_I4:
+	case Tok_LDIND_I8:
+	case Tok_LDIND_IP:
+	case Tok_LDIND_IPP:
+	case Tok_LDIND_R4:
+	case Tok_LDIND_R8:
+	case Tok_LDIND_U1:
+	case Tok_LDIND_U2:
+	case Tok_LDIND_U4:
+	case Tok_LDIND_U8:
+	case Tok_LDLOC:
+	case Tok_LDLOCA:
+	case Tok_LDLOCA_S:
+	case Tok_LDLOC_0:
+	case Tok_LDLOC_1:
+	case Tok_LDLOC_2:
+	case Tok_LDLOC_3:
+	case Tok_LDLOC_S:
+	case Tok_LDMETH:
+	case Tok_LDNULL:
+	case Tok_LDPROC:
+	case Tok_LDSTR:
+	case Tok_LDVAR:
+	case Tok_LDVARA:
+	case Tok_LINE:
+	case Tok_LOOP:
+	case Tok_MUL:
+	case Tok_NEG:
+	case Tok_NEWARR:
+	case Tok_NEWARR0:
+	case Tok_NEWARRGC:
+	case Tok_NEWOBJ:
+	case Tok_NEWOBJ0:
+	case Tok_NEWOBJGC:
+	case Tok_NEWVLA:
+	case Tok_NOP:
+	case Tok_NOT:
+	case Tok_OR:
+	case Tok_POP:
+	case Tok_PTROFF:
+	case Tok_PUTREG:
+	case Tok_REM:
+	case Tok_REM_UN:
+	case Tok_REPEAT:
+	case Tok_RET:
+	case Tok_SHL:
+	case Tok_SHR:
 	case Tok_SHR_UN:
 	case Tok_SIZEOF:
-	case Tok_CONV_U2:
-	case Tok_STIND_R4:
-	case Tok_LOOP:
-	case Tok_LDELEM_U8:
-	case Tok_CGT:
-	case Tok_LDELEM_I8:
-	case Tok_LDELEM_U4:
-	case Tok_LDELEMA:
-	case Tok_CALLI:
-	case Tok_STIND_I4:
-	case Tok_LDELEM_R8:
-	case Tok_RET:
-	case Tok_LDIND:
-	case Tok_STELEM_IPP:
-	case Tok_LDARG_S:
-	case Tok_STELEM_IP:
-	case Tok_NEWOBJ:
-	case Tok_LDC_I8:
-	case Tok_REPEAT:
-	case Tok_LDC_I4_4:
-	case Tok_LDC_I4_6:
-	case Tok_STVAR:
-	case Tok_LDIND_U4:
-	case Tok_ABS:
-	case Tok_CONV_R4:
-	case Tok_LDC_I4_7:
-	case Tok_WHILE:
-	case Tok_LINE:
-	case Tok_LDC_I4:
-	case Tok_LDIND_I2:
-	case Tok_NOP:
-	case Tok_NEWARR0:
+	case Tok_STARG:
+	case Tok_STARG_S:
 	case Tok_STELEM:
-	case Tok_DIV_UN:
+	case Tok_STELEM_I1:
+	case Tok_STELEM_I2:
+	case Tok_STELEM_I4:
+	case Tok_STELEM_I8:
+	case Tok_STELEM_IP:
+	case Tok_STELEM_IPP:
+	case Tok_STELEM_R4:
+	case Tok_STELEM_R8:
+	case Tok_STFLD:
+	case Tok_STI:
+	case Tok_STIND:
+	case Tok_STIND_I1:
+	case Tok_STIND_I2:
+	case Tok_STIND_I4:
+	case Tok_STIND_I8:
+	case Tok_STIND_IP:
+	case Tok_STIND_IPP:
+	case Tok_STIND_R4:
+	case Tok_STIND_R8:
+	case Tok_STLOC:
+	case Tok_STLOC_0:
+	case Tok_STLOC_1:
+	case Tok_STLOC_2:
+	case Tok_STLOC_3:
+	case Tok_STLOC_S:
+	case Tok_STRCPY:
+	case Tok_STVAR:
+	case Tok_SUB:
+	case Tok_SWITCH:
+	case Tok_WHILE:
+	case Tok_XOR:
 		return true;
 	default: return false;
 	}
@@ -611,49 +611,49 @@ static inline bool FIRST_StatementSequence(int tt) {
 
 static inline bool FIRST_Statement(int tt) {
 	switch(tt){
-	case Tok_STLOC_S:
-	case Tok_STFLD:
-	case Tok_EXIT:
-	case Tok_STIND_I8:
-	case Tok_REPEAT:
-	case Tok_POP:
-	case Tok_STARG_S:
-	case Tok_LOOP:
-	case Tok_PUTREG:
-	case Tok_STELEM_IPP:
 	case Tok_CLI:
-	case Tok_STIND_I4:
-	case Tok_STLOC:
-	case Tok_STIND_R8:
-	case Tok_IF:
-	case Tok_STELEM_IP:
-	case Tok_WHILE:
-	case Tok_STIND_I1:
-	case Tok_STLOC_0:
-	case Tok_STIND:
-	case Tok_STI:
-	case Tok_STELEM:
-	case Tok_STLOC_1:
-	case Tok_SWITCH:
-	case Tok_STVAR:
-	case Tok_STELEM_R4:
-	case Tok_STELEM_I4:
-	case Tok_STIND_I2:
-	case Tok_STELEM_I2:
-	case Tok_STIND_R4:
-	case Tok_STELEM_R8:
-	case Tok_STARG:
-	case Tok_STELEM_I8:
-	case Tok_STLOC_2:
-	case Tok_STRCPY:
-	case Tok_RET:
+	case Tok_EXIT:
 	case Tok_FREE:
-	case Tok_LABEL:
-	case Tok_STELEM_I1:
-	case Tok_STLOC_3:
-	case Tok_STIND_IPP:
-	case Tok_STIND_IP:
 	case Tok_GOTO:
+	case Tok_IF:
+	case Tok_LABEL:
+	case Tok_LOOP:
+	case Tok_POP:
+	case Tok_PUTREG:
+	case Tok_REPEAT:
+	case Tok_RET:
+	case Tok_STARG:
+	case Tok_STARG_S:
+	case Tok_STELEM:
+	case Tok_STELEM_I1:
+	case Tok_STELEM_I2:
+	case Tok_STELEM_I4:
+	case Tok_STELEM_I8:
+	case Tok_STELEM_IP:
+	case Tok_STELEM_IPP:
+	case Tok_STELEM_R4:
+	case Tok_STELEM_R8:
+	case Tok_STFLD:
+	case Tok_STI:
+	case Tok_STIND:
+	case Tok_STIND_I1:
+	case Tok_STIND_I2:
+	case Tok_STIND_I4:
+	case Tok_STIND_I8:
+	case Tok_STIND_IP:
+	case Tok_STIND_IPP:
+	case Tok_STIND_R4:
+	case Tok_STIND_R8:
+	case Tok_STLOC:
+	case Tok_STLOC_0:
+	case Tok_STLOC_1:
+	case Tok_STLOC_2:
+	case Tok_STLOC_3:
+	case Tok_STLOC_S:
+	case Tok_STRCPY:
+	case Tok_STVAR:
+	case Tok_SWITCH:
+	case Tok_WHILE:
 		return true;
 	default: return false;
 	}
@@ -689,12 +689,12 @@ static inline bool FIRST_MetaParams(int tt) {
 
 static inline bool FIRST_ConstExpression(int tt) {
 	switch(tt){
-	case Tok_ident:
-	case Tok_hexstring:
-	case Tok_string:
 	case Tok_Minus:
-	case Tok_float:
 	case Tok_Plus:
+	case Tok_float:
+	case Tok_hexstring:
+	case Tok_ident:
+	case Tok_string:
 	case Tok_unsigned:
 		return true;
 	default: return false;
@@ -703,12 +703,12 @@ static inline bool FIRST_ConstExpression(int tt) {
 
 static inline bool FIRST_ConstExpression2(int tt) {
 	switch(tt){
-	case Tok_ident:
-	case Tok_hexstring:
-	case Tok_string:
 	case Tok_Minus:
-	case Tok_float:
 	case Tok_Plus:
+	case Tok_float:
+	case Tok_hexstring:
+	case Tok_ident:
+	case Tok_string:
 	case Tok_unsigned:
 		return true;
 	default: return false;
@@ -716,7 +716,7 @@ static inline bool FIRST_ConstExpression2(int tt) {
 }
 
 static inline bool FIRST_constructor(int tt) {
-	return tt == Tok_ident || tt == Tok_hexstring;
+	return tt == Tok_hexstring || tt == Tok_ident;
 }
 
 static inline bool FIRST_component_list(int tt) {
@@ -725,13 +725,13 @@ static inline bool FIRST_component_list(int tt) {
 
 static inline bool FIRST_component(int tt) {
 	switch(tt){
-	case Tok_ident:
-	case Tok_hexstring:
-	case Tok_string:
-	case Tok_Minus:
 	case Tok_Lbrace:
-	case Tok_float:
+	case Tok_Minus:
 	case Tok_Plus:
+	case Tok_float:
+	case Tok_hexstring:
+	case Tok_ident:
+	case Tok_string:
 	case Tok_unsigned:
 		return true;
 	default: return false;
@@ -739,10 +739,9 @@ static inline bool FIRST_component(int tt) {
 }
 
 void Parser::RunParser() {
-	root = SynTree();
 	errors.clear();
 	next();
-	Mil(&root);
+	Mil();
 }
 
 void Parser::next() {
@@ -774,1206 +773,1156 @@ bool Parser::expect(int tt, bool pkw, const char* where) {
 
 static inline void dummy() {}
 
-	void Parser::addTerminal(SynTree* st) {
-		if( cur.d_type != Tok_Semi && cur.d_type != Tok_Comma && cur.d_type != Tok_Dot && cur.d_type != Tok_Colon ){
-			SynTree* tmp = new SynTree( cur ); st->d_children.append(tmp);
-		}
-	}
-void Parser::Mil(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_Mil, la); st->d_children.append(tmp); st = tmp; }
+void Parser::Mil() {
 	while( FIRST_module(la.d_type) || FIRST_module(la.d_code) ) {
-		module(st);
+		module();
 	}
 }
 
-void Parser::integer(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_integer, la); st->d_children.append(tmp); st = tmp; }
+void Parser::integer() {
 	if( la.d_type == Tok_Plus || la.d_type == Tok_Minus ) {
 		if( la.d_type == Tok_Plus ) {
-			if( expect(Tok_Plus, false, "integer") ) addTerminal(st);
+			expect(Tok_Plus, false, "integer");
 		} else if( la.d_type == Tok_Minus ) {
-			if( expect(Tok_Minus, false, "integer") ) addTerminal(st);
+			expect(Tok_Minus, false, "integer");
 		} else
 			invalid("integer");
 	}
-	if( expect(Tok_unsigned, false, "integer") ) addTerminal(st);
+	expect(Tok_unsigned, false, "integer");
 }
 
-void Parser::number(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_number, la); st->d_children.append(tmp); st = tmp; }
+void Parser::number() {
 	if( la.d_type == Tok_Plus || la.d_type == Tok_Minus ) {
 		if( la.d_type == Tok_Plus ) {
-			if( expect(Tok_Plus, false, "number") ) addTerminal(st);
+			expect(Tok_Plus, false, "number");
 		} else if( la.d_type == Tok_Minus ) {
-			if( expect(Tok_Minus, false, "number") ) addTerminal(st);
+			expect(Tok_Minus, false, "number");
 		} else
 			invalid("number");
 	}
 	if( la.d_type == Tok_float ) {
-		if( expect(Tok_float, false, "number") ) addTerminal(st);
+		expect(Tok_float, false, "number");
 	} else if( la.d_type == Tok_unsigned ) {
-		if( expect(Tok_unsigned, false, "number") ) addTerminal(st);
+		expect(Tok_unsigned, false, "number");
 	} else
 		invalid("number");
 }
 
-void Parser::qualident(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_qualident, la); st->d_children.append(tmp); st = tmp; }
+void Parser::qualident() {
 	if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Bang )  ) {
-		if( expect(Tok_ident, false, "qualident") ) addTerminal(st);
-		if( expect(Tok_Bang, false, "qualident") ) addTerminal(st);
+		expect(Tok_ident, false, "qualident");
+		expect(Tok_Bang, false, "qualident");
 	}
-	if( expect(Tok_ident, false, "qualident") ) addTerminal(st);
+	expect(Tok_ident, false, "qualident");
 }
 
-void Parser::trident(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_trident, la); st->d_children.append(tmp); st = tmp; }
+void Parser::trident() {
 	if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Bang )  ) {
-		if( expect(Tok_ident, false, "trident") ) addTerminal(st);
-		if( expect(Tok_Bang, false, "trident") ) addTerminal(st);
+		expect(Tok_ident, false, "trident");
+		expect(Tok_Bang, false, "trident");
 	}
-	if( expect(Tok_ident, false, "trident") ) addTerminal(st);
-	if( expect(Tok_Dot, false, "trident") ) addTerminal(st);
-	if( expect(Tok_ident, false, "trident") ) addTerminal(st);
+	expect(Tok_ident, false, "trident");
+	expect(Tok_Dot, false, "trident");
+	expect(Tok_ident, false, "trident");
 }
 
-void Parser::qortrident(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_qortrident, la); st->d_children.append(tmp); st = tmp; }
+void Parser::qortrident() {
 	if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Bang )  ) {
-		if( expect(Tok_ident, false, "qortrident") ) addTerminal(st);
-		if( expect(Tok_Bang, false, "qortrident") ) addTerminal(st);
+		expect(Tok_ident, false, "qortrident");
+		expect(Tok_Bang, false, "qortrident");
 	}
-	if( expect(Tok_ident, false, "qortrident") ) addTerminal(st);
+	expect(Tok_ident, false, "qortrident");
 	if( la.d_type == Tok_Dot ) {
-		if( expect(Tok_Dot, false, "qortrident") ) addTerminal(st);
-		if( expect(Tok_ident, false, "qortrident") ) addTerminal(st);
+		expect(Tok_Dot, false, "qortrident");
+		expect(Tok_ident, false, "qortrident");
 	}
 }
 
-void Parser::identdef(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_identdef, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_ident, false, "identdef") ) addTerminal(st);
+void Parser::identdef() {
+	expect(Tok_ident, false, "identdef");
 	if( la.d_type == Tok_Star ) {
-		if( expect(Tok_Star, false, "identdef") ) addTerminal(st);
+		expect(Tok_Star, false, "identdef");
 	}
 }
 
-void Parser::regwidth(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_regwidth, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_unsigned, false, "regwidth") ) addTerminal(st);
+void Parser::regwidth() {
+	expect(Tok_unsigned, false, "regwidth");
 }
 
-void Parser::Line(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_Line, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_LINE, true, "Line") ) addTerminal(st);
-	if( expect(Tok_unsigned, false, "Line") ) addTerminal(st);
+void Parser::Line() {
+	expect(Tok_LINE, true, "Line");
+	expect(Tok_unsigned, false, "Line");
 }
 
-void Parser::ConstDeclaration(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_ConstDeclaration, la); st->d_children.append(tmp); st = tmp; }
+void Parser::ConstDeclaration() {
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-		Line(st);
+		Line();
 	}
-	if( expect(Tok_ident, false, "ConstDeclaration") ) addTerminal(st);
+	expect(Tok_ident, false, "ConstDeclaration");
 	if( la.d_type == Tok_Eq ) {
-		if( expect(Tok_Eq, false, "ConstDeclaration") ) addTerminal(st);
-		ConstExpression2(st);
+		expect(Tok_Eq, false, "ConstDeclaration");
+		ConstExpression2();
 	} else if( la.d_type == Tok_Colon ) {
-		if( expect(Tok_Colon, false, "ConstDeclaration") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_Colon, false, "ConstDeclaration");
+		qualident();
 	} else
 		invalid("ConstDeclaration");
 }
 
-void Parser::TypeDeclaration(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_TypeDeclaration, la); st->d_children.append(tmp); st = tmp; }
+void Parser::TypeDeclaration() {
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-		Line(st);
+		Line();
 	}
-	identdef(st);
+	identdef();
 	if( la.d_type == Tok_Eq ) {
-		if( expect(Tok_Eq, false, "TypeDeclaration") ) addTerminal(st);
-		type(st);
+		expect(Tok_Eq, false, "TypeDeclaration");
+		type();
 	}
 }
 
-void Parser::type(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_type, la); st->d_children.append(tmp); st = tmp; }
+void Parser::type() {
 	if( FIRST_ArrayType(la.d_type) || FIRST_ArrayType(la.d_code) ) {
-		ArrayType(st);
+		ArrayType();
 	} else if( FIRST_StructUnionType(la.d_type) || FIRST_StructUnionType(la.d_code) ) {
-		StructUnionType(st);
+		StructUnionType();
 	} else if( FIRST_ObjectType(la.d_type) || FIRST_ObjectType(la.d_code) ) {
-		ObjectType(st);
+		ObjectType();
 	} else if( FIRST_PointerType(la.d_type) || FIRST_PointerType(la.d_code) ) {
-		PointerType(st);
+		PointerType();
 	} else if( FIRST_ProcedureType(la.d_type) || FIRST_ProcedureType(la.d_code) ) {
-		ProcedureType(st);
+		ProcedureType();
 	} else if( FIRST_NamedType(la.d_type) ) {
-		NamedType(st);
+		NamedType();
 	} else if( FIRST_InterfaceType(la.d_type) || FIRST_InterfaceType(la.d_code) ) {
-		InterfaceType(st);
+		InterfaceType();
 	} else
 		invalid("type");
 }
 
-void Parser::NamedType(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_NamedType, la); st->d_children.append(tmp); st = tmp; }
-	qualident(st);
+void Parser::NamedType() {
+	qualident();
 }
 
-void Parser::ArrayType(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_ArrayType, la); st->d_children.append(tmp); st = tmp; }
+void Parser::ArrayType() {
 	if( la.d_code == Tok_ARRAY ) {
-		if( expect(Tok_ARRAY, true, "ArrayType") ) addTerminal(st);
+		expect(Tok_ARRAY, true, "ArrayType");
 		if( FIRST_length(la.d_type) ) {
-			length(st);
+			length();
 		}
-		if( expect(Tok_OF, true, "ArrayType") ) addTerminal(st);
-		NamedType(st);
+		expect(Tok_OF, true, "ArrayType");
+		NamedType();
 	} else if( la.d_type == Tok_Lbrack ) {
-		if( expect(Tok_Lbrack, false, "ArrayType") ) addTerminal(st);
+		expect(Tok_Lbrack, false, "ArrayType");
 		if( FIRST_length(la.d_type) ) {
-			length(st);
+			length();
 		}
-		if( expect(Tok_Rbrack, false, "ArrayType") ) addTerminal(st);
-		NamedType(st);
+		expect(Tok_Rbrack, false, "ArrayType");
+		NamedType();
 	} else
 		invalid("ArrayType");
 }
 
-void Parser::length(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_length, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_unsigned, false, "length") ) addTerminal(st);
+void Parser::length() {
+	expect(Tok_unsigned, false, "length");
 }
 
-void Parser::StructUnionType(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_StructUnionType, la); st->d_children.append(tmp); st = tmp; }
+void Parser::StructUnionType() {
 	if( la.d_code == Tok_STRUCT ) {
-		if( expect(Tok_STRUCT, true, "StructUnionType") ) addTerminal(st);
+		expect(Tok_STRUCT, true, "StructUnionType");
 	} else if( la.d_code == Tok_UNION ) {
-		if( expect(Tok_UNION, true, "StructUnionType") ) addTerminal(st);
+		expect(Tok_UNION, true, "StructUnionType");
 	} else
 		invalid("StructUnionType");
 	while( ( !( peek(1).d_code == Tok_END ) )  ) {
-		FieldList(st);
+		FieldList();
 		if( la.d_type == Tok_Semi ) {
-			if( expect(Tok_Semi, false, "StructUnionType") ) addTerminal(st);
+			expect(Tok_Semi, false, "StructUnionType");
 		}
 	}
-	if( expect(Tok_END, true, "StructUnionType") ) addTerminal(st);
+	expect(Tok_END, true, "StructUnionType");
 }
 
-void Parser::FieldList(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_FieldList, la); st->d_children.append(tmp); st = tmp; }
+void Parser::FieldList() {
 	if( FIRST_IdentList(la.d_type) || FIRST_IdentList(la.d_code) ) {
-		IdentList(st);
-		if( expect(Tok_Colon, false, "FieldList") ) addTerminal(st);
-		NamedType(st);
+		IdentList();
+		expect(Tok_Colon, false, "FieldList");
+		NamedType();
 		if( la.d_type == Tok_Colon ) {
-			if( expect(Tok_Colon, false, "FieldList") ) addTerminal(st);
-			if( expect(Tok_unsigned, false, "FieldList") ) addTerminal(st);
+			expect(Tok_Colon, false, "FieldList");
+			expect(Tok_unsigned, false, "FieldList");
 		}
 	} else if( la.d_type == Tok_2Dot ) {
-		if( expect(Tok_2Dot, false, "FieldList") ) addTerminal(st);
-		if( expect(Tok_unsigned, false, "FieldList") ) addTerminal(st);
+		expect(Tok_2Dot, false, "FieldList");
+		expect(Tok_unsigned, false, "FieldList");
 	} else
 		invalid("FieldList");
 }
 
-void Parser::IdentList(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_IdentList, la); st->d_children.append(tmp); st = tmp; }
+void Parser::IdentList() {
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-		Line(st);
+		Line();
 	}
-	identdef(st);
+	identdef();
 	while( la.d_type == Tok_Comma || FIRST_Line(la.d_type) || FIRST_Line(la.d_code) || FIRST_identdef(la.d_type) ) {
 		if( la.d_type == Tok_Comma ) {
-			if( expect(Tok_Comma, false, "IdentList") ) addTerminal(st);
+			expect(Tok_Comma, false, "IdentList");
 		}
 		if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-			Line(st);
+			Line();
 		}
-		identdef(st);
+		identdef();
 	}
 }
 
-void Parser::InterfaceType(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_InterfaceType, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_INTERFACE, true, "InterfaceType") ) addTerminal(st);
+void Parser::InterfaceType() {
+	expect(Tok_INTERFACE, true, "InterfaceType");
 }
 
-void Parser::ObjectType(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_ObjectType, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_OBJECT, true, "ObjectType") ) addTerminal(st);
+void Parser::ObjectType() {
+	expect(Tok_OBJECT, true, "ObjectType");
 	if( la.d_type == Tok_Lpar ) {
-		if( expect(Tok_Lpar, false, "ObjectType") ) addTerminal(st);
-		NamedType(st);
-		if( expect(Tok_Rpar, false, "ObjectType") ) addTerminal(st);
+		expect(Tok_Lpar, false, "ObjectType");
+		NamedType();
+		expect(Tok_Rpar, false, "ObjectType");
 	}
 	while( FIRST_MemberList(la.d_type) || FIRST_MemberList(la.d_code) ) {
-		MemberList(st);
+		MemberList();
 		if( la.d_type == Tok_Semi ) {
-			if( expect(Tok_Semi, false, "ObjectType") ) addTerminal(st);
+			expect(Tok_Semi, false, "ObjectType");
 		}
 	}
-	if( expect(Tok_END, true, "ObjectType") ) addTerminal(st);
+	expect(Tok_END, true, "ObjectType");
 }
 
-void Parser::MemberList(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_MemberList, la); st->d_children.append(tmp); st = tmp; }
-	IdentList(st);
-	if( expect(Tok_Colon, false, "MemberList") ) addTerminal(st);
-	NamedType(st);
+void Parser::MemberList() {
+	IdentList();
+	expect(Tok_Colon, false, "MemberList");
+	NamedType();
 }
 
-void Parser::PointerType(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_PointerType, la); st->d_children.append(tmp); st = tmp; }
+void Parser::PointerType() {
 	if( la.d_code == Tok_POINTER ) {
-		if( expect(Tok_POINTER, true, "PointerType") ) addTerminal(st);
-		if( expect(Tok_TO, true, "PointerType") ) addTerminal(st);
+		expect(Tok_POINTER, true, "PointerType");
+		expect(Tok_TO, true, "PointerType");
 	} else if( la.d_type == Tok_Hat ) {
-		if( expect(Tok_Hat, false, "PointerType") ) addTerminal(st);
+		expect(Tok_Hat, false, "PointerType");
 	} else
 		invalid("PointerType");
-	NamedType(st);
+	NamedType();
 }
 
-void Parser::ProcedureType(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_ProcedureType, la); st->d_children.append(tmp); st = tmp; }
+void Parser::ProcedureType() {
 	if( la.d_code == Tok_PROCEDURE ) {
-		if( expect(Tok_PROCEDURE, true, "ProcedureType") ) addTerminal(st);
+		expect(Tok_PROCEDURE, true, "ProcedureType");
 	} else if( la.d_code == Tok_PROC ) {
-		if( expect(Tok_PROC, true, "ProcedureType") ) addTerminal(st);
+		expect(Tok_PROC, true, "ProcedureType");
 	} else
 		invalid("ProcedureType");
 	if( la.d_type == Tok_Hat ) {
-		if( expect(Tok_Hat, false, "ProcedureType") ) addTerminal(st);
+		expect(Tok_Hat, false, "ProcedureType");
 	}
 	if( FIRST_FormalParameters(la.d_type) ) {
-		FormalParameters(st);
+		FormalParameters();
 	}
 }
 
-void Parser::VariableDeclaration(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_VariableDeclaration, la); st->d_children.append(tmp); st = tmp; }
-	IdentList(st);
-	if( expect(Tok_Colon, false, "VariableDeclaration") ) addTerminal(st);
-	NamedType(st);
+void Parser::VariableDeclaration() {
+	IdentList();
+	expect(Tok_Colon, false, "VariableDeclaration");
+	NamedType();
 }
 
-void Parser::ProcedureDeclaration(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_ProcedureDeclaration, la); st->d_children.append(tmp); st = tmp; }
+void Parser::ProcedureDeclaration() {
 	if( la.d_code == Tok_PROCEDURE ) {
-		if( expect(Tok_PROCEDURE, true, "ProcedureDeclaration") ) addTerminal(st);
+		expect(Tok_PROCEDURE, true, "ProcedureDeclaration");
 	} else if( la.d_code == Tok_PROC ) {
-		if( expect(Tok_PROC, true, "ProcedureDeclaration") ) addTerminal(st);
+		expect(Tok_PROC, true, "ProcedureDeclaration");
 	} else
 		invalid("ProcedureDeclaration");
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-		Line(st);
+		Line();
 	}
 	if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Dot )  ) {
-		Binding(st);
-		identdef(st);
+		Binding();
+		identdef();
 		if( FIRST_FormalParameters(la.d_type) ) {
-			FormalParameters(st);
+			FormalParameters();
 		}
 		if( la.d_type == Tok_Semi ) {
-			if( expect(Tok_Semi, false, "ProcedureDeclaration") ) addTerminal(st);
+			expect(Tok_Semi, false, "ProcedureDeclaration");
 		}
 		if( la.d_code == Tok_ABSTRACT ) {
-			if( expect(Tok_ABSTRACT, true, "ProcedureDeclaration") ) addTerminal(st);
+			expect(Tok_ABSTRACT, true, "ProcedureDeclaration");
 		} else if( FIRST_ProcedureBody(la.d_type) || FIRST_ProcedureBody(la.d_code) ) {
-			ProcedureBody(st);
+			ProcedureBody();
 		} else
 			invalid("ProcedureDeclaration");
 	} else if( FIRST_identdef(la.d_type) ) {
-		identdef(st);
+		identdef();
 		if( FIRST_FormalParameters(la.d_type) ) {
-			FormalParameters(st);
+			FormalParameters();
 		}
 		if( la.d_code == Tok_INLINE || la.d_code == Tok_INVAR || la.d_code == Tok_INIT || la.d_code == Tok_ENTRY || la.d_type == Tok_Semi || FIRST_ProcedureBody(la.d_type) || FIRST_ProcedureBody(la.d_code) ) {
 			if( la.d_code == Tok_INLINE || la.d_code == Tok_INVAR || la.d_code == Tok_INIT || la.d_code == Tok_ENTRY ) {
 				if( la.d_code == Tok_INLINE ) {
-					if( expect(Tok_INLINE, true, "ProcedureDeclaration") ) addTerminal(st);
+					expect(Tok_INLINE, true, "ProcedureDeclaration");
 				} else if( la.d_code == Tok_INVAR ) {
-					if( expect(Tok_INVAR, true, "ProcedureDeclaration") ) addTerminal(st);
+					expect(Tok_INVAR, true, "ProcedureDeclaration");
 				} else if( la.d_code == Tok_INIT ) {
-					if( expect(Tok_INIT, true, "ProcedureDeclaration") ) addTerminal(st);
+					expect(Tok_INIT, true, "ProcedureDeclaration");
 				} else if( la.d_code == Tok_ENTRY ) {
-					if( expect(Tok_ENTRY, true, "ProcedureDeclaration") ) addTerminal(st);
+					expect(Tok_ENTRY, true, "ProcedureDeclaration");
 				} else
 					invalid("ProcedureDeclaration");
 			}
 			if( la.d_type == Tok_Semi ) {
-				if( expect(Tok_Semi, false, "ProcedureDeclaration") ) addTerminal(st);
+				expect(Tok_Semi, false, "ProcedureDeclaration");
 			}
-			ProcedureBody(st);
+			ProcedureBody();
 		} else if( ( ( ( peek(1).d_code == Tok_EXTERN || peek(1).d_code == Tok_FOREIGN ) || peek(1).d_type == Tok_Semi && ( peek(2).d_code == Tok_EXTERN || peek(2).d_code == Tok_FOREIGN ) ) )  ) {
 			if( la.d_type == Tok_Semi ) {
-				if( expect(Tok_Semi, false, "ProcedureDeclaration") ) addTerminal(st);
+				expect(Tok_Semi, false, "ProcedureDeclaration");
 			}
 			if( la.d_code == Tok_EXTERN ) {
-				if( expect(Tok_EXTERN, true, "ProcedureDeclaration") ) addTerminal(st);
+				expect(Tok_EXTERN, true, "ProcedureDeclaration");
 			} else if( la.d_code == Tok_FOREIGN ) {
-				if( expect(Tok_FOREIGN, true, "ProcedureDeclaration") ) addTerminal(st);
+				expect(Tok_FOREIGN, true, "ProcedureDeclaration");
 				if( la.d_type == Tok_string ) {
-					if( expect(Tok_string, false, "ProcedureDeclaration") ) addTerminal(st);
+					expect(Tok_string, false, "ProcedureDeclaration");
 				}
 			} else
 				invalid("ProcedureDeclaration");
 		} else if( ( ( peek(1).d_code == Tok_FORWARD || peek(1).d_type == Tok_Semi && peek(2).d_code == Tok_FORWARD ) )  ) {
 			if( la.d_type == Tok_Semi ) {
-				if( expect(Tok_Semi, false, "ProcedureDeclaration") ) addTerminal(st);
+				expect(Tok_Semi, false, "ProcedureDeclaration");
 			}
-			if( expect(Tok_FORWARD, true, "ProcedureDeclaration") ) addTerminal(st);
+			expect(Tok_FORWARD, true, "ProcedureDeclaration");
 		} else
 			invalid("ProcedureDeclaration");
 	} else
 		invalid("ProcedureDeclaration");
 }
 
-void Parser::Binding(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_Binding, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_ident, false, "Binding") ) addTerminal(st);
-	if( expect(Tok_Dot, false, "Binding") ) addTerminal(st);
+void Parser::Binding() {
+	expect(Tok_ident, false, "Binding");
+	expect(Tok_Dot, false, "Binding");
 }
 
-void Parser::ProcedureBody(SynTree* st) {
+void Parser::ProcedureBody() {
 	if( la.d_code == Tok_VAR ) {
-		if( expect(Tok_VAR, true, "ProcedureBody") ) addTerminal(st);
+		expect(Tok_VAR, true, "ProcedureBody");
 		while( FIRST_LocalDeclaration(la.d_type) || FIRST_LocalDeclaration(la.d_code) ) {
-			LocalDeclaration(st);
+			LocalDeclaration();
 			if( la.d_type == Tok_Semi ) {
-				if( expect(Tok_Semi, false, "ProcedureBody") ) addTerminal(st);
+				expect(Tok_Semi, false, "ProcedureBody");
 			}
 		}
 	}
-	if( expect(Tok_BEGIN, true, "ProcedureBody") ) addTerminal(st);
-	StatementSequence(st);
-	if( expect(Tok_END, true, "ProcedureBody") ) addTerminal(st);
+	expect(Tok_BEGIN, true, "ProcedureBody");
+	StatementSequence();
+	expect(Tok_END, true, "ProcedureBody");
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-		Line(st);
+		Line();
 	}
-	if( expect(Tok_ident, false, "ProcedureBody") ) addTerminal(st);
+	expect(Tok_ident, false, "ProcedureBody");
 }
 
-void Parser::LocalDeclaration(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_LocalDeclaration, la); st->d_children.append(tmp); st = tmp; }
-	IdentList(st);
-	if( expect(Tok_Colon, false, "LocalDeclaration") ) addTerminal(st);
-	NamedType(st);
+void Parser::LocalDeclaration() {
+	IdentList();
+	expect(Tok_Colon, false, "LocalDeclaration");
+	NamedType();
 }
 
-void Parser::FormalParameters(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_FormalParameters, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_Lpar, false, "FormalParameters") ) addTerminal(st);
+void Parser::FormalParameters() {
+	expect(Tok_Lpar, false, "FormalParameters");
 	if( FIRST_FPSection(la.d_type) || FIRST_FPSection(la.d_code) ) {
-		FPSection(st);
-		while( ( peek(1).d_type == Tok_Semi && ( peek(2).d_code == Tok_LINE || peek(2).d_type == Tok_ident ) )  ) {
-			if( expect(Tok_Semi, false, "FormalParameters") ) addTerminal(st);
-			FPSection(st);
+		FPSection();
+		while( ( ( peek(1).d_type == Tok_Semi && peek(2).d_code == Tok_LINE ) || ( peek(1).d_type == Tok_Semi && peek(2).d_type == Tok_ident ) )  ) {
+			expect(Tok_Semi, false, "FormalParameters");
+			FPSection();
 		}
 	}
-	if( expect(Tok_Rpar, false, "FormalParameters") ) addTerminal(st);
+	expect(Tok_Rpar, false, "FormalParameters");
 	if( la.d_type == Tok_Colon ) {
-		if( expect(Tok_Colon, false, "FormalParameters") ) addTerminal(st);
-		ReturnType(st);
+		expect(Tok_Colon, false, "FormalParameters");
+		ReturnType();
 	}
 }
 
-void Parser::ReturnType(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_ReturnType, la); st->d_children.append(tmp); st = tmp; }
-	NamedType(st);
+void Parser::ReturnType() {
+	NamedType();
 }
 
-void Parser::FPSection(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_FPSection, la); st->d_children.append(tmp); st = tmp; }
+void Parser::FPSection() {
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-		Line(st);
+		Line();
 	}
-	if( expect(Tok_ident, false, "FPSection") ) addTerminal(st);
+	expect(Tok_ident, false, "FPSection");
 	while( la.d_type == Tok_Comma || FIRST_Line(la.d_type) || FIRST_Line(la.d_code) || la.d_type == Tok_ident ) {
 		if( la.d_type == Tok_Comma ) {
-			if( expect(Tok_Comma, false, "FPSection") ) addTerminal(st);
+			expect(Tok_Comma, false, "FPSection");
 		}
 		if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-			Line(st);
+			Line();
 		}
-		if( expect(Tok_ident, false, "FPSection") ) addTerminal(st);
+		expect(Tok_ident, false, "FPSection");
 	}
-	if( expect(Tok_Colon, false, "FPSection") ) addTerminal(st);
-	NamedType(st);
+	expect(Tok_Colon, false, "FPSection");
+	NamedType();
 }
 
-void Parser::module(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_module, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_MODULE, true, "module") ) addTerminal(st);
+void Parser::module() {
+	expect(Tok_MODULE, true, "module");
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-		Line(st);
+		Line();
 	}
-	if( expect(Tok_ident, false, "module") ) addTerminal(st);
+	expect(Tok_ident, false, "module");
 	if( FIRST_MetaParams(la.d_type) ) {
-		MetaParams(st);
+		MetaParams();
 	}
 	if( la.d_type == Tok_Semi ) {
-		if( expect(Tok_Semi, false, "module") ) addTerminal(st);
+		expect(Tok_Semi, false, "module");
 	}
 	if( la.d_code == Tok_SOURCE ) {
-		if( expect(Tok_SOURCE, true, "module") ) addTerminal(st);
-		if( expect(Tok_string, false, "module") ) addTerminal(st);
+		expect(Tok_SOURCE, true, "module");
+		expect(Tok_string, false, "module");
 		if( la.d_type == Tok_Semi ) {
-			if( expect(Tok_Semi, false, "module") ) addTerminal(st);
+			expect(Tok_Semi, false, "module");
 		}
 	}
 	while( FIRST_ImportList(la.d_type) || FIRST_ImportList(la.d_code) || FIRST_ImporterList(la.d_type) || FIRST_ImporterList(la.d_code) || FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) ) {
 		if( FIRST_ImportList(la.d_type) || FIRST_ImportList(la.d_code) ) {
-			ImportList(st);
+			ImportList();
 		} else if( FIRST_ImporterList(la.d_type) || FIRST_ImporterList(la.d_code) ) {
-			ImporterList(st);
-		} else if( FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) || la.d_code == Tok_END || la.d_code == Tok_PROCEDURE || la.d_code == Tok_IMPORTER || la.d_code == Tok_PROC || la.d_code == Tok_IMPORT || la.d_code == Tok_TYPE || la.d_code == Tok_CONST || la.d_code == Tok_VAR ) {
-			DeclarationSequence(st);
+			ImporterList();
+		} else if( FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) || la.d_code == Tok_PROCEDURE || la.d_code == Tok_PROC || la.d_code == Tok_END || la.d_code == Tok_CONST || la.d_code == Tok_IMPORT || la.d_code == Tok_TYPE || la.d_code == Tok_VAR || la.d_code == Tok_IMPORTER ) {
+			DeclarationSequence();
 		} else
 			invalid("module");
 	}
-	if( expect(Tok_END, true, "module") ) addTerminal(st);
+	expect(Tok_END, true, "module");
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-		Line(st);
+		Line();
 	}
-	if( expect(Tok_ident, false, "module") ) addTerminal(st);
+	expect(Tok_ident, false, "module");
 	if( la.d_type == Tok_Dot ) {
-		if( expect(Tok_Dot, false, "module") ) addTerminal(st);
+		expect(Tok_Dot, false, "module");
 	}
 }
 
-void Parser::ImporterList(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_ImporterList, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_IMPORTER, true, "ImporterList") ) addTerminal(st);
-	if( expect(Tok_ident, false, "ImporterList") ) addTerminal(st);
+void Parser::ImporterList() {
+	expect(Tok_IMPORTER, true, "ImporterList");
+	expect(Tok_ident, false, "ImporterList");
 	while( la.d_type == Tok_Comma || la.d_type == Tok_ident ) {
 		if( la.d_type == Tok_Comma ) {
-			if( expect(Tok_Comma, false, "ImporterList") ) addTerminal(st);
+			expect(Tok_Comma, false, "ImporterList");
 		}
-		if( expect(Tok_ident, false, "ImporterList") ) addTerminal(st);
+		expect(Tok_ident, false, "ImporterList");
 	}
 }
 
-void Parser::ImportList(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_ImportList, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_IMPORT, true, "ImportList") ) addTerminal(st);
-	import(st);
+void Parser::ImportList() {
+	expect(Tok_IMPORT, true, "ImportList");
+	import();
 	while( la.d_type == Tok_Comma || FIRST_import(la.d_type) || FIRST_import(la.d_code) ) {
 		if( la.d_type == Tok_Comma ) {
-			if( expect(Tok_Comma, false, "ImportList") ) addTerminal(st);
+			expect(Tok_Comma, false, "ImportList");
 		}
-		import(st);
+		import();
 	}
 	if( la.d_type == Tok_Semi ) {
-		if( expect(Tok_Semi, false, "ImportList") ) addTerminal(st);
+		expect(Tok_Semi, false, "ImportList");
 	}
 }
 
-void Parser::import(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_import, la); st->d_children.append(tmp); st = tmp; }
+void Parser::import() {
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-		Line(st);
+		Line();
 	}
-	if( expect(Tok_ident, false, "import") ) addTerminal(st);
+	expect(Tok_ident, false, "import");
 	if( FIRST_instantiation(la.d_type) ) {
-		instantiation(st);
+		instantiation();
 	}
 }
 
-void Parser::instantiation(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_instantiation, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_ColonEq, false, "instantiation") ) addTerminal(st);
-	if( expect(Tok_ident, false, "instantiation") ) addTerminal(st);
-	MetaActuals(st);
+void Parser::instantiation() {
+	expect(Tok_ColonEq, false, "instantiation");
+	expect(Tok_ident, false, "instantiation");
+	MetaActuals();
 }
 
-void Parser::DeclarationSequence(SynTree* st) {
+void Parser::DeclarationSequence() {
 	while( la.d_code == Tok_CONST || la.d_code == Tok_TYPE || la.d_code == Tok_VAR || FIRST_ProcedureDeclaration(la.d_type) || FIRST_ProcedureDeclaration(la.d_code) ) {
 		if( la.d_code == Tok_CONST ) {
-			if( expect(Tok_CONST, true, "DeclarationSequence") ) addTerminal(st);
+			expect(Tok_CONST, true, "DeclarationSequence");
 			while( FIRST_ConstDeclaration(la.d_type) || FIRST_ConstDeclaration(la.d_code) ) {
-				ConstDeclaration(st);
+				ConstDeclaration();
 				if( la.d_type == Tok_Semi ) {
-					if( expect(Tok_Semi, false, "DeclarationSequence") ) addTerminal(st);
+					expect(Tok_Semi, false, "DeclarationSequence");
 				}
 			}
 		} else if( la.d_code == Tok_TYPE ) {
-			if( expect(Tok_TYPE, true, "DeclarationSequence") ) addTerminal(st);
+			expect(Tok_TYPE, true, "DeclarationSequence");
 			while( FIRST_TypeDeclaration(la.d_type) || FIRST_TypeDeclaration(la.d_code) ) {
-				TypeDeclaration(st);
+				TypeDeclaration();
 				if( la.d_type == Tok_Semi ) {
-					if( expect(Tok_Semi, false, "DeclarationSequence") ) addTerminal(st);
+					expect(Tok_Semi, false, "DeclarationSequence");
 				}
 			}
 		} else if( la.d_code == Tok_VAR ) {
-			if( expect(Tok_VAR, true, "DeclarationSequence") ) addTerminal(st);
+			expect(Tok_VAR, true, "DeclarationSequence");
 			while( FIRST_VariableDeclaration(la.d_type) || FIRST_VariableDeclaration(la.d_code) ) {
-				VariableDeclaration(st);
+				VariableDeclaration();
 				if( la.d_type == Tok_Semi ) {
-					if( expect(Tok_Semi, false, "DeclarationSequence") ) addTerminal(st);
+					expect(Tok_Semi, false, "DeclarationSequence");
 				}
 			}
 		} else if( FIRST_ProcedureDeclaration(la.d_type) || FIRST_ProcedureDeclaration(la.d_code) ) {
-			ProcedureDeclaration(st);
+			ProcedureDeclaration();
 			if( la.d_type == Tok_Semi ) {
-				if( expect(Tok_Semi, false, "DeclarationSequence") ) addTerminal(st);
+				expect(Tok_Semi, false, "DeclarationSequence");
 			}
 		} else
 			invalid("DeclarationSequence");
 	}
 }
 
-void Parser::Expression(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_Expression, la); st->d_children.append(tmp); st = tmp; }
+void Parser::Expression() {
 	while( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) || FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
 		if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
-			ExpInstr(st);
+			ExpInstr();
 		} else if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-			Line(st);
+			Line();
 		} else
 			invalid("Expression");
 	}
 }
 
-void Parser::ExpInstr(SynTree* st) {
+void Parser::ExpInstr() {
 	if( la.d_code == Tok_ADD ) {
-		if( expect(Tok_ADD, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_ADD, true, "ExpInstr");
 	} else if( la.d_code == Tok_ABS ) {
-		if( expect(Tok_ABS, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_ABS, true, "ExpInstr");
 	} else if( la.d_code == Tok_AND ) {
-		if( expect(Tok_AND, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_AND, true, "ExpInstr");
 	} else if( la.d_code == Tok_CALL || la.d_code == Tok_CALLI ) {
 		if( la.d_code == Tok_CALL ) {
-			if( expect(Tok_CALL, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_CALL, true, "ExpInstr");
 		} else if( la.d_code == Tok_CALLI ) {
-			if( expect(Tok_CALLI, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_CALLI, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
-		qualident(st);
+		qualident();
 	} else if( la.d_code == Tok_CALLMI ) {
-		if( expect(Tok_CALLMI, true, "ExpInstr") ) addTerminal(st);
-		qortrident(st);
+		expect(Tok_CALLMI, true, "ExpInstr");
+		qortrident();
 	} else if( la.d_code == Tok_CALLINST || la.d_code == Tok_CALLVIRT ) {
 		if( la.d_code == Tok_CALLINST ) {
-			if( expect(Tok_CALLINST, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_CALLINST, true, "ExpInstr");
 		} else if( la.d_code == Tok_CALLVIRT ) {
-			if( expect(Tok_CALLVIRT, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_CALLVIRT, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
-		trident(st);
+		trident();
 	} else if( la.d_code == Tok_CASTPTR ) {
-		if( expect(Tok_CASTPTR, true, "ExpInstr") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_CASTPTR, true, "ExpInstr");
+		qualident();
 	} else if( la.d_code == Tok_CEQ ) {
-		if( expect(Tok_CEQ, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CEQ, true, "ExpInstr");
 	} else if( la.d_code == Tok_CGT ) {
-		if( expect(Tok_CGT, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CGT, true, "ExpInstr");
 	} else if( la.d_code == Tok_CGT_UN ) {
-		if( expect(Tok_CGT_UN, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CGT_UN, true, "ExpInstr");
 	} else if( la.d_code == Tok_CLT ) {
-		if( expect(Tok_CLT, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CLT, true, "ExpInstr");
 	} else if( la.d_code == Tok_CLT_UN ) {
-		if( expect(Tok_CLT_UN, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CLT_UN, true, "ExpInstr");
 	} else if( la.d_code == Tok_CAST_I4 ) {
-		if( expect(Tok_CAST_I4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CAST_I4, true, "ExpInstr");
 	} else if( la.d_code == Tok_CAST_I8 ) {
-		if( expect(Tok_CAST_I8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CAST_I8, true, "ExpInstr");
 	} else if( la.d_code == Tok_CAST_R4 ) {
-		if( expect(Tok_CAST_R4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CAST_R4, true, "ExpInstr");
 	} else if( la.d_code == Tok_CAST_R8 ) {
-		if( expect(Tok_CAST_R8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CAST_R8, true, "ExpInstr");
 	} else if( la.d_code == Tok_CONV_I1 ) {
-		if( expect(Tok_CONV_I1, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CONV_I1, true, "ExpInstr");
 	} else if( la.d_code == Tok_CONV_I2 ) {
-		if( expect(Tok_CONV_I2, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CONV_I2, true, "ExpInstr");
 	} else if( la.d_code == Tok_CONV_I4 ) {
-		if( expect(Tok_CONV_I4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CONV_I4, true, "ExpInstr");
 	} else if( la.d_code == Tok_CONV_I8 ) {
-		if( expect(Tok_CONV_I8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CONV_I8, true, "ExpInstr");
 	} else if( la.d_code == Tok_CONV_R4 ) {
-		if( expect(Tok_CONV_R4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CONV_R4, true, "ExpInstr");
 	} else if( la.d_code == Tok_CONV_R8 ) {
-		if( expect(Tok_CONV_R8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CONV_R8, true, "ExpInstr");
 	} else if( la.d_code == Tok_CONV_U1 ) {
-		if( expect(Tok_CONV_U1, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CONV_U1, true, "ExpInstr");
 	} else if( la.d_code == Tok_CONV_U2 ) {
-		if( expect(Tok_CONV_U2, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CONV_U2, true, "ExpInstr");
 	} else if( la.d_code == Tok_CONV_U4 ) {
-		if( expect(Tok_CONV_U4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CONV_U4, true, "ExpInstr");
 	} else if( la.d_code == Tok_CONV_U8 ) {
-		if( expect(Tok_CONV_U8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_CONV_U8, true, "ExpInstr");
 	} else if( la.d_code == Tok_DIV ) {
-		if( expect(Tok_DIV, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_DIV, true, "ExpInstr");
 	} else if( la.d_code == Tok_DIV_UN ) {
-		if( expect(Tok_DIV_UN, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_DIV_UN, true, "ExpInstr");
 	} else if( la.d_code == Tok_DUP ) {
-		if( expect(Tok_DUP, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_DUP, true, "ExpInstr");
 	} else if( la.d_code == Tok_INITOBJ ) {
-		if( expect(Tok_INITOBJ, true, "ExpInstr") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_INITOBJ, true, "ExpInstr");
+		qualident();
 	} else if( la.d_code == Tok_ISINST ) {
-		if( expect(Tok_ISINST, true, "ExpInstr") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_ISINST, true, "ExpInstr");
+		qualident();
 	} else if( la.d_code == Tok_LDARG || la.d_code == Tok_LDARG_S ) {
 		if( la.d_code == Tok_LDARG ) {
-			if( expect(Tok_LDARG, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDARG, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDARG_S ) {
-			if( expect(Tok_LDARG_S, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDARG_S, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
 		if( la.d_type == Tok_unsigned ) {
-			if( expect(Tok_unsigned, false, "ExpInstr") ) addTerminal(st);
+			expect(Tok_unsigned, false, "ExpInstr");
 		} else if( la.d_type == Tok_ident ) {
-			if( expect(Tok_ident, false, "ExpInstr") ) addTerminal(st);
+			expect(Tok_ident, false, "ExpInstr");
 		} else
 			invalid("ExpInstr");
 	} else if( la.d_code == Tok_LDARG_0 ) {
-		if( expect(Tok_LDARG_0, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDARG_0, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDARG_1 ) {
-		if( expect(Tok_LDARG_1, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDARG_1, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDARG_2 ) {
-		if( expect(Tok_LDARG_2, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDARG_2, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDARG_3 ) {
-		if( expect(Tok_LDARG_3, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDARG_3, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDARGA || la.d_code == Tok_LDARGA_S ) {
 		if( la.d_code == Tok_LDARGA ) {
-			if( expect(Tok_LDARGA, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDARGA, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDARGA_S ) {
-			if( expect(Tok_LDARGA_S, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDARGA_S, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
 		if( la.d_type == Tok_unsigned ) {
-			if( expect(Tok_unsigned, false, "ExpInstr") ) addTerminal(st);
+			expect(Tok_unsigned, false, "ExpInstr");
 		} else if( la.d_type == Tok_ident ) {
-			if( expect(Tok_ident, false, "ExpInstr") ) addTerminal(st);
+			expect(Tok_ident, false, "ExpInstr");
 		} else
 			invalid("ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4 || la.d_code == Tok_LDC_I8 || la.d_code == Tok_LDC_I4_S ) {
 		if( la.d_code == Tok_LDC_I4 ) {
-			if( expect(Tok_LDC_I4, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDC_I4, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDC_I8 ) {
-			if( expect(Tok_LDC_I8, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDC_I8, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDC_I4_S ) {
-			if( expect(Tok_LDC_I4_S, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDC_I4_S, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
-		integer(st);
+		integer();
 	} else if( la.d_code == Tok_LDC_R4 || la.d_code == Tok_LDC_R8 ) {
 		if( la.d_code == Tok_LDC_R4 ) {
-			if( expect(Tok_LDC_R4, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDC_R4, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDC_R8 ) {
-			if( expect(Tok_LDC_R8, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDC_R8, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
-		number(st);
+		number();
 	} else if( la.d_code == Tok_LDC_IP ) {
-		if( expect(Tok_LDC_IP, true, "ExpInstr") ) addTerminal(st);
-		if( expect(Tok_unsigned, false, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_IP, true, "ExpInstr");
+		expect(Tok_unsigned, false, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4_0 ) {
-		if( expect(Tok_LDC_I4_0, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_I4_0, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4_1 ) {
-		if( expect(Tok_LDC_I4_1, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_I4_1, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4_2 ) {
-		if( expect(Tok_LDC_I4_2, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_I4_2, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4_3 ) {
-		if( expect(Tok_LDC_I4_3, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_I4_3, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4_4 ) {
-		if( expect(Tok_LDC_I4_4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_I4_4, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4_5 ) {
-		if( expect(Tok_LDC_I4_5, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_I4_5, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4_6 ) {
-		if( expect(Tok_LDC_I4_6, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_I4_6, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4_7 ) {
-		if( expect(Tok_LDC_I4_7, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_I4_7, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4_8 ) {
-		if( expect(Tok_LDC_I4_8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_I4_8, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_I4_M1 ) {
-		if( expect(Tok_LDC_I4_M1, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDC_I4_M1, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDC_OBJ ) {
-		if( expect(Tok_LDC_OBJ, true, "ExpInstr") ) addTerminal(st);
-		constructor(st);
+		expect(Tok_LDC_OBJ, true, "ExpInstr");
+		constructor();
 	} else if( la.d_code == Tok_LDELEM || la.d_code == Tok_LDELEMA ) {
 		if( la.d_code == Tok_LDELEM ) {
-			if( expect(Tok_LDELEM, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDELEM, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDELEMA ) {
-			if( expect(Tok_LDELEMA, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDELEMA, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
-		qualident(st);
+		qualident();
 	} else if( la.d_code == Tok_LDELEM_I1 ) {
-		if( expect(Tok_LDELEM_I1, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_I1, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_I2 ) {
-		if( expect(Tok_LDELEM_I2, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_I2, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_I4 ) {
-		if( expect(Tok_LDELEM_I4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_I4, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_I8 ) {
-		if( expect(Tok_LDELEM_I8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_I8, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_U1 ) {
-		if( expect(Tok_LDELEM_U1, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_U1, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_U2 ) {
-		if( expect(Tok_LDELEM_U2, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_U2, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_U4 ) {
-		if( expect(Tok_LDELEM_U4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_U4, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_U8 ) {
-		if( expect(Tok_LDELEM_U8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_U8, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_R4 ) {
-		if( expect(Tok_LDELEM_R4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_R4, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_R8 ) {
-		if( expect(Tok_LDELEM_R8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_R8, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_IP ) {
-		if( expect(Tok_LDELEM_IP, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_IP, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDELEM_IPP ) {
-		if( expect(Tok_LDELEM_IPP, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDELEM_IPP, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDFLD || la.d_code == Tok_LDFLDA ) {
 		if( la.d_code == Tok_LDFLD ) {
-			if( expect(Tok_LDFLD, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDFLD, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDFLDA ) {
-			if( expect(Tok_LDFLDA, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDFLDA, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
-		trident(st);
+		trident();
 	} else if( la.d_code == Tok_LDIFACE ) {
-		if( expect(Tok_LDIFACE, true, "ExpInstr") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_LDIFACE, true, "ExpInstr");
+		qualident();
 	} else if( la.d_code == Tok_LDIND_I1 ) {
-		if( expect(Tok_LDIND_I1, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_I1, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_I2 ) {
-		if( expect(Tok_LDIND_I2, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_I2, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_I4 ) {
-		if( expect(Tok_LDIND_I4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_I4, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_I8 ) {
-		if( expect(Tok_LDIND_I8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_I8, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_U1 ) {
-		if( expect(Tok_LDIND_U1, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_U1, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_U2 ) {
-		if( expect(Tok_LDIND_U2, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_U2, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_U4 ) {
-		if( expect(Tok_LDIND_U4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_U4, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_R4 ) {
-		if( expect(Tok_LDIND_R4, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_R4, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_U8 ) {
-		if( expect(Tok_LDIND_U8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_U8, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_R8 ) {
-		if( expect(Tok_LDIND_R8, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_R8, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_IP ) {
-		if( expect(Tok_LDIND_IP, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_IP, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND_IPP ) {
-		if( expect(Tok_LDIND_IPP, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDIND_IPP, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDLOC || la.d_code == Tok_LDLOC_S || la.d_code == Tok_LDLOCA || la.d_code == Tok_LDLOCA_S ) {
 		if( la.d_code == Tok_LDLOC ) {
-			if( expect(Tok_LDLOC, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDLOC, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDLOC_S ) {
-			if( expect(Tok_LDLOC_S, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDLOC_S, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDLOCA ) {
-			if( expect(Tok_LDLOCA, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDLOCA, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDLOCA_S ) {
-			if( expect(Tok_LDLOCA_S, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDLOCA_S, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
 		if( la.d_type == Tok_unsigned ) {
-			if( expect(Tok_unsigned, false, "ExpInstr") ) addTerminal(st);
+			expect(Tok_unsigned, false, "ExpInstr");
 		} else if( la.d_type == Tok_ident ) {
-			if( expect(Tok_ident, false, "ExpInstr") ) addTerminal(st);
+			expect(Tok_ident, false, "ExpInstr");
 		} else
 			invalid("ExpInstr");
 	} else if( la.d_code == Tok_LDLOC_0 ) {
-		if( expect(Tok_LDLOC_0, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDLOC_0, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDLOC_1 ) {
-		if( expect(Tok_LDLOC_1, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDLOC_1, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDLOC_2 ) {
-		if( expect(Tok_LDLOC_2, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDLOC_2, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDLOC_3 ) {
-		if( expect(Tok_LDLOC_3, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDLOC_3, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDNULL ) {
-		if( expect(Tok_LDNULL, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDNULL, true, "ExpInstr");
 	} else if( la.d_code == Tok_LDIND ) {
-		if( expect(Tok_LDIND, true, "ExpInstr") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_LDIND, true, "ExpInstr");
+		qualident();
 	} else if( la.d_code == Tok_LDPROC ) {
-		if( expect(Tok_LDPROC, true, "ExpInstr") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_LDPROC, true, "ExpInstr");
+		qualident();
 	} else if( la.d_code == Tok_LDMETH ) {
-		if( expect(Tok_LDMETH, true, "ExpInstr") ) addTerminal(st);
-		trident(st);
+		expect(Tok_LDMETH, true, "ExpInstr");
+		trident();
 	} else if( la.d_code == Tok_LDSTR ) {
-		if( expect(Tok_LDSTR, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_LDSTR, true, "ExpInstr");
 		if( la.d_type == Tok_string ) {
-			if( expect(Tok_string, false, "ExpInstr") ) addTerminal(st);
+			expect(Tok_string, false, "ExpInstr");
 		} else if( la.d_type == Tok_hexstring ) {
-			if( expect(Tok_hexstring, false, "ExpInstr") ) addTerminal(st);
+			expect(Tok_hexstring, false, "ExpInstr");
 		} else
 			invalid("ExpInstr");
 	} else if( la.d_code == Tok_LDVAR || la.d_code == Tok_LDVARA ) {
 		if( la.d_code == Tok_LDVAR ) {
-			if( expect(Tok_LDVAR, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDVAR, true, "ExpInstr");
 		} else if( la.d_code == Tok_LDVARA ) {
-			if( expect(Tok_LDVARA, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_LDVARA, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
-		qualident(st);
+		qualident();
 	} else if( la.d_code == Tok_MUL ) {
-		if( expect(Tok_MUL, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_MUL, true, "ExpInstr");
 	} else if( la.d_code == Tok_NEG ) {
-		if( expect(Tok_NEG, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_NEG, true, "ExpInstr");
 	} else if( la.d_code == Tok_NEWARR || la.d_code == Tok_NEWVLA || la.d_code == Tok_NEWOBJ || la.d_code == Tok_NEWARR0 || la.d_code == Tok_NEWOBJ0 || la.d_code == Tok_NEWARRGC || la.d_code == Tok_NEWOBJGC ) {
 		if( la.d_code == Tok_NEWARR ) {
-			if( expect(Tok_NEWARR, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_NEWARR, true, "ExpInstr");
 		} else if( la.d_code == Tok_NEWVLA ) {
-			if( expect(Tok_NEWVLA, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_NEWVLA, true, "ExpInstr");
 		} else if( la.d_code == Tok_NEWOBJ ) {
-			if( expect(Tok_NEWOBJ, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_NEWOBJ, true, "ExpInstr");
 		} else if( la.d_code == Tok_NEWARR0 ) {
-			if( expect(Tok_NEWARR0, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_NEWARR0, true, "ExpInstr");
 		} else if( la.d_code == Tok_NEWOBJ0 ) {
-			if( expect(Tok_NEWOBJ0, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_NEWOBJ0, true, "ExpInstr");
 		} else if( la.d_code == Tok_NEWARRGC ) {
-			if( expect(Tok_NEWARRGC, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_NEWARRGC, true, "ExpInstr");
 		} else if( la.d_code == Tok_NEWOBJGC ) {
-			if( expect(Tok_NEWOBJGC, true, "ExpInstr") ) addTerminal(st);
+			expect(Tok_NEWOBJGC, true, "ExpInstr");
 		} else
 			invalid("ExpInstr");
-		qualident(st);
+		qualident();
 	} else if( la.d_code == Tok_NOT ) {
-		if( expect(Tok_NOT, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_NOT, true, "ExpInstr");
 	} else if( la.d_code == Tok_OR ) {
-		if( expect(Tok_OR, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_OR, true, "ExpInstr");
 	} else if( la.d_code == Tok_REM ) {
-		if( expect(Tok_REM, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_REM, true, "ExpInstr");
 	} else if( la.d_code == Tok_REM_UN ) {
-		if( expect(Tok_REM_UN, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_REM_UN, true, "ExpInstr");
 	} else if( la.d_code == Tok_SHL ) {
-		if( expect(Tok_SHL, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_SHL, true, "ExpInstr");
 	} else if( la.d_code == Tok_SHR ) {
-		if( expect(Tok_SHR, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_SHR, true, "ExpInstr");
 	} else if( la.d_code == Tok_SHR_UN ) {
-		if( expect(Tok_SHR_UN, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_SHR_UN, true, "ExpInstr");
 	} else if( la.d_code == Tok_SIZEOF ) {
-		if( expect(Tok_SIZEOF, true, "ExpInstr") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_SIZEOF, true, "ExpInstr");
+		qualident();
 	} else if( la.d_code == Tok_SUB ) {
-		if( expect(Tok_SUB, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_SUB, true, "ExpInstr");
 	} else if( la.d_code == Tok_XOR ) {
-		if( expect(Tok_XOR, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_XOR, true, "ExpInstr");
 	} else if( la.d_code == Tok_PTROFF ) {
-		if( expect(Tok_PTROFF, true, "ExpInstr") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_PTROFF, true, "ExpInstr");
+		qualident();
 	} else if( la.d_code == Tok_NOP ) {
-		if( expect(Tok_NOP, true, "ExpInstr") ) addTerminal(st);
+		expect(Tok_NOP, true, "ExpInstr");
 	} else if( FIRST_CondOp(la.d_type) || FIRST_CondOp(la.d_code) ) {
-		CondOp(st);
+		CondOp();
 	} else if( la.d_code == Tok_GETREG ) {
-		if( expect(Tok_GETREG, true, "ExpInstr") ) addTerminal(st);
-		regwidth(st);
+		expect(Tok_GETREG, true, "ExpInstr");
+		regwidth();
 	} else
 		invalid("ExpInstr");
 }
 
-void Parser::CondOp(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_CondOp, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_IIF, true, "CondOp") ) addTerminal(st);
-	Expression(st);
-	if( expect(Tok_THEN, true, "CondOp") ) addTerminal(st);
-	Expression(st);
-	if( expect(Tok_ELSE, true, "CondOp") ) addTerminal(st);
-	Expression(st);
-	if( expect(Tok_END, true, "CondOp") ) addTerminal(st);
+void Parser::CondOp() {
+	expect(Tok_IIF, true, "CondOp");
+	Expression();
+	expect(Tok_THEN, true, "CondOp");
+	Expression();
+	expect(Tok_ELSE, true, "CondOp");
+	Expression();
+	expect(Tok_END, true, "CondOp");
 }
 
-void Parser::StatementSequence(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_StatementSequence, la); st->d_children.append(tmp); st = tmp; }
+void Parser::StatementSequence() {
 	while( FIRST_Statement(la.d_type) || FIRST_Statement(la.d_code) || FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) || FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
 		if( FIRST_Statement(la.d_type) || FIRST_Statement(la.d_code) ) {
-			Statement(st);
+			Statement();
 		} else if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
-			ExpInstr(st);
+			ExpInstr();
 		} else if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-			Line(st);
+			Line();
 		} else
 			invalid("StatementSequence");
 	}
 }
 
-void Parser::Statement(SynTree* st) {
+void Parser::Statement() {
 	if( la.d_code == Tok_FREE ) {
-		if( expect(Tok_FREE, true, "Statement") ) addTerminal(st);
+		expect(Tok_FREE, true, "Statement");
 	} else if( FIRST_RepeatUntil(la.d_type) || FIRST_RepeatUntil(la.d_code) ) {
-		RepeatUntil(st);
+		RepeatUntil();
 	} else if( la.d_code == Tok_EXIT ) {
-		if( expect(Tok_EXIT, true, "Statement") ) addTerminal(st);
+		expect(Tok_EXIT, true, "Statement");
 	} else if( la.d_code == Tok_GOTO ) {
-		if( expect(Tok_GOTO, true, "Statement") ) addTerminal(st);
-		if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
+		expect(Tok_GOTO, true, "Statement");
+		expect(Tok_ident, false, "Statement");
 	} else if( FIRST_IfThenElse(la.d_type) || FIRST_IfThenElse(la.d_code) ) {
-		IfThenElse(st);
+		IfThenElse();
 	} else if( la.d_code == Tok_LABEL ) {
-		if( expect(Tok_LABEL, true, "Statement") ) addTerminal(st);
-		if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
+		expect(Tok_LABEL, true, "Statement");
+		expect(Tok_ident, false, "Statement");
 	} else if( FIRST_Loop(la.d_type) || FIRST_Loop(la.d_code) ) {
-		Loop(st);
+		Loop();
 	} else if( la.d_code == Tok_POP ) {
-		if( expect(Tok_POP, true, "Statement") ) addTerminal(st);
+		expect(Tok_POP, true, "Statement");
 	} else if( la.d_code == Tok_RET ) {
-		if( expect(Tok_RET, true, "Statement") ) addTerminal(st);
+		expect(Tok_RET, true, "Statement");
 	} else if( la.d_code == Tok_STARG || la.d_code == Tok_STARG_S ) {
 		if( la.d_code == Tok_STARG ) {
-			if( expect(Tok_STARG, true, "Statement") ) addTerminal(st);
+			expect(Tok_STARG, true, "Statement");
 		} else if( la.d_code == Tok_STARG_S ) {
-			if( expect(Tok_STARG_S, true, "Statement") ) addTerminal(st);
+			expect(Tok_STARG_S, true, "Statement");
 		} else
 			invalid("Statement");
 		if( la.d_type == Tok_unsigned ) {
-			if( expect(Tok_unsigned, false, "Statement") ) addTerminal(st);
+			expect(Tok_unsigned, false, "Statement");
 		} else if( la.d_type == Tok_ident ) {
-			if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
+			expect(Tok_ident, false, "Statement");
 		} else
 			invalid("Statement");
 	} else if( la.d_code == Tok_STELEM ) {
-		if( expect(Tok_STELEM, true, "Statement") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_STELEM, true, "Statement");
+		qualident();
 	} else if( la.d_code == Tok_STELEM_I1 ) {
-		if( expect(Tok_STELEM_I1, true, "Statement") ) addTerminal(st);
+		expect(Tok_STELEM_I1, true, "Statement");
 	} else if( la.d_code == Tok_STELEM_I2 ) {
-		if( expect(Tok_STELEM_I2, true, "Statement") ) addTerminal(st);
+		expect(Tok_STELEM_I2, true, "Statement");
 	} else if( la.d_code == Tok_STELEM_I4 ) {
-		if( expect(Tok_STELEM_I4, true, "Statement") ) addTerminal(st);
+		expect(Tok_STELEM_I4, true, "Statement");
 	} else if( la.d_code == Tok_STELEM_I8 ) {
-		if( expect(Tok_STELEM_I8, true, "Statement") ) addTerminal(st);
+		expect(Tok_STELEM_I8, true, "Statement");
 	} else if( la.d_code == Tok_STELEM_R4 ) {
-		if( expect(Tok_STELEM_R4, true, "Statement") ) addTerminal(st);
+		expect(Tok_STELEM_R4, true, "Statement");
 	} else if( la.d_code == Tok_STELEM_R8 ) {
-		if( expect(Tok_STELEM_R8, true, "Statement") ) addTerminal(st);
+		expect(Tok_STELEM_R8, true, "Statement");
 	} else if( la.d_code == Tok_STELEM_IP ) {
-		if( expect(Tok_STELEM_IP, true, "Statement") ) addTerminal(st);
+		expect(Tok_STELEM_IP, true, "Statement");
 	} else if( la.d_code == Tok_STELEM_IPP ) {
-		if( expect(Tok_STELEM_IPP, true, "Statement") ) addTerminal(st);
+		expect(Tok_STELEM_IPP, true, "Statement");
 	} else if( la.d_code == Tok_STFLD ) {
-		if( expect(Tok_STFLD, true, "Statement") ) addTerminal(st);
-		trident(st);
+		expect(Tok_STFLD, true, "Statement");
+		trident();
 	} else if( la.d_code == Tok_STIND_I1 ) {
-		if( expect(Tok_STIND_I1, true, "Statement") ) addTerminal(st);
+		expect(Tok_STIND_I1, true, "Statement");
 	} else if( la.d_code == Tok_STIND_I2 ) {
-		if( expect(Tok_STIND_I2, true, "Statement") ) addTerminal(st);
+		expect(Tok_STIND_I2, true, "Statement");
 	} else if( la.d_code == Tok_STIND_I4 ) {
-		if( expect(Tok_STIND_I4, true, "Statement") ) addTerminal(st);
+		expect(Tok_STIND_I4, true, "Statement");
 	} else if( la.d_code == Tok_STIND_I8 ) {
-		if( expect(Tok_STIND_I8, true, "Statement") ) addTerminal(st);
+		expect(Tok_STIND_I8, true, "Statement");
 	} else if( la.d_code == Tok_STIND_R4 ) {
-		if( expect(Tok_STIND_R4, true, "Statement") ) addTerminal(st);
+		expect(Tok_STIND_R4, true, "Statement");
 	} else if( la.d_code == Tok_STIND_R8 ) {
-		if( expect(Tok_STIND_R8, true, "Statement") ) addTerminal(st);
+		expect(Tok_STIND_R8, true, "Statement");
 	} else if( la.d_code == Tok_STIND_IP ) {
-		if( expect(Tok_STIND_IP, true, "Statement") ) addTerminal(st);
+		expect(Tok_STIND_IP, true, "Statement");
 	} else if( la.d_code == Tok_STIND_IPP ) {
-		if( expect(Tok_STIND_IPP, true, "Statement") ) addTerminal(st);
+		expect(Tok_STIND_IPP, true, "Statement");
 	} else if( la.d_code == Tok_STLOC || la.d_code == Tok_STLOC_S ) {
 		if( la.d_code == Tok_STLOC ) {
-			if( expect(Tok_STLOC, true, "Statement") ) addTerminal(st);
+			expect(Tok_STLOC, true, "Statement");
 		} else if( la.d_code == Tok_STLOC_S ) {
-			if( expect(Tok_STLOC_S, true, "Statement") ) addTerminal(st);
+			expect(Tok_STLOC_S, true, "Statement");
 		} else
 			invalid("Statement");
 		if( la.d_type == Tok_unsigned ) {
-			if( expect(Tok_unsigned, false, "Statement") ) addTerminal(st);
+			expect(Tok_unsigned, false, "Statement");
 		} else if( la.d_type == Tok_ident ) {
-			if( expect(Tok_ident, false, "Statement") ) addTerminal(st);
+			expect(Tok_ident, false, "Statement");
 		} else
 			invalid("Statement");
 	} else if( la.d_code == Tok_STLOC_0 ) {
-		if( expect(Tok_STLOC_0, true, "Statement") ) addTerminal(st);
+		expect(Tok_STLOC_0, true, "Statement");
 	} else if( la.d_code == Tok_STLOC_1 ) {
-		if( expect(Tok_STLOC_1, true, "Statement") ) addTerminal(st);
+		expect(Tok_STLOC_1, true, "Statement");
 	} else if( la.d_code == Tok_STLOC_2 ) {
-		if( expect(Tok_STLOC_2, true, "Statement") ) addTerminal(st);
+		expect(Tok_STLOC_2, true, "Statement");
 	} else if( la.d_code == Tok_STLOC_3 ) {
-		if( expect(Tok_STLOC_3, true, "Statement") ) addTerminal(st);
+		expect(Tok_STLOC_3, true, "Statement");
 	} else if( la.d_code == Tok_STIND ) {
-		if( expect(Tok_STIND, true, "Statement") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_STIND, true, "Statement");
+		qualident();
 	} else if( la.d_code == Tok_STVAR ) {
-		if( expect(Tok_STVAR, true, "Statement") ) addTerminal(st);
-		qualident(st);
+		expect(Tok_STVAR, true, "Statement");
+		qualident();
 	} else if( la.d_code == Tok_STRCPY ) {
-		if( expect(Tok_STRCPY, true, "Statement") ) addTerminal(st);
+		expect(Tok_STRCPY, true, "Statement");
 	} else if( FIRST_Switch(la.d_type) || FIRST_Switch(la.d_code) ) {
-		Switch(st);
+		Switch();
 	} else if( FIRST_WhileDo(la.d_type) || FIRST_WhileDo(la.d_code) ) {
-		WhileDo(st);
+		WhileDo();
 	} else if( la.d_code == Tok_CLI ) {
-		if( expect(Tok_CLI, true, "Statement") ) addTerminal(st);
+		expect(Tok_CLI, true, "Statement");
 	} else if( la.d_code == Tok_STI ) {
-		if( expect(Tok_STI, true, "Statement") ) addTerminal(st);
+		expect(Tok_STI, true, "Statement");
 	} else if( la.d_code == Tok_PUTREG ) {
-		if( expect(Tok_PUTREG, true, "Statement") ) addTerminal(st);
-		regwidth(st);
+		expect(Tok_PUTREG, true, "Statement");
+		regwidth();
 	} else
 		invalid("Statement");
 }
 
-void Parser::IfThenElse(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_IfThenElse, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_IF, true, "IfThenElse") ) addTerminal(st);
-	Expression(st);
-	if( expect(Tok_THEN, true, "IfThenElse") ) addTerminal(st);
-	StatementSequence(st);
+void Parser::IfThenElse() {
+	expect(Tok_IF, true, "IfThenElse");
+	Expression();
+	expect(Tok_THEN, true, "IfThenElse");
+	StatementSequence();
 	if( la.d_code == Tok_ELSE ) {
-		if( expect(Tok_ELSE, true, "IfThenElse") ) addTerminal(st);
-		StatementSequence(st);
+		expect(Tok_ELSE, true, "IfThenElse");
+		StatementSequence();
 	}
-	if( expect(Tok_END, true, "IfThenElse") ) addTerminal(st);
+	expect(Tok_END, true, "IfThenElse");
 }
 
-void Parser::Loop(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_Loop, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_LOOP, true, "Loop") ) addTerminal(st);
-	StatementSequence(st);
-	if( expect(Tok_END, true, "Loop") ) addTerminal(st);
+void Parser::Loop() {
+	expect(Tok_LOOP, true, "Loop");
+	StatementSequence();
+	expect(Tok_END, true, "Loop");
 }
 
-void Parser::Switch(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_Switch, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_SWITCH, true, "Switch") ) addTerminal(st);
-	Expression(st);
+void Parser::Switch() {
+	expect(Tok_SWITCH, true, "Switch");
+	Expression();
 	while( la.d_code == Tok_CASE ) {
-		if( expect(Tok_CASE, true, "Switch") ) addTerminal(st);
-		integer(st);
+		expect(Tok_CASE, true, "Switch");
+		integer();
 		while( la.d_type == Tok_Comma || FIRST_integer(la.d_type) ) {
 			if( la.d_type == Tok_Comma ) {
-				if( expect(Tok_Comma, false, "Switch") ) addTerminal(st);
+				expect(Tok_Comma, false, "Switch");
 			}
-			integer(st);
+			integer();
 		}
-		if( expect(Tok_THEN, true, "Switch") ) addTerminal(st);
-		StatementSequence(st);
+		expect(Tok_THEN, true, "Switch");
+		StatementSequence();
 	}
 	if( la.d_code == Tok_ELSE ) {
-		if( expect(Tok_ELSE, true, "Switch") ) addTerminal(st);
-		StatementSequence(st);
+		expect(Tok_ELSE, true, "Switch");
+		StatementSequence();
 	}
-	if( expect(Tok_END, true, "Switch") ) addTerminal(st);
+	expect(Tok_END, true, "Switch");
 }
 
-void Parser::RepeatUntil(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_RepeatUntil, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_REPEAT, true, "RepeatUntil") ) addTerminal(st);
-	StatementSequence(st);
-	if( expect(Tok_UNTIL, true, "RepeatUntil") ) addTerminal(st);
-	Expression(st);
-	if( expect(Tok_END, true, "RepeatUntil") ) addTerminal(st);
+void Parser::RepeatUntil() {
+	expect(Tok_REPEAT, true, "RepeatUntil");
+	StatementSequence();
+	expect(Tok_UNTIL, true, "RepeatUntil");
+	Expression();
+	expect(Tok_END, true, "RepeatUntil");
 }
 
-void Parser::WhileDo(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_WhileDo, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_WHILE, true, "WhileDo") ) addTerminal(st);
-	Expression(st);
-	if( expect(Tok_DO, true, "WhileDo") ) addTerminal(st);
-	StatementSequence(st);
-	if( expect(Tok_END, true, "WhileDo") ) addTerminal(st);
+void Parser::WhileDo() {
+	expect(Tok_WHILE, true, "WhileDo");
+	Expression();
+	expect(Tok_DO, true, "WhileDo");
+	StatementSequence();
+	expect(Tok_END, true, "WhileDo");
 }
 
-void Parser::MetaActuals(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_MetaActuals, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_Lpar, false, "MetaActuals") ) addTerminal(st);
-	ConstExpression(st);
+void Parser::MetaActuals() {
+	expect(Tok_Lpar, false, "MetaActuals");
+	ConstExpression();
 	while( la.d_type == Tok_Comma || FIRST_ConstExpression(la.d_type) ) {
 		if( la.d_type == Tok_Comma ) {
-			if( expect(Tok_Comma, false, "MetaActuals") ) addTerminal(st);
+			expect(Tok_Comma, false, "MetaActuals");
 		}
-		ConstExpression(st);
+		ConstExpression();
 	}
-	if( expect(Tok_Rpar, false, "MetaActuals") ) addTerminal(st);
+	expect(Tok_Rpar, false, "MetaActuals");
 }
 
-void Parser::MetaParams(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_MetaParams, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_Lpar, false, "MetaParams") ) addTerminal(st);
+void Parser::MetaParams() {
+	expect(Tok_Lpar, false, "MetaParams");
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-		Line(st);
+		Line();
 	}
-	if( expect(Tok_ident, false, "MetaParams") ) addTerminal(st);
-	while( ( ( peek(1).d_type == Tok_Comma || peek(1).d_code == Tok_LINE || peek(1).d_type == Tok_ident ) && ( peek(2).d_code == Tok_LINE || peek(2).d_type == Tok_ident || peek(2).d_type == Tok_unsigned ) )  ) {
+	expect(Tok_ident, false, "MetaParams");
+	while( ( ( peek(1).d_type == Tok_Comma && peek(2).d_code == Tok_LINE ) || peek(1).d_type == Tok_ident || ( peek(1).d_type == Tok_Comma && peek(2).d_type == Tok_ident ) || ( peek(1).d_code == Tok_LINE && peek(2).d_type == Tok_unsigned ) || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Comma ) || ( peek(1).d_type == Tok_ident && peek(2).d_code == Tok_LINE ) || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_ident ) )  ) {
 		if( la.d_type == Tok_Comma ) {
-			if( expect(Tok_Comma, false, "MetaParams") ) addTerminal(st);
+			expect(Tok_Comma, false, "MetaParams");
 		}
 		if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
-			Line(st);
+			Line();
 		}
-		if( expect(Tok_ident, false, "MetaParams") ) addTerminal(st);
+		expect(Tok_ident, false, "MetaParams");
 	}
-	if( expect(Tok_Rpar, false, "MetaParams") ) addTerminal(st);
+	expect(Tok_Rpar, false, "MetaParams");
 }
 
-void Parser::ConstExpression(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_ConstExpression, la); st->d_children.append(tmp); st = tmp; }
+void Parser::ConstExpression() {
 	if( FIRST_qualident(la.d_type) ) {
-		qualident(st);
+		qualident();
 	} else if( FIRST_number(la.d_type) ) {
-		number(st);
+		number();
 	} else if( la.d_type == Tok_string ) {
-		if( expect(Tok_string, false, "ConstExpression") ) addTerminal(st);
+		expect(Tok_string, false, "ConstExpression");
 	} else if( la.d_type == Tok_hexstring ) {
-		if( expect(Tok_hexstring, false, "ConstExpression") ) addTerminal(st);
+		expect(Tok_hexstring, false, "ConstExpression");
 	} else
 		invalid("ConstExpression");
 }
 
-void Parser::ConstExpression2(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_ConstExpression2, la); st->d_children.append(tmp); st = tmp; }
+void Parser::ConstExpression2() {
 	if( FIRST_qualident(la.d_type) ) {
-		qualident(st);
+		qualident();
 		if( FIRST_component_list(la.d_type) ) {
-			component_list(st);
+			component_list();
 		}
 	} else if( FIRST_number(la.d_type) ) {
-		number(st);
+		number();
 	} else if( la.d_type == Tok_string ) {
-		if( expect(Tok_string, false, "ConstExpression2") ) addTerminal(st);
+		expect(Tok_string, false, "ConstExpression2");
 	} else if( la.d_type == Tok_hexstring ) {
-		if( expect(Tok_hexstring, false, "ConstExpression2") ) addTerminal(st);
+		expect(Tok_hexstring, false, "ConstExpression2");
 	} else
 		invalid("ConstExpression2");
 }
 
-void Parser::constructor(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_constructor, la); st->d_children.append(tmp); st = tmp; }
+void Parser::constructor() {
 	if( FIRST_NamedType(la.d_type) ) {
-		NamedType(st);
-		component_list(st);
+		NamedType();
+		component_list();
 	} else if( la.d_type == Tok_hexstring ) {
-		if( expect(Tok_hexstring, false, "constructor") ) addTerminal(st);
+		expect(Tok_hexstring, false, "constructor");
 	} else
 		invalid("constructor");
 }
 
-void Parser::component_list(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_component_list, la); st->d_children.append(tmp); st = tmp; }
-	if( expect(Tok_Lbrace, false, "component_list") ) addTerminal(st);
+void Parser::component_list() {
+	expect(Tok_Lbrace, false, "component_list");
 	if( FIRST_component(la.d_type) ) {
-		component(st);
+		component();
 		while( la.d_type == Tok_Comma || FIRST_component(la.d_type) ) {
 			if( la.d_type == Tok_Comma ) {
-				if( expect(Tok_Comma, false, "component_list") ) addTerminal(st);
+				expect(Tok_Comma, false, "component_list");
 			}
-			component(st);
+			component();
 		}
 	}
-	if( expect(Tok_Rbrace, false, "component_list") ) addTerminal(st);
+	expect(Tok_Rbrace, false, "component_list");
 }
 
-void Parser::component(SynTree* st) {
-	{ SynTree* tmp = new SynTree(SynTree::R_component, la); st->d_children.append(tmp); st = tmp; }
-	if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Eq )  ) {
-		if( expect(Tok_ident, false, "component") ) addTerminal(st);
-		if( expect(Tok_Eq, false, "component") ) addTerminal(st);
+void Parser::component() {
+	if( ( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Eq ) || ( peek(1).d_type == Tok_unsigned && peek(2).d_type == Tok_Eq ) )  ) {
+		if( la.d_type == Tok_ident ) {
+			expect(Tok_ident, false, "component");
+		} else if( la.d_type == Tok_unsigned ) {
+			expect(Tok_unsigned, false, "component");
+		} else
+			invalid("component");
+		expect(Tok_Eq, false, "component");
 	}
 	if( FIRST_ConstExpression(la.d_type) ) {
-		ConstExpression(st);
+		ConstExpression();
 	} else if( FIRST_component_list(la.d_type) ) {
-		component_list(st);
+		component_list();
 	} else
 		invalid("component");
 }

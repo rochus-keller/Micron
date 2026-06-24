@@ -33,11 +33,18 @@ class MilLoader2 : public Mil::Importer
 public:
     MilLoader2();
 
+    // TODO: we need a mechanism which generates MIC type information for each
+    // successfull MilLoader2::loadFromFile call
+    // TODO: loadFromFile should be able to load MIL not only from MIL files, but also
+    // from ELF .micron.mod sections
     Mil::Declaration* loadFromFile( const QString& path);
     Mil::Declaration* loadFromFile( QIODevice*, const QString& path);
+
     Mil::AstModel& getModel() { return mdl; }
     QList<Mil::Declaration*> getModulesInDependencyOrder();
 protected:
+    // TODO: the loader needs information where to find MIL modules; do we just look
+    // into each file of a directory, or do we get a finite list of files up front?
     Mil::Declaration* loadModule( const Mil::Import& imp );
 
 private:

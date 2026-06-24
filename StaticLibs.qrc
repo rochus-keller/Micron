@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>runtime/libscreen_linux_i386.a</file>
+        <file>runtime/libmicron_linux_i386.a</file>
+        <file>runtime/mic_init_glibc.c</file>
+    </qresource>
+</RCC>

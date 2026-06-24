@@ -30,7 +30,7 @@
 #include "MilVmOakwood.h"
 using namespace Mil;
 
-Project::Project(AstModel* mdl):mdl(mdl)
+Project::Project(AstModel* mdl):mdl(mdl),haveOakwood(false)
 {
     Q_ASSERT(mdl);
 }
@@ -42,14 +42,37 @@ Project::~Project()
 
 void Project::clear()
 {
-
+    mdl->clear();
+    moduleFiles.clear();
 }
 
 void Project::setFiles(const QStringList& files)
 {
     clear();
-    allMilFiles << ":/runtime/MIC+.mil";
-    allMilFiles << files;
+    moduleFiles << ModuleFile(":/runtime/MIC+.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("MIC$"),0) );
+#if 0
+    // no, those are expected to be part of the MIL files set
+    if( haveOakwood )
+    {
+        moduleFiles << ModuleFile(":/oakwood/mil/Args.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Args"),0) );
+        moduleFiles << ModuleFile(":/oakwood/mil/Files.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Files"),0) );
+        moduleFiles << ModuleFile(":/oakwood/mil/In.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("In"),0) );
+        moduleFiles << ModuleFile(":/oakwood/mil/Input.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Input"),0) );
+        moduleFiles << ModuleFile(":/oakwood/mil/Math.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Math"),0) );
+        moduleFiles << ModuleFile(":/oakwood/mil/MathL.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("MathL"),0) );
+        moduleFiles << ModuleFile(":/oakwood/mil/Out.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Out"),0) );
+        moduleFiles << ModuleFile(":/oakwood/mil/Screen.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Screen"),0) );
+        moduleFiles << ModuleFile(":/oakwood/mil/Strings.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Strings"),0) );
+    }
+#endif
+    foreach( const QString& path, files )
+    {
+        const QByteArrayList names = Lexer::isMilModule(path);
+        if( names.isEmpty() )
+            qCritical() << "Invalid MIL file:" << path;
+        else // TODO: check for name uniqness
+            moduleFiles << ModuleFile(path, names);
+    }
 }
 
 static QStringList collectFiles( const QDir& dir, const QStringList& suffix )
@@ -70,9 +93,7 @@ static QStringList collectFiles( const QDir& dir, const QStringList& suffix )
 
 void Project::collectFilesFrom(const QString& rootPath)
 {
-    clear();
-    allMilFiles << ":/runtime/MIC+.mil";
-    allMilFiles << collectFiles(rootPath, QStringList() << "*.mil");
+    setFiles(collectFiles(rootPath, QStringList() << "*.mil"));
 }
 
 class Lex : public Scanner2
@@ -97,59 +118,24 @@ public:
 
 bool Project::parse()
 {
-    int ok = 0;
+    int ok = 0, all = 0;;
     QElapsedTimer timer;
     timer.start();
-    foreach( const QString& file, allMilFiles )
+    for( int i = 0; i < moduleFiles.size(); i++ )
     {
-        Lex lex;
-        lex.lex.setStream(file);
-        Parser2 p(mdl, &lex, this);
-        qDebug() << "**** parsing" << file;
-        bool errorsFound = false;
-        int parsed = 0;
-        while( p.parseModule() ) // TODO: skip already parsed modules
+        Import imp;
+        for( int j = 0; j < moduleFiles[i].mods.size(); j++ )
         {
-            parsed++;
-            if( !p.errors.isEmpty() )
-            {
-                foreach( const Parser2::Error& e, p.errors )
-                    qCritical() << e.path << e.pos.d_row << e.pos.d_col << e.msg;
-                p.errors.clear();
-                errorsFound = true;
-            }else
-            {
-                Declaration* module = p.takeModule();
-                qDebug() << "module" << module->name;
-                Validator v(mdl);
-                if( !v.validate(module) )
-                {
-                    foreach( const Validator::Error& e, v.errors )
-                        qCritical() << e.where << e.pc << e.msg;
-                    v.errors.clear();
-                    errorsFound = true;
-                    delete module;
-                    module = 0;
-                }
-                if( module && !mdl->addModule(module) )
-                {
-                    delete module;
-                    module = 0;
-                }
-            }
+            all++;
+            imp.moduleName = moduleFiles[i].mods[j].first;
+            Declaration* d = loadModule(imp);
+            if( d && !d->hasErrors )
+                ok++;
         }
-        if( !p.errors.isEmpty() )
-        {
-            foreach( const Parser2::Error& e, p.errors )
-                qCritical() << e.path << e.pos.d_row << e.pos.d_col << e.msg;
-            errorsFound = true;
-        }
-        if( parsed && !errorsFound )
-            ok++;
     }
-    qDebug() << "#### finished with" << ok << "files ok of total" << allMilFiles.size() << "files" << "in" <<
+    qDebug() << "#### finished with" << ok << "files ok of total" << all << "files" << "in" <<
                 timer.elapsed() << " [ms]";
-    return ok == allMilFiles.size();
+    return ok == all;
 }
 
 void Project::generateC()
@@ -178,19 +164,24 @@ void Project::interpret(bool dump)
 {
     Interpreter r(mdl);
 
-    VmOakwood::addTo(&r,false);
+    if( haveOakwood )
+#ifdef _MIC_HAVE_SCREEN_
+        Mil::VmOakwood::addTo(&r, true);
+#else
+        Mil::VmOakwood::addTo(&r, false);
+#endif
 
     mdl->calcMemoryLayouts(sizeof(void*), 8);
 
     if( !r.compile() )
         return;
 
-    if( false ) // dump )
+    if( dump )
     {
         QTextStream out(stdout);
         r.dumpAll(out);
-    }
-    r.run();
+    }else
+        r.run();
 }
 
 void Project::dumpMil()
@@ -203,7 +194,83 @@ void Project::dumpMil()
 
 Declaration*Project::loadModule(const Import& imp)
 {
-    // we assume here that all modules were already loaded and parsed
+    ModuleFile* mf = findByName(imp.moduleName);
+    if( mf == 0 )
+        return 0;
+
+    ModuleFile::Mod* m = mf->findByName(imp.moduleName);
+
+    if( m->second )
+        return m->second;
+
+    Declaration* module = mdl->findModuleByName(imp.moduleName);
+    if( module )
+        return module; // found in importer list
+
+    Lex lex;
+    lex.lex.setStream(mf->path);
+    Parser2 p(mdl, &lex, this);
+    qDebug() << "**** parsing file" << mf->path;
+    int parsed = 0;
+    while( p.parseModule() )
+    {
+        parsed++;
+        module = p.takeModule();
+        if( !p.errors.isEmpty() )
+        {
+            foreach( const Parser2::Error& e, p.errors )
+                qCritical() << e.path << e.pos.d_row << e.pos.d_col << e.msg;
+            p.errors.clear();
+            module->hasErrors = true;
+        }else
+        {
+            Validator v(mdl);
+            if( !v.validate(module) )
+            {
+                foreach( const Validator::Error& e, v.errors )
+                    qCritical() << e.where << e.pc << e.msg;
+                v.errors.clear();
+                module->hasErrors = true;
+            }
+        }
+        mdl->popImporter(module);
+        if( module && !mdl->addModule(module) )
+            delete module;
+        else
+        {
+            m = mf->findByName(module->name);
+            if(m)
+                m->second = module;
+        }
+    }
+    if( !p.errors.isEmpty() )
+    {
+        foreach( const Parser2::Error& e, p.errors )
+            qCritical() << e.path << e.pos.d_row << e.pos.d_col << e.msg;
+    }
+
     return mdl->findModuleByName(imp.moduleName);
 }
 
+Project::ModuleFile *Project::findByName(const QByteArray & name)
+{
+    for( int i = 0; i < moduleFiles.size(); i++ )
+        for( int j = 0; j < moduleFiles[i].mods.size(); j++ )
+            if( moduleFiles[i].findByName(name) )
+                return &moduleFiles[i];
+    return 0;
+}
+
+Project::ModuleFile::ModuleFile(const QString &path, const QByteArrayList & names):path(path)
+{
+    foreach( const QByteArray& name, names )
+        mods << Mod(name,0);
+}
+
+Project::ModuleFile::Mod *Project::ModuleFile::findByName(const QByteArray &name)
+{
+    for( int j = 0; j < mods.size(); j++ )
+        if( mods[j].first.constData() == name.constData() )
+            return &mods[j];
+    return 0;
+}

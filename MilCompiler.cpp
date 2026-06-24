@@ -20,33 +20,54 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include "MilProject.h"
+#include "Version.h"
 #include <QCommandLineParser>
 #include <QtDebug>
 
+extern "C" {
+void Args_setArgcArgv(unsigned int c, char** v);
+}
 
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
+    a.setOrganizationName("Dr. Rochus Keller");
+    a.setOrganizationDomain("www.rochus-keller.ch");
+    a.setApplicationName("milc");
+    a.setApplicationVersion(MICRON_VERSION);
+
 
     QCommandLineParser cp;
-    cp.setApplicationDescription("Micron Intermediate Language (MIL) compiler");
+    cp.setApplicationDescription(QString("Micron Intermediate Language (MIL) compiler, version %1").arg(MICRON_VERSION));
     cp.addHelpOption();
     cp.addVersionOption();
     cp.addPositionalArgument("file", "a single mil file, or the directory searched for *.mil files");
     QCommandLineOption cgen("cgen", "generate C code");
     cp.addOption(cgen);
-    QCommandLineOption run("run", "interpret the code");
+    QCommandLineOption run("r", "run in interpreter");
     cp.addOption(run);
-    QCommandLineOption dump("d", "dump MIL");
+    QCommandLineOption dump("d", "dump MIL code");
     cp.addOption(dump);
+    QCommandLineOption dump2("l", "dump low-level bytecode");
+    cp.addOption(dump2);
+    QCommandLineOption oak("oakwood", "add oakwood modules");
+    cp.addOption(oak);
 
-    cp.process(a);
+    QStringList allArgs = a.arguments();
+
+    // cut away all arguments starting from "--"; they are sent to the interpreter instead
+    const int doubledash = allArgs.indexOf("--");
+    if( doubledash != -1 )
+        allArgs = allArgs.mid(0, doubledash);
+
+    cp.process(allArgs);
     const QStringList args = cp.positionalArguments();
     if( args.isEmpty() )
-        return -1;
+        cp.showHelp(-1);
 
     Mil::AstModel mdl;
     Mil::Project pro(&mdl);
+    pro.setOakwood(cp.isSet(oak));
     QFileInfo info(args.first());
     if( info.isDir() )
         pro.collectFilesFrom(info.filePath());
@@ -55,9 +76,33 @@ int main(int argc, char *argv[])
 
     const bool result = pro.parse();
 
-    if( result && cp.isSet(cgen) )
+    if( !result )
+        return 1;
+
+    QByteArrayList argc_;
+    QVector<char*> argv_;
+    argv_.reserve(10);
+    argv_.append("Micron Interpreter");
+
+    if( doubledash != -1 )
+    {
+        for( int i = doubledash+1; i < a.arguments().size(); i++ )
+            argc_.append( a.arguments()[i].toUtf8() );
+
+        for( int i = 0; i < argc_.size(); i++ )
+        {
+            if( !argc_[i].isEmpty() )
+                argv_.append(argc_[i].data());
+        }
+    }
+
+    Args_setArgcArgv( argv_.size(), argv_.data() );
+
+    if( cp.isSet(cgen) )
         pro.generateC();
-    if( result && cp.isSet(run) )
+    if( cp.isSet(dump2) )
+        pro.interpret(true);
+    if( cp.isSet(run) )
         pro.interpret();
 
     return 0;
