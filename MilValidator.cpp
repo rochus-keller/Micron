@@ -526,6 +526,8 @@ void Validator::visitStatSeq(Statement* stat)
 Statement* Validator::visitIfThenElse(Statement* stat)
 {
     Q_ASSERT( stat && stat->kind == IL_if );
+    if( stat->e == 0 )
+        error(stat,"empty if condition");
     visitExpr(stat->e);
     expectN(1, stat); // IF args points to the boolean expression,
     if( stat->args == 0 || !isInt32(deref(stat->args->getType())) )
@@ -551,6 +553,8 @@ void Validator::visitRepeat(Statement* stat)
 {
     Q_ASSERT( stat && stat->kind == IL_repeat );
     visitStatSeq(stat->body);
+    if( stat->e == 0 )
+        error(stat,"empty repeat condition");
     visitExpr(stat->e);
     expectN(1, stat);
     if( stat->args && !isInt32(deref(stat->args->getType())) )
@@ -599,6 +603,8 @@ Statement*Validator::visitSwitch(Statement* stat)
 void Validator::visitWhile(Statement* stat)
 {
     Q_ASSERT( stat && stat->kind == IL_while );
+    if( stat->e == 0 )
+        error(stat,"empty while condition");
     visitExpr(stat->e);
     expectN(1, stat);
     if( stat->args && !isInt32(deref(stat->args->getType())) )

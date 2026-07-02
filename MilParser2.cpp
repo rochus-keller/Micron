@@ -55,6 +55,10 @@ static inline bool FIRST_TypeDeclaration(int tt) {
     return tt == Tok_LINE || tt == Tok_ident;
 }
 
+static inline bool FIRST_Line(int tt) {
+    return tt == Tok_LINE;
+}
+
 static inline bool FIRST_type(int tt) {
 	switch(tt){
 	case Tok_UNION:
@@ -1812,6 +1816,14 @@ void Parser2::Line()
 
 Expression* Parser2::Expression_() {
     Expression* res = 0;
+
+    if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
+        res = ExpInstr();
+    } else if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
+        Line();
+    } else
+        invalid("Expression");
+
     while( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) || nextIsLine() ) {
         if( nextIsLine() ) {
             Line();

@@ -1195,7 +1195,7 @@ void Parser::module() {
 			ImportList();
 		} else if( FIRST_ImporterList(la.d_type) || FIRST_ImporterList(la.d_code) ) {
 			ImporterList();
-		} else if( FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) || la.d_code == Tok_PROCEDURE || la.d_code == Tok_PROC || la.d_code == Tok_END || la.d_code == Tok_CONST || la.d_code == Tok_IMPORT || la.d_code == Tok_TYPE || la.d_code == Tok_VAR || la.d_code == Tok_IMPORTER ) {
+		} else if( FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) || la.d_code == Tok_PROC || la.d_code == Tok_CONST || la.d_code == Tok_IMPORTER || la.d_code == Tok_IMPORT || la.d_code == Tok_PROCEDURE || la.d_code == Tok_VAR || la.d_code == Tok_TYPE || la.d_code == Tok_END ) {
 			DeclarationSequence();
 		} else
 			invalid("module");
@@ -1288,6 +1288,12 @@ void Parser::DeclarationSequence() {
 }
 
 void Parser::Expression() {
+	if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
+		ExpInstr();
+	} else if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
+		Line();
+	} else
+		invalid("Expression");
 	while( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) || FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
 		if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
 			ExpInstr();
@@ -1844,7 +1850,7 @@ void Parser::MetaParams() {
 		Line();
 	}
 	expect(Tok_ident, false, "MetaParams");
-	while( ( ( peek(1).d_type == Tok_Comma && peek(2).d_code == Tok_LINE ) || peek(1).d_type == Tok_ident || ( peek(1).d_type == Tok_Comma && peek(2).d_type == Tok_ident ) || ( peek(1).d_code == Tok_LINE && peek(2).d_type == Tok_unsigned ) || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Comma ) || ( peek(1).d_type == Tok_ident && peek(2).d_code == Tok_LINE ) || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_ident ) )  ) {
+	while( ( ( peek(1).d_code == Tok_LINE && peek(2).d_type == Tok_unsigned ) || peek(1).d_type == Tok_ident || ( peek(1).d_type == Tok_Comma && peek(2).d_code == Tok_LINE ) || ( peek(1).d_type == Tok_Comma && peek(2).d_type == Tok_ident ) || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Comma ) || ( peek(1).d_type == Tok_ident && peek(2).d_code == Tok_LINE ) || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_ident ) )  ) {
 		if( la.d_type == Tok_Comma ) {
 			expect(Tok_Comma, false, "MetaParams");
 		}
