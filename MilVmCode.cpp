@@ -1490,7 +1490,7 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
     case IL_newobj0:
     case IL_newarr0:
     case IL_newobjgc:
-    case IL_newarrgc:{
+    case IL_newarrgc: {
         Type* tt = deref(e->d->getType());
         const int len = tt->getByteSize(pointerWidth);
         LL_op op = LL_invalid;
@@ -1533,34 +1533,41 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
             emitOp(proc,op, id, true); // minus -> template id
         }else
             emitOp(proc,op, len);
-    }
+        }
         break;
     case IL_nop:
-    case IL_castptr:
         break; // NOP
+    case IL_castptr:
+        if( lhsT->isInteger() )
+        {
+            if( lhsT->isInt32OnStack() && pointerWidth > 4 )
+                emitOp(proc, LL_conv_i4_i8);
+            else if( lhsT->isInt64() && pointerWidth == 4 )
+                emitOp(proc, LL_conv_i8_i4);
+        }
+        // else NOP
+        break;
     case IL_dup:
         emitOp(proc,LL_dup, e->getType()->getByteSize(pointerWidth));
         break;
     case IL_call:
     case IL_callvirt:
-    case IL_callinst:
-    {
-        if( !translateProcDecl(e->d) )
-            return false;
-        const int id = findProc(e->d);
-        if( id < 0 )
-        {
-            qCritical() << "cannot find implementation of" << e->d->toPath();
-            return false;
-        }
-        if( e->kind == IL_call )
-            emitOp(proc, LL_call, id);
-        else if( e->kind == IL_callinst )
-            emitOp(proc, LL_callinst, id);
-        else
-            emitOp(proc, LL_callvirt, id);
-    }
-        break;
+    case IL_callinst: {
+            if( !translateProcDecl(e->d) )
+                return false;
+            const int id = findProc(e->d);
+            if( id < 0 )
+            {
+                qCritical() << "cannot find implementation of" << e->d->toPath();
+                return false;
+            }
+            if( e->kind == IL_call )
+                emitOp(proc, LL_call, id);
+            else if( e->kind == IL_callinst )
+                emitOp(proc, LL_callinst, id);
+            else
+                emitOp(proc, LL_callvirt, id);
+        } break;
     case IL_calli: {
         // Compute argsSize and returnSize from the function pointer type.
         // e->lhs is the function pointer expression; its type is the proc type.

@@ -1617,7 +1617,8 @@ void Parser2::FPSection() {
     foreach( const Token& id, ids )
     {
         Declaration* d = addDecl(id,Declaration::ParamDecl,false);
-        d->setType(t);
+        if( d )
+            d->setType(t);
     }
 }
 
@@ -1817,12 +1818,9 @@ void Parser2::Line()
 Expression* Parser2::Expression_() {
     Expression* res = 0;
 
-    if( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) ) {
-        res = ExpInstr();
-    } else if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
+    if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) )
         Line();
-    } else
-        invalid("Expression");
+    res = ExpInstr();
 
     while( FIRST_ExpInstr(la.d_type) || FIRST_ExpInstr(la.d_code) || nextIsLine() ) {
         if( nextIsLine() ) {

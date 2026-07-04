@@ -315,7 +315,7 @@ void IlAsmRenderer::render(const ProcData& m)
     {
         out << ws() << "procedure ";
         lineout();
-        if( (m.kind == ProcData::Normal || m.kind == ProcData::Abstract || m.kind == ProcData::Inline) && !m.binding.isEmpty() )
+        if( (m.kind == ProcData::Normal || m.kind == ProcData::Abstract || m.kind == ProcData::Inline || m.kind == ProcData::Forward) && !m.binding.isEmpty() )
             out << m.binding << ".";
         out << m.name;
         state = Proc;

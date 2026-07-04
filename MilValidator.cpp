@@ -919,9 +919,9 @@ Expression* Validator::visitExpr(Expression* e)
             {
                 e->lhs = stackAt(-1); // ptr
                 Type* lhsT = deref(e->lhs->getType());
-                if( lhsT->kind != Type::Pointer )
+                if( lhsT->kind != Type::Pointer && !lhsT->isInteger() )
                 {
-                    error(e, "expecting a pointer on the stack");
+                    error(e, "expecting a pointer or integer on the stack");
                     break;
                 }
                 Type* ptr = new Type();

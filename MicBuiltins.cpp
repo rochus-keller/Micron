@@ -590,6 +590,7 @@ void Builtins::doCast(const RowCol &pos)
     {
         if(type.type == 0 || type.type->kind != Type::Pointer)
             return; // reported elsewhere
+        // castptr expects the base type of the pointer, not the full pointer type
         ev->out->castptr_(ev->toQuali(type.type->getType()));
     }
     ev->stack.back().type = type.type;
