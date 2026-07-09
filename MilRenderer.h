@@ -73,7 +73,7 @@ namespace Mil
         QList<Var> params;
         QList<Var> locals;
         Quali retType;
-        QByteArray binding; // if Normal and not empty, the first param is receiver
+        QByteArray binding; // if Normal and not empty, the first param is receiver; also used for external name (quoted string, number or quali)
         ProcData():kind(Invalid),isPublic(0),endLine(0) {}
     };
 
@@ -238,6 +238,8 @@ namespace Mil
         Declaration* getModule() const { return module; }
         Type* getCurrentType() const { return type; }
 
+        void resolveAll(bool reportError = false);
+
     protected:
         Type* derefType(const Quali& );
         Statement* translateStat(const QList<ProcData::Op>& ops, quint32& pc);
@@ -247,7 +249,6 @@ namespace Mil
         Declaration* resolve(const Quali&) const;
         void error(Declaration *d, const QString&, int pc = -1);
         void error(Type *t, const QString&, int pc = -1);
-        void resolveAll(bool reportError = false);
         RowCol setline(quint32 line)
         {
             if( line )

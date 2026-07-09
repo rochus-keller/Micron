@@ -47,6 +47,7 @@ namespace Mil
                        const QByteArray& binding = QByteArray() ); // object type for methods, proc name for foreign
         void toFinallySection(bool, const RowCol&);
         void endProc(const RowCol&);
+        void discardProc();
 
         void beginType(const QByteArray& name, const RowCol&, bool isPublic = true, quint8 typeKind = EmiTypes::Struct,
                        const Quali& super = Quali() );

@@ -159,7 +159,7 @@ void Validator::visitProcedure(Declaration* proc)
 {
     if( proc->forward || proc->extern_ || proc->foreign_ )
     {
-        return; // TODO: check param compat
+        return; // TODO: check param compat, check foreign qualidents
     }
     curProc = proc;
     stack.clear();

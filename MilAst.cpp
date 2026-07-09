@@ -725,6 +725,24 @@ Constant::~Constant()
     }
 }
 
+quint64 Constant::toUnsigned(const QByteArray &str)
+{
+    if( str.isEmpty() )
+        return 0;
+    quint64 res = 0;
+    bool ok = true;
+    if( str.endsWith('H') || str.endsWith('h') )
+        res = str.left(str.size()-1).toULongLong(&ok,16);
+    else if( str.endsWith('O') || str.endsWith('o') )
+        res = str.left(str.size()-1).toULongLong(&ok,8);
+    else if( str.endsWith('Z') || str.endsWith('z') )
+        res = str.left(str.size()-1).toULongLong(&ok,2);
+    else res = str.toULongLong(&ok);
+    if( !ok )
+        qWarning() << "invalid unsigned:" << str;
+    return res;
+}
+
 ComponentList::~ComponentList()
 {
     if( type && !type->owned )
@@ -1071,10 +1089,17 @@ Quali Type::toQuali() const
 {
     if( kind == NameRef )
     {
+        // Prefer an explicitly-qualified reference (module part present). When
+        // the stored Quali lacks a module, e.g. a reference bound to a type
+        // that was only declared later in the same module and resolved after
+        // the fact, fall back to the resolved type so the emitted reference
+        // carries the proper (possibly cross-module) qualifier.
+        if( quali && !quali->first.isEmpty() )
+            return *quali;
+        if( type )
+            return type->toQuali();
         if( quali )
             return *quali;
-        else if( type )
-            return type->toQuali();
     }
     if( decl )
         return decl->toQuali();
@@ -1140,3 +1165,9 @@ ModuleData::~ModuleData()
         delete toDelete;
 }
 
+
+ProcedureData::~ProcedureData()
+{
+    if( externalId )
+        delete externalId;
+}

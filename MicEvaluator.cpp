@@ -2094,6 +2094,12 @@ QByteArray Evaluator::dequote(const QByteArray& str)
     return res;
 }
 
+QByteArray Evaluator::quote(const QByteArray &str)
+{
+    QByteArray q = str.contains('"') ? "'" : "\"";
+    return q + str + q;
+}
+
 Type *Evaluator::enumFoundationalType(Type * t)
 {
     Q_ASSERT( t && t->kind == Type::ConstEnum);

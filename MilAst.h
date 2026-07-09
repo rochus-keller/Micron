@@ -181,12 +181,13 @@ namespace Mil
 
     struct ProcedureData
     {
-        ProcedureData():finally(0),slot(0) {}
+        ProcedureData():finally(0),slot(0),externalId(0) {}
+        ~ProcedureData();
 
         quint32 slot;
         Statement* finally; // optionally, owned
         Mic::RowCol end;
-        QByteArray externalName; // original name in the external C library
+        Constant* externalId; // original name in the external C library, as string (S)| unsigned (I)|const ref (R)
     };
 
     class Declaration : public Node
@@ -282,6 +283,7 @@ namespace Mil
         };
         Constant():kind(Invalid) {}
         ~Constant();
+        static quint64 toUnsigned(const QByteArray& str);
     };
 
     class Expression : public Node

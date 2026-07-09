@@ -58,6 +58,7 @@ public:
     Qualident toQuali(Type*);
     Qualident toQuali(Declaration*);
     static QByteArray dequote(const QByteArray& str);
+    static QByteArray quote(const QByteArray& str);
 
     static inline Type* maxType(Type* lhs, Type* rhs)
     {

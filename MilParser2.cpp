@@ -21,6 +21,7 @@
 
 #include "MilParser2.h"
 #include <QtDebug>
+#include <limits>
 using namespace Mil;
 
 static inline bool FIRST_Mil(int tt) {
@@ -934,7 +935,10 @@ void Parser2::number(Constant* c) {
             c->d = -c->d;
 	} else if( la.d_type == Tok_unsigned ) {
 		expect(Tok_unsigned, false, "number");
-        c->i = cur.d_val.toLongLong();
+        const quint64 n = Constant::toUnsigned(cur.d_val);
+        if( n > std::numeric_limits<qint64>::max() )
+            error(cur, "unsigned is too large");
+        c->i = n;
         c->kind = Constant::I;
         if( minus )
             c->i = -c->i;
@@ -1059,7 +1063,7 @@ void Parser2::ConstDeclaration() {
         Line();
     }
     expect(Tok_ident, false, "ConstDeclaration");
-    Declaration* d = addDecl(cur, Declaration::ConstDecl);
+    Declaration* d = addDecl(cur, Declaration::ConstDecl, true);
     if( d == 0 )
         return;
     if( la.d_type == Tok_Eq ) {
@@ -1514,8 +1518,31 @@ void Parser2::ProcedureDeclaration() {
             expect(Tok_FOREIGN, true, "ProcedureDeclaration");
             p->foreign_ = true;
             if( la.d_type == Tok_string ) {
-                expect(Tok_string, false, "ProcedureDeclaration");
-                p->getPd()->externalName = cur.d_val.mid(1, cur.d_val.size()-2);
+                next();
+                Constant* c = new Constant();
+                c->kind = Constant::S;
+                cur.d_val = cur.d_val.mid(1, cur.d_val.size()-2); // dequote
+                c->s = (char*)malloc( cur.d_val.size() + 1);
+                strcpy(c->s, cur.d_val.constData());
+                p->getPd()->externalId = c;
+            }else if( la.d_type == Tok_unsigned )
+            {
+                next();
+                p->getPd()->externalId = new Constant();
+                p->getPd()->externalId->kind = Constant::I;
+                p->getPd()->externalId->i = Constant::toUnsigned(cur.d_val); // TODO: could overflow
+            }else if( FIRST_qualident((la.d_type) ) )
+            {
+                const Token t = la;
+                Declaration* d = qualident();
+                if( d && d->kind != Declaration::ConstDecl )
+                    error(t, "qualident must reference a constant declaration");
+                else if( d )
+                {
+                    p->getPd()->externalId = new Constant();
+                    p->getPd()->externalId->kind = Constant::R;
+                    p->getPd()->externalId->r = d;
+                }
             }
         } else if( la.d_code == Tok_FORWARD || ( la.d_type == Tok_Semi && peek(2).d_code == Tok_FORWARD ) ) {
             if( la.d_type == Tok_Semi ) {
@@ -1654,18 +1681,19 @@ void Parser2::module() {
             expect(Tok_Semi, false, "module");
         }
     }
-    while( FIRST_ImportList(la.d_type) || la.d_type == Tok_IMPORTER || la.d_code == Tok_IMPORTER || FIRST_DeclarationSequence(la.d_type) ) {
-		if( FIRST_ImportList(la.d_type) ) {
-			ImportList();
-        } if( la.d_type == Tok_IMPORTER || la.d_code == Tok_IMPORTER ) {
+    while( FIRST_ImportList(la.d_type) || FIRST_ImportList(la.d_code) || la.d_type == Tok_IMPORTER || la.d_code == Tok_IMPORTER ||
+           FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) ) {
+        if( FIRST_ImportList(la.d_type) || FIRST_ImportList(la.d_code) ) {
+            ImportList();
+        } else if( la.d_type == Tok_IMPORTER || la.d_code == Tok_IMPORTER ) {
             ImporterList();
-        } else if( FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) || la.d_code == Tok_IMPORT ||
-                   la.d_code == Tok_IMPORTER || la.d_code == Tok_VAR || la.d_code == Tok_PROCEDURE || la.d_code == Tok_CONST ||
-                   la.d_code == Tok_END || la.d_code == Tok_PROC || la.d_code == Tok_TYPE ) {
+        } else if( FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) || la.d_code == Tok_CONST || la.d_code == Tok_PROC ||
+                   la.d_code == Tok_IMPORTER || la.d_code == Tok_IMPORT || la.d_code == Tok_END || la.d_code == Tok_TYPE || la.d_code == Tok_PROCEDURE ||
+                   la.d_code == Tok_VAR ) {
             DeclarationSequence();
-		} else
-			invalid("module");
-	}
+        } else
+            invalid("module");
+    }
 	expect(Tok_END, false, "module");
     if( nextIsLine() ) {
         Line();
@@ -1767,10 +1795,10 @@ void Parser2::importer()
 }
 
 void Parser2::DeclarationSequence() {
-	while( la.d_type == Tok_CONST || la.d_type == Tok_TYPE || la.d_type == Tok_VAR || FIRST_ProcedureDeclaration(la.d_type) ) {
-		if( la.d_type == Tok_CONST ) {
+    while( la.d_code == Tok_CONST || la.d_type == Tok_TYPE || la.d_type == Tok_VAR || FIRST_ProcedureDeclaration(la.d_type) ) {
+        if( la.d_code == Tok_CONST ) {
 			expect(Tok_CONST, false, "DeclarationSequence");
-			while( FIRST_ConstDeclaration(la.d_type) ) {
+            while( FIRST_ConstDeclaration(la.d_type) ) {
 				ConstDeclaration();
 				if( la.d_type == Tok_Semi ) {
 					expect(Tok_Semi, false, "DeclarationSequence");
@@ -2934,7 +2962,10 @@ quint32 Parser2::numberOrIdent(bool param)
 {
     if( la.d_type == Tok_unsigned ) {
         expect(Tok_unsigned, false, "numberOrIdent");
-        return cur.d_val.toUInt();
+        const quint64 id = Constant::toUnsigned(cur.d_val);
+        if( id > std::numeric_limits<quint32>::max() )
+            error(cur, QString("number is too large: '%1'").arg(cur.d_val.constData()));
+        return id;
     } else if( la.d_type == Tok_ident ) {
         expect(Tok_ident, false, "numberOrIdent");
         Declaration* d = scopeStack.back()->findSubByName(cur.d_val);

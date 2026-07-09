@@ -23,6 +23,7 @@
 #include "MilAst.h"
 #include "MilValidator.h"
 #include "MilAstSerializer.h"
+#include "MilToken.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QFile>
@@ -87,7 +88,10 @@ void IlAsmRenderer::addVariable(const Quali& typeRef, QByteArray name, bool isPu
 {
     out << ws() << "var ";
     lineout();
-    out << name << ": " << toString(typeRef) << endl;
+    out << name;
+    if( isPublic )
+        out << "*";
+    out << ": " << toString(typeRef) << endl;
 }
 
 void IlAsmRenderer::addProcedure(const ProcData& m)
@@ -348,9 +352,9 @@ void IlAsmRenderer::render(const ProcData& m)
         out << " extern ";
         break;
     case ProcData::Foreign:
-        out << " extern c ";
+        out << " foreign ";
         if( !m.binding.isEmpty() )
-            out << "\"" << m.binding << "\" ";
+            out << m.binding; // in case of string, the quotes are already there!
         break;
     case ProcData::Inline:
         out << " inline ";
@@ -763,6 +767,8 @@ void IlAstRenderer::addConst(const Quali& typeRef, const QByteArray& name, const
         break;
     case QVariant::Int:
     case QVariant::LongLong:
+    case QVariant::UInt:
+    case QVariant::ULongLong:
         co->c->kind = Constant::I;
         co->c->i = val.toLongLong();
         break;
@@ -839,10 +845,36 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
         case ProcData::Extern:
             decl->extern_ = true;
             break;
-        case ProcData::Foreign:
-            decl->foreign_ = true;
-            decl->getPd()->externalName = proc.binding;
-            break;
+        case ProcData::Foreign: {
+                decl->foreign_ = true;
+                if( !proc.binding.isEmpty() && (proc.binding[0] == '"' || proc.binding[0] == '\'') ) {
+                    Constant* c = new Constant();
+                    c->kind = Constant::S;
+                    QByteArray val = proc.binding.mid(1, proc.binding.size()-2); // dequote
+                    c->s = (char*)malloc( val.size() + 1);
+                    strcpy(c->s, val.constData());
+                    decl->getPd()->externalId = c;
+                }else if( !proc.binding.isEmpty() && ::isdigit(proc.binding[0]) )
+                {
+                    decl->getPd()->externalId = new Constant();
+                    decl->getPd()->externalId->kind = Constant::I;
+                    decl->getPd()->externalId->i = Constant::toUnsigned(proc.binding);
+                }else
+                {
+                    const QByteArrayList pair = proc.binding.split('!');
+                    const Quali q = pair.size() == 1 ? Quali("",Token::getSymbol(pair.first())) :
+                                                 Quali(Token::getSymbol(pair[0]),Token::getSymbol(pair[1]));
+                    Declaration* d = resolve(q);
+                    if( d && d->kind != Declaration::ConstDecl )
+                        error(curProc, "qualident must reference a constant declaration");
+                    else if( d )
+                    {
+                        decl->getPd()->externalId = new Constant();
+                        decl->getPd()->externalId->kind = Constant::R;
+                        decl->getPd()->externalId->r = d;
+                    }
+                }
+            } break;
         case ProcData::Inline:
             decl->inline_ = true;
             break;

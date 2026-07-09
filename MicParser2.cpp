@@ -3966,9 +3966,11 @@ void Parser2::ProcedureDeclaration() {
                 procDecl->ffi_ = true;
                 procDecl->data = cur.d_val;
             }
-            out->beginProc(ev->toQuali(procDecl).second, procDecl->pos,
-                           procDecl->outer->kind == Declaration::Module &&
-                           procDecl->visi > 0, procDecl->ffi_ ? Mil::ProcData::Foreign : Mil::ProcData::Extern, procDecl->data.toByteArray());
+            QByteArray id = procDecl->data.toByteArray();
+            if( !id.isEmpty() )
+                id = ev->quote(id);
+            out->beginProc(ev->toQuali(procDecl).second, procDecl->pos, procDecl->outer->kind == Declaration::Module &&
+                           procDecl->visi > 0, procDecl->ffi_ ? Mil::ProcData::Foreign : Mil::ProcData::Extern, id);
 
             const QList<Declaration*> params = procDecl->getParams(true);
             foreach( Declaration* p, params )

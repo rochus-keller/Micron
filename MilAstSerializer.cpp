@@ -152,9 +152,16 @@ static void renderVar(const Declaration* v, AbstractRenderer* r)
 static void renderConst(const Declaration* v, AbstractRenderer* r)
 {
     QVariant val;
+    // A structured constant (byte string / component list) carries its type so
+    // the literal can be reconstructed; a scalar constant (I/D/P/S/R) derives
+    // its type from its value and is rendered as the bare `name = value` form.
+    // Passing the type to toVariant for a scalar would trigger the B/C assertion,
+    // and emitting a type qualifier would produce spurious `: <type>` output.
+    const bool structured = v->c && ( v->c->kind == Constant::B || v->c->kind == Constant::C );
+    Type* t = structured ? v->getType() : 0;
     if( v->c )
-        val = ConstrLiteral::toVariant(v->c, v->getType());
-    r->addConst(toQuali(v->getType()),v->name,val);
+        val = ConstrLiteral::toVariant(v->c, t);
+    r->addConst( t ? toQuali(t) : Quali(), v->name, val);
 }
 
 static void renderPos(ProcData& proc, const Mic::RowCol& pos, quint32& line, AstSerializer::DbgInfo dbi)
@@ -411,8 +418,20 @@ static void renderProc(const Declaration* proc, AbstractRenderer* r, AstSerializ
     else if(proc->foreign_ )
     {
         pdata.kind = ProcData::Foreign;
-        if( proc->pd )
-            pdata.binding = proc->pd->externalName;
+        if( proc->pd && proc->pd->externalId )
+        {
+            if( proc->pd->externalId->kind == Constant::I )
+                pdata.binding = QByteArray::number(proc->pd->externalId->p,16) + "h";
+            else if( proc->pd->externalId->kind == Constant::S )
+            {
+                QByteArray str(proc->pd->externalId->s);
+                QByteArray quote = str.contains('"') ? "'" : "\"";
+                pdata.binding = quote + str + quote;
+            }else if( proc->pd->externalId->kind == Constant::R )
+                pdata.binding = proc->pd->externalId->r->toPath();
+            else
+                qWarning() << "AstSerializer: invalid externalId";
+        }
     }else if(proc->forward )
         pdata.kind = ProcData::Forward;
     else if(proc->inline_ )

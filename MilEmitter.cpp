@@ -111,6 +111,19 @@ void Emitter::endProc(const RowCol & pos)
     ops = 0;
 }
 
+void Emitter::discardProc()
+{
+    // Drop any in-progress procedure(s) without emitting them. Tolerant of an
+    // empty stack so callers can invoke it unconditionally in a catch handler.
+    while( !d_proc.isEmpty() )
+        d_proc.pop_back();
+    ops = 0;
+    d_stackDepth = 0;
+    d_maxStackDepth = 0;
+    firstLine = 0;
+    lastLine = 0;
+}
+
 void Emitter::beginType(const QByteArray& name, const RowCol & pos, bool isPublic, quint8 typeKind, const Quali& super)
 {
     Q_ASSERT( d_typeKind == 0 );
