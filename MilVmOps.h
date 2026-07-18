@@ -38,6 +38,7 @@ OPDEF(cgt_u4, NoOpArgs), OPDEF(cgt_u8, NoOpArgs), OPDEF(cgt_p, NoOpArgs),
 OPDEF(clt_i4, NoOpArgs), OPDEF(clt_i8, NoOpArgs), OPDEF(clt_r4, NoOpArgs), OPDEF(clt_r8, NoOpArgs),
 OPDEF(clt_u4, NoOpArgs), OPDEF(clt_u8, NoOpArgs), OPDEF(clt_p, NoOpArgs),
 
+// NOTE: conv_b_a means convert a -> b!
 OPDEF(conv_i1_i4, NoOpArgs), OPDEF(conv_i1_i8, NoOpArgs), OPDEF(conv_i1_r4, NoOpArgs), OPDEF(conv_i1_r8, NoOpArgs), // to_from
 OPDEF(conv_i2_i4, NoOpArgs), OPDEF(conv_i2_i8, NoOpArgs), OPDEF(conv_i2_r4, NoOpArgs), OPDEF(conv_i2_r8, NoOpArgs),
 OPDEF(conv_i4_i8, NoOpArgs), OPDEF(conv_i4_r4, NoOpArgs), OPDEF(conv_i4_r8, NoOpArgs),
@@ -48,8 +49,11 @@ OPDEF(conv_u2_i4, NoOpArgs), OPDEF(conv_u2_i8, NoOpArgs), OPDEF(conv_u2_r4, NoOp
 OPDEF(conv_u4_i8, NoOpArgs), OPDEF(conv_u4_r4, NoOpArgs), OPDEF(conv_u4_r8, NoOpArgs),
 OPDEF(conv_u8_i4, NoOpArgs), OPDEF(conv_u8_r4, NoOpArgs), OPDEF(conv_u8_r8, NoOpArgs),
 
-OPDEF(conv_r4_i4, NoOpArgs), OPDEF(conv_r4_i8, NoOpArgs), OPDEF(conv_r4_r8, NoOpArgs),
-OPDEF(conv_r8_i4, NoOpArgs), OPDEF(conv_r8_i8, NoOpArgs), OPDEF(conv_r8_r4, NoOpArgs),
+OPDEF(conv_r4_i4, IntArg), OPDEF(conv_r4_i8, IntArg), OPDEF(conv_r4_r8, NoOpArgs),
+OPDEF(conv_r8_i4, IntArg), OPDEF(conv_r8_i8, IntArg), OPDEF(conv_r8_r4, NoOpArgs),
+// NOTE: conv_r4_ix and conv_r8_ix have an unsigned variant via IntArg=1;
+// if IntArg=1, we have conv_r4_ux, conv_r8_ux, because we get a different result whether i or u is on stack!
+// if IntArg=0, a signed value is assumed on the stack
 
 OPDEF(ldarg_i1, OffArg), OPDEF(ldarg_i2, OffArg), OPDEF(ldarg_i4, OffArg), OPDEF(ldarg_i8, OffArg),
 OPDEF(ldarg_u1, OffArg), OPDEF(ldarg_u2, OffArg), OPDEF(ldarg_u4, OffArg), OPDEF(ldarg_u8, OffArg),

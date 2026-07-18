@@ -22,10 +22,13 @@
 //   remove redundancy in vtable and extension level arrays, etc.
 
 #include "MilX86Renderer.h"
-#include <Micron/MicAtom.h>
+#include "MicAtom.h"
+#include "MilAstSerializer.h"
+#include "MilRenderer.h"
 #include <QtDebug>
 #include <QFile>
 #include <QFileInfo>
+#include <QBuffer>
 using namespace Mil;
 using namespace Vm;
 using namespace X86;
@@ -67,8 +70,12 @@ quint32 Renderer::getOrCreateExtSymbol(int procIdx)
     Vm::Procedure* proc = d_code.getProc(procIdx);
     Q_ASSERT(proc && proc->decl);
 
+    // Foreign procedure with an explicit C linker name: use it verbatim.
+    ForeignSym fs = proc->decl->foreignSym();
     QByteArray name;
-    if (proc->decl->kind == Declaration::Module)
+    if (fs.kind == ForeignSym::Named)
+        name = fs.name;
+    else if (proc->decl->kind == Declaration::Module)
         name = elfSymName(proc->decl->name + QByteArray("$begin$"));
     else
         name = elfSymName(proc->decl->toPath());
@@ -675,8 +682,15 @@ bool Renderer::renderModule(Declaration* module)
     // COMMON/BSS (MIC$GLOBALS), so vtable pointers are initialized at runtime
     // via emitGlobalVarVtableInits() emitted in the $begin$ guard block above.
 
-    // Write .micron.mod
-    QByteArray modContent = "module " + module->name + "\n";
+    // Serialize the module's public interface as MIL text into the .micron.mod section
+    QByteArray modContent;
+    {
+        QBuffer buf(&modContent);
+        buf.open(QIODevice::WriteOnly);
+        IlAsmRenderer ir(&buf, false);
+        AstSerializer::renderInterface(&ir, module);
+        buf.close();
+    }
     d_elf.appendToSection(d_sections.micronMod, modContent);
 
     // module variables
@@ -2332,17 +2346,44 @@ int Renderer::emitOp(Procedure& proc, int pc)
         popReg(EAX); em.xor_rr(EDX, EDX); pushRegPair(EAX, EDX); return 1;
 
     // r4 conversions (int -> float)
+    // val != 0 means the source integer is unsigned. x87 FILD only loads
+    // signed integers, so an unsigned 32-bit value is zero-extended to 64
+    // bits and loaded with FILD qword.
     case LL_conv_r4_i4:
-        em.fild_s(ESP, 0);
+        if (val) {
+            popReg(EAX);
+            em.push_i(0);        // high dword = 0 (zero-extend)
+            em.push_r(EAX);      // low dword = value
+            em.fild_q(ESP, 0);
+            em.add_ri(ESP, 4);   // shrink 8 -> 4
+            em.fstp_s(ESP, 0);
+        } else {
+            em.fild_s(ESP, 0);
+            em.fstp_s(ESP, 0);
+        }
+        return 1;
+    case LL_conv_r4_i8: {
+        // Full 64-bit source. FILD qword loads a signed 64-bit integer; for an
+        // unsigned source with bit 63 set, add 2^64 to correct the result.
+        popRegPair(EAX, EDX);    // EAX = low dword, EDX = high dword
+        em.push_r(EDX);
+        em.push_r(EAX);          // [ESP] = full 64-bit value
+        em.fild_q(ESP, 0);
+        if (val) {
+            Label noAdjust;
+            em.test_rr(EDX, EDX);
+            em.jcc(CC_NS, noAdjust); // high bit clear -> value already correct
+            em.push_i(0x43F00000);   // 2^64 as double (high dword)
+            em.push_i(0x00000000);   // 2^64 as double (low dword)
+            em.fld_d(ESP, 0);
+            em.faddp();
+            em.add_ri(ESP, 8);
+            em.bind(noAdjust);
+        }
+        em.add_ri(ESP, 4);       // shrink 8 -> 4 for the float result
         em.fstp_s(ESP, 0);
         return 1;
-    case LL_conv_r4_i8:
-        // Truncate to i4 first, then convert
-        popRegPair(EAX, EDX);
-        pushReg(EAX);
-        em.fild_s(ESP, 0);
-        em.fstp_s(ESP, 0);
-        return 1;
+    }
     case LL_conv_r4_r8:
         em.fld_d(ESP, 0);
         em.add_ri(ESP, 4); // shrink 8 -> 4
@@ -2354,20 +2395,41 @@ int Renderer::emitOp(Procedure& proc, int pc)
     // on the stack before the fstp. The pattern is: load into FPU, pop the
     // old value, push 8 bytes of space, then fstp.
     case LL_conv_r8_i4:
-        em.fild_s(ESP, 0);   // load i4 from stack into FPU
-        em.add_ri(ESP, 4);   // pop the i4 (4 bytes)
-        em.sub_ri(ESP, 8);   // allocate 8 bytes for double
-        em.fstp_d(ESP, 0);   // store double (8 bytes)
+        if (val) {
+            // unsigned: zero-extend to 64 bits, then FILD qword
+            popReg(EAX);
+            em.push_i(0);        // high dword = 0
+            em.push_r(EAX);      // low dword = value (8 bytes total)
+            em.fild_q(ESP, 0);   // load u32 (as 64-bit) into FPU
+            em.fstp_d(ESP, 0);   // store double (8 bytes)
+        } else {
+            em.fild_s(ESP, 0);   // load i4 from stack into FPU
+            em.add_ri(ESP, 4);   // pop the i4 (4 bytes)
+            em.sub_ri(ESP, 8);   // allocate 8 bytes for double
+            em.fstp_d(ESP, 0);   // store double (8 bytes)
+        }
         return 1;
-    case LL_conv_r8_i8:
-        // Truncate to i4, then convert
-        popRegPair(EAX, EDX);
-        pushReg(EAX);
-        em.fild_s(ESP, 0);   // load i4 into FPU
-        em.add_ri(ESP, 4);   // pop the i4
-        em.sub_ri(ESP, 8);   // allocate 8 bytes
-        em.fstp_d(ESP, 0);   // store double
+    case LL_conv_r8_i8: {
+        // Full 64-bit source. FILD qword loads a signed 64-bit integer; for an
+        // unsigned source with bit 63 set, add 2^64 to correct the result.
+        popRegPair(EAX, EDX);    // EAX = low dword, EDX = high dword
+        em.push_r(EDX);
+        em.push_r(EAX);          // [ESP] = full 64-bit value (8 bytes)
+        em.fild_q(ESP, 0);
+        if (val) {
+            Label noAdjust;
+            em.test_rr(EDX, EDX);
+            em.jcc(CC_NS, noAdjust); // high bit clear -> value already correct
+            em.push_i(0x43F00000);   // 2^64 as double (high dword)
+            em.push_i(0x00000000);   // 2^64 as double (low dword)
+            em.fld_d(ESP, 0);
+            em.faddp();
+            em.add_ri(ESP, 8);
+            em.bind(noAdjust);
+        }
+        em.fstp_d(ESP, 0);       // store double into the 8-byte slot
         return 1;
+    }
     case LL_conv_r8_r4:
         em.fld_s(ESP, 0);    // load float into FPU
         em.add_ri(ESP, 4);   // pop the float (4 bytes)
@@ -2417,18 +2479,29 @@ int Renderer::emitOp(Procedure& proc, int pc)
             }
         }
 
-        // CALL rel32 with relocation
-        // R_386_PC32: result = S + A - P, where P is address of the rel32 field.
-        // CPU computes branch target as P + 4 + stored_value, so we need addend = -4
-        // to compensate: S + (-4) - P = S - P - 4, which the CPU reads as (S - (P+4)).
-        quint32 callOff = em.call_rel32(-4); // addend = -4 for R_386_PC32
-        // callOff is the offset of the rel32 field
-        if (d_procSymbols.contains(val)) {
-            // Local call: R_386_PC32 relocation
-            d_elf.addRelocation(d_sections.relText, callOff, d_procSymbols[val], R_386_PC32);
+        // Foreign procedure bound to an absolute address: indirect call, no relocation.
+        ForeignSym fs = callee->decl->foreignSym();
+        if (fs.kind == ForeignSym::Address) {
+            em.mov_ri(EAX, (quint32)fs.address); // EAX is caller-saved / clobbered by the call
+            em.call_r(EAX);
         } else {
-            quint32 symIdx = getOrCreateExtSymbol(val);
-            d_elf.addRelocation(d_sections.relText, callOff, symIdx, R_386_PC32);
+            // CALL rel32 with relocation
+            // R_386_PC32: result = S + A - P, where P is address of the rel32 field.
+            // CPU computes branch target as P + 4 + stored_value, so we need addend = -4
+            // to compensate: S + (-4) - P = S - P - 4, which the CPU reads as (S - (P+4)).
+            quint32 callOff = em.call_rel32(-4); // addend = -4 for R_386_PC32
+            // callOff is the offset of the rel32 field
+            // A foreign proc with an explicit name is always an external reference,
+            // even if it happens to have a local proc symbol entry.
+            if (fs.kind == ForeignSym::Named) {
+                d_elf.addRelocation(d_sections.relText, callOff, getOrCreateExtSymbol(val), R_386_PC32);
+            } else if (d_procSymbols.contains(val)) {
+                // Local call: R_386_PC32 relocation
+                d_elf.addRelocation(d_sections.relText, callOff, d_procSymbols[val], R_386_PC32);
+            } else {
+                quint32 symIdx = getOrCreateExtSymbol(val);
+                d_elf.addRelocation(d_sections.relText, callOff, symIdx, R_386_PC32);
+            }
         }
 
         const bool fpReturn = callee->decl && callee->decl->getType() && callee->decl->getType()->isFloat();

@@ -127,6 +127,7 @@ namespace Mil
         ~Type();
 
         bool isInteger() const { return kind >= INT8 && kind <= UINT64; }
+        bool isUnsigned() const { return kind >= UINT8 && kind <= UINT64; }
         bool isInt64() const { return kind == UINT64 || kind == INT64; }
         bool isInt32() const { return kind == UINT32 || kind == INT32; }
         bool isFloat() const { return kind == FLOAT32 || kind == FLOAT64; }
@@ -190,6 +191,18 @@ namespace Mil
         Constant* externalId; // original name in the external C library, as string (S)| unsigned (I)|const ref (R)
     };
 
+    struct ForeignSym
+    {
+        enum Kind {
+            Default, // no explicit externalId: use the usual MIL naming convention (like extern)
+            Named,   // explicit C linker name
+            Address  // explicit absolute address
+        } kind;
+        QByteArray name; // valid when kind == Named
+        quint64 address; // valid when kind == Address
+        ForeignSym():kind(Default),address(0) {}
+    };
+
     class Declaration : public Node
     {
     public:
@@ -238,6 +251,7 @@ namespace Mil
         Declaration* findInitProc() const;
         ProcedureData* getPd();
         Type* getReceiver() const;
+        ForeignSym foreignSym() const; // resolve a foreign procedure's externalId (name/address)
     };
     typedef QList<Declaration*> DeclList;
 
@@ -364,6 +378,7 @@ namespace Mil
         bool addModule(Declaration*);
         const Declaration* getGlobals() const { return &globals; }
         const DeclList& getModules() const { return modules; }
+        DeclList getModulesInDependencyOrder();
         DeclList getRootModules() const;
         Type* getBasicType(quint8) const;
         Declaration* resolve(const Quali&) const;

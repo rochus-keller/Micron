@@ -24,7 +24,7 @@
 using namespace Mil;
 
 
-static void renderProc( const Declaration* p, AbstractRenderer* r, AstSerializer::DbgInfo);
+static void renderProc( const Declaration* p, AbstractRenderer* r, AstSerializer::DbgInfo, bool interfaceOnly = false);
 
 static void lineout(AbstractRenderer* r, const Mic::RowCol& pos, AstSerializer::DbgInfo dbi)
 {
@@ -398,7 +398,7 @@ static void renderStats(ProcData& proc, Statement* s, quint32& line, AstSerializ
     }
 }
 
-static void renderProc(const Declaration* proc, AbstractRenderer* r, AstSerializer::DbgInfo dbi)
+static void renderProc(const Declaration* proc, AbstractRenderer* r, AstSerializer::DbgInfo dbi, bool interfaceOnly)
 {
     Declaration* orig = proc->forwardToProc();
 
@@ -443,6 +443,14 @@ static void renderProc(const Declaration* proc, AbstractRenderer* r, AstSerializ
     else
         pdata.kind = ProcData::Normal;
 
+    // For an interface (`.micron.mod`) view, a public non-inline procedure that
+    // is implemented in this module is downgraded to an EXTERN header: the
+    // signature is exported, the body stays in the module's code section and is
+    // resolved by symbol at link time. 
+    const bool emitBody = !( interfaceOnly && pdata.kind == ProcData::Normal );
+    if( !emitBody )
+        pdata.kind = ProcData::Extern;
+
     if( proc->getType() )
         pdata.retType = proc->getType()->toQuali();
 
@@ -459,6 +467,8 @@ static void renderProc(const Declaration* proc, AbstractRenderer* r, AstSerializ
                 pdata.params.append(param);
             } break;
         case Declaration::LocalDecl: {
+                if( !emitBody )
+                    break; // an extern header carries no locals
                 ProcData::Var local;
                 local.name = sub->name;
                 local.type = toQuali(sub->getType());
@@ -470,22 +480,26 @@ static void renderProc(const Declaration* proc, AbstractRenderer* r, AstSerializ
         sub = sub->next;
     }
 
-    quint32 line = 0;
-    renderStats(pdata, proc->body, line, dbi);
+    if( emitBody )
+    {
+        quint32 line = 0;
+        renderStats(pdata, proc->body, line, dbi);
+    }
 
     r->addProcedure(pdata);
 }
 
-bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, DbgInfo dbi)
+static bool renderModule(AbstractRenderer* r, const Mil::Declaration* module,
+                         AstSerializer::DbgInfo dbi, bool interfaceOnly)
 {
     Q_ASSERT(r && module && module->kind == Declaration::Module);
 
-    if( dbi != None && (module->md == 0 || module->md->source.isEmpty()) )
+    if( dbi != AstSerializer::None && (module->md == 0 || module->md->source.isEmpty()) )
         qWarning() << "AstSerializer::render: trying to output debug info on a module without source information" <<
                       module->name;
     QString source;
     if( module->md == 0 || module->md->source.isEmpty() )
-        dbi = None;
+        dbi = AstSerializer::None;
     else
         source = module->md->source;
     QByteArrayList metaParamNames;
@@ -497,6 +511,13 @@ bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, 
     Declaration* sub = module->subs;
     while(sub)
     {
+        // In interface mode only the public *procedures/vars/consts* are
+        // emitted; imports are kept because exported signatures may reference
+        // them. All type declarations are emitted for now regardless of visibility;
+        // public record types are exported with all their fields so the layout/size stays correct, and since
+        // a private field's type must be resolvable, the whole type graph is kept. 
+        const Declaration* procDecl = ( sub->kind == Declaration::Placeholder ? sub->forwardTo : sub );
+        const bool isPublic = ( procDecl ? procDecl->public_ : sub->public_ );
         lineout(r, sub->pos, dbi);
         switch(sub->kind)
         {
@@ -505,13 +526,19 @@ bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, 
                 renderType(sub,r, dbi);
             break;
         case Declaration::VarDecl:
+            if( interfaceOnly && !sub->public_ )
+                break;
             renderVar(sub,r);
             break;
         case Declaration::Procedure:
-            renderProc(sub, r, dbi);
+            if( interfaceOnly && !isPublic )
+                break;
+            renderProc(sub, r, dbi, interfaceOnly);
             break;
         case Declaration::Placeholder:
-            renderProc(sub->forwardTo, r, dbi);
+            if( interfaceOnly && !isPublic )
+                break;
+            renderProc(sub->forwardTo, r, dbi, interfaceOnly);
             break;
         case Declaration::Import:
             r->addImport(sub->imported->name);
@@ -520,6 +547,8 @@ bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, 
             r->addImport(sub->imported->name, true);
             break;
         case Declaration::ConstDecl:
+            if( interfaceOnly && !sub->public_ )
+                break;
             renderConst(sub,r);
             break;
         }
@@ -529,4 +558,14 @@ bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, 
         lineout(r, module->md->end, dbi);
     r->endModule();
     return true;
+}
+
+bool AstSerializer::render(AbstractRenderer* r, const Mil::Declaration* module, DbgInfo dbi)
+{
+    return renderModule(r, module, dbi, false);
+}
+
+bool AstSerializer::renderInterface(AbstractRenderer* r, const Mil::Declaration* module, DbgInfo dbi)
+{
+    return renderModule(r, module, dbi, true);
 }

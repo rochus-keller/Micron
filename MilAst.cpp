@@ -139,6 +139,34 @@ bool AstModel::addModule(Declaration* module)
     return true;
 }
 
+static void visitImports(AstModel* loader, Declaration* top, QList<Declaration*>& res )
+{
+    Declaration* sub = top->subs;
+    while(sub)
+    {
+        if( sub->kind == Declaration::Import && !res.contains(sub->imported) )
+        {
+            res.append(sub->imported);
+            visitImports(loader, sub->imported, res);
+        }
+        sub = sub->next;
+    }
+}
+
+DeclList AstModel::getModulesInDependencyOrder()
+{
+    QList<Declaration*> res;
+    DeclList modules = getModules();
+
+    for( int i = 0; i < modules.size(); i++ )
+    {
+        visitImports(this, modules[i], res);
+        if( !res.contains(modules[i]) )
+            res << modules[i];
+    }
+    return res;
+}
+
 DeclList AstModel::getRootModules() const
 {
     QSet<Mil::Declaration*> used;
@@ -662,6 +690,40 @@ ProcedureData *Declaration::getPd()
         return pd;
     }else
         return 0;
+}
+
+ForeignSym Declaration::foreignSym() const
+{
+    ForeignSym res;
+    if( kind != Procedure || forward || !foreign_ )
+        return res; // extern-style: use the usual MIL naming convention
+    // pd is the valid union member when kind == Procedure && !forward
+    Constant* eid = pd ? pd->externalId : 0;
+    // an externalId may be a const reference (R) pointing to a ConstDecl; follow the chain
+    int guard = 0;
+    while( eid && eid->kind == Constant::R && guard++ < 16 )
+        eid = eid->r ? eid->r->c : 0;
+    if( eid == 0 )
+        return res; // foreign without explicit id: behaves like extern
+    switch( eid->kind )
+    {
+    case Constant::S:
+        res.kind = ForeignSym::Named;
+        if( eid->s )
+            res.name = QByteArray(eid->s);
+        break;
+    case Constant::I:
+        res.kind = ForeignSym::Address;
+        res.address = (quint64)eid->i;
+        break;
+    case Constant::P:
+        res.kind = ForeignSym::Address;
+        res.address = eid->p;
+        break;
+    default:
+        break; // unsupported constant kind: fall back to Default
+    }
+    return res;
 }
 
 Type *Declaration::getReceiver() const

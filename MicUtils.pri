@@ -1,10 +1,10 @@
 SOURCES += \
     $$PWD/MicAtom.cpp \
-    MicRowCol.cpp \
-    MilOps.cpp
+    $$PWD/MicRowCol.cpp \
+    $$PWD/MilOps.cpp
 
 HEADERS += \
     $$PWD/MicAtom.h \
-    MicRowCol.h \
-    MilOps.h
+    $$PWD/MicRowCol.h \
+    $$PWD/MilOps.h
 

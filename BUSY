@@ -15,10 +15,9 @@ if (build_mode == `optimized) && (target_toolchain == `msvc) {
 }
 
 submod qt = ../LeanQt (HAVE_FILEIO, HAVE_COREAPP, HAVE_CMDLINE)
-submod eigen = ../EiGen
 
 let config : Config {
-    .configs += [ qt.core_client_config eigen.config]
+    .configs += [ qt.core_client_config ]
     .include_dirs += ..
     if build_mode == `debug {
         .defines += "_DEBUG"
@@ -104,50 +103,6 @@ let mil : SourceSet {
     ]
 }
 
-# TODO: look for a better solution how to e.g. pass a Qt config to a pelib BUSY file instead
-let pelib_files = [
-    ../PeLib/AssemblyDef.cpp
-    ../PeLib/bigdigits.cpp
-    ../PeLib/Class.cpp
-    ../PeLib/CodeContainer.cpp
-    ../PeLib/CreateGUID.cpp
-    ../PeLib/CustomAttributeContainer.cpp
-    ../PeLib/DataContainer.cpp
-    ../PeLib/Enum.cpp
-    ../PeLib/Field.cpp
-    ../PeLib/Instruction.cpp
-    ../PeLib/Method.cpp
-    ../PeLib/MethodSignature.cpp
-    ../PeLib/Namespace.cpp
-    ../PeLib/SignatureGenerator.cpp
-    ../PeLib/Operand.cpp
-    ../PeLib/PELib.cpp
-    ../PeLib/PELibError.cpp
-    ../PeLib/PEWriter.cpp
-    ../PeLib/Property.cpp
-    ../PeLib/Qualifiers.cpp
-    ../PeLib/RSAEncoder.cpp
-    ../PeLib/sha1.cpp
-    ../PeLib/Type.cpp
-    ../PeLib/Value.cpp
-    ../PeLib/Resource.cpp
-    ../PeLib/PEMetaTables.cpp
-    ../PeLib/Stream.cpp
-    ../PeLib/CilIlEmitter.cpp
-    ../PeLib/CilPelibGen.cpp
-]
-let pelib_config : Config {
-    .include_dirs += ..
-    .defines += [ "HAVE_C99INCLUDES" "QT_CORE_LIB" ]
-    if (target_toolchain == `gcc) || (target_toolchain == `clang) {
-        .cflags_cc += "-std=c++11"
-    }
-}
-let pelib : SourceSet {
-    .sources += pelib_files;
-    .configs += [ pelib_config qt.core_client_config ]
-}
-
 let ide_files = [
         ../GuiTools/AutoMenu.cpp
         ../GuiTools/AutoShortcut.cpp
@@ -186,7 +141,8 @@ let rcc : Rcc {
 
 let compiler ! : Executable {
     .sources += [ ./MicMain.cpp ]
-    .deps += [ utils mic mil rcc eigen.common eigen.emitter qt.core_sources eigen.dbgconv
-                eigen.amd64 eigen.arm eigen.arm32 eigen.arma32 eigen.arma64 eigen.armt32 eigen.lcore pelib ]
+    .deps += [ utils mic mil rcc qt.core_sources ]
     .configs += config
 }
+
+# TODO: this file is no longer up-to-date!

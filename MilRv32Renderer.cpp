@@ -20,9 +20,12 @@
 // This is a pretty direct translation of MilArmv7Renderer to RV32 with options for the ESP32-P4, C3, C5 and C6
 
 #include "MilRv32Renderer.h"
-#include <Micron/MicAtom.h>
+#include "MicAtom.h"
+#include "MilAstSerializer.h"
+#include "MilRenderer.h"
 #include <QtDebug>
 #include <QFile>
+#include <QBuffer>
 using namespace Mil;
 using namespace Vm;
 using namespace Rv32;
@@ -65,8 +68,12 @@ quint32 Renderer::getOrCreateExtSymbol(int procIdx)
     Vm::Procedure* proc = d_code.getProc(procIdx);
     Q_ASSERT(proc && proc->decl);
 
+    // Foreign procedure with an explicit C linker name: use it verbatim.
+    ForeignSym fs = proc->decl->foreignSym();
     QByteArray name;
-    if (proc->decl->kind == Declaration::Module)
+    if (fs.kind == ForeignSym::Named)
+        name = fs.name;
+    else if (proc->decl->kind == Declaration::Module)
         name = elfSymName(proc->decl->name + QByteArray("$begin$"));
     else
         name = elfSymName(proc->decl->toPath());
@@ -655,7 +662,15 @@ bool Renderer::renderModule(Declaration* module)
 
     d_fixups.generateRelocations(d_elf, d_sections.relText, d_sections.relData);
 
-    QByteArray modContent = "module " + module->name + "\n";
+    // Serialize the module's public interface as MIL text into the .micron.mod section
+    QByteArray modContent;
+    {
+        QBuffer buf(&modContent);
+        buf.open(QIODevice::WriteOnly);
+        IlAsmRenderer ir(&buf, false);
+        AstSerializer::renderInterface(&ir, module);
+        buf.close();
+    }
     d_elf.appendToSection(d_sections.micronMod, modContent);
 
     if (d_dwarf) {
@@ -2492,44 +2507,44 @@ int Renderer::emitOp(Procedure& proc, int pc)
         pushRegPair(T0, T1);
         return 1;
     }
+    // val != 0 means the source integer is unsigned.
     case LL_conv_r4_i4:
         if (d_hasFloat) {
             popReg(T0);
             em.fmvw_x(Ft0, T0);
-            em.fcvts_w(Ft0, T0);
+            if (val)
+                em.fcvts_wu(Ft0, T0);
+            else
+                em.fcvts_w(Ft0, T0);
             pushFloat(Ft0);
         } else {
-            quint32 sym = d_elf.addSymbol("__mic$conv_r4_i4", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+            quint32 sym = d_elf.addSymbol(val ? "__mic$conv_r4_u4" : "__mic$conv_r4_i4", 0, 0, 0, STB_GLOBAL, STT_FUNC);
             emitExternCall(sym, 4, 4);
         }
         return 1;
-    case LL_conv_r4_i8:
-        if (d_hasFloat) {
-            popRegPair(T0, T1);
-            em.fcvts_w(Ft0, T0);
-            pushFloat(Ft0);
-        } else {
-            quint32 sym = d_elf.addSymbol("__mic$conv_r4_i4", 0, 0, 0, STB_GLOBAL, STT_FUNC);
-            popRegPair(T0, T1);
-            pushReg(T0);
-            emitExternCall(sym, 4, 4);
-        }
+    case LL_conv_r4_i8: {
+        // Full 64-bit source. RV32 has no 64-bit int->float instruction (and
+        // float arithmetic is done in software), so use a runtime helper that
+        // takes the full 8-byte value rather than truncating to 32 bits.
+        quint32 sym = d_elf.addSymbol(val ? "__mic$conv_r4_u8" : "__mic$conv_r4_i8", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+        emitExternCall(sym, 8, 4);
         return 1;
+    }
     case LL_conv_r4_r8: {
         quint32 sym = d_elf.addSymbol("__mic$conv_r4_r8", 0, 0, 0, STB_GLOBAL, STT_FUNC);
         emitExternCall(sym, 8, 4);
         return 1;
     }
     case LL_conv_r8_i4: {
-        quint32 sym = d_elf.addSymbol("__mic$conv_r8_i4", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+        quint32 sym = d_elf.addSymbol(val ? "__mic$conv_r8_u4" : "__mic$conv_r8_i4", 0, 0, 0, STB_GLOBAL, STT_FUNC);
         emitExternCall(sym, 4, 8);
         return 1;
     }
     case LL_conv_r8_i8: {
-        popRegPair(T0, T1);
-        pushReg(T0);
-        quint32 sym = d_elf.addSymbol("__mic$conv_r8_i4", 0, 0, 0, STB_GLOBAL, STT_FUNC);
-        emitExternCall(sym, 4, 8);
+        // Full 64-bit source -> f64 via a runtime helper taking the full 8-byte
+        // value rather than truncating to 32 bits.
+        quint32 sym = d_elf.addSymbol(val ? "__mic$conv_r8_u8" : "__mic$conv_r8_i8", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+        emitExternCall(sym, 8, 8);
         return 1;
     }
     case LL_conv_r8_r4: {
@@ -2609,7 +2624,16 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 }
             }
 
-            if (d_procSymbols.contains(val))
+            ForeignSym fs = callee->decl->foreignSym();
+            if (fs.kind == ForeignSym::Address) {
+                // Foreign procedure bound to an absolute address: indirect call via T3,
+                // a temporary not used to pass arguments (a0-a7).
+                loadImm32(T3, (quint32)fs.address);
+                emitIndirectCall(T3);
+            } else if (fs.kind == ForeignSym::Named)
+                // A foreign proc with an explicit name is always an external reference.
+                emitCall(getOrCreateExtSymbol(val));
+            else if (d_procSymbols.contains(val))
                 emitCall(d_procSymbols[val]);
             else
                 emitCall(getOrCreateExtSymbol(val));
@@ -2664,7 +2688,15 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 }
             }
 
-            if (d_procSymbols.contains(val))
+            ForeignSym fs = callee->decl->foreignSym();
+            if (fs.kind == ForeignSym::Address) {
+                // Foreign procedure bound to an absolute address: indirect call via T3.
+                loadImm32(T3, (quint32)fs.address);
+                emitIndirectCall(T3);
+            } else if (fs.kind == ForeignSym::Named)
+                // A foreign proc with an explicit name is always an external reference.
+                emitCall(getOrCreateExtSymbol(val));
+            else if (d_procSymbols.contains(val))
                 emitCall(d_procSymbols[val]);
             else
                 emitCall(getOrCreateExtSymbol(val));

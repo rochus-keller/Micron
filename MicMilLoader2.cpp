@@ -99,34 +99,11 @@ Declaration *MilLoader2::loadFromFile(QIODevice * in, const QString &path)
     return 0;
 }
 
-static void visitImports(AstModel* loader, Declaration* top, QList<Declaration*>& res )
-{
-    Declaration* sub = top->subs;
-    while(sub)
-    {
-        if( sub->kind == Declaration::Import && !res.contains(sub->imported) )
-        {
-            res.append(sub->imported);
-            visitImports(loader, sub->imported, res);
-        }
-        sub = sub->next;
-    }
-}
 
 QList<Declaration*> MilLoader2::getModulesInDependencyOrder()
 {
-    QList<Declaration*> res;
-    DeclList modules = mdl.getModules();
-
-    for( int i = 0; i < modules.size(); i++ )
-    {
-        visitImports(&mdl, modules[i], res);
-        if( !res.contains(modules[i]) )
-            res << modules[i];
-    }
-    return res;
+    return mdl.getModulesInDependencyOrder();
 }
-
 
 
 Declaration*MilLoader2::loadModule(const Import& imp)

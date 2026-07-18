@@ -984,8 +984,12 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         break;
     case IL_conv_i8:
         if( lhsT->isInt32OnStack() )
-            emitOp(proc, LL_conv_i8_i4);
-        else if(lhsT->kind == Type::FLOAT32)
+        {
+            if( lhsT->isUnsigned() )
+                emitOp(proc, LL_conv_u8_i4); // unsigned source -> zero extend
+            else
+                emitOp(proc, LL_conv_i8_i4); // signed source -> sign extend
+        }else if(lhsT->kind == Type::FLOAT32)
             emitOp(proc, LL_conv_i8_r4);
         else if(lhsT->kind == Type::FLOAT64)
             emitOp(proc, LL_conv_i8_r8);
@@ -994,9 +998,9 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         break;
     case IL_conv_r4:
         if( lhsT->isInt32OnStack() )
-            emitOp(proc, LL_conv_r4_i4);
+            emitOp(proc, LL_conv_r4_i4, lhsT->isUnsigned() );
         else if(lhsT->isInt64() )
-            emitOp(proc, LL_conv_r4_i8);
+            emitOp(proc, LL_conv_r4_i8, lhsT->isUnsigned() );
         else if(lhsT->kind == Type::FLOAT64)
             emitOp(proc, LL_conv_r4_r8);
         else if( !lhsT->isFloat() )
@@ -1004,11 +1008,11 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         break;
     case IL_conv_r8:
         if( lhsT->isInt32OnStack() )
-            emitOp(proc, LL_conv_r8_i4);
+            emitOp(proc, LL_conv_r8_i4, lhsT->isUnsigned());
         else if(lhsT->kind == Type::FLOAT32)
             emitOp(proc, LL_conv_r8_r4);
         else if( lhsT->isInt64() )
-            emitOp(proc, LL_conv_r8_i8);
+            emitOp(proc, LL_conv_r8_i8, lhsT->isUnsigned());
         else if( !lhsT->isFloat() )
             Q_ASSERT(false);
         break;
@@ -1048,8 +1052,12 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         break;
     case IL_conv_u8:
         if( lhsT->isInt32OnStack() )
-            emitOp(proc, LL_conv_u8_i4);
-        else if(lhsT->kind == Type::FLOAT32)
+        {
+            if( lhsT->isUnsigned() )
+                emitOp(proc, LL_conv_u8_i4); // unsigned source -> zero extend
+            else
+                emitOp(proc, LL_conv_i8_i4); // signed source -> sign extend
+        }else if(lhsT->kind == Type::FLOAT32)
             emitOp(proc, LL_conv_u8_r4);
         else if(lhsT->kind == Type::FLOAT64)
             emitOp(proc, LL_conv_u8_r8);
@@ -1541,9 +1549,13 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         if( lhsT->isInteger() )
         {
             if( lhsT->isInt32OnStack() && pointerWidth > 4 )
+            {
+                if (lhsT->isUnsigned())
+                    emitOp(proc, LL_conv_u8_i4); // source unsigned -> zero-extend
+                else
+                    emitOp(proc, LL_conv_i8_i4); // sign-extend
+            }else if( lhsT->isInt64() && pointerWidth == 4 )
                 emitOp(proc, LL_conv_i4_i8);
-            else if( lhsT->isInt64() && pointerWidth == 4 )
-                emitOp(proc, LL_conv_i8_i4);
         }
         // else NOP
         break;

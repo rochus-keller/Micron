@@ -18,9 +18,12 @@
 */
 
 #include "MilArmv7Renderer.h"
-#include <Micron/MicAtom.h>
+#include "MicAtom.h"
+#include "MilAstSerializer.h"
+#include "MilRenderer.h"
 #include <QtDebug>
 #include <QFile>
+#include <QBuffer>
 using namespace Mil;
 using namespace Vm;
 using namespace Arm;
@@ -57,8 +60,12 @@ quint32 Renderer::getOrCreateExtSymbol(int procIdx)
     Vm::Procedure* proc = d_code.getProc(procIdx);
     Q_ASSERT(proc && proc->decl);
 
+    // Foreign procedure with an explicit C linker name: use it verbatim.
+    ForeignSym fs = proc->decl->foreignSym();
     QByteArray name;
-    if (proc->decl->kind == Declaration::Module)
+    if (fs.kind == ForeignSym::Named)
+        name = fs.name;
+    else if (proc->decl->kind == Declaration::Module)
         name = elfSymName(proc->decl->name + QByteArray("$begin$"));
     else
         name = elfSymName(proc->decl->toPath());
@@ -683,7 +690,15 @@ bool Renderer::renderModule(Declaration* module)
 
     d_fixups.generateRelocations(d_elf, d_sections.relText, d_sections.relData);
 
-    QByteArray modContent = "module " + module->name + "\n";
+    // Serialize the module's public interface as MIL text into the .micron.mod section
+    QByteArray modContent;
+    {
+        QBuffer buf(&modContent);
+        buf.open(QIODevice::WriteOnly);
+        IlAsmRenderer ir(&buf, false);
+        AstSerializer::renderInterface(&ir, module);
+        buf.close();
+    }
     d_elf.appendToSection(d_sections.micronMod, modContent);
 
     if (d_dwarf) {
@@ -2276,17 +2291,35 @@ int Renderer::emitOp(Procedure& proc, int pc)
         pushRegPair(R0, R1);
         return 1;
 
+    // val != 0 means the source integer is unsigned.
     case LL_conv_r4_i4:
         popReg(R0); em.vmov_s_r(AL, S0, R0);
-        em.vcvti32_s(AL, S0, S0);
+        if (val)
+            em.vcvtu32_s(AL, S0, S0);
+        else
+            em.vcvti32_s(AL, S0, S0);
         pushFloat(S0);
         return 1;
-    case LL_conv_r4_i8:
-        // Truncate to i4, then convert
-        popRegPair(R0, R1); em.vmov_s_r(AL, S0, R0);
-        em.vcvti32_s(AL, S0, S0);
+    case LL_conv_r4_i8: {
+        // Full 64-bit source -> f32. VFP can only convert 32-bit integers, so
+        // compute high*2^32 + low with the low word treated as unsigned.
+        popRegPair(R0, R1);          // R0 = low (unsigned), R1 = high
+        em.vmov_s_r(AL, S0, R1);
+        if (val)
+            em.vcvtu32_d(AL, D0, S0);
+        else
+            em.vcvti32_d(AL, D0, S0);
+        em.mov(R2, Operand2((quint32)0));
+        em.movw(R3, 0x0000); em.movt(R3, 0x41F0); // 0x41F00000: high word of 2^32 (f64)
+        em.vmov_d_rr(AL, D1, R2, R3);             // D1 = 2^32
+        em.vmuld(AL, D0, D0, D1);                 // D0 = high * 2^32
+        em.vmov_s_r(AL, S4, R0);
+        em.vcvtu32_d(AL, D2, S4);                 // D2 = (double) low (unsigned)
+        em.vaddd(AL, D0, D0, D2);                 // D0 = high*2^32 + low
+        em.vcvtsd(AL, S0, D0);                    // narrow to f32
         pushFloat(S0);
         return 1;
+    }
     case LL_conv_r4_r8:
         popDouble(D0);
         em.vcvtsd(AL, S0, D0);
@@ -2295,14 +2328,31 @@ int Renderer::emitOp(Procedure& proc, int pc)
 
     case LL_conv_r8_i4:
         popReg(R0); em.vmov_s_r(AL, S0, R0);
-        em.vcvti32_d(AL, D0, S0);
+        if (val)
+            em.vcvtu32_d(AL, D0, S0);
+        else
+            em.vcvti32_d(AL, D0, S0);
         pushDouble(D0);
         return 1;
-    case LL_conv_r8_i8:
-        popRegPair(R0, R1); em.vmov_s_r(AL, S0, R0);
-        em.vcvti32_d(AL, D0, S0);
+    case LL_conv_r8_i8: {
+        // Full 64-bit source -> f64. VFP can only convert 32-bit integers, so
+        // compute high*2^32 + low with the low word treated as unsigned.
+        popRegPair(R0, R1);          // R0 = low (unsigned), R1 = high
+        em.vmov_s_r(AL, S0, R1);
+        if (val)
+            em.vcvtu32_d(AL, D0, S0);
+        else
+            em.vcvti32_d(AL, D0, S0);
+        em.mov(R2, Operand2((quint32)0));
+        em.movw(R3, 0x0000); em.movt(R3, 0x41F0); // 0x41F00000: high word of 2^32 (f64)
+        em.vmov_d_rr(AL, D1, R2, R3);             // D1 = 2^32
+        em.vmuld(AL, D0, D0, D1);                 // D0 = high * 2^32
+        em.vmov_s_r(AL, S4, R0);
+        em.vcvtu32_d(AL, D2, S4);                 // D2 = (double) low (unsigned)
+        em.vaddd(AL, D0, D0, D2);                 // D0 = high*2^32 + low
         pushDouble(D0);
         return 1;
+    }
     case LL_conv_r8_r4:
         popFloat(S0);
         em.vcvtds(AL, D0, S0);
@@ -2383,12 +2433,23 @@ int Renderer::emitOp(Procedure& proc, int pc)
             }
 
             // BL (overflow args remain on stack)
-            quint32 blOffset = em.currentPosition();
-            em.emitWord(0xEBFFFFFE);
-            if (d_procSymbols.contains(val))
-                fix.recordLocalCall(blOffset, d_procSymbols[val]);
-            else
-                fix.recordExternalCall(blOffset, getOrCreateExtSymbol(val));
+            ForeignSym fs = callee->decl->foreignSym();
+            if (fs.kind == ForeignSym::Address) {
+                // Foreign procedure bound to an absolute address: indirect call via R12 (IP),
+                // a scratch register not used to pass arguments.
+                loadImm32(R12, (quint32)fs.address);
+                em.blx_(AL, R12);
+            } else {
+                quint32 blOffset = em.currentPosition();
+                em.emitWord(0xEBFFFFFE);
+                // A foreign proc with an explicit name is always an external reference.
+                if (fs.kind == ForeignSym::Named)
+                    fix.recordExternalCall(blOffset, getOrCreateExtSymbol(val));
+                else if (d_procSymbols.contains(val))
+                    fix.recordLocalCall(blOffset, d_procSymbols[val]);
+                else
+                    fix.recordExternalCall(blOffset, getOrCreateExtSymbol(val));
+            }
 
             if (returnSize <= 8) {
                 // Small/void return: callee cleaned dump. Pop overflow.
@@ -2443,12 +2504,22 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 }
             }
 
-            quint32 blOffset = em.currentPosition();
-            em.emitWord(0xEBFFFFFE);
-            if (d_procSymbols.contains(val))
-                fix.recordLocalCall(blOffset, d_procSymbols[val]);
-            else
-                fix.recordExternalCall(blOffset, getOrCreateExtSymbol(val));
+            ForeignSym fs = callee->decl->foreignSym();
+            if (fs.kind == ForeignSym::Address) {
+                // Foreign procedure bound to an absolute address: indirect call via R12 (IP).
+                loadImm32(R12, (quint32)fs.address);
+                em.blx_(AL, R12);
+            } else {
+                quint32 blOffset = em.currentPosition();
+                em.emitWord(0xEBFFFFFE);
+                // A foreign proc with an explicit name is always an external reference.
+                if (fs.kind == ForeignSym::Named)
+                    fix.recordExternalCall(blOffset, getOrCreateExtSymbol(val));
+                else if (d_procSymbols.contains(val))
+                    fix.recordLocalCall(blOffset, d_procSymbols[val]);
+                else
+                    fix.recordExternalCall(blOffset, getOrCreateExtSymbol(val));
+            }
 
             emitCallStackAdj(callee->argsSize + padding, callee->returnSize);
         }

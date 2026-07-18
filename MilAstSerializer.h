@@ -29,6 +29,7 @@ namespace Mil
     public:
         enum DbgInfo { None, RowsOnly, RowsAndCols };
         static bool render(AbstractRenderer* out, const Declaration* module, DbgInfo = None );
+        static bool renderInterface(AbstractRenderer* out, const Declaration* module, DbgInfo = None );
     private:
         AstSerializer();
         ~AstSerializer();

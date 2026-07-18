@@ -5,6 +5,7 @@ SOURCES += \
     $$PWD/MilArmv7Emitter.cpp \
     $$PWD/MilArmv7Renderer.cpp \
     $$PWD/MilAstSerializer.cpp \
+    $$PWD/MilBackend.cpp \
     $$PWD/MilDwarfEmitter.cpp \
     $$PWD/MilElfLinker.cpp \
     $$PWD/MilElfReader.cpp \
@@ -17,31 +18,32 @@ SOURCES += \
     $$PWD/MilX86Emitter.cpp \
     $$PWD/MilX86Renderer.cpp \
     $$PWD/oakwood/Args+.c \
-    MilLexer.cpp \
-    MilToken.cpp \
-    MilTokenType.cpp \
-    MilParser2.cpp \
-    MilAst.cpp \
-    MilProject.cpp \
-    MilValidator.cpp \
-    MilCeeGen.cpp \
-    MilInterpreter.cpp \
-    runtime/MIC++.c \
-    oakwood/Input+.c \
-    oakwood/MathL+.c \
-    oakwood/Math+.c \
-    oakwood/Out+.c \
-    oakwood/Files+.c \
-    MilVmCode.cpp \
-    MilVmOakwood.cpp \
-    MilEmitter.cpp \
-    MilRenderer.cpp
+    $$PWD/MilLexer.cpp \
+    $$PWD/MilToken.cpp \
+    $$PWD/MilTokenType.cpp \
+    $$PWD/MilParser2.cpp \
+    $$PWD/MilAst.cpp \
+    $$PWD/MilProject.cpp \
+    $$PWD/MilValidator.cpp \
+    $$PWD/MilCeeGen.cpp \
+    $$PWD/MilInterpreter.cpp \
+    $$PWD/runtime/MIC++.c \
+    $$PWD/oakwood/Input+.c \
+    $$PWD/oakwood/MathL+.c \
+    $$PWD/oakwood/Math+.c \
+    $$PWD/oakwood/Out+.c \
+    $$PWD/oakwood/Files+.c \
+    $$PWD/MilVmCode.cpp \
+    $$PWD/MilVmOakwood.cpp \
+    $$PWD/MilEmitter.cpp \
+    $$PWD/MilRenderer.cpp
 
 HEADERS += \
     $$PWD/MilArmFixup.h \
     $$PWD/MilArmv7Emitter.h \
     $$PWD/MilArmv7Renderer.h \
     $$PWD/MilAstSerializer.h \
+    $$PWD/MilBackend.h \
     $$PWD/MilDwarfEmitter.h \
     $$PWD/MilElfLinker.h \
     $$PWD/MilElfReader.h \
@@ -53,17 +55,17 @@ HEADERS += \
     $$PWD/MilVmCode2.h \
     $$PWD/MilX86Emitter.h \
     $$PWD/MilX86Renderer.h \
-    MilLexer.h \
-    MilToken.h \
-    MilTokenType.h \
-    MilParser2.h \
-    MilAst.h \
-    MilProject.h \
-    MilValidator.h \
-    MilCeeGen.h \
-    MilInterpreter.h \
-    MilVmOps.h \
-    MilVmCode.h \
-    MilVmOakwood.h \
-    MilEmitter.h \
-    MilRenderer.h
+    $$PWD/MilLexer.h \
+    $$PWD/MilToken.h \
+    $$PWD/MilTokenType.h \
+    $$PWD/MilParser2.h \
+    $$PWD/MilAst.h \
+    $$PWD/MilProject.h \
+    $$PWD/MilValidator.h \
+    $$PWD/MilCeeGen.h \
+    $$PWD/MilInterpreter.h \
+    $$PWD/MilVmOps.h \
+    $$PWD/MilVmCode.h \
+    $$PWD/MilVmOakwood.h \
+    $$PWD/MilEmitter.h \
+    $$PWD/MilRenderer.h

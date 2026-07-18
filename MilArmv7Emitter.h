@@ -242,8 +242,10 @@ namespace Arm
         void vcvtsd(Condition cond, SRegister sd, DRegister dm);             // f64 -> f32
         void vcvts_i32(Condition cond, SRegister sd, SRegister sm);          // f32 -> int32 (truncate)
         void vcvti32_s(Condition cond, SRegister sd, SRegister sm);          // int32 -> f32
+        void vcvtu32_s(Condition cond, SRegister sd, SRegister sm);          // uint32 -> f32
         void vcvtd_i32(Condition cond, SRegister sd, DRegister dm);          // f64 -> int32 (truncate)
         void vcvti32_d(Condition cond, DRegister dd, SRegister sm);          // int32 -> f64
+        void vcvtu32_d(Condition cond, DRegister dd, SRegister sm);          // uint32 -> f64
         void vcmps(Condition cond, SRegister sd, SRegister sm);              // Compare f32
         void vcmpd(Condition cond, DRegister dd, DRegister dm);              // Compare f64
         void vmrs_apsr(Condition cond);                                      // Move FPU flags to CPU flags

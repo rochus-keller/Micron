@@ -1,8 +1,8 @@
-#ifndef _MILBACKEND_H
-#define _MILBACKEND_H
+#ifndef MILBACKEND_H
+#define MILBACKEND_H
 
 /*
-* Copyright 2025 Rochus Keller <mailto:me@rochus-keller.ch>
+* Copyright 2026 Rochus Keller <mailto:me@rochus-keller.ch>
 *
 * This file is part of the Micron language project.
 *
@@ -21,15 +21,34 @@
 */
 
 #include <QStringList>
-#include <Micron/MilEiGen.h>
 
 namespace Mil
 {
-    class Backend {
-    public:
-        static bool generate(const QString& inFile, const QString& outFile, EiGen::TargetCode, bool debug = false);
-        static bool link(const QStringList& inFiles, const QStringList& searchDirs, const QString& outFile, EiGen::TargetCode target, bool linkLib = false, bool debug = false);
-    };
+class AstModel;
+
+class Backend
+{
+public:
+    Backend();
+
+    static void compileArm(Mil::AstModel& mdl, const QString& outPath, const QStringList& libDirs,
+                           const QStringList& linkLibs, const QStringList& linkObjs,
+                           const QString& exeName, bool dbg = false, bool useAapcs = true, bool hasHwDiv = true);
+
+    static void compileRv32(Mil::AstModel& mdl, const QString& outPath, const QStringList& libDirs,
+                           const QStringList& linkLibs, const QStringList& linkObjs,
+                           const QString& exeName, bool dbg = false, bool useRvAbi = true,
+                           bool hasFloat = true, bool hasHwDiv = true, bool esp32 = false);
+
+    static void compileX86(Mil::AstModel& mdl, const QString& outPath, const QStringList& libDirs,
+                           const QStringList& linkLibs, const QStringList& linkObjs,
+                           const QString& exeName, bool dbg = false, bool cdeclRet = true);
+
+    static bool linkExecutable(const QStringList& objFiles, const QStringList& libDirs,
+                                    const QStringList& linkLibs, const QStringList& linkObjs,
+                                    const QString& outPath, const QString& exeName,
+                                    bool esp32 = false);
+};
 }
 
-#endif // _MILBACKEND_H
+#endif // MILBACKEND_H

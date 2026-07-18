@@ -171,8 +171,6 @@ void Project::interpret(bool dump)
         Mil::VmOakwood::addTo(&r, false);
 #endif
 
-    mdl->calcMemoryLayouts(sizeof(void*), 8);
-
     if( !r.compile() )
         return;
 

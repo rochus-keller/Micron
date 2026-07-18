@@ -600,6 +600,13 @@ void Emitter::fild_s(Register base, qint32 disp)
     emitModRM_m(0, base, disp);
 }
 
+void Emitter::fild_q(Register base, qint32 disp)
+{
+    // FILD qword [base + disp]: 0xDF /5 (load 64-bit signed integer)
+    emitByte(0xDF);
+    emitModRM_m(5, base, disp);
+}
+
 void Emitter::fistp_s(Register base, qint32 disp)
 {
     emitByte(0xDB);

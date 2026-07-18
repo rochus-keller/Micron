@@ -455,12 +455,22 @@ void Emitter::vcvti32_s(Condition cond, SRegister sd, SRegister sm) {
     quint32 inst = (cond << 28) | 0x0EB80AC0 | encodeSReg(sd, 12, 22) | encodeSReg(sm, 0, 5);
     emit32(inst);
 }
+void Emitter::vcvtu32_s(Condition cond, SRegister sd, SRegister sm) {
+    // Same as VCVT.F32.S32 but with the signedness bit (bit 7) cleared -> U32
+    quint32 inst = (cond << 28) | 0x0EB80A40 | encodeSReg(sd, 12, 22) | encodeSReg(sm, 0, 5);
+    emit32(inst);
+}
 void Emitter::vcvtd_i32(Condition cond, SRegister sd, DRegister dm) {
     quint32 inst = (cond << 28) | 0x0EBD0BC0 | encodeSReg(sd, 12, 22) | encodeDReg(dm, 0, 5);
     emit32(inst);
 }
 void Emitter::vcvti32_d(Condition cond, DRegister dd, SRegister sm) {
     quint32 inst = (cond << 28) | 0x0EB80BC0 | encodeDReg(dd, 12, 22) | encodeSReg(sm, 0, 5);
+    emit32(inst);
+}
+void Emitter::vcvtu32_d(Condition cond, DRegister dd, SRegister sm) {
+    // Same as VCVT.F64.S32 but with the signedness bit (bit 7) cleared -> U32
+    quint32 inst = (cond << 28) | 0x0EB80B40 | encodeDReg(dd, 12, 22) | encodeSReg(sm, 0, 5);
     emit32(inst);
 }
 void Emitter::vcmps(Condition cond, SRegister sd, SRegister sm) {

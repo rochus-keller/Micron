@@ -206,6 +206,8 @@ namespace X86
         void fstp_d(Register base, qint32 disp);
         // FILD dword [base + disp]
         void fild_s(Register base, qint32 disp);
+        // FILD qword [base + disp] (64-bit signed integer load)
+        void fild_q(Register base, qint32 disp);
         // FISTP dword [base + disp]
         void fistp_s(Register base, qint32 disp);
         // FISTTP dword [base + disp] (SSE3 truncating store)

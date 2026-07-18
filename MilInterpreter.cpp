@@ -978,7 +978,7 @@ bool Interpreter::Imp::execute(Frame* frame)
                 VM_CONV_OP(quint32, quint32, double)
             vmbreak;
         vmcase(conv_u8_i4)
-                VM_CONV_OP(quint64, quint64, qint32)
+                VM_CONV_OP(quint64, quint64, quint32) // must be uint32, not int32, so that zero extended
             vmbreak;
         vmcase(conv_u8_r4)
                 VM_CONV_OP(quint64, quint64, float)
@@ -986,21 +986,37 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(conv_u8_r8)
                 VM_CONV_OP(quint64, quint64, double)
             vmbreak;
-        vmcase(conv_r4_i4)
+        vmcase(conv_r4_i4) {
+              if( frame->proc->ops[pc].val ) {
+                VM_CONV_OP(float, float, quint32)
+              } else {
                 VM_CONV_OP(float, float, qint32)
-            vmbreak;
-        vmcase(conv_r4_i8)
+              }
+            } vmbreak;
+        vmcase(conv_r4_i8) {
+              if( frame->proc->ops[pc].val ) {
+                VM_CONV_OP(float, float, quint64)
+              } else {
                 VM_CONV_OP(float, float, qint64)
-            vmbreak;
+              }
+            } vmbreak;
         vmcase(conv_r4_r8)
                 VM_CONV_OP(float, float, double)
             vmbreak;
-        vmcase(conv_r8_i4)
+        vmcase(conv_r8_i4) {
+              if( frame->proc->ops[pc].val ) {
+                VM_CONV_OP(double, double, quint32)
+              } else {
                 VM_CONV_OP(double, double, qint32)
-            vmbreak;
-        vmcase(conv_r8_i8)
-                VM_CONV_OP(double, double, qint64)
-            vmbreak;
+              }
+            } vmbreak;
+        vmcase(conv_r8_i8) {
+                if( frame->proc->ops[pc].val ) {
+                    VM_CONV_OP(double, double, quint64)
+                } else {
+                    VM_CONV_OP(double, double, qint64)
+                }
+            } vmbreak;
         vmcase(conv_r8_r4)
                 VM_CONV_OP(double, double, float)
             vmbreak;

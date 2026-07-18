@@ -886,6 +886,8 @@ Expression* Validator::visitExpr(Expression* e)
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
+            if( e->kind == IL_cast_i4 && deref(e->lhs->getType())->getByteSize(8) > 4 )
+                error(e, "value on stack has a different byte size than 4");
             e->setType(mdl->getBasicType(Type::INT32));
             stack.back() = e;
             break;
@@ -895,6 +897,8 @@ Expression* Validator::visitExpr(Expression* e)
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
+            if( e->kind == IL_cast_i8 && deref(e->lhs->getType())->getByteSize(8) != 8)
+                error(e, "value on stack has a different byte size than 8");
             e->setType(mdl->getBasicType(Type::INT64));
             stack.back() = e;
             break;
@@ -903,6 +907,8 @@ Expression* Validator::visitExpr(Expression* e)
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
+            if( e->kind == IL_cast_r4 && deref(e->lhs->getType())->getByteSize(8) > 4 )
+                error(e, "value on stack has a different byte size than 4");
             e->setType(mdl->getBasicType(Type::FLOAT32));
             stack.back() = e;
             break;
@@ -911,6 +917,8 @@ Expression* Validator::visitExpr(Expression* e)
             if( !expectN(1,e) )
                 break;
             e->lhs = stackAt(-1);
+            if( e->kind == IL_cast_r8 && deref(e->lhs->getType())->getByteSize(8) != 8)
+                error(e, "value on stack has a different byte size than 8");
             e->setType(mdl->getBasicType(Type::FLOAT64));
             stack.back() = e;
             break;

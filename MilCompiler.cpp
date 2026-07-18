@@ -20,6 +20,7 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include "MilProject.h"
+#include "MilBackend.h"
 #include "Version.h"
 #include <QCommandLineParser>
 #include <QtDebug>
@@ -52,6 +53,24 @@ int main(int argc, char *argv[])
     cp.addOption(dump2);
     QCommandLineOption oak("oakwood", "add oakwood modules");
     cp.addOption(oak);
+    QCommandLineOption arch("a", "generate code for the given architecture", "arch");
+    cp.addOption(arch);
+    QCommandLineOption dbg("g", "generate debug information");
+    cp.addOption(dbg);
+    QCommandLineOption cdeclRet("cdecl", "use cdecl-compatible return values (EAX/EAX:EDX for <=8 bytes, x86 only)");
+    cp.addOption(cdeclRet);
+    QCommandLineOption aapcs("aapcs", "use AAPCS32 calling convention (args in R0-R3, return in R0/R0-R1, ARM only)");
+    QCommandLineOption esp32opt("esp32", "generate ESP32-P4 Harvard architecture ELF (split Flash/SRAM memory map)");
+    cp.addOption(aapcs);
+    cp.addOption(esp32opt);
+    QCommandLineOption libs("L", "add a library search directory for the linker", "path");
+    cp.addOption(libs);
+    QCommandLineOption linkLib("n", "link with archive library lib<name>.a (searched in -L dirs)", "name");
+    cp.addOption(linkLib);
+    QCommandLineOption linkObj("f", "add an object file (.o) to the linker input", "file");
+    cp.addOption(linkObj);
+    QCommandLineOption op("O", "set the path where compiled modules are stored", "path");
+    cp.addOption(op);
 
     QStringList allArgs = a.arguments();
 
@@ -97,6 +116,31 @@ int main(int argc, char *argv[])
     }
 
     Args_setArgcArgv( argv_.size(), argv_.data() );
+
+    const QString arch_ = cp.value(arch);
+    const QStringList libDirs = cp.values(libs);
+    const QStringList linkLibs = cp.values(linkLib);
+    const QStringList linkObjs = cp.values(linkObj);
+    const bool dbg_ = cp.isSet(dbg);
+    const QStringList outPaths = cp.values(op);
+    if( outPaths.size() > 1 )
+    {
+        qCritical() << "only one output path can be set";
+        return -1;
+    }
+    QString outPath;
+    if( !outPaths.isEmpty() )
+        outPath = outPaths.first();
+    else
+        outPath = QFileInfo(args.first()).absolutePath();
+
+    if( arch_ == "arm7" || arch_ == "armv7" )
+        Mil::Backend::compileArm(mdl, outPath, libDirs, linkLibs, linkObjs, info.baseName(), dbg_, cp.isSet(aapcs));
+    if( arch_ == "rv32" || arch_ == "riscv32" )
+        Mil::Backend::compileRv32(mdl, outPath, libDirs, linkLibs, linkObjs, info.baseName(), dbg_, cp.isSet(aapcs),
+                    /*hasFloat*/true, /*hasHwDiv*/true, cp.isSet(esp32opt));
+    if( arch_ == "x86" || arch_ == "i386" )
+        Mil::Backend::compileX86(mdl, outPath, libDirs, linkLibs, linkObjs, info.baseName(), dbg_, cp.isSet(cdeclRet));
 
     if( cp.isSet(cgen) )
         pro.generateC();
