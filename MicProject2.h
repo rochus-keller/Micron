@@ -26,13 +26,13 @@
 #include <QStringList>
 #include <QExplicitlySharedDataPointer>
 #include <Micron/MicAst.h>
-#include <Micron/MicMilLoader2.h>
+#include <Micron/MicModuleManager.h>
 
 class QDir;
 
 namespace Mic
 {
-    class Project2 : public QObject, public Mic::Importer
+    class Project2 : public QObject, public Importer, public ModuleResolver
     {
 #ifndef QT_NO_QOBJECT
         Q_OBJECT
@@ -125,14 +125,11 @@ namespace Mic
         bool parse();
 
         bool generateC(const QString& outDir);
-        bool generateCil(const QString& outDir);
-        bool generateLlvm(const QString& outDir);
         bool generateMil(const QString& outDir);
         bool generateX86(const QString& outDir, QStringList &objFiles, bool indirectMain);
         bool copyCResources(const QString& outDir, QStringList& cFiles, bool withInit = true, bool sdl = false);
 
         bool interpret(const QString &outDir = QString());
-        bool interpret2();
         bool generateMrl(const QString &outDir);
 
         const FileHash& getFiles() const { return d_files; }
@@ -148,7 +145,7 @@ namespace Mic
         typedef QList<QPair<Declaration*, SymList> > UsageByMod;
         UsageByMod getUsage( Declaration* ) const;
         DeclList getSubs(Declaration* d) const;
-        DeclList getDependencyOrder() const { return dependencyOrder; }
+        DeclList getDependencyOrder() const { return d_dependencyOrder; }
 
         quint32 getSloc() const;
 
@@ -176,10 +173,17 @@ namespace Mic
         QByteArray moduleSuffix( const Mic::MetaActualList& ma )
         {
             // TODO: this is an intermediate solution assuming everything is built from sources in full everytime.
-            return "$" + QByteArray::number(modules.size());
+            return "$" + QByteArray::number(d_modules.size());
         }
 
         Declaration* loadModule( const Import& imp );
+
+        Declaration* resolveModule( const QByteArray& milModuleName ); // ModuleResolver implementation
+
+        Mil::AstModel& getMilModel() { return d_modMan.getModel(); }
+        AstModel& getMicModel() { return d_mdl; }
+
+        QStringList getLinkObjects() const { return d_modMan.getLinkObjects(); }
 
     signals:
         void sigModified(bool);
@@ -198,14 +202,15 @@ namespace Mic
         QString writeC(const QString &in, const QString& what, const QString& out);
 
     private:
+        class MilImp;
         AstModel d_mdl;
-        Mic::MilLoader2 loader;
+        ModuleManager d_modMan;
         FileHash d_files;
         QList<File*> d_libs; // temporary solution
         typedef QList<ModuleSlot> Modules;
-        Modules modules;
-        DeclList dependencyOrder;
-        QHash<Declaration*, DeclList> subs;
+        Modules d_modules;
+        DeclList d_dependencyOrder;
+        QHash<Declaration*, DeclList> d_subs;
         FileGroups d_groups;
         QString d_filePath; // path where the project file was loaded from or saved to
         QStringList d_suffixes;

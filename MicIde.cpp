@@ -887,7 +887,9 @@ void Ide::onInterpret2()
     logMessage("\nStarting application...\n\n",SysInfo,false);
     QElapsedTimer t;
     t.start();
+#ifdef _MIC_HAVE_LUAJIT_
     d_pro->interpret2();
+#endif
     logMessage(QString("\nApplication ende after %1 [ms]...\n\n").arg(t.elapsed()),SysInfo,false);
 }
 
@@ -1077,41 +1079,6 @@ void Ide::onExportMil()
     d_pro->setDbg(d_debugging);
     if( !d_pro->generateMil(dirPath) )
         QMessageBox::critical(this,tr("Save MIL"),tr("There was an error when generating IL; "
-                                                   "see Output window for more information"));
-}
-
-void Ide::onExportLlvm()
-{
-    ENABLED_IF( d_pro->errors.isEmpty() );
-
-    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save LLVM Intermediate Language"), d_pro->getBuildDir(true) );
-
-    if (dirPath.isEmpty())
-        return;
-
-    // TODO
-    if( !compile(false,false) ) // otherwise allocated flag is already set after one generator run
-        return;
-
-    if( !d_pro->generateLlvm(dirPath) )
-        QMessageBox::critical(this,tr("Save LLVM IR"),tr("There was an error when generating LL; "
-                                                   "see Output window for more information"));
-}
-
-void Ide::onExportCil()
-{
-    ENABLED_IF( d_pro->errors.isEmpty() );
-
-    const QString dirPath = QFileDialog::getExistingDirectory(this, tr("Save ECMA-335 CIL"), d_pro->getBuildDir(true) );
-
-    if (dirPath.isEmpty())
-        return;
-
-    if( !compile(false,false) ) // otherwise allocated flag is already set after one generator run
-        return;
-
-    if( !d_pro->generateCil(dirPath) )
-        QMessageBox::critical(this,tr("Save CIL"),tr("There was an error when generating IL; "
                                                    "see Output window for more information"));
 }
 

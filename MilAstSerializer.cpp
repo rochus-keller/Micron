@@ -511,13 +511,15 @@ static bool renderModule(AbstractRenderer* r, const Mil::Declaration* module,
     Declaration* sub = module->subs;
     while(sub)
     {
-        // In interface mode only the public *procedures/vars/consts* are
-        // emitted; imports are kept because exported signatures may reference
-        // them. All type declarations are emitted for now regardless of visibility;
-        // public record types are exported with all their fields so the layout/size stays correct, and since
-        // a private field's type must be resolvable, the whole type graph is kept. 
+        // in interface mode only the public procedures/vars/consts are emitted
+        // all type declarations are emitted for now regardless of visibility
+        // public record types are exported with all their fields so the layout/size stays correct
         const Declaration* procDecl = ( sub->kind == Declaration::Placeholder ? sub->forwardTo : sub );
         const bool isPublic = ( procDecl ? procDecl->public_ : sub->public_ );
+
+        // invar procedure body must travel with the interface even when the procedure is not public
+        const bool isInvar = ( procDecl ? procDecl->invar : sub->invar );
+
         lineout(r, sub->pos, dbi);
         switch(sub->kind)
         {
@@ -531,12 +533,12 @@ static bool renderModule(AbstractRenderer* r, const Mil::Declaration* module,
             renderVar(sub,r);
             break;
         case Declaration::Procedure:
-            if( interfaceOnly && !isPublic )
+            if( interfaceOnly && !isPublic && !isInvar )
                 break;
             renderProc(sub, r, dbi, interfaceOnly);
             break;
         case Declaration::Placeholder:
-            if( interfaceOnly && !isPublic )
+            if( interfaceOnly && !isPublic && !isInvar )
                 break;
             renderProc(sub->forwardTo, r, dbi, interfaceOnly);
             break;

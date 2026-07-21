@@ -36,10 +36,10 @@
 #include "MilInterpreter.h"
 #include "MilVmOakwood.h"
 #include "MilRlCode.h"
-#ifdef _MIC_HAVE_LUAJIT_
-#include "MilLjBcGen.h"
-#include <LjTools/Engine2.h>
-#endif
+#include "MilElfReader.h"
+#include "MicAstLoader.h"
+#include "MilBackend.h"
+#include <QBuffer>
 using namespace Mic;
 
 struct HitTest
@@ -115,10 +115,39 @@ public:
     QString source() const { return sourcePath; }
 };
 
-Project2::Project2(QObject *parent) : QObject(parent),d_dirty(false),
+class Project2::MilImp : public QObject, public Mil::Importer
+{
+public:
+    // routes MIL-level imports (arising while a loaded .mil/.mob pulls its own
+    // dependencies) back to the project, so they can be located in any provider
+    // format through the project's package-aware, source-parsing import path
+    Project2* prj;
+    MilImp(Project2* prj):QObject(prj),prj(prj){}
+    Mil::Declaration* loadModule( const Mil::Import& imp )
+    {
+        // MIL resolves imports by name in the already populated model first
+        foreach( Mil::Declaration* m, prj->d_modMan.getModel().getModules() )
+            if( m->name.constData() == imp.moduleName.constData() ) // || m->name == imp.moduleName )
+                return m;
+
+        // otherwise locate and load a provider in any format; this populates the
+        // Mil::AstModel as a side effect, so we look the module up again afterwards
+        Import micImp;
+        micImp.path = imp.moduleName.split('$');
+        prj->loadModule(micImp);
+
+        foreach( Mil::Declaration* m, prj->d_modMan.getModel().getModules() )
+            if( m->name.constData() == imp.moduleName.constData() ) // || m->name == imp.moduleName )
+                return m;
+        return 0;
+    }
+};
+
+Project2::Project2(QObject *parent) : QObject(parent),d_modMan(0),d_dirty(false),
     d_useBuiltInOakwood(false),d_level(0),d_useOakwoodScreen(false)
 {
-    d_suffixes << ".mic";
+    d_modMan.setMilImporter(new MilImp(this));
+    d_suffixes << ".mic" << ".mil" << ".mob";
 }
 
 Project2::~Project2()
@@ -129,11 +158,11 @@ Project2::~Project2()
 void Project2::clear(bool all, bool reloadMic)
 {
     d_mdl.clear();
-    modules.clear();
-    dependencyOrder.clear();
-    loader.getModel().clear();
+    d_modules.clear();
+    d_dependencyOrder.clear();
     errors.clear();
-    subs.clear();
+    d_subs.clear();
+    d_modMan.clearModel(reloadMic); // clears the shared Mil model + link objects, reloads MIC+.mil
     if( all )
     {
         d_groups.clear();
@@ -143,8 +172,6 @@ void Project2::clear(bool all, bool reloadMic)
             delete f;
         d_libs.clear();
     }
-    if( reloadMic )
-        loader.loadFromFile(":/runtime/MIC+.mil");
 }
 
 void Project2::createNew()
@@ -293,10 +320,10 @@ const Project2::FileGroup* Project2::findFileGroup(const VirtualPath& package) c
 
 Symbol*Project2::getSymbolsOfModule(Declaration* module) const
 {
-    for( int i = 0; i < modules.size(); i++ )
+    for( int i = 0; i < d_modules.size(); i++ )
     {
-        if( modules[i].decl == module )
-            return modules[i].xref.syms;
+        if( d_modules[i].decl == module )
+            return d_modules[i].xref.syms;
     }
     return 0;
 }
@@ -354,11 +381,11 @@ Declaration *Project2::findModule(const QByteArray &name) const
 Project2::UsageByMod Project2::getUsage(Declaration *n) const
 {
     UsageByMod res;
-    for( int i = 0; i < modules.size(); i++ )
+    for( int i = 0; i < d_modules.size(); i++ )
     {
-        const SymList& syms = modules[i].xref.uses.value(n);
+        const SymList& syms = d_modules[i].xref.uses.value(n);
         if( !syms.isEmpty() )
-            res << qMakePair(modules[i].decl, syms);
+            res << qMakePair(d_modules[i].decl, syms);
     }
 
     return res;
@@ -366,7 +393,7 @@ Project2::UsageByMod Project2::getUsage(Declaration *n) const
 
 DeclList Project2::getSubs(Declaration* d) const
 {
-    return subs.value(d);
+    return d_subs.value(d);
 }
 
 QString Project2::getWorkingDir(bool resolved) const
@@ -521,13 +548,13 @@ bool Project2::generateC(const QString &outDir)
 
     QDir dir(outDir);
     // TODO: check if files can be created and written
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    foreach( Mil::Declaration* module, d_modMan.getModel().getModules() )
         module->nobody = !Mil::CeeGen::requiresBody(module);
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    foreach( Mil::Declaration* module, d_modMan.getModel().getModules() )
     {
         if( module->generic ) // skip not fully instantiated modules
             continue;
-        Mil::CeeGen cg(&loader.getModel());
+        Mil::CeeGen cg(&d_modMan.getModel());
         QFile header( dir.absoluteFilePath(escapeFilename(module->name) + ".h"));
         header.open(QFile::WriteOnly);
         QFile* body = 0;
@@ -548,7 +575,7 @@ bool Project2::generateC(const QString &outDir)
     out << "// main+.c" << endl;
     out << Mil::CeeGen::genDedication() << endl << endl;
 
-    Mil::DeclList roots = loader.getModel().getRootModules();
+    Mil::DeclList roots = d_modMan.getModel().getRootModules();
     foreach( Mil::Declaration* module, roots )
         out << "#include \"" <<  escapeFilename(module->name) << ".h\"" << endl;
 
@@ -568,123 +595,13 @@ bool Project2::generateC(const QString &outDir)
     return true;
 }
 
-bool Project2::generateCil(const QString &outDir)
-{
-#if 0
-    // TODO
-    writeC("runtime", "MIC+", outDir);
-
-    if( useBuiltInOakwood() )
-    {
-        writeC("oakwood", "Args", outDir);
-        writeC("oakwood", "In", outDir);
-        writeC("oakwood", "Out", outDir);
-        writeC("oakwood", "Files", outDir);
-        writeC("oakwood", "Input", outDir);
-        writeC("oakwood", "Math", outDir);
-        writeC("oakwood", "MathL", outDir);
-        writeC("oakwood", "Strings", outDir);
-    }
-
-    QSet<Mil::Declaration*> used;
-    QDir dir(outDir);
-    // TODO: check if files can be created and written
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
-    {
-        if( module->generic ) // skip not fully instantiated modules
-            continue;
-        Mil::Declaration* sub = module->subs;
-        while(sub)
-        {
-            if( sub->kind == Mil::Declaration::Import )
-            {
-                Mil::Declaration* imported = sub->imported;
-                if( imported && !imported->generic )
-                    used.insert(imported);
-            }
-            sub = sub->next;
-        }
-        module->nobody = !Mil::CeeGen::requiresBody(module);
-        if( !module->nobody )
-        {
-            Mil::CilAsmGen cg(&loader.getModel());
-            // Mono doesn't find the assembly, if the module name differs from the assembly name!
-            // so use $ also in the file name instead of +
-            QFile body( dir.absoluteFilePath(QString::fromLatin1(module->name) + ".il"));
-            body.open(QFile::WriteOnly);
-            cg.generate(module, &body);
-        } // else TODO
-    }
-
-    QFile main(dir.absoluteFilePath("Main$.il"));
-    main.open(QFile::WriteOnly);
-    Mil::CilAsmGen cg(&loader.getModel());
-    cg.generateMain(&main, used);
-
-    QFile config(dir.absoluteFilePath("Main$.runtimeconfig.json"));
-    config.open(QFile::WriteOnly);
-    cg.generateConfig(&config);
-#endif
-
-    return true;
-}
-
-bool Project2::generateLlvm(const QString &outDir)
-{
-#if 0
-    // TODO
-    writeC("runtime", "MIC+", outDir);
-
-    if( useBuiltInOakwood() )
-    {
-        writeC("oakwood", "Args", outDir);
-        writeC("oakwood", "In", outDir);
-        writeC("oakwood", "Out", outDir);
-        writeC("oakwood", "Files", outDir);
-        writeC("oakwood", "Input", outDir);
-        writeC("oakwood", "Math", outDir);
-        writeC("oakwood", "MathL", outDir);
-        writeC("oakwood", "Strings", outDir);
-    }
-
-    QSet<Mil::Declaration*> used;
-    QDir dir(outDir);
-    // TODO: check if files can be created and written
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
-    {
-        if( module->generic ) // skip not fully instantiated modules
-            continue;
-        Mil::Declaration* sub = module->subs;
-        while(sub)
-        {
-            if( sub->kind == Mil::Declaration::Import )
-            {
-                Mil::Declaration* imported = sub->imported;
-                if( imported && !imported->generic )
-                    used.insert(imported);
-            }
-            sub = sub->next;
-        }
-        module->nobody = !Mil::CeeGen::requiresBody(module);
-        if( !module->nobody )
-        {
-            Mil::LlvmGen cg(&loader.getModel());
-            QFile body( dir.absoluteFilePath(QString::fromLatin1(module->name) + ".ll"));
-            body.open(QFile::WriteOnly);
-            cg.generate(module, &body);
-        } // else TODO
-    }
-#endif
-
-    return true;
-}
 
 bool Project2::generateMil(const QString &outDir)
 {
     QSet<Mil::Declaration*> used;
     QDir dir(outDir);
     // TODO: check if files can be created and written
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
+    foreach( Mil::Declaration* module, d_modMan.getModel().getModules() )
     {
         if( module->generic || module->name == "MIC$" ) // skip not fully instantiated modules
             continue;
@@ -709,80 +626,11 @@ bool Project2::generateMil(const QString &outDir)
 
 bool Project2::generateX86(const QString &outDir, QStringList& objFiles, bool indirectMain)
 {
-    // x86 backend: generate ELF32 relocatable objects for each module
-     loader.getModel().calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
-
-     bool hasErrors = false;
-
-     foreach( Mil::Declaration* module, loader.getModulesInDependencyOrder() )
-     {
-         if( module->name == "MIC$" || module->generic )
-             continue;
-
-         // Reset all flags for this module's compile pass
-         foreach( Mil::Declaration* m, loader.getModel().getModules() )
-         {
-             m->translated = false;
-             for (Mil::Declaration* sub = m->subs; sub; sub = sub->next) {
-                 if (sub->kind == Mil::Declaration::Procedure)
-                     sub->validated = false;
-                 if (sub->kind == Mil::Declaration::TypeDecl && sub->getType()) {
-                     foreach (Mil::Declaration* msub, sub->getType()->subs) {
-                         if (msub->kind == Mil::Declaration::Procedure)
-                             msub->validated = false;
-                     }
-                 }
-             }
-         }
-
-         Mil::X86::Renderer renderer(&loader.getModel());
-         renderer.setCdeclReturns(true);
-         renderer.setEmitDwarf(d_dbg);
-
-         if( !renderer.renderModule(module) )
-         {
-             qCritical() << "error generating x86 code for module" << module->name
-                         << ":" << renderer.errorMessage();
-             hasErrors = true;
-             break;
-         }
-
-         const QString objFile = QDir(outDir).absoluteFilePath(Mil::CeeGen::escapeFilename(module->name) + ".o");
-
-         if( !renderer.writeToFile(objFile) )
-         {
-             qCritical() << "cannot write object file" << objFile;
-             hasErrors = true;
-             break;
-         }
-         qDebug() << "  generated" << objFile;
-         objFiles << objFile;
-     }
-
-     if( !hasErrors )
-     {
-         qDebug() << "#### generated" << objFiles.size() << "x86 object files";
-
-         // Generate main.o that calls all module inits in dependency order
-         QByteArrayList moduleNames;
-         foreach( Mil::Declaration* module, loader.getModel().getRootModules() )
-         {
-             if( module->name == "MIC$" )
-                 continue;
-             moduleNames << module->name;
-         }
-         QString mainObj;
-         mainObj = QDir(outDir).absoluteFilePath("main+.o");
-
-         if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj, indirectMain) )
-         {
-             qDebug() << "  generated" << mainObj;
-             objFiles << mainObj;
-         }
-         else
-             qCritical() << "cannot generate main+.o";
-     }
-     return !hasErrors;
+     QStringList res = Mil::Backend::compileX86(d_modMan.getModel(), outDir, d_dbg, indirectMain, true);
+     if( res.isEmpty() )
+         return false;
+     objFiles = res;
+     return true;
 }
 
 bool Project2::copyCResources(const QString &outDir, QStringList &cFiles, bool withInit, bool sdl)
@@ -831,7 +679,7 @@ void Args_setArgcArgv(unsigned int c, char** v);
 
 bool Project2::interpret(const QString& outDir)
 {
-    Mil::Interpreter r(&loader.getModel());
+    Mil::Interpreter r(&d_modMan.getModel());
 
     if( d_useBuiltInOakwood )
         Mil::VmOakwood::addTo(&r,d_useOakwoodScreen);
@@ -841,7 +689,7 @@ bool Project2::interpret(const QString& outDir)
 
     if( !outDir.isEmpty() )
     {
-        QList<Mil::Declaration*> mods = loader.getModel().getModules();
+        QList<Mil::Declaration*> mods = d_modMan.getModel().getModules();
         for(int i = mods.size()-1; i >= 0; i--)
         {
             // we have to dump here because when doing it in the precompile loop only the begin$ is ready
@@ -871,173 +719,14 @@ bool Project2::interpret(const QString& outDir)
     return r.run();
 }
 
-bool Project2::interpret2()
-{
-#ifdef _MIC_HAVE_LUAJIT_
-    loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
-
-    Mil::Vm::Code llCode(&loader.getModel(), sizeof(void*), 8);
-    llCode.setGenerateLines(true);
-
-    llCode.registerExternals();
-
-    foreach( Mil::Declaration* module, loader.getModel().getModules() )
-    {
-        if( !llCode.compile(module) )
-        {
-            qCritical() << "error compiling LL code for module" << module->name;
-            return false;
-        }
-    }
-
-    Mil::Rl::Code mrlCode(llCode, 8);
-    if (!mrlCode.compile())
-    {
-        qCritical() << "error compiling MRL code";
-        return false;
-    }
-
-    for (int i = 0; i < mrlCode.procCount(); i++)
-        mrlCode.compactRegisters(i);
-
-#if 0
-    if (dumpMrl)
-    {
-        QTextStream out(stdout);
-        mrlCode.dumpAll(out);
-    }
-#endif
-
-    const quint32 varMemSize = loader.getModel().getVarMemSize();
-    Mil::LjBcGen gen(llCode, mrlCode, varMemSize);
-
-    // Compute initial global variable data (including vtable indices for inline Objects)
-    if( varMemSize > 0 )
-    {
-        QByteArray initData(varMemSize, '\0');
-        foreach( Mil::Declaration* module, loader.getModel().getModules() )
-        {
-            if( module->generic )
-                continue;
-            Mil::DeclList vars = module->getVars();
-            foreach( Mil::Declaration* d, vars )
-            {
-                Mil::Type* t = d->getType()->deref();
-                if( t->objectInit )
-                    llCode.initMemory(initData.data() + d->off, t, true);
-            }
-        }
-        // Replace C++ Vtable* pointers with small integer vtable indices
-        for( int v = 0; v < llCode.vtableCount(); v++ )
-        {
-            Mil::Vm::Vtable* vtPtr = llCode.getVtable(v);
-            // Scan initData for occurrences of this pointer
-            for( int off = 0; off + (int)sizeof(void*) <= (int)varMemSize; off += sizeof(void*) )
-            {
-                void* stored = 0;
-                memcpy(&stored, initData.data() + off, sizeof(void*));
-                if( stored == vtPtr )
-                {
-                    // Replace with vtable index as int32 (zero-extend to pointer size)
-                    memset(initData.data() + off, 0, sizeof(void*));
-                    qint32 idx = v;
-                    memcpy(initData.data() + off, &idx, sizeof(idx));
-                }
-            }
-        }
-        gen.setGlobalVarInit(initData);
-    }
-
-    QByteArray bcData;
-    QBuffer buf(&bcData);
-    buf.open(QIODevice::WriteOnly);
-    if (!gen.generate(&buf))
-    {
-        qCritical() << "error generating LuaJIT bytecode:" << gen.errorMessage();
-        return false;
-    }
-    buf.close();
-
-    qDebug() << "#### generated LuaJIT bytecode:" << bcData.size() << "bytes,"
-             << mrlCode.procCount() << "procedures";
-
-#if 0
-    if (!outPath.isEmpty())
-    {
-        const QString bcFile = QDir(outPath).absoluteFilePath("output.ljbc");
-        QFile f(bcFile);
-        if (f.open(QIODevice::WriteOnly))
-        {
-            f.write(bcData);
-            f.close();
-            qDebug() << "  wrote" << bcFile;
-        }
-    }
-#endif
-
-        Lua::Engine2 lua;
-        lua.addLibrary(Lua::Engine2::PACKAGE);
-        lua.addLibrary(Lua::Engine2::TABLE);
-        lua.addLibrary(Lua::Engine2::STRING);
-        lua.addLibrary(Lua::Engine2::MATH);
-        lua.addLibrary(Lua::Engine2::IO);
-        lua.addLibrary(Lua::Engine2::BIT);
-        lua.addLibrary(Lua::Engine2::FFI);
-        lua.addLibrary(Lua::Engine2::JIT);
-        lua.addLibrary(Lua::Engine2::OS);
-        lua.setPrintToStdout(true);
-        //lua.setJit(false); // uncomment to disable JIT for debugging
-
-        // Load the runtime preamble
-        QByteArray preamble = Mil::LjBcGen::runtimePreamble();
-        if( !lua.addSourceLib(preamble, "micron_runtime") )
-        {
-            qCritical() << "error loading LuaJIT runtime preamble:" << lua.getLastError();
-            return false;
-        }
-
-        // Load extern FFI function setup code
-        QByteArray extSetup = gen.externSetupCode();
-        if( !extSetup.isEmpty() )
-        {
-            if( !lua.addSourceLib(extSetup, "micron_externs") )
-            {
-                qCritical() << "error loading extern setup:" << lua.getLastError();
-                return false;
-            }
-        }
-
-        // Load vtable and template setup code
-        QByteArray vtSetup = gen.vtableSetupCode();
-        if( !vtSetup.isEmpty() )
-        {
-            if( !lua.addSourceLib(vtSetup, "micron_vtables") )
-            {
-                qCritical() << "error loading vtable setup:" << lua.getLastError();
-                return false;
-            }
-        }
-
-        // Load the generated bytecode
-        if (!lua.addSourceLib(bcData, "@micron"))
-        {
-            qCritical() << "error loading generated bytecode:" << lua.getLastError();
-            return false;
-        }
-
-        qDebug() << "#### LuaJIT execution completed";
-#endif
-        return true;
-}
-
 bool Project2::generateMrl(const QString &outDir)
 {
-    Mil::Interpreter r(&loader.getModel());
+    Mil::Interpreter r(&d_modMan.getModel());
 
     if( d_useBuiltInOakwood )
         Mil::VmOakwood::addTo(&r, d_useOakwoodScreen);
 
-    loader.getModel().calcMemoryLayouts(sizeof(void*), 8);
+    d_modMan.getModel().calcMemoryLayouts(sizeof(void*), 8);
 
     if( !r.compile() )
         return false;
@@ -1048,7 +737,7 @@ bool Project2::generateMrl(const QString &outDir)
     if( !mrl.compactAll() )
         qWarning() << "Mil::Rl::Code::compactAll failed";
 
-    QList<Mil::Declaration*> mods = loader.getModel().getModules();
+    QList<Mil::Declaration*> mods = d_modMan.getModel().getModules();
     for(int i = mods.size()-1; i >= 0; i--)
     {
         Mil::Declaration* module = mods[i];
@@ -1071,7 +760,7 @@ Declaration *Project2::loadModule(const Import &imp)
         if( imp.importer )
             importer = imp.importer->data.value<ModuleData>().source;
         errors << Error("cannot find source file of imported module", imp.importedAt, importer);
-        modules.append(ModuleSlot(imp,0,0));
+        d_modules.append(ModuleSlot(imp,0,0));
         return 0;
     }
 
@@ -1089,19 +778,43 @@ Declaration *Project2::loadModule(const Import &imp)
         return ms->decl;
 
     // immediately add it so that circular module refs lead to an error
-    modules.append(ModuleSlot(fixedImp,file,0));
-    ms = &modules.back();
+    d_modules.append(ModuleSlot(fixedImp,file,0));
+    ms = &d_modules.back();
+
+    // prebuilt module providers don't carry Micron source; delegate the mixed-format
+    // loading to the shared ModuleManager. It loads the MIL into the shared model,
+    // marks a .mob extern_ and collects its object for the linker, and reconstructs
+    // the Mic interface into the project's model (cross-module refs resolve back here).
+    if( !file->d_filePath.endsWith(".mic", Qt::CaseInsensitive) )
+    {
+        const ModuleManager::ProviderKind kind =
+                file->d_filePath.endsWith(".mob", Qt::CaseInsensitive) ?
+                    ModuleManager::MilObject : ModuleManager::MilSource;
+        Declaration* res = d_modMan.loadProvider(
+                    ModuleManager::Location(kind, file->d_filePath), &d_mdl, this);
+        if( res == 0 )
+        {
+            errors << Error(d_modMan.getError(), imp.importedAt, file->d_filePath);
+            return 0;
+        }
+        res->invalid = false;
+        d_dependencyOrder << res;
+        if( fixedImp.metaActuals.isEmpty() )
+            file->d_mod = res;
+        ms->decl = res;
+        return res;
+    }
 
 //#define _SPLITTER_ // TEST
 #ifdef _SPLITTER_
-    Mil::IlAstRenderer ast(&loader.getModel());
+    Mil::IlAstRenderer ast(&mm.getMil());
     QFile out(file->d_filePath + ".dump.mil");
     out.open(QIODevice::WriteOnly);
     Mil::IlAsmRenderer asm_(&out,false);
     Mil::RenderSplitter imr(QList<Mil::AbstractRenderer*>() << &ast << &asm_);
 
 #else
-    Mil::IlAstRenderer imr(&loader.getModel());
+    Mil::IlAstRenderer imr(&d_modMan.getModel());
 #endif
 
     d_level++;
@@ -1146,7 +859,7 @@ Declaration *Project2::loadModule(const Import &imp)
     if( res )
     {
         res->invalid = hasErrors;
-        dependencyOrder << res;
+        d_dependencyOrder << res;
     }
 
     if( fixedImp.metaActuals.isEmpty() )
@@ -1158,11 +871,23 @@ Declaration *Project2::loadModule(const Import &imp)
     ms->xref = p.takeXref();
     QHash<Declaration*,DeclList>::const_iterator i;
     for( i = ms->xref.subs.begin(); i != ms->xref.subs.end(); ++i )
-        subs[i.key()] += i.value();
+        d_subs[i.key()] += i.value();
 
     ms->decl = res;
     d_level--;
     return res;
+}
+
+Declaration* Project2::resolveModule(const QByteArray& milModuleName)
+{    
+    // a reconstructed MIL/object interface references another module by its
+    // (possibly $-qualified) MIL name; make it present in any provider format
+    const ModuleSlot* ms = find(milModuleName);
+    if( ms != 0 )
+        return ms->decl;
+    Import imp;
+    imp.path = milModuleName.split('$');
+    return loadModule(imp);
 }
 
 QStringList Project2::findFiles(const QDir& dir, bool recursive)
@@ -1214,28 +939,28 @@ int Project2::findPackage(const VirtualPath& path) const
 
 Project2::ModuleSlot *Project2::find(const Import &imp)
 {
-    for(int i = 0; i < modules.size(); i++ )
+    for(int i = 0; i < d_modules.size(); i++ )
     {
-        if( modules[i].imp == imp )
-            return &modules[i];
+        if( d_modules[i].imp == imp )
+            return &d_modules[i];
     }
     return 0;
 }
 
 const Project2::ModuleSlot *Project2::find(const QByteArray & name) const
 {
-    for( int i = 0; i < modules.size(); i++ )
-        if( modules[i].decl && modules[i].decl->name == name ) // TODO: search by string pointer?
-            return &modules[i];
+    for( int i = 0; i < d_modules.size(); i++ )
+        if( d_modules[i].decl && d_modules[i].decl->name == name ) // TODO: search by string pointer?
+            return &d_modules[i];
     return 0;
 }
 
 const Project2::ModuleSlot *Project2::find(Declaration * m) const
 {
-    for( int i = 0; i < modules.size(); i++ )
+    for( int i = 0; i < d_modules.size(); i++ )
     {
-        if( modules[i].decl == m )
-            return &modules[i];
+        if( d_modules[i].decl == m )
+            return &d_modules[i];
     }
     return 0;
 }
@@ -1297,7 +1022,7 @@ void Project2::parseLib(const QString & name)
     f->d_name = name.toUtf8();
     d_libs << f;
     ms.file = f;
-    modules.append(ms);
+    d_modules.append(ms);
 }
 
 QString Project2::writeC(const QString& where, const QString &what, const QString &out)
@@ -1384,6 +1109,13 @@ bool Project2::loadFrom(const QString& filePath)
     QSettings in(d_filePath,QSettings::IniFormat);
 
     d_suffixes = in.value("Suffixes").toStringList();
+    if( d_suffixes.isEmpty() )
+        d_suffixes << ".mic";
+    // always accept prebuilt module providers so mixed-format projects work
+    if( !d_suffixes.contains(".mil") )
+        d_suffixes << ".mil";
+    if( !d_suffixes.contains(".mob") )
+        d_suffixes << ".mob";
     d_useBuiltInOakwood = in.value("BuiltInOakwood").toBool();
     d_useOakwoodScreen = in.value("OakwoodScreen").toBool();
     d_main.first = in.value("MainModule").toByteArray();

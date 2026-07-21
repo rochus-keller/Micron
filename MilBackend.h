@@ -31,18 +31,12 @@ class Backend
 public:
     Backend();
 
-    static void compileArm(Mil::AstModel& mdl, const QString& outPath, const QStringList& libDirs,
-                           const QStringList& linkLibs, const QStringList& linkObjs,
-                           const QString& exeName, bool dbg = false, bool useAapcs = true, bool hasHwDiv = true);
+    static QStringList compileArm(Mil::AstModel& mdl, const QString& outPath, bool dbg = false, bool indirectMain = true, bool useAapcs = true, bool hasHwDiv = true);
 
-    static void compileRv32(Mil::AstModel& mdl, const QString& outPath, const QStringList& libDirs,
-                           const QStringList& linkLibs, const QStringList& linkObjs,
-                           const QString& exeName, bool dbg = false, bool useRvAbi = true,
+    static QStringList compileRv32(Mil::AstModel& mdl, const QString& outPath, bool dbg = false, bool indirectMain = false, bool useRvAbi = true,
                            bool hasFloat = true, bool hasHwDiv = true, bool esp32 = false);
 
-    static void compileX86(Mil::AstModel& mdl, const QString& outPath, const QStringList& libDirs,
-                           const QStringList& linkLibs, const QStringList& linkObjs,
-                           const QString& exeName, bool dbg = false, bool cdeclRet = true);
+    static QStringList compileX86(Mil::AstModel& mdl, const QString& outPath, bool dbg = false, bool indirectMain = true, bool cdeclRet = true);
 
     static bool linkExecutable(const QStringList& objFiles, const QStringList& libDirs,
                                     const QStringList& linkLibs, const QStringList& linkObjs,

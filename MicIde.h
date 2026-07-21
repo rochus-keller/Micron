@@ -125,8 +125,6 @@ namespace Mic
         void onExportMil();
         void onExportLl();
         void onExportRl();
-        void onExportLlvm();
-        void onExportCil();
         void onExportC();
         void onModsDblClicked(QTreeWidgetItem*,int);
         void onModDblClicked(QTreeWidgetItem*,int);

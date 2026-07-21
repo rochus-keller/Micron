@@ -23,15 +23,14 @@
 #include "MilRv32Renderer.h"
 #include "MilX86Renderer.h"
 #include "MilElfLinker.h"
+#include "MilCeeGen.h"
 #include <QtDebug>
 #include <QDir>
 
 using namespace Mil;
 
 
-void Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, const QStringList& libDirs,
-                       const QStringList& linkLibs, const QStringList& linkObjs,
-                       const QString& exeName, bool dbg, bool cdeclRet)
+QStringList Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, bool dbg, bool indirectMain, bool cdeclRet)
 {
     // x86 backend: generate ELF32 relocatable objects for each module
     mdl.calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
@@ -41,7 +40,7 @@ void Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, const QStri
 
     foreach( Mil::Declaration* module, mdl.getModulesInDependencyOrder() )
     {
-        if( module->name == "MIC$" )
+        if( module->name == "MIC$" || module->generic || module->extern_ )
             continue;
 
         // Reset all flags for this module's compile pass
@@ -61,8 +60,8 @@ void Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, const QStri
         }
 
         Mil::X86::Renderer renderer(&mdl);
-        renderer.setEmitDwarf(dbg);
         renderer.setCdeclReturns(cdeclRet);
+        renderer.setEmitDwarf(dbg);
 
         if( !renderer.renderModule(module) )
         {
@@ -72,7 +71,7 @@ void Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, const QStri
             break;
         }
 
-        const QString objFile = QDir(outPath).absoluteFilePath(module->name + ".o");
+        const QString objFile = QDir(outPath).absoluteFilePath(Mil::CeeGen::escapeFilename(module->name) + ".o");
 
         if( !renderer.writeToFile(objFile) )
         {
@@ -92,30 +91,24 @@ void Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, const QStri
         QByteArrayList moduleNames;
         foreach( Mil::Declaration* module, mdl.getRootModules() )
         {
-            if( module->name == "MIC$" )
+            if( module->name == "MIC$" || module->extern_ )
                 continue;
             moduleNames << module->name;
         }
         const QString mainObj = QDir(outPath).absoluteFilePath("main+.o");
-        if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj, cdeclRet) )
+        if( Mil::X86::Renderer::generateMainObject(moduleNames, mainObj, indirectMain) )
         {
             qDebug() << "  generated" << mainObj;
             objFiles << mainObj;
         }
         else
             qCritical() << "cannot generate main+.o";
-    }
-
-    if( !hasErrors && (!libDirs.isEmpty() || !linkLibs.isEmpty() || !linkObjs.isEmpty()) )
-    {
-        if( !linkExecutable(objFiles, libDirs, linkLibs, linkObjs, outPath, exeName) )
-            hasErrors = true;
-    }
+    }else
+        objFiles.clear();
+    return objFiles;
 }
 
-void Backend::compileRv32(Mil::AstModel& mdl, const QString& outPath, const QStringList& libDirs,
-                       const QStringList& linkLibs, const QStringList& linkObjs,
-                       const QString& exeName, bool dbg, bool useRvAbi,
+QStringList Backend::compileRv32(Mil::AstModel& mdl, const QString& outPath, bool dbg, bool indirectMain, bool useRvAbi,
                        bool hasFloat, bool hasHwDiv, bool esp32)
 {
     // RV32 backend: generate ELF relocatable objects for each module
@@ -126,7 +119,7 @@ void Backend::compileRv32(Mil::AstModel& mdl, const QString& outPath, const QStr
 
     foreach( Mil::Declaration* module, mdl.getModulesInDependencyOrder() )
     {
-        if( module->name == "MIC$" )
+        if( module->name == "MIC$" || module->generic || module->extern_ )
             continue;
 
         // Reset all flags for this module's compile pass
@@ -179,30 +172,24 @@ void Backend::compileRv32(Mil::AstModel& mdl, const QString& outPath, const QStr
         QByteArrayList moduleNames;
         foreach( Mil::Declaration* module, mdl.getRootModules() )
         {
-            if( module->name == "MIC$" )
+            if( module->name == "MIC$" || module->extern_ )
                 continue;
             moduleNames << module->name;
         }
         const QString mainObj = QDir(outPath).absoluteFilePath("main+.o");
-        if( Mil::Rv32::Renderer::generateMainObject(moduleNames, mainObj, false )) // TODO: configurable useRvAbi) )
+        if( Mil::Rv32::Renderer::generateMainObject(moduleNames, mainObj, indirectMain ))
         {
             qDebug() << "  generated" << mainObj;
             objFiles << mainObj;
         }
         else
             qCritical() << "cannot generate main+.o";
-    }
-
-    if( !hasErrors && (!libDirs.isEmpty() || !linkLibs.isEmpty() || !linkObjs.isEmpty()) )
-    {
-        if( !linkExecutable(objFiles, libDirs, linkLibs, linkObjs, outPath, exeName, esp32) )
-            hasErrors = true;
-    }
+    }else
+        objFiles.clear();
+    return objFiles;
 }
 
-void Backend::compileArm(Mil::AstModel& mdl, const QString& outPath, const QStringList& libDirs,
-                       const QStringList& linkLibs, const QStringList& linkObjs,
-                       const QString& exeName, bool dbg, bool useAapcs, bool hasHwDiv)
+QStringList Backend::compileArm(Mil::AstModel& mdl, const QString& outPath, bool dbg, bool indirectMain, bool useAapcs, bool hasHwDiv)
 {
     // ARMv7 backend: generate ELF relocatable objects for each module
     mdl.calcMemoryLayouts(4 /*pointerWidth*/, 4 /*stackAlignment*/);
@@ -212,7 +199,7 @@ void Backend::compileArm(Mil::AstModel& mdl, const QString& outPath, const QStri
 
     foreach( Mil::Declaration* module, mdl.getModulesInDependencyOrder() )
     {
-        if( module->name == "MIC$" )
+        if( module->name == "MIC$" || module->generic || module->extern_ )
             continue;
 
         // Reset all flags for this module's compile pass
@@ -264,25 +251,21 @@ void Backend::compileArm(Mil::AstModel& mdl, const QString& outPath, const QStri
         QByteArrayList moduleNames;
         foreach( Mil::Declaration* module, mdl.getRootModules() )
         {
-            if( module->name == "MIC$" )
+            if( module->name == "MIC$" || module->extern_ )
                 continue;
             moduleNames << module->name;
         }
         const QString mainObj = QDir(outPath).absoluteFilePath("main+.o");
-        if( Mil::Arm::Renderer::generateMainObject(moduleNames, mainObj, useAapcs) )
+        if( Mil::Arm::Renderer::generateMainObject(moduleNames, mainObj, indirectMain) )
         {
             qDebug() << "  generated" << mainObj;
             objFiles << mainObj;
         }
         else
             qCritical() << "cannot generate main+.o";
-    }
-
-    if( !hasErrors && (!libDirs.isEmpty() || !linkLibs.isEmpty() || !linkObjs.isEmpty()) )
-    {
-        if( !linkExecutable(objFiles, libDirs, linkLibs, linkObjs, outPath, exeName) )
-            hasErrors = true;
-    }
+    }else
+        objFiles.clear();
+    return objFiles;
 }
 
 bool Backend::linkExecutable(const QStringList& objFiles, const QStringList& libDirs,

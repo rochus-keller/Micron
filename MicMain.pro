@@ -17,7 +17,11 @@ CONFIG(debug, debug|release) {
 include(MicParser.pri)
 
 SOURCES += \
-    MicMain.cpp
+    MicMain.cpp \
+    MicProject2.cpp
+
+HEADERS += \
+    MicProject2.h
 
 HAVE_SCREEN_SDL {
     DEFINES += _MIC_HAVE_SCREEN_

@@ -17,7 +17,8 @@
 * http://www.gnu.org/copyleft/gpl.html.
 */
 
-#include "MicMilLoader2.h"
+#include "MicModuleManager.h"
+#include "MicProject2.h"
 #include "MicAst.h"
 #include "MilInterpreter.h"
 #include "MilVmCode.h"
@@ -43,176 +44,204 @@
 #include <QCommandLineParser>
 #include <QDirIterator>
 
-class Lex2 : public Mic::Scanner2
-{
-public:
-    QString sourcePath;
-    Mic::PpLexer lex;
-    Mic::Token next()
-    {
-        return lex.nextToken();
-    }
-    Mic::Token peek(int offset)
-    {
-        return lex.peekToken(offset);
-    }
-    QString source() const { return sourcePath; }
-};
-
-static QByteArray getModuleName(const QString& file)
-{
-    Mic::Lexer lex;
-    lex.setStream(file);
-    Mic::Token t = lex.nextToken();
-    while( t.isValid() && t.d_type != Mic::Tok_MODULE )
-        t = lex.nextToken();
-    if( t.d_type == Mic::Tok_MODULE )
-    {
-        t = lex.nextToken();
-        if( t.d_type == Mic::Tok_ident )
-            return t.d_val;
-    }
-    return QByteArray();
-}
-
-struct ModuleSlot
-{
-    Mic::Import imp;
-    QString file;
-    Mic::Declaration* decl;
-    ModuleSlot():decl(0) {}
-    ModuleSlot( const Mic::Import& i, const QString& f, Mic::Declaration* d):imp(i),file(f),decl(d){}
-};
-
-class Manager : public Mic::Importer {
-public:
-    typedef QList<ModuleSlot> Modules;
-    Modules modules;
-    QList<QDir> searchPath;
-    QString rootPath;
-    Mic::MilLoader2 loader;
-    bool dbg;
-
-    Manager():dbg(false) {
-        loader.loadFromFile(":/runtime/MIC+.mil");
-    }
-    ~Manager() {
-        Modules::const_iterator i;
-        for( i = modules.begin(); i != modules.end(); ++i )
-            delete (*i).decl;
-    }
-
-    ModuleSlot* find(const Mic::Import& imp)
-    {
-        for(int i = 0; i < modules.size(); i++ )
-        {
-            if( modules[i].imp == imp )
-                return &modules[i];
-        }
-        return 0;
-    }
-
-    QByteArray modulePath( const QByteArrayList& path )
-    {
-        return path.join('$');
-    }
-
-    QByteArray moduleSuffix( const Mic::MetaActualList& ma )
-    {
-        // TODO: this is an intermediate solution assuming everything is built from sources in full everytime.
-        return "$" + QByteArray::number(modules.size());
-    }
-
-    Mic::Declaration* loadModule( const Mic::Import& imp )
-    {
-        ModuleSlot* ms = find(imp);
-        if( ms != 0 )
-            return ms->decl;
-
-        QString file = toFile(imp);
-        if( file.isEmpty() )
-        {
-            qCritical() <<  "cannot find source file of module" << imp.path.join('.');
-            modules.append(ModuleSlot(imp,QString(),0));
-            return 0;
-        }
-
-        // immediately add it so that circular module refs lead to an error
-        modules.append(ModuleSlot(imp,file,0));
-        ms = &modules.back();
-
-        Mil::IlAstRenderer imr(&loader.getModel());
-
-        Lex2 lex;
-        lex.sourcePath = file; // to keep file name if invalid
-        lex.lex.setStream(file);
-
-//#define _DUMP
-#ifdef _DUMP
-        QList<Mil::AbstractRenderer*> renderer;
-        QFile out;
-        out.open(stdout, QIODevice::WriteOnly);
-        Mil::IlAsmRenderer ilasm(&out,true);
-        renderer << &ilasm;
-        renderer << &imr;
-        Mil::RenderSplitter split(renderer);
-        Mil::Emitter e(&split, Mil::Emitter::RowsAndCols);
-#else
-        qDebug() << "**** parsing" << QFileInfo(file).fileName();
-        Mil::Emitter e(&imr, dbg ? Mil::Emitter::RowsOnly : Mil::Emitter::None);
-#endif
-        Mic::AstModel mdl;
-        Mic::Parser2 p(&mdl,&lex, &e, this);
-        p.RunParser(imp);
-        Mic::Declaration* res = 0;
-        if( !p.errors.isEmpty() )
-        {
-            foreach( const Mic::Parser2::Error& e, p.errors )
-                qCritical() << QFileInfo(e.path).fileName() << e.row << e.col << e.msg;
-        }else if( !imr.errors.isEmpty() )
-        {
-            foreach( const Mil::AbstractRenderer::Error& e, imr.errors )
-                qCritical() << (e.where + ":" + QByteArray::number(e.pc)) << e.msg;
-        }else
-        {
-            res = p.takeModule();
-            if( !imr.errors.isEmpty() )
-                res->invalid = true;
-#ifdef _DUMP
-            out.putChar('\n');
-#endif
-        }
-        // TODO: uniquely extend the name of generic module instantiations
-
-        ms->decl = res;
-        return res;
-    }
-
-    QString toFile(const Mic::Import& imp)
-    {
-        const QString path = imp.path.join('/') + ".mic";
-        foreach( const QDir& dir, searchPath )
-        {
-            const QString tmp = dir.absoluteFilePath(path);
-            if( QFile::exists(tmp) )
-                return tmp;
-        }
-        if( !modules.isEmpty() )
-        {
-            // if the file is not in the search path, look in the directory of the caller assuming
-            // that the required module path is relative to the including module
-            QFileInfo info( modules.back().file );
-            const QString tmp = info.absoluteDir().absoluteFilePath(path);
-            if( QFile::exists(tmp) )
-                return tmp;
-            // TODO: in this case we have to adjust the local path of the imported module to the full path
-        }
-        return QString();
-    }
-};
-
 extern "C" {
 void Args_setArgcArgv(unsigned int c, char** v);
+}
+
+class ModuleLocator : public Mic::ModuleManager::ModuleLocator
+{
+public:
+    QList<QDir> searchPath;
+
+    Mic::ModuleManager::Location locate( const QByteArrayList& path )
+    {
+        // auto-discovery: a module import path is resolved against the current and include directories,
+        // preferring source over prebuilt artifacts
+        const QString rel = QString::fromUtf8(path.join('/'));
+        static const char* const exts[] = { ".mic", ".mil", ".mob" };
+        static const Mic::ModuleManager::ProviderKind kinds[] = {
+            Mic::ModuleManager::MicSource,
+            Mic::ModuleManager::MilSource,
+            Mic::ModuleManager::MilObject
+        };
+        for( int k = 0; k < 3; k++ )
+        {
+            foreach( const QDir& dir, searchPath )
+            {
+                const QString tmp = dir.absoluteFilePath(rel + exts[k]);
+                if( QFile::exists(tmp) )
+                    return Mic::ModuleManager::Location(kinds[k], tmp);
+            }
+        }
+        return Mic::ModuleManager::Location();
+    }
+};
+
+struct BuildOpts
+{
+    bool dbg;
+    bool doDump;
+    bool dump2;
+    bool doRun;
+    bool cdeclRet;
+    bool aapcs;
+    bool esp32;
+    QString arch;
+    QString outPath;
+    QString exeName;
+    QStringList libDirs;
+    QStringList linkLibs;
+    QStringList linkObjs;
+    BuildOpts():dbg(false),doDump(false),dump2(false),doRun(false),
+        cdeclRet(false),aapcs(false),esp32(false){}
+};
+
+static int emitAndRun(Mil::AstModel& model, const BuildOpts& opts, int all, int ok)
+{
+    if( opts.doDump )
+    {
+        QFile out;
+        out.open(stdout, QIODevice::WriteOnly);
+        out.write("\n");
+        foreach( Mil::Declaration* m, model.getModulesInDependencyOrder() )
+        {
+            if( m->name == "MIC$" )
+                continue;
+            Mil::IlAsmRenderer r(&out, opts.dbg);
+            Mil::AstSerializer::render(&r,m, Mil::AstSerializer::RowsOnly);
+            out.putChar('\n');
+        }
+    }
+
+    QStringList objFiles;
+    if( all == ok && (opts.arch == "arm7" || opts.arch == "armv7") )
+        objFiles = Mil::Backend::compileArm(model, opts.outPath, opts.dbg, true, opts.aapcs);
+    if( all == ok && (opts.arch == "rv32" || opts.arch == "riscv32") )
+        objFiles = Mil::Backend::compileRv32(model, opts.outPath, opts.dbg, /*indirectMain*/false, opts.aapcs,
+                    /*hasFloat*/true, /*hasHwDiv*/true, opts.esp32);
+    if( all == ok && (opts.arch == "x86" || opts.arch == "i386") )
+        objFiles = Mil::Backend::compileX86(model, opts.outPath, opts.dbg, true, opts.cdeclRet);
+
+    if( !objFiles.isEmpty() || !opts.libDirs.isEmpty() || !opts.linkLibs.isEmpty() || !opts.linkObjs.isEmpty() )
+        Mil::Backend::linkExecutable(objFiles, opts.libDirs, opts.linkLibs, opts.linkObjs, opts.outPath, opts.exeName); // TODO: link errors
+
+    if( all == ok && opts.doRun )
+    {
+        Mil::Interpreter r(&model);
+
+#ifdef _MIC_HAVE_SCREEN_
+        Mil::VmOakwood::addTo(&r, true);
+#else
+        Mil::VmOakwood::addTo(&r, false);
+#endif
+
+        if( !r.compile() )
+            return -1;
+        if( opts.dump2 )
+        {
+            QTextStream out(stdout);
+            r.dumpAll(out);
+        }
+
+        QByteArrayList args_;
+        QVector<char*> argv_;
+        argv_.reserve(10);
+        argv_.append("Micron Interpreter");
+
+        const int start = qApp->arguments().indexOf("--");
+        if( start != -1 )
+        {
+            for( int i = start+1; i < qApp->arguments().size(); i++ )
+                args_.append( qApp->arguments()[i].toUtf8() );
+
+            for( int i = 0; i < args_.size(); i++ )
+            {
+                if( !args_[i].isEmpty() )
+                    argv_.append(args_[i].data());
+            }
+        }
+
+        Args_setArgcArgv( argv_.size(), argv_.data() );
+
+        r.run();
+    }
+
+    return 0;
+}
+
+static int buildSingle(const QFileInfo& info, const QStringList& searchPaths, BuildOpts& opts)
+{
+    ModuleLocator locator;
+    locator.searchPath.append(info.absoluteDir());
+    for( int i = 0; i < searchPaths.size(); i++ )
+        locator.searchPath.append(QDir(searchPaths[i]));
+
+    Mic::ModuleManager mm(&locator, opts.dbg);
+
+    Mic::Import imp;
+    imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
+    Mic::Declaration* top = mm.loadModule(imp); // recursively loads all required modules
+    if( top )
+    {
+        Mil::Declaration* topMil = mm.milModuleFor(imp);
+        if( topMil )
+            topMil->entryPoint = true; // top-level module is entry point
+    }
+
+    const int all = mm.moduleCount();
+    int ok = 0;
+    foreach( Mic::Declaration* d, mm.getMicModules() )
+        ok += d->invalid ? 0 : 1;
+
+    opts.linkObjs += mm.getLinkObjects(); // link the .mob objects of prebuilt providers
+
+    if( opts.outPath.isEmpty() )
+        opts.outPath = info.absolutePath();
+    if( opts.exeName.isEmpty() )
+        opts.exeName = info.baseName();
+
+    // the reconstructed Mic ASTs are no longer needed for code generation
+    const int res = emitAndRun(mm.getModel(), opts, all, ok);
+
+    qDebug() << "#### finished with" << ok << "modules ok of total" << all << "modules";
+    return res;
+}
+
+static int buildProject(const QString& projFile, BuildOpts& opts)
+{
+    Mic::Project2 prj;
+    prj.setDbg(opts.dbg);
+    if( !prj.loadFrom(projFile) )
+    {
+        qCritical() << "cannot load project file" << projFile;
+        return -1;
+    }
+
+    prj.parse();
+
+    int all = 0, ok = 0;
+    foreach( Mic::Declaration* m, prj.getDependencyOrder() )
+    {
+        all++;
+        if( m && !m->invalid )
+            ok++;
+    }
+    foreach( const Mic::Project2::Error& e, prj.errors )
+        qCritical() << e.path << e.pos.d_row << e.pos.d_col << e.msg;
+
+    opts.linkObjs += prj.getLinkObjects(); // link the .mob objects of prebuilt providers
+
+    QFileInfo info(projFile);
+    if( opts.outPath.isEmpty() )
+        opts.outPath = info.absolutePath();
+    if( opts.exeName.isEmpty() )
+        opts.exeName = prj.getMain().first.isEmpty() ?
+                    info.baseName().toUtf8() : QString::fromUtf8(prj.getMain().first);
+
+    const int res = emitAndRun(prj.getMilModel(), opts, all, ok);
+
+    qDebug() << "#### finished with" << ok << "modules ok of total" << all << "modules";
+    return res;
 }
 
 int main(int argc, char *argv[])
@@ -231,7 +260,7 @@ int main(int argc, char *argv[])
     cp.setApplicationDescription(QString("Micron compiler, version %1").arg(MICRON_VERSION));
     cp.addHelpOption();
     cp.addVersionOption();
-    cp.addPositionalArgument("main", "the main module of the application");
+    cp.addPositionalArgument("main", "the main module (.mic/.mil/.mob) or a project (.micpro)");
     QCommandLineOption sp("I", "add a path where to look for modules", "path");
     cp.addOption(sp);
     QCommandLineOption op("O", "set the path where compiled modules are stored", "path");
@@ -270,7 +299,7 @@ int main(int argc, char *argv[])
     const QStringList args = cp.positionalArguments();
     if( args.size() != 1 )
     {
-        qCritical() << "expecting exactly one source file";
+        qCritical() << "expecting exactly one source or project file";
         return -1;
     }
 
@@ -281,112 +310,35 @@ int main(int argc, char *argv[])
         qCritical() << "only one output path can be set";
         return -1;
     }
-    QString outPath;
-    if( !outPaths.isEmpty() )
-        outPath = outPaths.first();
 
-    const QString arch_ = cp.value(arch);
-    const QStringList libDirs = cp.values(libs);
-    const QStringList linkLibs = cp.values(linkLib);
-    const QStringList linkObjs = cp.values(linkObj);
-    int ok = 0;
-    int all = 0;
+    BuildOpts o;
+    o.dbg = cp.isSet(dbg);
+    o.doDump = cp.isSet(dump);
+    o.dump2 = cp.isSet(dump2);
+    o.doRun = cp.isSet(run);
+    o.cdeclRet = cp.isSet(cdeclRet);
+    o.aapcs = cp.isSet(aapcs);
+    o.esp32 = cp.isSet(esp32opt);
+    o.arch = cp.value(arch);
+    o.libDirs = cp.values(libs);
+    o.linkLibs = cp.values(linkLib);
+    o.linkObjs = cp.values(linkObj);
+    if( !outPaths.isEmpty() )
+        o.outPath = outPaths.first();
+
     QElapsedTimer timer;
     timer.start();
 
-    Manager mgr;
-    mgr.dbg = cp.isSet(dbg);
-
-    QFileInfo info(args.first());
-    mgr.rootPath = info.absolutePath();
-    mgr.searchPath.append(info.absoluteDir());
-
-    for( int i = 0; i < searchPaths.size(); i++ )
-    {
-        const QString path = searchPaths[i];
-        mgr.searchPath.append(path);
-    }
-
-    Mic::Import imp;
-    imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
-    Mic::Declaration* top = mgr.loadModule(imp); // recursively compiles all required files
-    if( top )
-        mgr.loader.getModel().getModules().last()->entryPoint = true; // top-level module is entry point
-
-    all += mgr.modules.size();
-    foreach( const ModuleSlot& m, mgr.modules )
-        ok += m.decl ? !m.decl->invalid : 0;
+    const QFileInfo info(args.first());
+    int res = 0;
+    if( info.suffix().compare("micpro", Qt::CaseInsensitive) == 0 )
+        res = buildProject(args.first(), o); // .micpro file selects the project build
+    else
+        res = buildSingle(info, searchPaths, o); // everything else is treated as a single main module with auto-discovery
 
     Mic::Expression::killArena();
     Mic::AstModel::cleanupGlobals();
-    qDebug() << "#### finished with" << ok << "modules ok of total" << all << "modules" << "in" << timer.elapsed() << " [ms]";
+    qDebug() << "#### elapsed" << timer.elapsed() << "[ms]";
 
-    if( cp.isSet(dump) )
-    {
-        QFile out;
-        out.open(stdout, QIODevice::WriteOnly);
-        out.write("\n");
-        foreach( Mil::Declaration* m, mgr.loader.getModulesInDependencyOrder() )
-        {
-            if( m->name == "MIC$" )
-                continue;
-            Mil::IlAsmRenderer r(&out, mgr.dbg);
-            Mil::AstSerializer::render(&r,m, Mil::AstSerializer::RowsOnly);
-            out.putChar('\n');
-        }
-    }
-
-    if( outPath.isEmpty() )
-       outPath = mgr.rootPath;
-
-    if( all == ok && (arch_ == "arm7" || arch_ == "armv7") )
-        Mil::Backend::compileArm(mgr.loader.getModel(), outPath, libDirs, linkLibs, linkObjs, info.baseName(), mgr.dbg, cp.isSet(aapcs));
-    if( all == ok && (arch_ == "rv32" || arch_ == "riscv32") )
-        Mil::Backend::compileRv32(mgr.loader.getModel(), outPath, libDirs, linkLibs, linkObjs, info.baseName(), mgr.dbg, cp.isSet(aapcs),
-                    /*hasFloat*/true, /*hasHwDiv*/true, cp.isSet(esp32opt));
-    if( all == ok && (arch_ == "x86" || arch_ == "i386") )
-        Mil::Backend::compileX86(mgr.loader.getModel(), outPath, libDirs, linkLibs, linkObjs, info.baseName(), mgr.dbg, cp.isSet(cdeclRet));
-
-    if( all == ok && cp.isSet(run) )
-    {
-        Mil::Interpreter r(&mgr.loader.getModel());
-
-#ifdef _MIC_HAVE_SCREEN_
-        Mil::VmOakwood::addTo(&r, true);
-#else
-        Mil::VmOakwood::addTo(&r, false);
-#endif
-
-        if( !r.compile() )
-            return -1;
-        if( cp.isSet(dump2) )
-        {
-            QTextStream out(stdout);
-            r.dumpAll(out);
-        }
-
-        QByteArrayList args_;
-        QVector<char*> argv_;
-        argv_.reserve(10);
-        argv_.append("Micron Interpreter");
-
-        const int start = qApp->arguments().indexOf("--");
-        if( start != -1 )
-        {
-            for( int i = start+1; i < qApp->arguments().size(); i++ )
-                args_.append( qApp->arguments()[i].toUtf8() );
-
-            for( int i = 0; i < args_.size(); i++ )
-            {
-                if( !args_[i].isEmpty() )
-                    argv_.append(args_[i].data());
-            }
-        }
-
-        Args_setArgcArgv( argv_.size(), argv_.data() );
-
-        r.run();
-    }
-
-    return 0;
+    return res;
 }

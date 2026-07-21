@@ -68,7 +68,7 @@ namespace Mil
         //    uint mode : 3;
         uint inline_ : 1;
         uint invar : 1;
-        uint extern_ : 1; // extern name (if present) is in val
+        uint extern_ : 1; // proc extern name (if present) is in val; for module, marks a prebuilt
         uint foreign_ : 1;
         uint nobody : 1;
         uint forward : 1;

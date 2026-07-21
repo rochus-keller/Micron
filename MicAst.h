@@ -371,6 +371,14 @@ namespace Mic
         virtual QByteArray modulePath( const QByteArrayList& imp ) = 0;
     };
 
+    class ModuleResolver {
+    public:
+        virtual ~ModuleResolver() {}
+        // given the MIL name of an imported module, returns the already-loaded Mic module declaration or 0
+        virtual Declaration* resolveModule( const QByteArray& milModuleName ) = 0;
+    };
+
+
 }
 
 Q_DECLARE_METATYPE(Mic::Import)

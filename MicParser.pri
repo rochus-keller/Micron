@@ -8,7 +8,8 @@ SOURCES += \
     MicAst.cpp \
     MicEvaluator.cpp \
     MicBuiltins.cpp \
-    MicMilLoader2.cpp
+    MicAstLoader.cpp \
+    MicModuleManager.cpp
 
 HEADERS += \
     MicLexer.h \
@@ -19,5 +20,6 @@ HEADERS += \
     MicAst.h \
     MicEvaluator.h \
     MicBuiltins.h \
-    MicMilLoader2.h
+    MicAstLoader.h \
+    MicModuleManager.h
 
