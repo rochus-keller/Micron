@@ -96,7 +96,7 @@ struct BuildOpts
         cdeclRet(false),aapcs(false),esp32(false){}
 };
 
-static int emitAndRun(Mil::AstModel& model, const BuildOpts& opts, int all, int ok)
+static int emitAndRun(Mil::AstModel& model, const BuildOpts& opts, int all, int ok, Mic::Project2* pro = 0)
 {
     if( opts.doDump )
     {
@@ -127,6 +127,11 @@ static int emitAndRun(Mil::AstModel& model, const BuildOpts& opts, int all, int 
 
     if( all == ok && opts.doRun )
     {
+        if( pro )
+        {
+            pro->interpret();
+            return 0;
+        }
         Mil::Interpreter r(&model);
 
 #ifdef _MIC_HAVE_SCREEN_
@@ -238,7 +243,7 @@ static int buildProject(const QString& projFile, BuildOpts& opts)
         opts.exeName = prj.getMain().first.isEmpty() ?
                     info.baseName().toUtf8() : QString::fromUtf8(prj.getMain().first);
 
-    const int res = emitAndRun(prj.getMilModel(), opts, all, ok);
+    const int res = emitAndRun(prj.getMilModel(), opts, all, ok, &prj);
 
     qDebug() << "#### finished with" << ok << "modules ok of total" << all << "modules";
     return res;
@@ -331,7 +336,7 @@ int main(int argc, char *argv[])
 
     const QFileInfo info(args.first());
     int res = 0;
-    if( info.suffix().compare("micpro", Qt::CaseInsensitive) == 0 )
+    if( info.suffix() == "micpro" )
         res = buildProject(args.first(), o); // .micpro file selects the project build
     else
         res = buildSingle(info, searchPaths, o); // everything else is treated as a single main module with auto-discovery

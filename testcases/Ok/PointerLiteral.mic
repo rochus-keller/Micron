@@ -1,0 +1,19 @@
+module PointerLiteral
+
+type
+    Ptr = pointer to any
+var
+    ptr : Ptr
+    i : uint32
+begin
+    println("begin")
+    
+    i := 1234
+    
+    // ptr := Ptr{ i } // error no const expr
+    ptr := Ptr{ 1234 } // ok
+    println(ord(ptr))
+    
+    println("end")
+
+end PointerLiteral

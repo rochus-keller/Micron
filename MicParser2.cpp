@@ -4456,12 +4456,14 @@ void Parser2::module(const Import & import) {
         id.name.d_val = "begin$"; // keep $ postfix, because "begin" is a MIL keyword
         id.visi = Node::Private;
         Declaration* procDecl = addDecl(id, Declaration::Procedure);
+        ev->pushCurProc(procDecl);
         mdl->openScope(procDecl);
         out->beginProc("begin$", la.toRowCol(),0, langLevel == 0 ? Mil::ProcData::ModuleEntry : Mil::ProcData::ModuleInit);
         resolveDeferreds();
         block();
         out->endProc(RowCol());
         mdl->closeScope();
+        ev->popCurProc();
     }
 	expect(Tok_END, true, "module");
 

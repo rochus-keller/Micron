@@ -118,9 +118,7 @@ public:
 class Project2::MilImp : public QObject, public Mil::Importer
 {
 public:
-    // routes MIL-level imports (arising while a loaded .mil/.mob pulls its own
-    // dependencies) back to the project, so they can be located in any provider
-    // format through the project's package-aware, source-parsing import path
+    // routes MIL-level imports (for mil and mob files) back to the project
     Project2* prj;
     MilImp(Project2* prj):QObject(prj),prj(prj){}
     Mil::Declaration* loadModule( const Mil::Import& imp )
@@ -130,8 +128,7 @@ public:
             if( m->name.constData() == imp.moduleName.constData() ) // || m->name == imp.moduleName )
                 return m;
 
-        // otherwise locate and load a provider in any format; this populates the
-        // Mil::AstModel as a side effect, so we look the module up again afterwards
+        // otherwise locate and load the module into Mil::AstModel and lookup the module again afterwards
         Import micImp;
         micImp.path = imp.moduleName.split('$');
         prj->loadModule(micImp);
@@ -781,12 +778,9 @@ Declaration *Project2::loadModule(const Import &imp)
     d_modules.append(ModuleSlot(fixedImp,file,0));
     ms = &d_modules.back();
 
-    // prebuilt module providers don't carry Micron source; delegate the mixed-format
-    // loading to the shared ModuleManager. It loads the MIL into the shared model,
-    // marks a .mob extern_ and collects its object for the linker, and reconstructs
-    // the Mic interface into the project's model (cross-module refs resolve back here).
-    if( !file->d_filePath.endsWith(".mic", Qt::CaseInsensitive) )
+    if( !file->d_filePath.endsWith(".mic") )
     {
+        // handle mil and mob files directly via ModuleManager
         const ModuleManager::ProviderKind kind =
                 file->d_filePath.endsWith(".mob", Qt::CaseInsensitive) ?
                     ModuleManager::MilObject : ModuleManager::MilSource;

@@ -21,14 +21,5 @@
         <file>images/alias_priv.png</file>
         <file>images/alias.png</file>
         <file>font/DejaVuSansMono.ttf</file>
-        <file>oakwood/Files.mic</file>
-        <file>oakwood/In.mic</file>
-        <file>oakwood/Input.mic</file>
-        <file>oakwood/Math.mic</file>
-        <file>oakwood/MathL.mic</file>
-        <file>oakwood/Out.mic</file>
-        <file>oakwood/Strings.mic</file>
-        <file>oakwood/Args.mic</file>
-        <file>oakwood/Screen.mic</file>
     </qresource>
 </RCC>

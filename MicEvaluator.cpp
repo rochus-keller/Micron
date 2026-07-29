@@ -861,7 +861,8 @@ bool bitCast(QVariant &v) {
 
 static inline bool bitCast(QVariant &v, Type* out, Type* in)
 {
-    Q_ASSERT(out && in && out->getByteSize() == in->getByteSize());
+    if( out == 0 || in == 0 || out->getByteSize() != in->getByteSize() )
+        return false;
     if( in->kind == out->kind )
         return true;
     switch(out->kind)
@@ -1030,7 +1031,7 @@ bool Evaluator::shortCircuitAnd(Expression* e)
             return false;
         if( !recursiveRun(e->rhs) )
             return false;
-        if( binaryOp(e->kind,e->pos) )
+        if( !binaryOp(e->kind,e->pos) )
             return false;
     }else
     {
@@ -2556,12 +2557,11 @@ void Evaluator::constructor(Expression* e)
 
 Declaration* Evaluator::addTemp(Type* t, const RowCol& pos)
 {
+    Q_ASSERT( !curProcs.isEmpty() );
     Declaration* decl = mdl->addDecl(mdl->getTempName());
     decl->kind = Declaration::LocalDecl;
     decl->setType(t);
     decl->pos = pos;
-    Declaration::append(curProcs.back()->link, decl);
-    decl->outer = curProcs.back();
     decl->id = out->addLocal(toQuali(t), decl->name, decl->pos);
     return decl;
 }

@@ -22,5 +22,14 @@
         <file>oakwood/Screen.h</file>
         <file>oakwood/ScreenXcb.c</file>
         <file>oakwood/ScreenSdl.c</file>
+        <file>oakwood/Args.mic</file>
+        <file>oakwood/Files.mic</file>
+        <file>oakwood/In.mic</file>
+        <file>oakwood/Input.mic</file>
+        <file>oakwood/Math.mic</file>
+        <file>oakwood/MathL.mic</file>
+        <file>oakwood/Out.mic</file>
+        <file>oakwood/Screen.mic</file>
+        <file>oakwood/Strings.mic</file>
     </qresource>
 </RCC>

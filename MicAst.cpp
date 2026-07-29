@@ -295,7 +295,14 @@ Declaration*AstModel::findDecl(const QByteArray& id, bool recursive) const
             if( cur->name.constData() == id.constData() )
                 return cur;
             else
+            {
+                if( cur == cur->next )
+                {
+                    qWarning() << "AstModel::findDecl: declaration follows itself:" << id;
+                    break;
+                }
                 cur = cur->next;
+            }
         }
         if( !recursive )
             return 0;

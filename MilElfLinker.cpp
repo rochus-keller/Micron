@@ -24,6 +24,7 @@
 #include <QDateTime>
 #include <QFileInfo>
 #include <QCryptographicHash>
+#include <QtDebug>
 using namespace Mil;
 
 // ELF Section flags 
@@ -588,9 +589,13 @@ bool ElfLinker::link(const QString& outPath) {
 
     // Patch the ESP-IDF App Descriptor SHA256 hash with the hash of the final ELF
     if (d_isEsp32) {
+#ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
         QByteArray hash = QCryptographicHash::hash(elf, QCryptographicHash::Sha256);
         const int sha256Offset = rodataDescFileOffset + 144; // app_elf_sha256 is at byte 144 in the descriptor
         memcpy(elf.data() + sha256Offset, hash.constData(), 32);
+#else
+        qWarning() << "ElfLinker for ESP32 requires QCryptographicHash::Sha256";
+#endif
     }
 
     QFile outFile(outPath);
