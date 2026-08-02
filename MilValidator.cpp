@@ -1613,6 +1613,7 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
     case IL_ldelem_i2:
     case IL_stelem_i2:
     case IL_ldind_i2:
+    case IL_stind_i2:
     case IL_conv_i2:
         return mdl->getBasicType(Type::INT16);
     case IL_ldelem_i4:

@@ -658,6 +658,7 @@ Parser2::~Parser2()
 void Parser2::RunParser(const Import &import) {
 	errors.clear();
     deferred.clear();
+    deferred.push_back(DeferredLevel());
     forwards.clear();
     allTypes.clear();
 	next();
@@ -722,9 +723,9 @@ void Parser2::checkPointerResolved(Type * ptr)
     Type* base = ptr->getType();
     if( base == 0 || base->kind != Type::Undefined )
         return;
-    for( int i = 0; i < deferred.size(); i++ )
+    for( int i = 0; i < deferred.back().size(); i++ )
     {
-        if( deferred[i].first == ptr )
+        if( deferred.back()[i].first == ptr )
         {
             resolveDeferred(i, true);
             //error(deferred[i].second, "cannot resolve pointer base type");
@@ -970,7 +971,7 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
 #endif
 
     // Tv is a procedure type and e is the name of a procedure whose formal parameters match those of Tv.
-    if( rhs->kind == Declaration::Procedure )
+    if( rhs->kind == Declaration::Procedure || rhs->kind == Declaration::ForwardDecl )
     {
         if( lhs->kind == Type::Proc )
         {
@@ -1521,6 +1522,8 @@ Type* Parser2::ArrayType() {
     arr->vla = vla;
 
     openArrayError(tok2,etype);
+    // we don't support array of open array, because MIL newarr only takes one dimension from stack
+    // and references the element type, not the array type; we could add a MIL newarrnd operation if unavoidable
     invalidTypeError(tok2,etype);
     arr->len = len;
     arr->setType(etype);
@@ -1800,7 +1803,7 @@ Type* Parser2::PointerType() {
             {
                 // we're looking for a local declaration
                 res->deferred = true;
-                deferred << qMakePair(res,tok);
+                deferred.back() << qMakePair(res,tok);
             } // else import error already reported
         }else
             res->setType(t);
@@ -2000,11 +2003,18 @@ void Parser2::emitType(Type* t)
         Qualident base;
         if( t->deferred )
         {
-            for( int i = 0; i < deferred.size(); i++ )
+            for( int i = 0; i < deferred.back().size(); i++ )
             {
-                if( deferred[i].first == t )
+                if( deferred.back()[i].first == t )
                 {
-                    base = qMakePair(QByteArray(),deferred[i].second.d_val);
+                    // if we come here, we need to send a yet unresoved pointer to MIL
+                    // we know that the pointer base must be local, and we have to prefix the name with the procedure path
+                    Q_ASSERT(t->decl && t->decl->outer);
+                    base = ev->toQuali(t->decl->outer); // get the path of the outer procedure if any
+                    if( !base.second.isEmpty() )
+                        base.second = Token::getSymbol(base.second + "$" + deferred.back()[i].second.d_val);
+                    else
+                        base.second = deferred.back()[i].second.d_val;
                     break;
                 }
             }
@@ -2127,7 +2137,7 @@ void Parser2::prepareParam(const DeclList& formals, const ExpList& actuals)
     Expression* actual = actuals.last();
 
     if( !paramCompat(formal,actual) ) {
-        //paramCompat(formal,actual); // TEST
+        // paramCompat(formal,actual); // TEST
         error(actual->pos.d_row, actual->pos.d_col, "actual argument not compatible with formal parameter");
     }
 }
@@ -2717,32 +2727,32 @@ Declaration*Parser2::addDecl(const Parser2::IdentDef& id, Declaration::Kind mode
 
 void Parser2::resolveDeferreds(bool reportError)
 {
-    if( deferred.isEmpty() )
+    if( deferred.back().isEmpty() )
         return;
-    for(int i = 0; i < deferred.size(); i++ )
+    for(int i = 0; i < deferred.back().size(); i++ )
         resolveDeferred(i, reportError);
 }
 
 void Parser2::resolveDeferred(int i, bool reportError)
 {
-    if( deferred[i].first == 0 )
+    if( deferred.back()[i].first == 0 )
         return; // already handled
-    Declaration* d = findDecl(deferred[i].second);
+    Declaration* d = findDecl(deferred.back()[i].second);
     if( d == 0 )
-        deferred[i].first = 0; // already reported
+        deferred.back()[i].first = 0; // already reported
     else if( d->getType() == 0 || d->kind != Declaration::TypeDecl )
     {
-        if( reportError && !deferred[i].first->invalid )
+        if( reportError && !deferred.back()[i].first->invalid )
         {
-            error(deferred[i].second, QString("cannot resolve type: %1").arg(deferred[i].second.d_val.constData()) );
-            deferred[i].first = 0;
+            error(deferred.back()[i].second, QString("cannot resolve type: %1").arg(deferred.back()[i].second.d_val.constData()) );
+            deferred.back()[i].first = 0;
         }
     }else
     {
-        markRef(d, deferred[i].second.toRowCol());
-        deferred[i].first->setType(d->getType());
-        deferred[i].first->deferred = false;
-        deferred[i].first = 0;
+        markRef(d, deferred.back()[i].second.toRowCol());
+        deferred.back()[i].first->setType(d->getType());
+        deferred.back()[i].first->deferred = false;
+        deferred.back()[i].first = 0;
     }
 }
 
@@ -3445,6 +3455,8 @@ void Parser2::CaseStatement() {
     const Token tok1 = cur;
     Token tok2 = la;
     Expression* e = expression(0);
+    if( e == 0 )
+        return; // already reported
     const bool typeCase = e->getType() && e->getType()->kind == Type::Pointer &&
                                  e->getType()->getType() && e->getType()->getType()->kind == Type::Object;
     if( typeCase )
@@ -3940,6 +3952,7 @@ void Parser2::ProcedureDeclaration() {
             return;
 
         ev->pushCurProc(procDecl);
+        deferred.push_back(DeferredLevel());
 
         if( peek(1).d_type == Tok_EXTERN || ( peek(1).d_type == Tok_Semi && peek(2).d_type == Tok_EXTERN ) ) {
             // EXTERN procedure
@@ -4033,6 +4046,7 @@ void Parser2::ProcedureDeclaration() {
 
             // inlined ProcedureBody();
             DeclarationSequence();
+            resolveDeferreds();
             block();
             expect(Tok_END, true, "ProcedureBody");
             out->endProc(la.toRowCol());
@@ -4055,6 +4069,7 @@ void Parser2::ProcedureDeclaration() {
 			invalid("ProcedureDeclaration");
         mdl->closeScope();
         ev->popCurProc();
+        deferred.pop_back();
 #if 0
         // TODO this happens and has to be fixes
         if( !ev->isStackEmpty() )

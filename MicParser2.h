@@ -216,7 +216,8 @@ namespace Mic {
         Scanner2* scanner;
         Declaration* thisMod, *thisDecl;
         QList<Type*> typeStack; // TODO: likely not used
-        QList<QPair<Type*,Token> > deferred;
+        typedef QList<QPair<Type*,Token> > DeferredLevel; // module level (including begin), then one more for each proc and nesting
+        QList<DeferredLevel> deferred;
         QList<RowCol> loopStack;
         typedef QList<RowCol> Depth;
         Depth blockDepth; // stack of RowCol, top is current StatSeq

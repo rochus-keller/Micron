@@ -495,7 +495,11 @@ Token Lexer::number()
             digits.replace('_',"");
             const int base = isHex ? 16 : isOctal ? 8 : isBinary ? 2 : 10;
             const quint64 number = digits.toULongLong(&ok, base);
-            const quint64 limit = qPow(255,byteWidth) / ( isSigned ? 2.0 : 1.0 );
+            quint64 limit = (byteWidth == 8) ? ~0ULL // avoid undefined C++ behavior of shifting a 64-bit value by 64
+                                             : (1ULL << (byteWidth * 8)) - 1;
+            if( isSigned )
+                limit = (limit >> 1) + 1; // e.g. unsigned 65535 becomes signed 32768 for 16-bit limits,
+                                            // so both the positive (32767) and negative (32768) maximum pass
             if( number >  limit || !ok )
                 return token( Tok_Invalid, off, QString("literal too large for an %1 bit %2integer")
                               .arg(byteWidth*8).arg(isSigned ? "signed ":"" ).toUtf8() );

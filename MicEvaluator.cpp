@@ -165,7 +165,8 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
                 rhs.type->getType()->kind == Type::CHAR))
     {
         // Tv is a non-open array of CHAR, Te is a string literal, or an open array of CHAR;
-        assureTopOnMilStack(false, pos);
+        if( !assureTopOnMilStack(false, pos) )
+            return false;
         out->line_(pos);
         out->ldind_(toQuali(lhs));
     }else if( lhs && lhs->kind == Type::Array && lhs->len &&
@@ -173,7 +174,8 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
     {
         // copy rhs non-open array ref by value to stack to copy to non-open lhs array
         Q_ASSERT( lhs->len == rhs.type->len );
-        assureTopOnMilStack(false, pos);
+        if( !assureTopOnMilStack(false, pos) )
+            return false;
         out->line_(pos);
         out->ldind_(toQuali(lhs));
     }else if( lhs && lhs->kind == Type::CHAR && rhs.type->kind == Type::StrLit )
@@ -234,7 +236,8 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
     {
         Q_ASSERT( &rhs == &stack.back() );
         Type* t = rhs.type;
-        assureTopOnMilStack(false, pos); // modifies stack.back() i.e. rhs
+        if( !assureTopOnMilStack(false, pos) ) // modifies stack.back() i.e. rhs
+            return false;
         adjustNumType(t,lhs);
     }
 
@@ -1001,17 +1004,19 @@ Value Evaluator::top()
     return res;
 }
 
-void Evaluator::assureTopOnMilStack(bool pop, const RowCol& pos)
+bool Evaluator::assureTopOnMilStack(bool pop, const RowCol& pos)
 {
+    bool res = true;
     if( top().isConst() )
     {
         Value v = stack.takeLast();
-        pushMilStack(v, pos);
+        res = pushMilStack(v, pos);
         v.mode = Value::Val;
         stack.push_back(v);
     }
     if(pop)
         this->pop();
+    return res;
 }
 
 bool Evaluator::shortCircuitAnd(Expression* e)
@@ -1040,12 +1045,14 @@ bool Evaluator::shortCircuitAnd(Expression* e)
         out->iif_();
         if( !recursiveRun(e->lhs) )
             return false;
-        assureTopOnMilStack(true, e->lhs->pos);
+        if( !assureTopOnMilStack(true, e->lhs->pos) )
+            return false;
         out->line_(e->pos);
         out->then_();
         if( !recursiveRun(e->rhs) )
             return false;
-        assureTopOnMilStack(false, e->rhs->pos); // leave the bool result on the stack
+        if( !assureTopOnMilStack(false, e->rhs->pos) ) // leave the bool result on the stack
+            return false;
         out->line_(e->pos);
         out->else_();
         out->ldc_i4(0); // push FALSE
@@ -1086,7 +1093,8 @@ bool Evaluator::shortCircuitOr(Expression* e)
             out->end_();
             return false;
         }
-        assureTopOnMilStack(true, e->lhs->pos);
+        if( !assureTopOnMilStack(true, e->lhs->pos) )
+            return false;
         out->line_(e->pos);
         out->then_();
         out->ldc_i4(1); // push TRUE
@@ -1097,7 +1105,8 @@ bool Evaluator::shortCircuitOr(Expression* e)
             out->end_();
             return false;
         }
-        assureTopOnMilStack(false, e->rhs->pos); // leave the bool result on the stack
+        if( !assureTopOnMilStack(false, e->rhs->pos) ) // leave the bool result on the stack
+            return false;
         out->end_();
     }
 #endif
@@ -1121,11 +1130,11 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
             case Type::Nil:
                 out->ldnull_();
                 break;
-            case Type::BOOL:
-            case Type::CHAR:
             case Type::UINT8:
             case Type::UINT16:
             case Type::UINT32:
+            case Type::BOOL:
+            case Type::CHAR:
             case Type::SET:
                 out->ldc_i4(v.val.toUInt());
                 //v.type = mdl->getType(Type::INT32);
@@ -1136,6 +1145,19 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
             case Type::INT8:
             case Type::INT16:
             case Type::INT32:
+#if 0
+                // TODO: doesn't work, e.g. BitBlt.mic val(int16, 0ffffh) gives an error
+                {
+                    // check here because the positive signed int can be 1 larger than max due to lexer undecidability
+                    const qint64 i = v.val.toLongLong();
+                    const qint64 lower = Type::getMin((Type::Kind)v.type->kind).toLongLong();
+                    const qint64 upper = Type::getMax((Type::Kind)v.type->kind).toLongLong();
+                    if( i > upper || i < lower )
+                        return error("the given integer constant value is outside of its domain", pos);
+                }
+#endif
+                out->ldc_i4(v.val.toInt());
+                break;
             case Type::ConstEnum:
                 out->ldc_i4(v.val.toInt());
                 //v.type = mdl->getType(Type::INT32);
@@ -2155,11 +2177,13 @@ bool Evaluator::recursiveRun(Expression* e)
         if( !recursiveRun(e->lhs) )
             return false;
         if( e->lhs->isConst() && !e->rhs->isConst() )
-            assureTopOnMilStack(false, e->lhs->pos);
+            if( !assureTopOnMilStack(false, e->lhs->pos) )
+                return false;
         if( !recursiveRun(e->rhs) )
             return false;
         if( !e->lhs->isConst() && e->rhs->isConst() )
-            assureTopOnMilStack(false, e->rhs->pos);
+            if( !assureTopOnMilStack(false, e->rhs->pos) )
+                return false;
         if( !binaryOp(e->kind, e->pos) )
             return false;
         break;
@@ -2324,7 +2348,8 @@ bool Evaluator::recursiveRun(Expression* e)
                             stack.back().val = (char)stack.back().val.toByteArray()[0];
                             stack.back().type = mdl->getType(Type::CHAR);
                         }
-                        assureTopOnMilStack(false, args[i]->pos); // effects builtin args and variable args
+                        if( !assureTopOnMilStack(false, args[i]->pos) ) // effects builtin args and variable args
+                            return false;
                     }
                 }else
                     return error("more actual than formal arguments", e->pos);
@@ -2384,13 +2409,15 @@ bool Evaluator::dynamicSetConstructor(Expression* e)
             bindUniInt(c->lhs, false);
             if( !evaluate(c->lhs) )
                 return false;
-            assureTopOnMilStack(true, c->lhs->pos);
+            if( !assureTopOnMilStack(true, c->lhs->pos) )
+                return false;
 
             // Evaluate upper bound
             bindUniInt(c->rhs, false);
             if( !evaluate(c->rhs) )
                 return false;
-            assureTopOnMilStack(true, c->rhs->pos);
+            if( !assureTopOnMilStack(true, c->rhs->pos) )
+                return false;
             out->line_(c->pos);
             out->call_(coreName("SetRange"), 2, true);
             out->or_();
@@ -2401,7 +2428,8 @@ bool Evaluator::dynamicSetConstructor(Expression* e)
             bindUniInt(c, false);
             if( !evaluate(c) )
                 return false;
-            assureTopOnMilStack(true, c->pos);
+            if( !assureTopOnMilStack(true, c->pos) )
+                return false;
             out->ldc_i4(1);
             out->shl_();
             out->or_();
@@ -2442,7 +2470,8 @@ bool Evaluator::dynamicStructConstructor(Expression* e)
 
             if( !evaluate(c->rhs) )
                 return false;
-            assureTopOnMilStack(true, c->rhs->pos);
+            if( !assureTopOnMilStack(true, c->rhs->pos) )
+                return false;
 
             // Copy of Variant/Field logic from stfld()
             Mil::Trident td;
@@ -2468,7 +2497,8 @@ bool Evaluator::dynamicStructConstructor(Expression* e)
 
             if( !evaluate(c->rhs) )
                 return false;
-            assureTopOnMilStack(true, c->rhs->pos);
+            if( !assureTopOnMilStack(true, c->rhs->pos) )
+                return false;
 
             out->line_(c->pos);
             out->stelem_(toQuali(e->getType()->getType()));

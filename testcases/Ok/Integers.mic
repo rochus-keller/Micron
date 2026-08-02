@@ -1,0 +1,8 @@
+module Integers
+
+var i2 : int16
+
+begin
+  i2 := -32768i2
+
+end Integers
