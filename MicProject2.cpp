@@ -141,7 +141,7 @@ public:
 };
 
 Project2::Project2(QObject *parent) : QObject(parent),d_modMan(0),d_dirty(false),
-    d_useBuiltInOakwood(false),d_level(0),d_useOakwoodScreen(false)
+    d_useBuiltInOakwood(false),d_depth(0),d_useOakwoodScreen(false)
 {
     d_modMan.setMilImporter(new MilImp(this));
     d_suffixes << ".mic" << ".mil" << ".mob";
@@ -168,6 +168,7 @@ void Project2::clear(bool all, bool reloadMic)
         foreach(File* f, d_libs)
             delete f;
         d_libs.clear();
+        d_groups.append( FileGroup() ); // root file group
     }
 }
 
@@ -811,7 +812,7 @@ Declaration *Project2::loadModule(const Import &imp)
     Mil::IlAstRenderer imr(&d_modMan.getModel());
 #endif
 
-    d_level++;
+    d_depth++;
     Lex2 lex;
     lex.sourcePath = file->d_filePath; // to keep file name if invalid
     QBuffer buf; // keep buffer here so it remains valid for the parse if needed
@@ -827,7 +828,7 @@ Declaration *Project2::loadModule(const Import &imp)
     Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
     p.RunParser(fixedImp);
     if( p.getModule() )
-        qDebug() << "*** parsing" << p.getModule()->name << "level" << d_level << (p.getModule()->generic?"generic":""); // TEST
+        qDebug() << "*** parsing" << p.getModule()->name << "depth" << d_depth << (p.getModule()->generic?"generic":""); // TEST
     else
         qDebug() << "*** parse" << file->d_name; // TEST
     Mic::Declaration* res = 0;
@@ -868,7 +869,7 @@ Declaration *Project2::loadModule(const Import &imp)
         d_subs[i.key()] += i.value();
 
     ms->decl = res;
-    d_level--;
+    d_depth--;
     return res;
 }
 
@@ -1052,8 +1053,8 @@ bool Project2::save()
     out.setValue("Arguments", d_args );
 
     const FileGroup* root = getRootFileGroup();
-    out.beginWriteArray("Modules", root->d_files.size() ); // nested arrays don't work
-    for( int i = 0; i < root->d_files.size(); i++ )
+    out.beginWriteArray("Modules", root ? root->d_files.size() : 0 ); // nested arrays don't work
+    for( int i = 0; root && i < root->d_files.size(); i++ )
     {
         const QString absPath = root->d_files[i]->d_filePath;
         const QString relPath = dir.relativeFilePath( absPath );

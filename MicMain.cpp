@@ -86,6 +86,7 @@ struct BuildOpts
     bool cdeclRet;
     bool aapcs;
     bool esp32;
+    qint64 base;
     QString arch;
     QString outPath;
     QString exeName;
@@ -93,7 +94,7 @@ struct BuildOpts
     QStringList linkLibs;
     QStringList linkObjs;
     BuildOpts():dbg(false),doDump(false),dump2(false),doRun(false),
-        cdeclRet(false),aapcs(false),esp32(false){}
+        cdeclRet(false),aapcs(false),esp32(false),base(-1){}
 };
 
 static int emitAndRun(Mil::AstModel& model, const BuildOpts& opts, int all, int ok, Mic::Project2* pro = 0)
@@ -123,7 +124,8 @@ static int emitAndRun(Mil::AstModel& model, const BuildOpts& opts, int all, int 
         objFiles = Mil::Backend::compileX86(model, opts.outPath, opts.dbg, true, opts.cdeclRet);
 
     if( !objFiles.isEmpty() || !opts.libDirs.isEmpty() || !opts.linkLibs.isEmpty() || !opts.linkObjs.isEmpty() )
-        Mil::Backend::linkExecutable(objFiles, opts.libDirs, opts.linkLibs, opts.linkObjs, opts.outPath, opts.exeName); // TODO: link errors
+        Mil::Backend::linkExecutable(objFiles, opts.libDirs, opts.linkLibs, opts.linkObjs, opts.outPath,
+                                     opts.exeName, opts.esp32, opts.base); // TODO: link errors
 
     if( all == ok && opts.doRun )
     {
@@ -286,6 +288,10 @@ int main(int argc, char *argv[])
     QCommandLineOption esp32opt("esp32", "generate ESP32-P4 Harvard architecture ELF (split Flash/SRAM memory map)");
     cp.addOption(aapcs);
     cp.addOption(esp32opt);
+    QCommandLineOption rtOpt("runtime", "MIL file implementing MIC$, for freestanding targets", "file");
+    cp.addOption(rtOpt);
+    QCommandLineOption baseOpt("base", "set the load address of the executable (hex, default 8048000)", "addr");
+    cp.addOption(baseOpt);
     QCommandLineOption libs("L", "add a library search directory for the linker", "path");
     cp.addOption(libs);
     QCommandLineOption linkLib("n", "link with archive library lib<name>.a (searched in -L dirs)", "name");
@@ -324,6 +330,26 @@ int main(int argc, char *argv[])
     o.cdeclRet = cp.isSet(cdeclRet);
     o.aapcs = cp.isSet(aapcs);
     o.esp32 = cp.isSet(esp32opt);
+    if( cp.isSet(baseOpt) )
+    {
+        bool ok = false;
+        o.base = cp.value(baseOpt).toUInt(&ok,16);
+        if( !ok )
+        {
+            qCritical() << "invalid base address" << cp.value(baseOpt);
+            return -1;
+        }
+    }
+    if( cp.isSet(rtOpt) )
+    {
+        const QString path = cp.value(rtOpt);
+        if( !QFile::exists(path) )
+        {
+            qCritical() << "runtime file not found" << path;
+            return -1;
+        }
+        Mic::ModuleManager::setRuntimePath(path);
+    }
     o.arch = cp.value(arch);
     o.libDirs = cp.values(libs);
     o.linkLibs = cp.values(linkLib);

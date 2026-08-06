@@ -218,7 +218,7 @@ namespace Mic
         QByteArray d_args;
         QString d_workingDir, d_buildDir;
         ModProc d_main;
-        qint16 d_level;
+        qint16 d_depth;
         bool d_dirty;
         bool d_useBuiltInOakwood;
         bool d_useOakwoodScreen;

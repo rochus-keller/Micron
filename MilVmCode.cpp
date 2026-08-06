@@ -993,7 +993,11 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
             emitOp(proc, LL_conv_i8_r4);
         else if(lhsT->kind == Type::FLOAT64)
             emitOp(proc, LL_conv_i8_r8);
-        else if( !lhsT->isInt64() )
+        else if(lhsT->kind == Type::Pointer || lhsT->kind == Type::Proc)
+        {
+            if( pointerWidth <= 4 )
+                emitOp(proc, LL_conv_u8_i4);
+        }else if( !lhsT->isInt64() )
             Q_ASSERT(false);
         break;
     case IL_conv_r4:
@@ -1061,7 +1065,11 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
             emitOp(proc, LL_conv_u8_r4);
         else if(lhsT->kind == Type::FLOAT64)
             emitOp(proc, LL_conv_u8_r8);
-        else
+        else if(lhsT->kind == Type::Pointer || lhsT->kind == Type::Proc)
+        {
+            if( pointerWidth <= 4 )
+                emitOp(proc, LL_conv_u8_i4);
+        }else
             Q_ASSERT(false);
         break;
     case IL_ceq:

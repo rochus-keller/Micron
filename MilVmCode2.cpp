@@ -217,7 +217,7 @@ bool Code2::expression(Procedure &proc, Expression* e)
         BINOP2(shr_un);
         break;
     case IL_shr:
-        BINOP2(shr_un);
+        BINOP2(shr);
         break;
 
     case IL_neg:

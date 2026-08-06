@@ -358,6 +358,16 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         }
         break;
 
+    case Builtin::PTROFF:
+        expectingNArgs(args,2);
+        if( args[0]->getType()->kind != Type::Pointer )
+            throw "expecting pointer first argument";
+        ev->bindUniInt(args[1], true);
+        if( !args[1]->getType()->isInt() )
+            throw "expecting signed integer second argument";
+        *ret = args[0]->getType();
+        break;
+
     // procedures:
         // TODO: complete
     case Builtin::ASSERT:
@@ -591,7 +601,8 @@ void Builtins::doCast(const RowCol &pos)
         if(type.type == 0 || type.type->kind != Type::Pointer)
             return; // reported elsewhere
         // castptr expects the base type of the pointer, not the full pointer type
-        ev->out->castptr_(ev->toQuali(type.type->getType()));
+        if( !ev->stack.back().isConst() )
+            ev->out->castptr_(ev->toQuali(type.type->getType()));
     }
     ev->stack.back().type = type.type;
 }
@@ -734,7 +745,7 @@ void Builtins::doOrd(const RowCol& pos)
             break;
         case Type::Pointer:
         case Type::Proc:
-            v.type = ev->mdl->getType(Type::UINT64); // TODO: target byte width
+            v.type = ev->mdl->getType(Type::UINT64);
             break;
         default:
             Q_ASSERT(false);
@@ -761,7 +772,8 @@ void Builtins::doOrd(const RowCol& pos)
             break;
         case Type::Pointer:
         case Type::Proc:
-            v.type = ev->mdl->getType(Type::UINT64); // TODO: target byte width
+            v.type = ev->mdl->getType(Type::UINT64);
+            ev->out->conv_(Mil::EmiTypes::U8);
             break;
         case Type::INT32:
         case Type::UINT32:
@@ -889,6 +901,24 @@ void Builtins::COPY(const RowCol &pos)
     Value from = ev->stack.takeLast();
     Value to = ev->stack.takeLast();
     ev->out->call_(coreName("strcpy"),3,false);
+}
+
+void Builtins::doPtroff(const RowCol &pos)
+{
+    Value step = ev->stack.takeLast();
+    Value what = ev->stack.takeLast();
+
+    // everything is on the MIL stack already
+
+    if( what.type->getType()->kind == Type::Any )
+    {
+        ev->error("cannot apply this operation on pointers of ANY type",pos);
+        return;
+    }
+
+    ev->out->ptroff_(ev->toQuali(what.type->getType())); // …, pointer value, offset -> …, pointer value
+
+    ev->stack.push_back(what);
 }
 
 void Builtins::checkNumOfActuals(int nArgs, int min, int max)
@@ -1058,6 +1088,11 @@ void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
         // TODO: do we expect more enums than fit in I4?
     }else if( what.type->kind == Type::Pointer )
     {
+        if( what.type->getType()->kind == Type::Any )
+        {
+            ev->error("cannot apply this operation on pointers of ANY type",pos);
+            return;
+        }
         // the address of the variable hosting the pointer is already on the stack
         ev->out->dup_();
         ev->out->ldind_(Mil::EmiTypes::IntPtr); // fetch the pointer value
@@ -1505,6 +1540,12 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
     case Builtin::USIG:
         checkNumOfActuals(nArgs, 1);
         doUsig(pos);
+        handleStack = false;
+        break;
+    case Builtin::PTROFF:
+        checkNumOfActuals(nArgs, 2);
+        pushActualsToMilStack(nArgs,pos);
+        doPtroff(pos);
         handleStack = false;
         break;
     case Builtin::NOP:

@@ -41,7 +41,7 @@ public:
     static bool linkExecutable(const QStringList& objFiles, const QStringList& libDirs,
                                     const QStringList& linkLibs, const QStringList& linkObjs,
                                     const QString& outPath, const QString& exeName,
-                                    bool esp32 = false);
+                                    bool esp32 = false, qint64 baseAddress = -1);
 };
 }
 

@@ -278,7 +278,7 @@ static inline bool FIRST_literal(int tt) {
 }
 
 static inline bool FIRST_constructor(int tt) {
-    return tt == Tok_Lbrace || tt == Tok_ident;
+    return tt == Tok_Lbrace;
 }
 
 static inline bool FIRST_component(int tt) {
@@ -2360,6 +2360,19 @@ Expression* Parser2::designator(bool needsLvalue) {
     if( s && needsLvalue )
         s->kind = Symbol::Lval;
 
+    if( FIRST_constructor(la.d_type) ) {
+        // this is a typed constructor NamedType '{' ... '}'
+        if( res->kind != Expression::TypeDecl ) {
+            error(tok,"qualident doesn't reference a named type");
+            return 0;
+        }
+        res = constructor(res->getType()); // replace res, ignore the named type
+        // a typed constructor can be part of a designator, which makes sense if the constructor is
+        // e.g. a pointer or procedure type literal; such a literal can be dereferenced or called or
+        // whatever is legal on a designator; an untyped constructor makes no sense in a designator
+        // because the type hint would apply to the last element in the selector, not to the constructor
+    }
+
     // TODO: track read-only
 
     while( FIRST_selector(la.d_type) ) {
@@ -2450,7 +2463,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 res = tmp;
             }else if( res->getType()->kind == Type::Pointer )
             {
-                res->setByVal();
+                res->setByVal(); // res is used by value, setByValue is here called on the lhs of Deref, not Deref itself!
                 Expression* tmp = Expression::create(Expression::Deref, tok.toRowCol() );
                 tmp->lhs = res;
                 checkPointerResolved(res->getType());
@@ -2958,9 +2971,7 @@ Expression* Parser2::literal() {
 Expression* Parser2::constructor(Type* hint) {
     const Token t = la;
     Expression* res = Expression::create(Expression::Constructor, t.toRowCol());
-    if( FIRST_NamedType(t.d_type) ) {
-        res->setType(NamedType());
-    }else if( hint )
+    if( hint )
         res->setType(hint);
     else
         res->setType(mdl->getType(Type::SET));
@@ -3210,20 +3221,10 @@ Expression* Parser2::component(Type* constrType, int& index) {
 
 Expression* Parser2::factor(Type* hint, bool lvalue) {
     Expression* res = 0;
-    if( ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Lbrace ) ||  peek(1).d_type == Tok_Lbrace ) {
-        res = constructor(hint);
-    } else if( la.d_type == Tok_At && ( peek(2).d_type == Tok_ident && peek(3).d_type == Tok_Lbrace || peek(2).d_type == Tok_Lbrace ) ) {
-        expect(Tok_At, false, "factor");
-        Expression* tmp = constructor(hint ? hint->getType() : 0);
-        tmp->anonymous = true; // this also represents an anonymous local variable
-        // TODO: who allocates and initializes the local? Here we would just deref a desig to it
-
-        res = Expression::create(Expression::Addr, cur.toRowCol());
-        res->lhs = tmp;
-        Type* ptr = addHelperType(Type::Pointer, 0, res->lhs->getType(), res->pos);
-        res->setType(ptr);
-    } else if( FIRST_literal(la.d_type) ) {
+    if( FIRST_literal(la.d_type) ) {
         res = literal();
+    } else if( FIRST_constructor(la.d_type) ) {
+        res = constructor(hint);
 	} else if( FIRST_variableOrFunctionCall(la.d_type) ) {
         res = variableOrFunctionCall(lvalue);
 	} else if( la.d_type == Tok_Lpar ) {
@@ -3249,13 +3250,24 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
     } else if( la.d_type == Tok_At ) {
         const Token tok = la;
         expect(Tok_At, false, "factor");
-        Expression* tmp = designator(true);
+        Expression* tmp = 0;
+        if( FIRST_constructor(la.d_type) )
+            tmp = constructor(hint ? hint->getType() : 0); // @{...}
+        else
+            tmp = designator(true); // this can also be a typed constructor
         if( tmp == 0 )
             return 0; // reported elsewhere
 
+        if( tmp->kind == Expression::Constructor )
+            tmp->anonymous = true; // this also represents an anonymous local variable
+            // TODO: who allocates and initializes the local? Here we would just deref a desig to it
+
         // TODO: The address operator @ cannot be applied to a record field declared with a BITS specification.
-        if( !tmp->hasAddress() && tmp->kind != Expression::TypeDecl )
+        if( !tmp->hasAddress() && tmp->kind != Expression::Constructor && tmp->kind != Expression::TypeDecl ) {
+            // Expression::TypeDecl: to support cast(@TypeName)
             error(tok,"cannot use address operator on this object");
+            return 0;
+        }
 
         res = Expression::create(Expression::Addr, cur.toRowCol());
         res->lhs = tmp;

@@ -266,6 +266,12 @@ bool Evaluator::assign(const RowCol& pos)
     Value rhs = stack.takeLast();
     Value lhs = stack.takeLast();
 
+    if( !lhs.ref && lhs.type && lhs.type->kind == Type::Pointer )
+    {
+        lhs.ref = true;
+        lhs.type = lhs.type->getType();
+    }
+
     if( !lhs.ref )
         return false; // error reported elsewhere
 
@@ -400,7 +406,26 @@ bool Evaluator::derefPointer(bool byVal, const RowCol& pos)
 
     Value v = stack.takeLast();
 
-    Q_ASSERT( v.type && v.type->kind == Type::Pointer && !v.ref );
+    if( v.type == 0 || v.type->kind != Type::Pointer || v.ref )
+    {
+        qCritical() << "Evaluator::derefPointer value on stack is not a pointer or is a value reference";
+        return false; // already reported
+    }
+
+    if( v.isConst() )
+    {
+        // here we only come from a pointer literal
+        Q_ASSERT( v.val.canConvert<Mil::PointerLiteral>() );
+        if( !byVal )
+        {
+            // keep the verbatim pointer literal on stack
+            stack.push_back(v);
+            return err.isEmpty(); // just leave pointer literal on stack
+        }
+        // else push the pointer and let derefValue fetch
+        pushMilStack(v, pos);
+        v.mode = Value::Val;
+    }
 
     v.type = v.type->getType();
     v.ref = true;
@@ -2226,8 +2251,14 @@ bool Evaluator::recursiveRun(Expression* e)
         // also works for @typename
         if( !recursiveRun(e->lhs) )
             return false;
-        // TODO: @constructor creates a temporary variable
-        stack.back().type = e->getType(); // NOP otherwise
+
+        // TODO: consider that @constructor creates a temporary variable
+
+        // '@' results in a pointer to type(lhs).
+        // Since lhs could be a variable fetch, the result is a ref of type(variable)
+        // So we also have to clear ref when we instead provide a pointer to type(variable)
+        stack.back().type = e->getType();
+        stack.back().ref = false;
         break;
     case Expression::Literal:
         stack.push_back(Value(e->getType(),e->val,Value::Const));
@@ -2737,9 +2768,9 @@ bool Evaluator::recurseConstConstructor(Expression* e)
 
 bool Evaluator::stind(Expression* lhs, Expression* rhs, const RowCol& pos)
 {
-    if( !evaluate(lhs) )
+    if( !evaluate(lhs, true) )
         return false;
-    if( rhs && !evaluate(rhs) )
+    if( rhs && !evaluate(rhs) ) // don't assure milonstack here because ch := " " pushes a string otherwise
         return false;         // value is pushed in assign
     if( rhs && !assign(pos) )
         return false;

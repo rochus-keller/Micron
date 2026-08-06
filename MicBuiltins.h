@@ -64,6 +64,7 @@ protected:
     void doUsig(const RowCol &pos);
     void doChr(const RowCol& pos);
     void COPY(const RowCol& pos);
+    void doPtroff(const RowCol &pos);
 
     void checkNumOfActuals(int nArgs, int min, int max = 0);
     void pushActualsToMilStack(int nArgs, const RowCol& pos);

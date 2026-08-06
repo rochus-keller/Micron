@@ -29,6 +29,21 @@
 
 using namespace Mil;
 
+static bool isInterfaceOnly(Mil::Declaration* module)
+{
+    // TODO: this needs a proper solution; the goal is to keep custom MIC$ impls
+    for( Mil::Declaration* sub = module->subs; sub; sub = sub->next )
+        if( sub->kind == Mil::Declaration::Procedure && !sub->extern_ )
+            return false;
+    return true;
+}
+
+static bool skipModule(Mil::Declaration* module)
+{
+    return module->generic || module->extern_ ||
+            ( module->name == "MIC$" && isInterfaceOnly(module) );
+}
+
 
 QStringList Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, bool dbg, bool indirectMain, bool cdeclRet)
 {
@@ -40,7 +55,7 @@ QStringList Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, bool
 
     foreach( Mil::Declaration* module, mdl.getModulesInDependencyOrder() )
     {
-        if( module->name == "MIC$" || module->generic || module->extern_ )
+        if( skipModule(module) )
             continue;
 
         // Reset all flags for this module's compile pass
@@ -119,7 +134,7 @@ QStringList Backend::compileRv32(Mil::AstModel& mdl, const QString& outPath, boo
 
     foreach( Mil::Declaration* module, mdl.getModulesInDependencyOrder() )
     {
-        if( module->name == "MIC$" || module->generic || module->extern_ )
+        if( skipModule(module) )
             continue;
 
         // Reset all flags for this module's compile pass
@@ -199,7 +214,7 @@ QStringList Backend::compileArm(Mil::AstModel& mdl, const QString& outPath, bool
 
     foreach( Mil::Declaration* module, mdl.getModulesInDependencyOrder() )
     {
-        if( module->name == "MIC$" || module->generic || module->extern_ )
+        if( skipModule(module) )
             continue;
 
         // Reset all flags for this module's compile pass
@@ -271,7 +286,7 @@ QStringList Backend::compileArm(Mil::AstModel& mdl, const QString& outPath, bool
 bool Backend::linkExecutable(const QStringList& objFiles, const QStringList& libDirs,
                            const QStringList& linkLibs, const QStringList& linkObjs,
                            const QString& outPath, const QString& exeName,
-                           bool esp32)
+                           bool esp32, qint64 baseAddress)
 {
     if( libDirs.isEmpty() && linkLibs.isEmpty() && linkObjs.isEmpty() )
     {
@@ -280,6 +295,8 @@ bool Backend::linkExecutable(const QStringList& objFiles, const QStringList& lib
     }
 
     Mil::ElfLinker linker;
+    if( baseAddress >= 0 )
+        linker.setBaseAddress((quint32)baseAddress); // e.g. bare metal, instead of the default OS load address
     if( esp32 )
         linker.setEsp32MemoryMap(0x40020000, 0x40010000, 0x4FF20000); // intentionally using 0x40020000 and not 0x40000000
             // we simply move .rodata higher up in the cache window, out of the Mask ROM's shadow.

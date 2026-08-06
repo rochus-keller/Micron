@@ -55,9 +55,17 @@ ModuleManager::ModuleManager(ModuleLocator* loc, bool d):locator(loc),d_milImpor
     loadRuntime();
 }
 
+static QString s_runtimePath;
+
+void ModuleManager::setRuntimePath(const QString& path)
+{
+    // Path of a MIL file implementing MIC$, instead of the built-in declarations.
+    s_runtimePath = path;
+}
+
 void ModuleManager::loadRuntime()
 {
-    loadMil(QString(":/runtime/MIC+.mil"));
+    loadMil(s_runtimePath.isEmpty() ? QString(":/runtime/MIC+.mil") : s_runtimePath);
 }
 
 void ModuleManager::clearModel(bool reloadRuntime)
@@ -357,6 +365,7 @@ void ModuleManager::recordInvar(const AstLoader& al)
 
 Mil::Declaration* ModuleManager::invarBody(Declaration* micProc) const
 {
+    // For an imported INVAR procedure, return its MIL body so the compile-time evaluator can interpret it
     return invarProcs.value(micProc, 0);
 }
 
