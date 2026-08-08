@@ -32,7 +32,7 @@ namespace Mic
             // functions
             ABS, CAP, BAND, ASR, BNOT, BOR, BSET, SHL, SHR,
             BXOR, CAST, CHR, DEFAULT, FLOOR, FLT, GETENV, LEN, MAX,
-            MIN, ODD, ORD, SIZE, STRLEN, VAL, SIG, USIG, PTROFF,
+            MIN, ODD, ORD, SIZE, STRLEN, VAL, SIG, USIG, PTROFF, OBDIV, OBMOD,
             // procedures
             ASSERT, DEC, DISPOSE, EXCL, HALT, INC,
             INCL, NEW, PCALL, PRINT, PRINTLN, RAISE, SETENV,

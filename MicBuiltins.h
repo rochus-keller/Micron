@@ -55,7 +55,7 @@ protected:
     void doAbs();
     void doFlt();
     void doFloor();
-    void doShiftRight(const RowCol& pos);
+    void doShiftRight(const RowCol& pos, bool arithmetic);
     void doShiftLeft(const RowCol &pos);
     void doOrd(const RowCol &pos);
     void doSize(const RowCol &pos);
@@ -65,6 +65,7 @@ protected:
     void doChr(const RowCol& pos);
     void COPY(const RowCol& pos);
     void doPtroff(const RowCol &pos);
+    void obdivmod(int op);
 
     void checkNumOfActuals(int nArgs, int min, int max = 0);
     void pushActualsToMilStack(int nArgs, const RowCol& pos);

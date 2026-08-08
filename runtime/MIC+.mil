@@ -23,4 +23,98 @@ proc exit(res: i4) extern
 proc strlen(str: _$3): u4 extern
 proc strcpy(to,from: _$3; n: i4) extern
 
+proc obdiv32* (x, y: int32): int32
+begin
+  ldarg_0
+  ldarg_1
+  div       // q = x div y, truncated
+  ldarg_0
+  ldarg_1
+  rem       // r = x rem y
+  ldc_i4_0
+  ceq       // r = 0
+  ldc_i4_1
+  xor       // r # 0
+  ldarg_0
+  ldarg_1
+  xor       // sign bit set iff signs differ
+  ldc_i4_0
+  clt       // (x xor y) < 0
+  and       // adjust = (r # 0) and (signs differ)
+  sub       // q - adjust
+  ret
+end obdiv32
+
+proc obmod32* (x, y: int32): int32
+begin
+  ldarg_0
+  ldarg_1
+  rem       // r = x rem y
+  ldarg_0
+  ldarg_1
+  rem
+  ldc_i4_0
+  ceq
+  ldc_i4_1
+  xor       // r # 0
+  ldarg_0
+  ldarg_1
+  xor
+  ldc_i4_0
+  clt       // (x xor y) < 0
+  and       // adjust
+  ldarg_1
+  mul       // adjust * y
+  add       // r + adjust * y
+  ret
+end obmod32
+
+procedure obdiv64* (x,y: int64): int64
+begin
+  ldarg_0
+  ldarg_1
+  div       // q = x div y, truncated
+  ldarg_0
+  ldarg_1
+  rem       // r = x rem y
+  ldc_i8 0
+  ceq       // r = 0
+  ldc_i4_1
+  xor       // r # 0
+  ldarg_0
+  ldarg_1
+  xor
+  ldc_i8 0
+  clt       // (x xor y) < 0
+  and       // adjust = (r # 0) and (signs differ)
+  conv_i8
+  sub       // q - adjust
+  ret
+end obdiv64
+
+procedure obmod64* (x, y: int64): int64
+begin
+  ldarg_0
+  ldarg_1
+  rem       // r = x rem y
+  ldarg_0
+  ldarg_1
+  rem
+  ldc_i8 0
+  ceq
+  ldc_i4_1
+  xor       // r # 0
+  ldarg_0
+  ldarg_1
+  xor
+  ldc_i8 0
+  clt       // (x xor y) < 0
+  and       // adjust
+  conv_i8
+  ldarg_1
+  mul       // adjust * y
+  add       // r + adjust * y
+  ret
+end obmod64
+
 end MIC$

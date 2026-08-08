@@ -149,6 +149,12 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::BOR:
         checkBitArith(builtin, args, ret, mdl, ev);
         break;
+    case Builtin::OBDIV:
+    case Builtin::OBMOD:
+        checkBitArith(builtin, args, ret, mdl, ev);
+        if( ret && !(*ret)->isInt() )
+            throw "operation is only supported for signed integers";
+        break;
     case Builtin::BSET:
         expectingNArgs(args,1);
         ev->bindUniInt(args.first(), false);
@@ -677,11 +683,11 @@ void Builtins::doFloor()
     ev->stack.push_back(v);
 }
 
-void Builtins::doShiftRight(const RowCol& pos)
+void Builtins::doShiftRight(const RowCol& pos, bool arithmetic)
 {
     Value rhs = ev->stack.takeLast();
     Value lhs = ev->stack.takeLast();
-    if( lhs.type->isInt() )
+    if( arithmetic && lhs.type->isInt() )
     {
         if( lhs.isConst() && rhs.isConst() )
             lhs.val = lhs.val.toLongLong() >> rhs.val.toUInt();
@@ -693,8 +699,13 @@ void Builtins::doShiftRight(const RowCol& pos)
     }else
     {
         if( lhs.isConst() && rhs.isConst() )
-            lhs.val = lhs.val.toULongLong() >> rhs.val.toUInt();
-        else
+        {
+            quint64 v = lhs.val.toULongLong();
+            const int len = lhs.type ? lhs.type->getByteSize() : 8;
+            if( len > 0 && len < 8 )
+                v &= ( 1ULL << ( 8 * len ) ) - 1; // a negative value is not sign extended
+            lhs.val = v >> rhs.val.toUInt();
+        }else
         {
             lhs.mode = Value::Val;
             ev->out->shr_(true);
@@ -919,6 +930,60 @@ void Builtins::doPtroff(const RowCol &pos)
     ev->out->ptroff_(ev->toQuali(what.type->getType())); // …, pointer value, offset -> …, pointer value
 
     ev->stack.push_back(what);
+}
+
+void Builtins::obdivmod(int op)
+{
+    Value rhs = ev->stack.takeLast();
+    Value lhs = ev->stack.takeLast();
+
+    Value res = lhs;
+    if( lhs.isConst() && rhs.isConst() )
+    {
+        const qint64 a = lhs.val.toLongLong();
+        const qint64 b = rhs.val.toLongLong();
+        if( b == 0 )
+            throw QString("division by zero");
+        switch(op)
+        {
+        case Builtin::OBDIV:
+            if( a < 0 )
+                res.val = (a - b + 1) / b;
+            else
+                res.val = a / b;
+            break;
+        case Builtin::OBMOD:
+            if (a < 0)
+                 res.val = (b - 1) + (a - b + 1) % b;
+             else
+                 res.val = a % b;
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+    }else
+    {
+        // both operands are already on MIL stack, even if one was const
+        switch(op)
+        {
+        case Builtin::OBDIV:
+            if( lhs.type->is64() || rhs.type->is64() )
+                ev->out->call_(coreName("obdiv64"),2,true);
+            else
+                ev->out->call_(coreName("obdiv32"),2,true);
+            break;
+        case Builtin::OBMOD:
+            if( lhs.type->is64() || rhs.type->is64() )
+                ev->out->call_(coreName("obmod64"),2,true);
+            else
+                ev->out->call_(coreName("obmod32"),2,true);
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+        res.mode = Value::Val;
+    }
+    ev->stack.push_back(res);
 }
 
 void Builtins::checkNumOfActuals(int nArgs, int min, int max)
@@ -1461,10 +1526,16 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         bitnot();
         handleStack = false;
         break;
+    case Builtin::OBDIV:
+    case Builtin::OBMOD:
+        checkNumOfActuals(nArgs, 2);
+        obdivmod(builtin);
+        handleStack = false;
+        break;
     case Builtin::ASR:
     case Builtin::SHR:
         checkNumOfActuals(nArgs, 2);
-        doShiftRight(pos);
+        doShiftRight(pos, builtin == Builtin::ASR);
         handleStack = false;
         break;
     case Builtin::SHL:

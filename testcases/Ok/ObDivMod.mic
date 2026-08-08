@@ -1,0 +1,27 @@
+module ObDivMod
+
+var i4 : int32
+    i8 : int64
+begin
+
+  i4 := -7
+  i4 := obdiv(i4,2)
+  println(i4) // expected -4
+  println(-7 div 2) // expected -3
+  
+  i4 := -7
+  i4 := obmod(i4,2)
+  println(i4) // expected 1
+  println(-7 mod 2) // expected -1
+  
+  i8 := -7
+  i8 := obdiv(i8,2i8)
+  println(i8) // expected -4
+  println(-7i8 div 2i8) // expected -3
+  
+  i8 := -7
+  i8 := obmod(i8,2i8)
+  println(i8) // expected 1
+  println(-7i8 mod 2i8) // expected -1
+
+end ObDivMod

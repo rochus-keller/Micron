@@ -27,7 +27,7 @@ const char* Builtin::name[] = {
     "?",
     "ABS", "CAP", "BAND", "ASR", "BNOT", "BOR", "BSET", "SHL", "SHR",
     "BXOR", "CAST", "CHR", "DEFAULT", "FLOOR", "FLT", "GETENV", "LEN", "MAX",
-    "MIN", "ODD", "ORD", "SIZE", "STRLEN", "VAL", "SIG", "USIG", "PTROFF",
+    "MIN", "ODD", "ORD", "SIZE", "STRLEN", "VAL", "SIG", "USIG", "PTROFF", "OBDIV", "OBMOD",
     "ASSERT", "DEC", "DISPOSE", "EXCL", "HALT", "INC",
     "INCL", "NEW", "PCALL", "PRINT", "PRINTLN", "RAISE", "SETENV",
     "CLI", "GETREG", "NEWGC", "NEWINIT", "NOP", "PUTREG", "STI",
@@ -160,6 +160,8 @@ AstModel::AstModel():helper(0),helperId(0)
         addBuiltin(Builtin::SIG);
         addBuiltin(Builtin::USIG);
         addBuiltin(Builtin::PTROFF);
+        addBuiltin(Builtin::OBDIV);
+        addBuiltin(Builtin::OBMOD);
         addBuiltin(Builtin::ASSERT);
         addBuiltin(Builtin::DEC);
         addBuiltin(Builtin::DISPOSE);

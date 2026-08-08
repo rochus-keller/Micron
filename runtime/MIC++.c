@@ -1,6 +1,6 @@
+#include "MIC+.h"
 #include <string.h>
 #include <stdio.h>
-#include <inttypes.h>
 #include <assert.h>
 #include <stdlib.h>
 #ifdef _HAVE_BOEHM_GC_
@@ -25,7 +25,7 @@ static int my_printf(const char *fmt, ...) {
     return result;
 }
 
-unsigned int MIC$$relop1(const char* l, const char* r, int op)
+uint32_t MIC$$relop1(const char* l, const char* r, int op)
 {
     if( l == 0 || r == 0 )
         return 0;
@@ -47,7 +47,7 @@ unsigned int MIC$$relop1(const char* l, const char* r, int op)
 	return 0;
 }
 
-unsigned int MIC$$relop2(const char* lhs, char rhs, int op)
+uint32_t MIC$$relop2(const char* lhs, char rhs, int op)
 {
     if( lhs == 0 )
         return 0;
@@ -56,7 +56,7 @@ unsigned int MIC$$relop2(const char* lhs, char rhs, int op)
 	return MIC$$relop1(lhs,ch,op);
 }
 
-unsigned int MIC$$relop3(char lhs, const char* rhs, int op)
+uint32_t MIC$$relop3(char lhs, const char* rhs, int op)
 {
     if( rhs == 0 )
         return 0;
@@ -65,7 +65,7 @@ unsigned int MIC$$relop3(char lhs, const char* rhs, int op)
 	return MIC$$relop1(ch,rhs,op);
 }
 
-unsigned int MIC$$relop4(char lhs, char rhs, int op)
+uint32_t MIC$$relop4(char lhs, char rhs, int op)
 {
 	char l[2] = "x";
 	l[0] = lhs;
@@ -187,6 +187,50 @@ void* MIC$$gcalloc(unsigned int size)
     return calloc(1, size);
 #endif
 }
+
+#if 0
+// not required here, ceegen uses the imp in MIC+.mic
+int32_t MIC$$obdiv32( int32_t a, int32_t b )
+{
+    // source: http://lists.inf.ethz.ch/pipermail/oberon/2019/013353.html
+    assert( b != 0 );
+    if( a < 0 )
+        return (a - b + 1) / b;
+    else
+        return a / b;
+}
+
+int64_t MIC$$obdiv64( int64_t a, int64_t b )
+{
+    // source: http://lists.inf.ethz.ch/pipermail/oberon/2019/013353.html
+    assert( b != 0 );
+    if( a < 0 )
+        return (a - b + 1) / b;
+    else
+        return a / b;
+}
+
+
+int32_t MIC$$obmod32( int32_t a, int32_t b )
+{
+    // source: http://lists.inf.ethz.ch/pipermail/oberon/2019/013353.html
+    assert( b != 0 );
+    if (a < 0)
+        return (b - 1) + (a - b + 1) % b;
+    else
+        return a % b;
+}
+
+int64_t MIC$$obmod64( int64_t a, int64_t b )
+{
+    // source: http://lists.inf.ethz.ch/pipermail/oberon/2019/013353.html
+    assert( b != 0 );
+    if (a < 0)
+        return (b - 1) + (a - b + 1) % b;
+    else
+        return a % b;
+}
+#endif
 
 // intrinsics
 

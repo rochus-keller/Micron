@@ -1234,6 +1234,7 @@ Expression*Parser2::integer()
             break;
         case '8':
             type = mdl->getType(Type::INT64);
+            break;
         default:
             error(cur,QString("invalid integer suffix 'i%1'").arg(number[number.size()-1]));
         }
@@ -3992,8 +3993,11 @@ void Parser2::ProcedureDeclaration() {
                 procDecl->data = cur.d_val;
             }
             QByteArray id = procDecl->data.toByteArray();
+#if 0
+            // id is already quoted
             if( !id.isEmpty() )
                 id = ev->quote(id);
+#endif
             out->beginProc(ev->toQuali(procDecl).second, procDecl->pos, procDecl->outer->kind == Declaration::Module &&
                            procDecl->visi > 0, procDecl->ffi_ ? Mil::ProcData::Foreign : Mil::ProcData::Extern, id);
 
