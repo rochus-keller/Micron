@@ -54,6 +54,13 @@ static inline void putLE32(char* buf, quint32 val)
     buf[3] = char((val >> 24) & 0xFF);
 }
 
+// Helper: read a little-endian 32-bit value from a buffer
+static inline quint32 getLE32(const char* buf)
+{
+    return quint32(quint8(buf[0])) | (quint32(quint8(buf[1])) << 8) |
+           (quint32(quint8(buf[2])) << 16) | (quint32(quint8(buf[3])) << 24);
+}
+
 // Helper: write a little-endian 16-bit value into a buffer
 static inline void putLE16(char* buf, quint16 val)
 {
@@ -190,17 +197,14 @@ quint32 ElfWriter::addSymbol(const QByteArray& name, quint32 section,
     sym.other = 0;
     sym.shndx = quint16(section);
 
-    // ELF requires all local symbols before global symbols.
-    // We insert locals at the current position, globals at the end.
-    if (binding == STB_LOCAL) {
-        // Insert before the first global symbol
-        d_symbols.insert(d_firstGlobal, sym);
+    // ELF requires all local symbols before global symbols, but inserting a local
+    // symbol among the ones already added would invalidate the indices returned so
+    // far; the symbols are therefore appended in the order they are added and only
+    // sorted when the file is written (see buildElf)
+    d_symbols.append(sym);
+    if (binding == STB_LOCAL)
         d_firstGlobal++;
-        return d_firstGlobal - 1;
-    } else {
-        d_symbols.append(sym);
-        return d_symbols.size() - 1;
-    }
+    return d_symbols.size() - 1;
 }
 
 quint32 ElfWriter::addSectionSymbol(quint32 sectionIdx)
@@ -308,29 +312,61 @@ QByteArray ElfWriter::buildElf()
         }
     }
 
+    // The symbols are written with the local ones first, as ELF requires; order maps
+    // the position in the file to the symbol, and index the other way round
+    QList<int> order;
+    QVector<int> index(d_symbols.size());
+    for (int pass = 0; pass < 2; pass++) {
+        for (int i = 0; i < d_symbols.size(); i++) {
+            const bool isLocal = (d_symbols[i].info >> 4) == STB_LOCAL;
+            if (isLocal == (pass == 0)) {
+                index[i] = order.size();
+                order.append(i);
+            }
+        }
+    }
+
     // Build .strtab content (symbol names)
     d_sections[d_strtabIdx].data.clear();
     QList<quint32> symNameOffsets;
-    for (int i = 0; i < d_symbols.size(); i++) {
-        if (i == 0 || d_symbols[i].name.isEmpty()) {
+    for (int i = 0; i < order.size(); i++) {
+        const Symbol& s = d_symbols[order[i]];
+        if (i == 0 || s.name.isEmpty()) {
             symNameOffsets.append(0); // null/empty name -> offset 0
         } else {
-            symNameOffsets.append(addToStrtab(d_symbols[i].name));
+            symNameOffsets.append(addToStrtab(s.name));
         }
     }
 
     // Build .symtab content
     d_sections[d_symtabIdx].data.clear();
     d_sections[d_symtabIdx].info = d_firstGlobal; // sh_info = index of first global symbol
-    for (int i = 0; i < d_symbols.size(); i++) {
+    for (int i = 0; i < order.size(); i++) {
+        const Symbol& s = d_symbols[order[i]];
         char sym[ELF32_SYM_SIZE];
         putLE32(sym + 0, symNameOffsets[i]); // st_name
-        putLE32(sym + 4, d_symbols[i].value); // st_value
-        putLE32(sym + 8, d_symbols[i].size); // st_size
-        sym[12] = char(d_symbols[i].info); // st_info
-        sym[13] = char(d_symbols[i].other); // st_other
-        putLE16(sym + 14, d_symbols[i].shndx); // st_shndx
+        putLE32(sym + 4, s.value); // st_value
+        putLE32(sym + 8, s.size); // st_size
+        sym[12] = char(s.info); // st_info
+        sym[13] = char(s.other); // st_other
+        putLE16(sym + 14, s.shndx); // st_shndx
         d_sections[d_symtabIdx].data.append(sym, ELF32_SYM_SIZE);
+    }
+
+    // The relocations refer to the symbols by the index they had when they were added
+    for (int i = 0; i < d_sections.size(); i++) {
+        const quint32 type = d_sections[i].type;
+        if (type != SHT_REL && type != SHT_RELA)
+            continue;
+        const int entrySize = (type == SHT_RELA) ? 12 : 8;
+        QByteArray& data = d_sections[i].data;
+        for (int off = 0; off + entrySize <= data.size(); off += entrySize) {
+            char* rel = data.data() + off;
+            const quint32 info = getLE32(rel + 4);
+            const quint32 sym = info >> 8;
+            Q_ASSERT(sym < quint32(index.size()));
+            putLE32(rel + 4, (quint32(index[sym]) << 8) | (info & 0xFF));
+        }
     }
 
     // Compute file layout

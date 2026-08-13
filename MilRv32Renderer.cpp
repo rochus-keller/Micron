@@ -765,6 +765,60 @@ void Renderer::loadAddr(Register rd, quint32 symbolIdx, qint32 addend)
 }
 
 
+void Renderer::copyWords(Register dst, qint32 dstOff, Register src, qint32 srcOff,
+                         quint32 size, Register word, Register tmpDst, Register tmpSrc)
+{
+    const quint32 aligned = (size + 3) & ~3;
+    if (aligned == 0)
+        return;
+    const quint32 chunk = 2044; // the largest multiple of 4 which fits the 12 bit immediate
+    if (dstOff + (qint32)aligned <= (qint32)chunk && srcOff + (qint32)aligned <= (qint32)chunk &&
+            dstOff >= 0 && srcOff >= 0)
+    {
+        for (quint32 i = 0; i < aligned; i += 4)
+        {
+            d_emitter.lw(word, src, srcOff + (qint32)i);
+            d_emitter.sw(word, dst, dstOff + (qint32)i);
+        }
+        return;
+    }
+    // the offsets don't fit, so the bases are advanced from chunk to chunk
+    if (dstOff == 0)
+        d_emitter.mv(tmpDst, dst);
+    else if (dstOff >= -2048 && dstOff <= 2047)
+        d_emitter.addi(tmpDst, dst, dstOff);
+    else
+    {
+        loadImm32(tmpDst, dstOff);
+        d_emitter.add(tmpDst, dst, tmpDst);
+    }
+    if (srcOff == 0)
+        d_emitter.mv(tmpSrc, src);
+    else if (srcOff >= -2048 && srcOff <= 2047)
+        d_emitter.addi(tmpSrc, src, srcOff);
+    else
+    {
+        loadImm32(tmpSrc, srcOff);
+        d_emitter.add(tmpSrc, src, tmpSrc);
+    }
+    quint32 off = 0;
+    while (off < aligned)
+    {
+        const quint32 n = qMin(chunk, aligned - off);
+        for (quint32 i = 0; i < n; i += 4)
+        {
+            d_emitter.lw(word, tmpSrc, (qint32)i);
+            d_emitter.sw(word, tmpDst, (qint32)i);
+        }
+        off += n;
+        if (off < aligned)
+        {
+            d_emitter.addi(tmpSrc, tmpSrc, (qint32)n);
+            d_emitter.addi(tmpDst, tmpDst, (qint32)n);
+        }
+    }
+}
+
 void Renderer::pushReg(Register r)
 {
     d_emitter.addi(Sp, Sp, -Slot4);
@@ -1363,10 +1417,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             loadImm32(T4, aligned);
             em.sub(Sp, Sp, T4);
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, T3, (qint32)i);
-            em.sw(T0, Sp, (qint32)i);
-        }
+        copyWords(Sp, 0, T3, 0, aligned);
         return 1;
     }
 
@@ -1465,10 +1516,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             loadImm32(T4, aligned);
             em.sub(Sp, Sp, T4);
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, T3, (qint32)i);
-            em.sw(T0, Sp, (qint32)i);
-        }
+        copyWords(Sp, 0, T3, 0, aligned);
         return 2;
     }
 
@@ -1523,10 +1571,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         loadLocalAddr(T3, val);
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, Sp, (qint32)i);
-            em.sw(T0, T3, (qint32)i);
-        }
+        copyWords(T3, 0, Sp, 0, aligned);
         if (aligned <= 2047)
             em.addi(Sp, Sp, (qint32)aligned);
         else {
@@ -1607,10 +1652,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             loadImm32(T4, aligned);
             em.sub(Sp, Sp, T4);
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, T3, (qint32)i);
-            em.sw(T0, Sp, (qint32)i);
-        }
+        copyWords(Sp, 0, T3, 0, aligned);
         return 2;
     }
     case LL_ldarga:
@@ -1669,10 +1711,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         loadArgAddr(T3, val);
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, Sp, (qint32)i);
-            em.sw(T0, T3, (qint32)i);
-        }
+        copyWords(T3, 0, Sp, 0, aligned);
         if (aligned <= 2047)
             em.addi(Sp, Sp, (qint32)aligned);
         else {
@@ -1734,10 +1773,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             loadImm32(T4, aligned);
             em.sub(Sp, Sp, T4);
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, T3, (qint32)i);
-            em.sw(T0, Sp, (qint32)i);
-        }
+        copyWords(Sp, 0, T3, 0, aligned);
         return 2;
     }
 
@@ -1771,10 +1807,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         loadVarAddr(T3, val);
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, Sp, (qint32)i);
-            em.sw(T0, T3, (qint32)i);
-        }
+        copyWords(T3, 0, Sp, 0, aligned);
         if (aligned <= 2047)
             em.addi(Sp, Sp, (qint32)aligned);
         else {
@@ -2783,10 +2816,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             loadImm32(T4, aligned);
             em.sub(Sp, Sp, T4);
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, T3, (qint32)i);
-            em.sw(T0, Sp, (qint32)i);
-        }
+        copyWords(Sp, 0, T3, 0, aligned);
         return 1;
     }
     case LL_ldind_str: {
@@ -2799,10 +2829,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             loadImm32(T4, aligned);
             em.sub(Sp, Sp, T4);
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, T3, (qint32)i);
-            em.sw(T0, Sp, (qint32)i);
-        }
+        copyWords(Sp, 0, T3, 0, aligned);
         return 1;
     }
 
@@ -2831,10 +2858,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = val;
         quint32 aligned = (size + 3) & ~3;
         em.lw(T3, Sp, (qint32)aligned);
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, Sp, (qint32)i);
-            em.sw(T0, T3, (qint32)i);
-        }
+        copyWords(T3, 0, Sp, 0, aligned);
         quint32 total = aligned + Slot4;
         if (total <= 2047)
             em.addi(Sp, Sp, (qint32)total);
@@ -2976,10 +3000,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             loadImm32(T4, aligned);
             em.sub(Sp, Sp, T4);
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, T3, (qint32)i);
-            em.sw(T0, Sp, (qint32)i);
-        }
+        copyWords(Sp, 0, T3, 0, aligned);
         return 2;
     }
 
@@ -3063,10 +3084,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 em.add(T3, T3, T4);
             }
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, Sp, (qint32)i);
-            em.sw(T0, T3, (qint32)i);
-        }
+        copyWords(T3, 0, Sp, 0, aligned);
         quint32 total = aligned + Slot4;
         if (total <= 2047)
             em.addi(Sp, Sp, (qint32)total);
@@ -3168,10 +3186,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             loadImm32(T4, aligned);
             em.sub(Sp, Sp, T4);
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, T3, (qint32)i);
-            em.sw(T0, Sp, (qint32)i);
-        }
+        copyWords(Sp, 0, T3, 0, aligned);
         return 1;
     }
 
@@ -3221,10 +3236,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             em.mul(T1, T1, T5);
             em.add(T3, T4, T1);
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, Sp, (qint32)i);
-            em.sw(T0, T3, (qint32)i);
-        }
+        copyWords(T3, 0, Sp, 0, aligned);
         quint32 total = aligned + Slot4 + Slot4;
         if (total <= 2047)
             em.addi(Sp, Sp, (qint32)total);
@@ -3253,10 +3265,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             loadImm32(T3, aligned);
             em.sub(Sp, Sp, T3);
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.lw(T0, Sp, (qint32)(aligned + i));
-            em.sw(T0, Sp, (qint32)i);
-        }
+        copyWords(Sp, 0, Sp, (qint32)aligned, aligned);
         return 1;
     }
 
@@ -3295,10 +3304,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 quint32 tmplOff = getOrEmitTemplate(val);
                 loadAddr(T1, d_rodataSymIdx, tmplOff);
                 quint32 aligned = (tmplSize + 3) & ~3;
-                for (quint32 i = 0; i < aligned; i += 4) {
-                    em.lw(T4, T1, (qint32)i);
-                    em.sw(T4, T0, (qint32)i);
-                }
+                copyWords(T0, 0, T1, 0, aligned, T4);
             }
             emitVtableFixups(T0, tmpl);
         }
@@ -3354,10 +3360,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 Rv32::Label loopLbl, doneLbl;
                 em.bind(loopLbl);
                 em.bgeu(T3, T5, doneLbl);
-                for (quint32 i = 0; i < aligned; i += 4) {
-                    em.lw(T4, T1, (qint32)i);
-                    em.sw(T4, T3, (qint32)i);
-                }
+                copyWords(T3, 0, T1, 0, aligned, T4, T0, T2);
                 // Save regs before vtable fixup
                 pushReg(T5); pushReg(T3); pushReg(T1);
                 emitVtableFixups(T3, tmpl);
@@ -3395,10 +3398,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 quint32 tmplOff = getOrEmitTemplate(val);
                 loadAddr(T1, d_rodataSymIdx, tmplOff);
                 quint32 aligned = (tmplSize + 3) & ~3;
-                for (quint32 i = 0; i < aligned; i += 4) {
-                    em.lw(T4, T1, (qint32)i);
-                    em.sw(T4, T0, (qint32)i);
-                }
+                copyWords(T0, 0, T1, 0, aligned, T4);
             }
             emitVtableFixups(T0, tmpl);
         }

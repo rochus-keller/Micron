@@ -244,6 +244,7 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
         case IL_ldloca_s:
         case IL_ldloca:
         case IL_ldloc:
+        case IL_getreg:
             proc.body << ProcData::Op(e->kind, e->id);
             break;
         case IL_ldc_obj:
@@ -369,6 +370,7 @@ static void renderStats(ProcData& proc, Statement* s, quint32& line, AstSerializ
             case IL_starg_s:
             case IL_stloc:
             case IL_stloc_s:
+            case IL_putreg:
                 proc.body << ProcData::Op(s->kind, s->id);
                 break;
             case IL_stelem:

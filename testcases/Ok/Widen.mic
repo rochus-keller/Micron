@@ -1,0 +1,11 @@
+module Widen
+
+var b: uint8
+    i: int16
+
+begin
+    i := +b
+    i := -b
+    i := sigl(b)
+    i := -sigl(b)
+end Widen

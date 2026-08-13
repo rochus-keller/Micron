@@ -27,8 +27,8 @@ BEGIN
   ASSERT(pa >= 3);
   dxb := fnt.raster[pa-3];  xb := fnt.raster[pa-2]; yb := fnt.raster[pa-1]; 
   wb := fnt.raster[pa]; hb := fnt.raster[pa+1];
-  FOR i := 0 TO BAND(SIG(wb), 0FFH) * BAND(SIG(hb), 0FFH) + 1 DO patadr[i] := fnt.raster[pa+i] END;// copy w and h and all raster bytes
-  dx^ := SIG(dxb); x^ := SIG(xb); y^ := SIG(yb); w^ := SIG(wb); h^ := SIG(hb)
+  FOR i := 0 TO BAND(SIGC(wb), 0FFH) * BAND(SIGC(hb), 0FFH) + 1 DO patadr[i] := fnt.raster[pa+i] END;// copy w and h and all raster bytes
+  dx^ := SIGC(dxb); x^ := SIGC(xb); y^ := SIGC(yb); w^ := SIGC(wb); h^ := SIGC(hb)
 END GetPat;
 
 PROCEDURE This*(CONST name: POINTER TO ARRAY OF CHAR): Font;
@@ -65,22 +65,22 @@ BEGIN F := root;
         NEW(F); F.name := name^;
         RdInt16(@R, @height); RdInt16(@R, @minX); RdInt16(@R, @maxX); RdInt16(@R, @minY); RdInt16(@R, @maxY); RdInt16(@R, @NofRuns);
         NofBoxes := 0; k := 0;
-        WHILE k # SIG(NofRuns) DO
+        WHILE k # SIGC(NofRuns) DO
           RdInt16(@R, @beg);
           run[k].beg := beg; RdInt16(@R, @end_);
           run[k].end_ := end_; NofBoxes := VAL(BYTE,NofBoxes + end_ - beg); INC(k)
         END;
         NofBytes := 5; j := 0;
-        WHILE j # SIG(NofBoxes) DO
+        WHILE j # SIGC(NofBoxes) DO
           RdInt16(@R, @box[j].dx); RdInt16(@R, @box[j].x); RdInt16(@R, @box[j].y);
           RdInt16(@R, @box[j].w); RdInt16(@R, @box[j].h);
-          NofBytes := NofBytes + 5 + SIG((box[j].w + 7) DIV 8 * box[j].h);
+          NofBytes := NofBytes + 5 + SIGC((box[j].w + 7) DIV 8 * box[j].h);
           INC(j)
         END;
         IF NofBytes < 2300 THEN NEW(F) ELSE NEW(LF); F := LF END ;
         F.name := name^;
-        F.height := SIG(height); F.minX := SIG(minX); F.maxX := SIG(maxX); F.maxY := SIG(maxY);
-        F.minY := SIG(minY);
+        F.height := SIGC(height); F.minX := SIGC(minX); F.maxX := SIGC(maxX); F.maxY := SIGC(maxY);
+        F.minY := SIGC(minY);
         a0 := 0; // points to first byte of F.raster
         F.raster[a0] := 0H; F.raster[a0+1] := 0H; F.raster[a0+2] := 0H; 
         F.raster[a0+3] := 0H; F.raster[a0+4] := 0H;
@@ -89,13 +89,13 @@ BEGIN F := root;
         INC(a0, 3); a := a0+2; // the original code is "INC(a0, 2); a := a0+3" which is wrong
         // a now points to dxb of the next glyph
         j := 0; k := 0; m := 0;
-        WHILE k < SIG(NofRuns) DO
-          WHILE (m < SIG(run[k].beg)) & (m < 128) DO F.T[m] := a0; INC(m) END;
-          WHILE (m < SIG(run[k].end_)) & (m < 128) DO
+        WHILE k < SIGC(NofRuns) DO
+          WHILE (m < SIGC(run[k].beg)) & (m < 128) DO F.T[m] := a0; INC(m) END;
+          WHILE (m < SIGC(run[k].end_)) & (m < 128) DO
             F.T[m] := a+3; // T[m] points to w,h,... of the font pattern
             F.raster[a] := box[j].dx; F.raster[a+1] := box[j].x; F.raster[a+2] := box[j].y;
             F.raster[a+3] := box[j].w; F.raster[a+4] := box[j].h; INC(a, 5);
-            n := SIG((box[j].w + 7) DIV 8 * box[j].h);
+            n := SIGC((box[j].w + 7) DIV 8 * box[j].h);
             WHILE n # 0 DO DEC(n); Files.ReadByte(@R, @b); F.raster[a] := b; INC(a) END ;
             INC(j); INC(m)
           END;

@@ -13,7 +13,7 @@ MODULE Inbut; (*NW 5.10.86 / 15.11.90 Ceres-2; PDR 21.4.12 / NW 15.5.2013 Ceres-
   
   PROCEDURE Available*(): INTEGER;
   BEGIN Peek();
-    RETURN SIG(ORD(Recd))
+    RETURN SIGC(ORD(Recd))
   END Available;
 
   PROCEDURE Read*(ch: ^CHAR);

@@ -96,7 +96,7 @@ MODULE Texts [LEVEL=4]; (*JG 21.11.90 / NW 11.7.90 / 24.12.95 / 22.11.10 / 20.3.
       END;
       NEW(q); q.fnt := Dict[fno];
       Files.ReadByte(R, @bt); q.col := +bt;
-      Files.ReadByte(R, @bt); q.voff := ASR(SIG(SHL(bt, 24)), 24);
+      Files.ReadByte(R, @bt); q.voff := ASR(SIGC(SHL(bt, 24)), 24);
       Files.ReadInt(R, @q.len);
       Files.ReadByte(R, @bt); fno := +bt;
       q.f := f; q.off := off; off := off + q.len;
@@ -353,16 +353,16 @@ MODULE Texts [LEVEL=4]; (*JG 21.11.90 / NW 11.7.90 / 24.12.95 / 22.11.10 / 20.3.
     ELSE hex := FALSE;
       IF ch = "-" THEN neg := TRUE; Read(S, @ch) ELSE neg := FALSE END ;
       IF ("0" <= ch) & (ch <= "9") THEN (*number*)
-        n := SIG(ORD(ch)) - 30H; h := n; Read(S, @ch);
+        n := SIGC(ORD(ch)) - 30H; h := n; Read(S, @ch);
         WHILE ("0" <= ch) & (ch <= "9") OR ("A" <= ch) & (ch <= "F") DO
-          IF ch <= "9" THEN d := SIG(ORD(ch)) - 30H ELSE d := VAL(INTEGER, ORD(ch)) - 37H; hex := TRUE END ;
+          IF ch <= "9" THEN d := SIGC(ORD(ch)) - 30H ELSE d := VAL(INTEGER, ORD(ch)) - 37H; hex := TRUE END ;
           n := 10*n + d; h := 10H*h + d; Read(S, @ch)
         END ;
         IF ch = "H" THEN (*hex integer*) Read(S, @ch); S.i := h; S.class := Int  (*neg?*)
         ELSIF ch = "." THEN (*real number*)
           Read(S, @ch); x := 0.0; e := 0; j := 0;
           WHILE ("0" <= ch) & (ch <= "9") DO  (*fraction*)
-            h := 10*n + SIG(ORD(ch) - 30H);
+            h := 10*n + SIGC(ORD(ch) - 30H);
             IF h < maxM THEN n := h; INC(j) END ;
             Read(S, @ch)
           END ;
@@ -373,7 +373,7 @@ MODULE Texts [LEVEL=4]; (*JG 21.11.90 / NW 11.7.90 / 24.12.95 / 22.11.10 / 20.3.
               IF ch = "+" THEN Read(S, @ch) END
             END ;
             WHILE ("0" <= ch) & (ch <= "9") DO
-              s := s*10 + SIG(ORD(ch)) - 30H; Read(S, @ch)
+              s := s*10 + SIGC(ORD(ch)) - 30H; Read(S, @ch)
             END ;
             IF negE THEN DEC(e, s) ELSE INC(e, s) END ;
           END ;

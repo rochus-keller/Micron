@@ -108,7 +108,7 @@ module PAL
 
   proc getTime*(): integer 
   begin
-    return SIG(Screen.GetTicks())
+    return SIGC(Screen.GetTicks())
   end getTime
 
   proc drainEvents()
@@ -116,7 +116,7 @@ module PAL
   begin
     evt := Screen.NextEvent()
     while evt # 0 do
-      evtType := BAND(SIG(SHR(evt, 24)), 0FFH)
+      evtType := BAND(SIGC(SHR(evt, 24)), 0FFH)
       evtData := BAND(evt, 0FFFFFFH)
       
       if evtType = Screen.EvtKeyChar then
@@ -278,7 +278,7 @@ module PAL
   proc length*(buffer: integer): integer
   begin
     if (buffer >= 0) and (buffer < MAX_FILES) and (fileSlots[buffer] # nil) then
-      return SIG(Files.Length(fileSlots[buffer]))
+      return SIGC(Files.Length(fileSlots[buffer]))
     end
     return 0
   end length
@@ -294,7 +294,7 @@ module PAL
   proc getPos*(buffer: integer): integer
   begin
     if (buffer >= 0) and (buffer < MAX_FILES) and (fileSlots[buffer] # nil) then
-      return SIG(Files.Pos(fileSlots[buffer]))
+      return SIGC(Files.Pos(fileSlots[buffer]))
     end
     return 0
   end getPos

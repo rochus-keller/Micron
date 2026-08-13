@@ -1031,7 +1031,7 @@ quint32 Type::getByteSize(quint8 pointerWidth) const
     switch( kind )
     {
     case NIL:
-        return 0;
+        return pointerWidth;
     case BOOL:
     case CHAR:
     case INT8:

@@ -1,0 +1,18 @@
+module UintLit
+
+var i : int32
+
+begin
+
+  // i := 07FFFFFFFH  // ok, max positive of int32, 2147483647
+  // i := +080000000H // fail, results in 2147483648 which is INT64
+  i := sigc(07FFFFFFFH)
+  println(i)
+  i := sigc(080000000H)
+  println(i)
+  i := cast(int32,07FFFFFFFH)
+  println(i)
+  i := cast(int32,080000000hu) // fails without u suffix which is correct since 080000000h is cast to INT64
+  println(i)
+  
+end UintLit

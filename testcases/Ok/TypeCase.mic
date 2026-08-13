@@ -26,8 +26,10 @@ BEGIN
   
   t.i := 33
   CASE v OF
+  | T1: 
+      PRINT(v.i) 
+      PRINTLN(" found T1")
   | T0: PRINTLN("found T0")
-  | T1: PRINTLN("found T1")
   | NIL: PRINTLN("found NIL")
   ELSE
     PRINTLN("found nothing")
@@ -40,7 +42,7 @@ END TypeCase.
 (*
 false
 true
-found T0
+33 found T1
 hello from test0
 Cheers from test1 33
 *)

@@ -487,7 +487,7 @@ void Validator::visitStatSeq(Statement* stat)
         case IL_putreg:
             if( expectN(1, stat) )
             {
-                const int lhs = stat->id >> 16 | 0xff;
+                const int lhs = (stat->id >> 16) & 0xffff;
 
                 Type* rhsT = stat->args->getType();
                 if( !rhsT->isInteger() && !rhsT->isPointer() )
@@ -996,7 +996,7 @@ Expression* Validator::visitExpr(Expression* e)
             }
             break;
         case IL_getreg:
-            switch( e->id >> 16 | 0xff )
+            switch( (e->id >> 16) & 0xff )
             {
             case 0:
                 e->setType(mdl->getBasicType(Type::INTPTR));

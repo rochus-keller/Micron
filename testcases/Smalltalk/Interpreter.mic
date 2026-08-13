@@ -141,7 +141,7 @@ var    newProcessWaiting : boolean
   var integerPointer: OOP
   begin 
     if OM.isIntegerValue(integerValue) then
-      integerPointer := OM.integerObjectOf(sig(integerValue))
+      integerPointer := OM.integerObjectOf(sigc(integerValue))
       OM.storePointerOfObject(fieldIndex, objectPointer, integerPointer)
     else
       primitiveFail()
@@ -182,7 +182,7 @@ var    newProcessWaiting : boolean
     if OM.isIntegerObject(integerPointer) then
       return OM.integerValueOf(integerPointer)
     else
-      return sig(primitiveFail())
+      return sigc(primitiveFail())
     end
   end fetchIntegerOfObject
   
@@ -342,15 +342,15 @@ var    newProcessWaiting : boolean
   var tmp, mask: Slot
   begin
     if offset >= 0 then
-      return sig(shl(usig(wordToShift), usig(offset)))
+      return sigc(shl(usig(wordToShift), usig(offset)))
     else
       offset := -offset
       if wordToShift < 0 then
         tmp := shr(usig(wordToShift), usig(offset))
         mask := bnot(shr(0FFFFh, usig(offset)))
-        return sig(bor(tmp, mask))
+        return sigc(bor(tmp, mask))
       else
-        return sig(shr(usig(wordToShift), usig(offset)))
+        return sigc(shr(usig(wordToShift), usig(offset)))
       end
     end
   end bitShift
@@ -687,9 +687,9 @@ var    newProcessWaiting : boolean
   procedure longUnconditionalJump()
   var offset: Int; nextByte: Slot
   begin 
-    offset := sig(OM.extractBits( 13, 15, currentBytecode ))
+    offset := sigc(OM.extractBits( 13, 15, currentBytecode ))
     nextByte := fetchByte()
-    offset := ( offset - 4 ) * 256 + sig(nextByte)
+    offset := ( offset - 4 ) * 256 + sigc(nextByte)
     TRACE_BYTECODE()
     jump( offset )
   end longUnconditionalJump
@@ -697,7 +697,7 @@ var    newProcessWaiting : boolean
   procedure shortUnconditionalJump()
   var offset: Int
   begin 
-    offset := sig(OM.extractBits( 13, 15, currentBytecode ))
+    offset := sigc(OM.extractBits( 13, 15, currentBytecode ))
     TRACE_BYTECODE()
     jump( offset + 1 )
   end shortUnconditionalJump
@@ -1160,7 +1160,7 @@ var    newProcessWaiting : boolean
         end
     else
         value := OM.fetchByteOfObject(index-1,arr)
-        return OM.integerObjectOf(sig(value))
+        return OM.integerObjectOf(sigc(value))
     end
   end subscriptWith
 
@@ -1265,7 +1265,7 @@ var    newProcessWaiting : boolean
     end
     contextSize := OM.fetchWordLenghtOf(methodContext)
     newContext := OM.instantiateClassWithPointers( OM.classBlockContext, contextSize )
-    initialIP := OM.integerObjectOf(sig(instructionPointer+3))
+    initialIP := OM.integerObjectOf(sigc(instructionPointer+3))
     OM.storePointerOfObject(InitialIPIndex, newContext, initialIP)
     OM.storePointerOfObject(InstructionPointerIndex, newContext, initialIP)
     storeStackPointerValueInContext(0,newContext)
@@ -2185,7 +2185,7 @@ var    newProcessWaiting : boolean
         primitiveClass()
     | 112, 115:
         // number of unallocated Words in obj space
-        pushInteger(sig(0efffh)) // phantasy number
+        pushInteger(sigc(0efffh)) // phantasy number
     | 113:
         primitiveQuit()
     | 114:
@@ -2256,7 +2256,7 @@ var    newProcessWaiting : boolean
   procedure jumpif(condition, offset: Int)
   var value: Int
   begin 
-    value := sig(popStack())
+    value := sigc(popStack())
     if value = condition then
         jump(offset)
     elsif not ( (value = OM.objectTrue) or (value = OM.objectFalse) ) then
@@ -2639,9 +2639,9 @@ var    newProcessWaiting : boolean
   procedure longConditionalJump()
   var offset: Int; nextByte: Slot
   begin 
-    offset := sig(OM.extractBits( 14, 15, currentBytecode ))
+    offset := sigc(OM.extractBits( 14, 15, currentBytecode ))
     nextByte := fetchByte()
-    offset := offset * 256 + sig(nextByte)
+    offset := offset * 256 + sigc(nextByte)
     TRACE_BYTECODE()
     if (currentBytecode >= 168) and (currentBytecode <= 171) then
         jumpif( OM.objectTrue, offset )
@@ -2653,7 +2653,7 @@ var    newProcessWaiting : boolean
   procedure shortContidionalJump()
   var offset: Int
   begin 
-    offset := sig(OM.extractBits( 13, 15, currentBytecode ))
+    offset := sigc(OM.extractBits( 13, 15, currentBytecode ))
     TRACE_BYTECODE()
     jumpif( OM.objectFalse, offset + 1 )
   end shortContidionalJump
@@ -2759,7 +2759,7 @@ var    newProcessWaiting : boolean
   var selectorIndex, count: Int; selector: OOP
   begin 
     if not specialSelectorPrimitiveResponse() then
-      selectorIndex := sig(( currentBytecode - 176 ) * 2)
+      selectorIndex := sigc(( currentBytecode - 176 ) * 2)
       selector := OM.fetchPointerOfObject(usig(selectorIndex), OM.specialSelectors )
       count := fetchIntegerOfObject( usig(selectorIndex + 1), OM.specialSelectors )
     TRACE_BYTECODE()

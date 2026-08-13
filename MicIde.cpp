@@ -1920,6 +1920,8 @@ Ide::Editor* Ide::showEditor(const QString& path, int row, int col, bool setMark
 
 void Ide::showEditor(Declaration *n, bool setMarker, bool center)
 {
+    if( n == 0 )
+        return;
     Declaration* mod = n->getModule();
     if( mod )
         showEditor( mod->data.value<ModuleData>().source, n->pos.d_row, n->pos.d_col, setMarker, center );

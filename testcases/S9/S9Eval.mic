@@ -105,7 +105,7 @@ begin
     return
   end
   k := hash_size(IO.length(e))
-  new_ := M.new_vec(S9Types.T_VECTOR, k * sig(size(S9Types.cell)))
+  new_ := M.new_vec(S9Types.T_VECTOR, k * sigc(size(S9Types.cell)))
   G.Car[e] := new_
   v := G.vector(G.car(e))
   w := v
@@ -269,19 +269,19 @@ end make_sequence
 (* Handle (and ...) *)
 procedure sf_and*(x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
 begin
-  return make_sequence(sig(ord(S9Types.EV_AND)), S9Types._TRUE, x, pc, ps)
+  return make_sequence(sigc(ord(S9Types.EV_AND)), S9Types._TRUE, x, pc, ps)
 end sf_and
 
 (* Handle (begin ...) *)
 procedure sf_begin*(x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
 begin
-  return make_sequence(sig(ord(S9Types.EV_BEGIN)), S9Types._UNSPECIFIC, x, pc, ps)
+  return make_sequence(sigc(ord(S9Types.EV_BEGIN)), S9Types._UNSPECIFIC, x, pc, ps)
 end sf_begin
 
 (* Handle (or ...) *)
 procedure sf_or*(x: S9Types.cell; pc: pointer to int32; ps: pointer to int32): S9Types.cell
 begin
-  return make_sequence(sig(ord(S9Types.EV_OR)), S9Types._FALSE, x, pc, ps)
+  return make_sequence(sigc(ord(S9Types.EV_OR)), S9Types._FALSE, x, pc, ps)
 end sf_or
 
 (* Handle (cond ...) *)
@@ -307,7 +307,7 @@ begin
   end
   M.save(clauses)
   pc^ := 2
-  ps^ := sig(ord(S9Types.EV_COND))
+  ps^ := sigc(ord(S9Types.EV_COND))
   return G.caar(clauses)
 end sf_cond
 
@@ -330,7 +330,7 @@ begin
   end
   M.save(m)
   pc^ := 2
-  ps^ := sig(ord(S9Types.EV_IF_PRED))
+  ps^ := sigc(ord(S9Types.EV_IF_PRED))
   return G.car(m)
 end sf_if
 
@@ -579,7 +579,7 @@ begin
   end
   M.save(n)
   pc^ := 2
-  ps^ := sig(ord(S9Types.EV_SET_VAL))
+  ps^ := sigc(ord(S9Types.EV_SET_VAL))
   return G.caddr(x)
 end sf_set_b
 
@@ -592,7 +592,7 @@ var
   new: S9Types.cell
   k: int32
 begin
-  if G.car(G.State_stack) = sig(ord(S9Types.EV_ARGS)) then
+  if G.car(G.State_stack) = sigc(ord(S9Types.EV_ARGS)) then
     if syntax then
       return G.error("define-syntax: invalid context", x)
     else
@@ -633,9 +633,9 @@ begin
   G.Car[G.Stack] := G.binding_box(v)
   pc^ := 2
   if syntax then
-    ps^ := sig(ord(S9Types.EV_MACRO))
+    ps^ := sigc(ord(S9Types.EV_MACRO))
   else
-    ps^ := sig(ord(S9Types.EV_SET_VAL))
+    ps^ := sigc(ord(S9Types.EV_SET_VAL))
   end
   return a
 end sf_define
@@ -676,7 +676,7 @@ var
   s: int32
 begin
   if G.State_stack = S9Types._NIL then
-    return sig(ord(S9Types.EV_ATOM))
+    return sigc(ord(S9Types.EV_ATOM))
   end
   s := val(int32, G.car(G.State_stack))
   G.State_stack := G.cdr(G.State_stack)
@@ -789,7 +789,7 @@ begin
   M.save(G.Stack_bottom)
   G.State_stack := S9Types._NIL
   G.Stack_bottom := G.Stack
-  s := sig(ord(S9Types.EV_ATOM))
+  s := sigc(ord(S9Types.EV_ATOM))
   c := 0
   
   loop
@@ -850,7 +850,7 @@ begin
         x := G.car(G.Acc)
       end
       M.save(rib)
-      s := sig(ord(S9Types.EV_ARGS))
+      s := sigc(ord(S9Types.EV_ARGS))
       c := 3  (* skip ascent, go directly to next outer loop iteration *)
     else
       G.Acc := x
@@ -873,12 +873,12 @@ begin
         return S9Types._UNDEFINED
       end
       
-      if s = sig(ord(S9Types.EV_BETA)) then
+      if s = sigc(ord(S9Types.EV_BETA)) then
         (* Finish BETA reduction *)
         G.Environment := M.unsave(1)
         M.unsave(1)  (* source expression / rib *)
         s := restore_state()
-      elsif s = sig(ord(S9Types.EV_ARGS)) then
+      elsif s = sigc(ord(S9Types.EV_ARGS)) then
         (* Append to list, reduce *)
         rib := G.car(G.Stack)
         x := G.car(rib)              (* rib_args *)
@@ -914,7 +914,7 @@ begin
             bind_arguments(G.Acc)
             x := G.caddr(G.car(G.Acc))  (* caddar: body of closure *)
             c := 2
-            s := sig(ord(S9Types.EV_BETA))
+            s := sigc(ord(S9Types.EV_BETA))
           elsif G.continuation_p(G.car(G.Acc)) then
             (* Resume continuation *)
             if G.cdr(G.Acc) = S9Types._NIL then
@@ -953,7 +953,7 @@ begin
           x := G.car(x)
           exit  (* Leave ascending loop, evaluate next member *)
         end
-      elsif s = sig(ord(S9Types.EV_IF_PRED)) then
+      elsif s = sigc(ord(S9Types.EV_IF_PRED)) then
         m := M.unsave(1)
         M.unsave(1)  (* source expression *)
         s := restore_state()
@@ -964,10 +964,10 @@ begin
         end
         c := 1
         exit
-      elsif (s = sig(ord(S9Types.EV_AND))) or (s = sig(ord(S9Types.EV_OR))) then
+      elsif (s = sigc(ord(S9Types.EV_AND))) or (s = sigc(ord(S9Types.EV_OR))) then
         G.Stack := M.cons(G.cdar(G.Stack), G.cdr(G.Stack))
-        if ((G.Acc = S9Types._FALSE) & (s = sig(ord(S9Types.EV_AND)))) or
-           ((G.Acc # S9Types._FALSE) & (s = sig(ord(S9Types.EV_OR)))) or
+        if ((G.Acc = S9Types._FALSE) & (s = sigc(ord(S9Types.EV_AND)))) or
+           ((G.Acc # S9Types._FALSE) & (s = sigc(ord(S9Types.EV_OR)))) or
            (G.car(G.Stack) = S9Types._NIL) then
           M.unsave(2)
           s := restore_state()
@@ -982,7 +982,7 @@ begin
         end
         c := 1
         exit
-      elsif s = sig(ord(S9Types.EV_COND)) then
+      elsif s = sigc(ord(S9Types.EV_COND)) then
         if G.Acc # S9Types._FALSE then
           x := G.cdaar(G.Stack)
           if x = S9Types._NIL then
@@ -1015,7 +1015,7 @@ begin
         end
         c := 1
         exit
-      elsif s = sig(ord(S9Types.EV_BEGIN)) then
+      elsif s = sigc(ord(S9Types.EV_BEGIN)) then
         G.Stack := M.cons(G.cdar(G.Stack), G.cdr(G.Stack))
         if G.cdar(G.Stack) = S9Types._NIL then
           x := G.caar(G.Stack)
@@ -1026,8 +1026,8 @@ begin
         end
         c := 1
         exit
-      elsif (s = sig(ord(S9Types.EV_SET_VAL))) or (s = sig(ord(S9Types.EV_MACRO))) then
-        if s = sig(ord(S9Types.EV_MACRO)) then
+      elsif (s = sigc(ord(S9Types.EV_SET_VAL))) or (s = sigc(ord(S9Types.EV_MACRO))) then
+        if s = sigc(ord(S9Types.EV_MACRO)) then
           if G.procedure_p(G.Acc) then
             G.Acc := M.new_atom(S9Types.T_SYNTAX, G.Acc)
           end
@@ -1043,7 +1043,7 @@ begin
         G.Acc := S9Types._UNSPECIFIC
         c := 0
         exit
-      elsif s = sig(ord(S9Types.EV_MACRO_EXPAND)) then
+      elsif s = sigc(ord(S9Types.EV_MACRO_EXPAND)) then
         M.unsave(1)
         s := restore_state()
         x := G.Acc

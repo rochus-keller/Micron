@@ -29,7 +29,7 @@ typedef QPair<QByteArray,QByteArray> Qualident;
 class Evaluator
 {
 public:
-    Evaluator(AstModel* m, Mil::Emitter* out):mdl(m),out(out) {}
+    Evaluator(AstModel* m, Mil::Emitter* out):mdl(m),out(out),langLevel(3) {}
 
     void pushCurProc(Declaration*d) { curProcs.push_back(d); }
     void popCurProc() { curProcs.pop_back(); }
@@ -97,6 +97,8 @@ public:
             ev->bindUniInt(rhs, lhs && lhs->getType() ? lhs->getType()->isInt() : false);
     }
 
+    quint8 langLevel;
+
 protected:
     bool recursiveRun(Expression*);
     void constructor(Expression*);
@@ -107,6 +109,7 @@ protected:
 
     // assign
     bool stind(Expression* lhs, Expression* rhs, const RowCol &pos);
+    bool stind(Type* lhs, const RowCol &pos);
     bool stelem( Expression* lhs, Expression* rhs, const RowCol &pos );
     bool stfld( Expression* lhs, Expression* rhs, const RowCol &pos );
 

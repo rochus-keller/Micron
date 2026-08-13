@@ -105,11 +105,13 @@ namespace Rv32
 
         int emitOp(Vm::Procedure& proc, int pc);
 
-        // Load a 32-bit immediate into register rd using LUI+ADDI
         void loadImm32(Rv32::Register rd, quint32 value);
 
-        // Load an absolute address into rd with relocations against symbolIdx
         void loadAddr(Rv32::Register rd, quint32 symbolIdx, qint32 addend = 0);
+
+        void copyWords(Rv32::Register dst, qint32 dstOff, Rv32::Register src, qint32 srcOff,
+                       quint32 size, Rv32::Register word = Rv32::T0,
+                       Rv32::Register tmpDst = Rv32::T5, Rv32::Register tmpSrc = Rv32::T6);
 
         void pushReg(Rv32::Register r);
         void popReg(Rv32::Register r);

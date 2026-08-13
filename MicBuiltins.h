@@ -61,6 +61,7 @@ protected:
     void doSize(const RowCol &pos);
     void doStrlen(const RowCol& pos);
     void doSig(const RowCol &pos);
+    void doLsig(const RowCol &pos);
     void doUsig(const RowCol &pos);
     void doChr(const RowCol& pos);
     void COPY(const RowCol& pos);

@@ -694,7 +694,7 @@ var
 begin
   c := val(int32,G.char_value(G.cadr(x)))
   if (c >= +ord('a')) & (c <= +ord('z')) then
-    c := c - sig(ord('a')) + sig(ord('A'))
+    c := c - sigc(ord('a')) + sigc(ord('A'))
   end
   return IO.make_char(c)
 end pp_char_upcase
@@ -705,7 +705,7 @@ var
 begin
   c := val(int32,G.char_value(G.cadr(x)))
   if (c >= +ord('A')) & (c <= +ord('Z')) then
-    c := c - sig(ord('A')) + sig(ord('a'))
+    c := c - sigc(ord('A')) + sigc(ord('a'))
   end
   return IO.make_char(c)
 end pp_char_downcase
@@ -725,8 +725,8 @@ begin
     c1 := val(int32,G.char_value(G.car(n)))
     c2 := val(int32, G.char_value(G.cadr(n)))
     if ci then
-      if (c1 >= +ord('A')) & (c1 <= +ord('Z')) then c1 := c1 - sig(ord('A')) + sig(ord('a')) end
-      if (c2 >= +ord('A')) & (c2 <= +ord('Z')) then c2 := c2 - sig(ord('A')) + sig(ord('a')) end
+      if (c1 >= +ord('A')) & (c1 <= +ord('Z')) then c1 := c1 - sigc(ord('A')) + sigc(ord('a')) end
+      if (c2 >= +ord('A')) & (c2 <= +ord('Z')) then c2 := c2 - sigc(ord('A')) + sigc(ord('a')) end
     end
     case op of
     | 0: if ~(c1 < c2) then return T._FALSE end
@@ -770,7 +770,7 @@ begin
   n := IO.make_string("", k)
   s := G.string(n)
   if G.cddr(x) = T._NIL then
-    c := sig(ord(' '))
+    c := sigc(ord(' '))
   else
     c := val(int32,G.char_value(G.caddr(x)))
   end
@@ -800,7 +800,7 @@ begin
   end
   str := G.string(G.cadr(x))
   inc(str,p)
-  return IO.make_char(sig(ord(str^)))
+  return IO.make_char(sigc(ord(str^)))
 end pp_string_ref
 
 procedure pp_string_set_b*(x: T.cell): T.cell
@@ -962,8 +962,8 @@ begin
       c1 := +ord(s1^)
       c2 := +ord(s2^)
       if ci then
-        if (c1 >= +ord('A')) & (c1 <= +ord('Z')) then c1 := c1 - sig(ord('A') + ord('a')) end
-        if (c2 >= +ord('A')) & (c2 <= +ord('Z')) then c2 := c2 - sig(ord('A') + ord('a')) end
+        if (c1 >= +ord('A')) & (c1 <= +ord('Z')) then c1 := c1 - sigc(ord('A') + ord('a')) end
+        if (c2 >= +ord('A')) & (c2 <= +ord('Z')) then c2 := c2 - sigc(ord('A') + ord('a')) end
       end
       if c1 < c2 then cmp := -1
       elsif c1 > c2 then cmp := 1
@@ -1102,7 +1102,7 @@ begin
   if k < 0 then
     return G.error("make-vector: got negative length", G.cadr(x))
   end
-  n := M.new_vec(T.T_VECTOR, k * sig(size(T.cell)))
+  n := M.new_vec(T.T_VECTOR, k * sigc(size(T.cell)))
   v := G.vector(n)
   if G.cddr(x) = T._NIL then
     m := T._FALSE
@@ -1257,10 +1257,10 @@ var
   n: T.cell
   pf: int32
 begin
-  pf := sig(ord(G.Port_flags[portno]))
+  pf := sigc(ord(G.Port_flags[portno]))
   G.Port_flags[portno] := chr(bor(ord(G.Port_flags[portno]), T.LockTag))
   n := M.new_atom(portno, T._NIL)
-  n := M.cons3(ptype, n, sig(bor(T.AtomTag, T.PortTag)))
+  n := M.cons3(ptype, n, sigc(bor(T.AtomTag, T.PortTag)))
   G.Port_flags[portno] := chr(pf)
   return n
 end make_port
@@ -1749,7 +1749,7 @@ begin
     | 13: a := bor(bnot(a), b)
     | 14: a := bnot(band(a, b))
     | 15: a := bnot(0i)
-    | 16: a := sig(shl(a, usig(b)))
+    | 16: a := sigc(shl(a, usig(b)))
     | 17: a := asr(a, usig(b))
     else
       return T._FALSE

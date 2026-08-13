@@ -27,7 +27,8 @@ const char* Builtin::name[] = {
     "?",
     "ABS", "CAP", "BAND", "ASR", "BNOT", "BOR", "BSET", "SHL", "SHR",
     "BXOR", "CAST", "CHR", "DEFAULT", "FLOOR", "FLT", "GETENV", "LEN", "MAX",
-    "MIN", "ODD", "ORD", "SIZE", "STRLEN", "VAL", "SIG", "USIG", "PTROFF", "OBDIV", "OBMOD",
+    "MIN", "ODD", "ORD", "SIZE", "STRLEN", "VAL", "SIGC", "USIG", "PTROFF",
+    "OBDIV", "OBMOD", "SIGL",
     "ASSERT", "DEC", "DISPOSE", "EXCL", "HALT", "INC",
     "INCL", "NEW", "PCALL", "PRINT", "PRINTLN", "RAISE", "SETENV",
     "CLI", "GETREG", "NEWGC", "NEWINIT", "NOP", "PUTREG", "STI",
@@ -157,7 +158,8 @@ AstModel::AstModel():helper(0),helperId(0)
         addBuiltin(Builtin::STRLEN);
         addBuiltin(Builtin::CAST);
         addBuiltin(Builtin::VAL);
-        addBuiltin(Builtin::SIG);
+        addBuiltin(Builtin::SIGC);
+        addBuiltin(Builtin::SIGL);
         addBuiltin(Builtin::USIG);
         addBuiltin(Builtin::PTROFF);
         addBuiltin(Builtin::OBDIV);
@@ -313,10 +315,8 @@ Declaration*AstModel::findDecl(const QByteArray& id, bool recursive) const
     return 0;
 }
 
-bool Type::isObjectOrObjectPointer() const
+bool Type::isObjectPointer() const
 {
-    if( kind == Object )
-        return true;
     if( kind == Pointer && getType() && getType()->kind == Object )
         return true;
     else
@@ -804,11 +804,17 @@ bool Expression::isLvalue() const
             kind == Index || kind == Deref;
 }
 
+bool Expression::isVariable() const
+{
+    return kind == LocalVar || kind == Param || kind == ModuleVar || kind == FieldSelect;
+}
+
 bool Expression::hasAddress() const
 {
     if( kind == FieldSelect )
     {
-        Declaration* f = val.value<Declaration*>();
+        Declaration* f = decl;
+        Q_ASSERT(f);
         return f->id == 0; // no BITS
     }
     return isAssignable();
@@ -865,27 +871,6 @@ void Expression::setType(Type * t)
 const char *Expression::getName() const
 {
     return getName(kind);
-}
-
-Declaration *Expression::getDecl(Declaration *curProc)
-{
-    switch(kind)
-    {
-    case ModuleVar:
-    case ProcDecl:
-    case ConstDecl:
-    case TypeDecl:
-    case FieldSelect:
-    case MethSelect:
-    case IntfSelect:
-        return val.value<Declaration*>();
-    case LocalVar:
-    case Param:
-        if( curProc )
-            return curProc->getByIndex(val.toInt(), kind);
-        break;
-    }
-    return 0;
 }
 
 const char *Expression::getName(quint8 kind)

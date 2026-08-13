@@ -40,7 +40,7 @@ MODULE Display [LEVEL=4];  (*NW 5.11.2013 / 3.7.2016*)
 	BEGIN
 		a := ( a - base ) DIV 4;
 		IF (a < 0) OR (a >= RasterLen) THEN RETURN END;
-		raster[a] := SIG(ORD(x))
+		raster[a] := SIGC(ORD(x))
 	END PUTS;
 
   PROCEDURE Dot*(col, x, y, mode: INTEGER);
@@ -97,19 +97,19 @@ MODULE Display [LEVEL=4];  (*NW 5.11.2013 / 3.7.2016*)
   BEGIN 
     w := patadr[0]; h := patadr[1]; i := 2;
     a := base + (x DIV 32)*4 + y*128; 
-    FOR a0 := a TO a + (SIG(h)-1)*128 BY 128 DO
+    FOR a0 := a TO a + (SIGC(h)-1)*128 BY 128 DO
       (*build pattern line; w < 32*)
-      pbt := patadr[i]; INC(i); pwd := BAND(SIG(pbt), 0FFH);
-      IF w > 8 THEN pbt := patadr[i]; INC(i); pwd := BAND(SIG(pbt), 0FFH)*100H + pwd;
-        IF w > 16 THEN pbt := patadr[i]; INC(i); pwd := BAND(SIG(pbt), 0FFH)*10000H + pwd;
-          IF w > 24 THEN pbt := patadr[i]; INC(i); pwd := BAND(SIG(pbt), 0FFH)*1000000H + pwd END
+      pbt := patadr[i]; INC(i); pwd := BAND(SIGC(pbt), 0FFH);
+      IF w > 8 THEN pbt := patadr[i]; INC(i); pwd := BAND(SIGC(pbt), 0FFH)*100H + pwd;
+        IF w > 16 THEN pbt := patadr[i]; INC(i); pwd := BAND(SIGC(pbt), 0FFH)*10000H + pwd;
+          IF w > 24 THEN pbt := patadr[i]; INC(i); pwd := BAND(SIGC(pbt), 0FFH)*1000000H + pwd END
         END
       END ;
       GETS(a0, @pix);
       IF mode = invert THEN PUTS(a0, BSET(SHL(pwd, USIG(x MOD 32))) / pix)
       ELSE PUTS(a0, BSET(SHL(pwd, USIG(x MOD 32))) + pix)
       END ;
-      IF (x MOD 32) + SIG(w) > 32 THEN (*spill over*)
+      IF (x MOD 32) + SIGC(w) > 32 THEN (*spill over*)
         GETS(a0+4, @pix);
         IF mode = invert THEN PUTS(a0+4, BSET(USIG(ASR(pwd, USIG(32 - (x MOD 32))))) / pix)
         ELSE PUTS(a0+4, BSET(USIG(ASR(pwd, USIG(32 - (x MOD 32))))) + pix)
@@ -120,7 +120,7 @@ MODULE Display [LEVEL=4];  (*NW 5.11.2013 / 3.7.2016*)
   
   PROCEDURE RORS(s: POINTER TO SET; n: INTEGER) INLINE
   BEGIN
-    s^ := BSET(USIG(Kernel.ROR(SIG(ORD(s^)), n)))
+    s^ := BSET(USIG(Kernel.ROR(SIGC(ORD(s^)), n)))
   END RORS
 
   PROCEDURE CopyBlock*(sx, sy, w, h, dx, dy, mode: INTEGER); (*only for mode = replace*)

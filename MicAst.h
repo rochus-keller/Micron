@@ -32,7 +32,8 @@ namespace Mic
             // functions
             ABS, CAP, BAND, ASR, BNOT, BOR, BSET, SHL, SHR,
             BXOR, CAST, CHR, DEFAULT, FLOOR, FLT, GETENV, LEN, MAX,
-            MIN, ODD, ORD, SIZE, STRLEN, VAL, SIG, USIG, PTROFF, OBDIV, OBMOD,
+            MIN, ODD, ORD, SIZE, STRLEN, VAL, SIGC, USIG, PTROFF,
+            OBDIV, OBMOD, SIGL,
             // procedures
             ASSERT, DEC, DISPOSE, EXCL, HALT, INC,
             INCL, NEW, PCALL, PRINT, PRINTLN, RAISE, SETENV,
@@ -146,7 +147,7 @@ namespace Mic
         bool isStructured() const { return kind == Array || kind == Record || kind == Object; }
         bool isCharArray() const { return kind == Array && getType() && getType()->kind == CHAR; }
         bool isByteArray() const { return kind == Array && getType() && getType()->kind == UINT8; }
-        bool isObjectOrObjectPointer() const;
+        bool isObjectPointer() const;
         bool isPointerProcType() const { return kind == Pointer || (kind == Proc && !typebound); }
 
         Declaration* findSub(const QByteArray& name) const;
@@ -197,6 +198,8 @@ namespace Mic
         Declaration* find(const QByteArray& name, bool recursive = true);
         Declaration *deforward();
         static void append(Declaration* list, Declaration* next);
+        // TODO Type* getType(int) const { return Node::getType(); }
+        // void setType(Type* t, int) { Node::setType(t); }
     };
     typedef QList<Declaration*> DeclList;
 
@@ -231,12 +234,14 @@ namespace Mic
         Expression* lhs; // for unary and binary ops
         Expression* rhs; // for binary ops
         Expression* next; // for args, set elems, and caselabellist
+        Declaration* decl;
 
         bool isConst() const;
         bool hasConstValue() const;
         QVariant getConstValue() const;
         DeclList getFormals(bool includeReceiver = false) const;
         bool isLvalue() const; // true if result of expression is usually a ref to type; can be changed with byVal
+        bool isVariable() const;
         bool hasAddress() const;
         bool isAssignable() const;
         int strLitLen() const; // -1: no strlit; >=0 strlit
@@ -244,7 +249,6 @@ namespace Mic
         void appendRhs(Expression*);
         void setType(Type*);
         const char *getName() const;
-        Declaration* getDecl(Declaration* curProc);
         static const char *getName(quint8);
         static Expression* createFromToken(quint16,const RowCol&);
         static Expression* create(Kind k = Invalid, const RowCol& rc = RowCol());
@@ -258,7 +262,7 @@ namespace Mic
         static Arena* arena;
         static quint32 used;
         static quint32 lock;
-        Expression(Kind k = Invalid, const RowCol& rc = RowCol()):Node(E),lhs(0),rhs(0),next(0)
+        Expression(Kind k = Invalid, const RowCol& rc = RowCol()):Node(E),lhs(0),rhs(0),next(0),decl(0)
             {kind = k; pos = rc;}
         ~Expression() {}
     };

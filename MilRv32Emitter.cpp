@@ -75,17 +75,23 @@ void Emitter::emitB(quint8 opcode, quint8 funct3, quint8 rs1, quint8 rs2, Label&
     quint32 inst = (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | opcode;
     if (label.isBound()) {
         qint32 offset = label.position() - currentPosition();
-        Q_ASSERT(offset >= -4096 && offset <= 4094 && (offset & 1) == 0);
-        quint32 uoff = static_cast<quint32>(offset);
-        quint32 b12   = (uoff >> 12) & 0x1;
-        quint32 b11   = (uoff >> 11) & 0x1;
-        quint32 b10_5 = (uoff >> 5) & 0x3F;
-        quint32 b4_1  = (uoff >> 1) & 0xF;
-        inst |= (b12 << 31) | (b10_5 << 25) | (b4_1 << 8) | (b11 << 7);
-    } else {
-        label.addUnresolvedUse(currentPosition());
+        if (offset >= -4096 && offset <= 4094) {
+            Q_ASSERT((offset & 1) == 0);
+            quint32 uoff = static_cast<quint32>(offset);
+            quint32 b12   = (uoff >> 12) & 0x1;
+            quint32 b11   = (uoff >> 11) & 0x1;
+            quint32 b10_5 = (uoff >> 5) & 0x3F;
+            quint32 b4_1  = (uoff >> 1) & 0xF;
+            inst |= (b12 << 31) | (b10_5 << 25) | (b4_1 << 8) | (b11 << 7);
+            emit32(inst);
+            return;
+        }
     }
-    emit32(inst);
+    // The target is too far away, or the distance is not yet known
+    quint32 inverted = (rs2 << 20) | (rs1 << 15) | ((funct3 ^ 1) << 12) | opcode;
+    inverted |= (4 << 8); // displacement 8: the instruction after the jump
+    emit32(inverted);
+    jal(Zero, label);
 }
 
 void Emitter::emitU(quint8 opcode, quint8 rd, qint32 imm20) {

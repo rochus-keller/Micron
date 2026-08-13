@@ -277,7 +277,6 @@ end error
 
 
 // Forward declarations for mutually recursive procedures
-procedure^ insymbol()
 procedure^ block(fsys: T.SetOfSys; fsy: T.Symbol; fprocp_: T.Ctp)
 
 
@@ -672,9 +671,7 @@ end align
 proc printtables(fb: boolean)
   var i, lim: integer
   // Forward declarations for mutually recursive procs
-  procedure^ markstp(fp: T.Stp)
   procedure^ markctp(fp: T.Ctp)
-  procedure^ followstp(fp: T.Stp)
   procedure^ followctp(fp: T.Ctp)
 
   proc markstp(fp: T.Stp)
@@ -791,40 +788,10 @@ end genlabel
    that receive needed outer state as parameters. *)
 
 // Forward declarations 
-procedure^ skip(fsys: T.SetOfSys)
-procedure^ constant(fsys: T.SetOfSys; fsp: ^T.Stp; fvalu: ^T.Valu)
-procedure^ equalbounds(fsp1, fsp2: T.Stp): boolean
-procedure^ comptypes(fsp1, fsp2: T.Stp): boolean
-procedure^ isString(fsp: T.Stp): boolean
 procedure^ typ(fsys: T.SetOfSys; fsp: ^T.Stp; fsize: ^integer)
-procedure^ simpletype(fsys: T.SetOfSys; fsp: ^T.Stp; fsize: ^integer)
-procedure^ fieldlist(fsys: T.SetOfSys; frecvar: ^T.Stp; displ: ^integer)
-procedure^ selector(fsys: T.SetOfSys; fcp: T.Ctp)
 procedure^ expression(fsys: T.SetOfSys)
-procedure^ simpleexpression(fsys: T.SetOfSys)
-procedure^ term(fsys: T.SetOfSys)
-procedure^ factor(fsys: T.SetOfSys)
 procedure^ statement(fsys: T.SetOfSys)
-procedure^ body(fsys: T.SetOfSys; fprocp_: T.Ctp)
-procedure^ labeldeclaration(fsys: T.SetOfSys)
-procedure^ constdeclaration(fsys: T.SetOfSys)
-procedure^ typedeclaration(fsys: T.SetOfSys)
-procedure^ vardeclaration(fsys: T.SetOfSys)
-procedure^ procdeclaration(fsys: T.SetOfSys; fsy: T.Symbol)
 
-// code generation forward decls
-procedure^ gen0(fop: integer)
-procedure^ gen1(fop: integer; fp2: integer)
-procedure^ gen2(fop: integer; fp1: integer; fp2: integer)
-procedure^ gen0t(fop: integer; fp2: T.Stp)
-procedure^ gen1t(fop: integer; fp2: integer; fp3: T.Stp)
-procedure^ gen2t(fop: integer; fp1: integer; fp2: integer; fp3: T.Stp)
-procedure^ load()
-procedure^ store(lattr: T.Attr)
-procedure^ loadaddress()
-procedure^ genfjp(faddr: ^integer)
-procedure^ genujpxjp(fop: integer; fp2: ^integer)
-procedure^ gencupent(fop: integer; fp1: integer; fp2: integer)
 
 // pcom.pas lines 855-862: skip
 proc skip(fsys: T.SetOfSys)

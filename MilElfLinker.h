@@ -116,6 +116,7 @@ namespace Mil
         bool extractFromArchives();
         bool buildGot();
         bool applyRelocations();
+        static QList<QByteArray> referencingFunctions(InputFile* file, const QByteArray& name);
         QByteArray generateEspAppDescriptor(const QString& outPath);
 
         static inline quint32 alignTo(quint32 val, quint32 align) {

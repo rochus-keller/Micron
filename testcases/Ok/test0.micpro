@@ -1,0 +1,19 @@
+[General]
+Arguments=@ByteArray()
+BuildDir=
+BuiltInOakwood=false
+MainModule=@ByteArray()
+MainProc=@ByteArray()
+OakwoodScreen=false
+Options=@ByteArray()
+Suffixes=.mic, .mil, .mob
+WorkingDir=
+
+[Modules]
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/TypeCase.mic
+1\RelPath=TypeCase.mic
+size=1
+
+[Packages]
+1\Name=@ByteArray()
+size=1

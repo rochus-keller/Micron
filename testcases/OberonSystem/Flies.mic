@@ -193,8 +193,8 @@ MODULE Flies;  (*NW 11.1.86 / 22.9.93 / 25.5.95 / 25.12.95 / 15.8.2013*)
   PROCEDURE ReadNum*(R: POINTER TO Rider; x: POINTER TO INTEGER);
     VAR n, y: INTEGER; b: BYTE;
   BEGIN n := 32; y := 0; ReadByte(R, @b);
-    WHILE b >= 80H DO y := Kernel.ROR(y + SIG(b-80H), 7); DEC(n, 7); ReadByte(R, @b) END ;
-    IF n <= 4 THEN x^ := Kernel.ROR(y + SIG(b MOD 10H), 4) 
+    WHILE b >= 80H DO y := Kernel.ROR(y + SIGC(b-80H), 7); DEC(n, 7); ReadByte(R, @b) END ;
+    IF n <= 4 THEN x^ := Kernel.ROR(y + SIGC(b MOD 10H), 4) 
     ELSE x^ := ASR(Kernel.ROR(y + (+b), 7), USIG(n-7)) END
   END ReadNum;
         
@@ -241,7 +241,7 @@ MODULE Flies;  (*NW 11.1.86 / 22.9.93 / 25.5.95 / 25.12.95 / 15.8.2013*)
   END WriteInt;
 
   PROCEDURE WriteSet*(R: POINTER TO Rider; s: SET);
-  BEGIN WriteInt(R, SIG(ORD(s)))
+  BEGIN WriteInt(R, SIGC(ORD(s)))
   END WriteSet;
 
   PROCEDURE WriteReal*(R: POINTER TO Rider; x: REAL);

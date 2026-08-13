@@ -638,7 +638,7 @@ static bool isPtrToOpenCharArray(Type* t)
 
 Parser2::Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* i, bool xref):
     mdl(m),scanner(s),out(out),imp(i),thisMod(0),thisDecl(0),inFinally(false),
-    langLevel(3), defaultVisi(Node::Private),haveExceptions(false),first(0),last(0)
+    defaultVisi(Node::Private),haveExceptions(false),first(0),last(0)
 {
     ev = new Evaluator(m,out);
     self = Token::getSymbol("self");
@@ -793,8 +793,9 @@ Expression *Parser2::createSelector(Declaration *field, Expression *prev, bool n
     Expression* tmp = Expression::create(k, pos );
     field->used = true;
     tmp->val = QVariant::fromValue(field);
+    tmp->decl = field;
     tmp->lhs = prev;
-    tmp->setType(getGuardedType(field));
+    tmp->setType(field->getType());
     return tmp;
 }
 
@@ -970,6 +971,8 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
     }
 #endif
 
+    Type* rhsT = rhs->getType();
+
     // Tv is a procedure type and e is the name of a procedure whose formal parameters match those of Tv.
     if( rhs->kind == Declaration::Procedure || rhs->kind == Declaration::ForwardDecl )
     {
@@ -977,7 +980,7 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
         {
             if( lhs->typebound != rhs->typebound )
                 return false;
-            return matchFormals(lhs->subs, rhs->getParams(false)) && matchResultType(lhs->getType(),rhs->getType());
+            return matchFormals(lhs->subs, rhs->getParams(false)) && matchResultType(lhs->getType(),rhsT);
         }else
             return false;
     }
@@ -987,14 +990,13 @@ bool Parser2::assigCompat(Type* lhs, Declaration* rhs, const RowCol& pos)
         return lhs->subs.contains(rhs);
 
     if( lhs->isCharArray() && lhs->len > 0 &&
-            rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == Type::StrLit )
+            rhs->kind == Declaration::ConstDecl && rhsT->kind == Type::StrLit )
         return strlen(rhs->data.toByteArray().constData()) < lhs->len;
 
     if( lhs->isByteArray() && lhs->len > 0 &&
-            rhs->kind == Declaration::ConstDecl && rhs->getType()->kind == Type::ByteArrayLit )
+            rhs->kind == Declaration::ConstDecl && rhsT->kind == Type::ByteArrayLit )
         return rhs->data.toByteArray().size() == lhs->len;
 
-    Type* rhsT = rhs->getType();
     if( rhs->kind == Declaration::ConstDecl && rhsT->kind == Type::UniInt )
         rhsT = lhs && lhs->isInt() ? ev->smallestIntType(rhs->data) : ev->smallestUIntType(rhs->data);
 
@@ -1017,7 +1019,8 @@ bool Parser2::assigCompat(Type* lhs, Expression* rhs, const RowCol& pos)
     if( rhs->kind == Expression::ConstDecl || rhs->kind == Expression::ProcDecl ||
             rhs->kind == Expression::MethSelect || rhs->kind == Expression::IntfSelect )
     {
-        Declaration* d = rhs->val.value<Declaration*>();
+        Declaration* d = rhs->decl;
+        Q_ASSERT(d);
         if( d->kind == Declaration::ConstDecl && d->getType()->kind == Type::UniInt )
         {
             Type* rhsT = lhs && lhs->isInt() ? ev->smallestIntType(d->data) : ev->smallestUIntType(d->data);
@@ -1587,7 +1590,7 @@ Type* Parser2::RecordType() {
 
 Type* Parser2::ObjectType() {
     expect(Tok_OBJECT, true, "ObjectType");
-    if( langLevel < 4 )
+    if( ev->langLevel < 4 )
         error(cur,"object types not available on current language level");
     Type* rec = new Type();
     rec->pos = cur.toRowCol();
@@ -1938,6 +1941,7 @@ Expression*Parser2::toExpr(Declaration* d, const RowCol& rc)
         return 0;
     }
     Expression* res = Expression::create(k,rc);
+    res->decl = d;
     res->val = val;
     res->setType(getGuardedType(d));
     res->visi = d->visi;
@@ -2222,7 +2226,8 @@ bool Parser2::checkUnaryOp(Expression* e)
         // all other operands, the type of the result is the same as the type of the operand.
         if( e->lhs->getType()->kind == Type::UniInt )
         {
-            Type* t = ev->smallestIntType(e->val);
+            // lhs is a literal
+            Type* t = ev->smallestIntType(e->lhs->val);
             e->lhs->setType(t);
             e->setType(t);
         }else if( e->lhs->getType()->isNumber() )
@@ -2239,7 +2244,7 @@ bool Parser2::checkUnaryOp(Expression* e)
                 e->lhs = Evaluator::createAutoConv(e->lhs, mdl->getType(Type::INT64));
                 break;
             case Type::UINT64:
-                return error(e->pos.d_row, e->pos.d_col, "unary + operator is not applicable to operands of UINT64 type");
+                return error(e->pos.d_row, e->pos.d_col, "unary operator is not applicable to operands of UINT64 type");
             }
             e->setType(e->lhs->getType());
         }else if ( e->kind == Expression::Minus && e->getType()->isSet() )
@@ -2374,10 +2379,23 @@ Expression* Parser2::designator(bool needsLvalue) {
         // because the type hint would apply to the last element in the selector, not to the constructor
     }
 
+    if( res && res->getType() && res->getType()->isObjectPointer() && res->isVariable() && res->decl && res->getType() != res->decl->getType() )
+    {
+        // this indicates that the type of the pointer to object variable was overridden in a type case statement
+        Expression* tmp = Expression::create(Expression::Cast, tok.toRowCol() );
+        tmp->lhs = res;
+        checkPointerResolved(res->getType());
+        tmp->setType(res->getType());
+        res = tmp;
+    }
+
     // TODO: track read-only
 
     while( FIRST_selector(la.d_type) ) {
         // inlined selector
+
+        if( !res )
+            return 0;
 
         if( res->getType() == 0 )
             break; // error already reported
@@ -2453,7 +2471,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             expect(Tok_Hat, false, "selector");
             if( res->kind == Expression::MethSelect )
             {
-                if( langLevel < 4 )
+                if( ev->langLevel < 4 )
                 {
                     error(cur,"super calls not available on current language level");
                     return 0;
@@ -2472,7 +2490,7 @@ Expression* Parser2::designator(bool needsLvalue) {
                 res = tmp;
             }else
             {
-                if( langLevel >= 4 )
+                if( ev->langLevel >= 4 )
                     error(tok,"operator only applicable to pointer types or method super calls");
                 else
                     error(tok,"only a pointer type can be dereferenced");
@@ -2528,10 +2546,10 @@ Expression* Parser2::designator(bool needsLvalue) {
             {
                 Builtins bi(ev);
                 const quint8 id = proc->val.toInt();
-                if( (langLevel < 3 && (id == Builtin::NEW || id == Builtin::DISPOSE || id == Builtin::NEWGC || id == Builtin::NEWINIT)) ||
-                    ((langLevel < 2 || !haveExceptions) && (id == Builtin::PCALL || id == Builtin::RAISE)) ||
-                    (langLevel > 1 && (id == Builtin::CLI || id == Builtin::GETREG || id == Builtin::NOP || id == Builtin::PUTREG || id == Builtin::STI)) )
-                    error(lpar, QString("operation not supported on language level %1").arg(langLevel));
+                if( (ev->langLevel < 3 && (id == Builtin::NEW || id == Builtin::DISPOSE || id == Builtin::NEWGC || id == Builtin::NEWINIT)) ||
+                    ((ev->langLevel < 2 || !haveExceptions) && (id == Builtin::PCALL || id == Builtin::RAISE)) ||
+                    (ev->langLevel > 2 && (id == Builtin::CLI || id == Builtin::GETREG || id == Builtin::NOP || id == Builtin::PUTREG || id == Builtin::STI)) )
+                    error(lpar, QString("operation not supported on language level %1").arg(ev->langLevel));
 
                 const QString err = bi.checkArgs(id, args, &retType, mdl);
                 if( !err.isEmpty() )
@@ -2598,11 +2616,26 @@ Expression* Parser2::designator(bool needsLvalue) {
             }
         } else
             invalid("selector");
+
+        if( res->getType() && res->getType()->isObjectPointer() && res->isVariable() && res->decl && res->getType() != res->decl->getType() )
+        {
+            // this indicates that the type of the pointer to object variable was overridden in a type case statement
+            // we check this in each round so that also field selects can apply
+            Expression* tmp = Expression::create(Expression::Cast, tok.toRowCol() );
+            tmp->lhs = res;
+            checkPointerResolved(res->getType());
+            tmp->setType(res->getType());
+            res = tmp;
+        }
     }
 
-    if( !needsLvalue && res->isLvalue() ) // TODO: why not just check needsLvalue?
+    if( !needsLvalue )
     {
-        res->setByVal();
+        Expression* candidate = res;
+        if( res->kind == Expression::Cast && res->getType()->isObjectPointer() )
+            candidate = res->lhs; // the cast itself is not an lvalue (otherwise setByVal would not propagate to the right target)
+        if( candidate->isLvalue() )
+            res->setByVal();
     }
     return res;
 }
@@ -2613,7 +2646,7 @@ Expression* Parser2::maybeQualident(Symbol** s)
     expect(Tok_ident, false, "designator");
     Token tok = cur;
 
-    if( langLevel >= 1 && cur.d_val.constData() == self.constData() &&
+    if( ev->langLevel >= 1 && cur.d_val.constData() == self.constData() &&
             mdl->getTopScope()->kind == Declaration::Procedure &&
             mdl->getTopScope()->typebound && mdl->getTopScope()->autoself )
         cur.d_val = self;
@@ -2825,7 +2858,7 @@ quint8 Parser2::relation() {
 		expect(Tok_IN, true, "relation");
     } else if( la.d_type == Tok_IS ) {
         expect(Tok_IS, true, "relation");
-        if( langLevel < 4 )
+        if( ev->langLevel < 4 )
             error(cur,"operator not available on current language level");
     } else
 		invalid("relation");
@@ -3021,7 +3054,8 @@ Expression* Parser2::constructor(Type* hint) {
         while(c)
         {
             Q_ASSERT( c->kind == Expression::NameValue || c->kind == Expression::Value);
-            Declaration* name = c->val.value<Declaration*>();
+            Q_ASSERT( c->decl );
+            Declaration* name = c->decl;
             if( test.contains(name) )
                 error(c->pos, "value for this field was already defined");
             test.insert(name);
@@ -3183,7 +3217,8 @@ Expression* Parser2::component(Type* constrType, int& index) {
                 if( res->kind == Expression::ConstDecl )
                 {
                     res->kind = Expression::Literal;
-                    res->val = res->val.value<Declaration*>()->data;
+                    Q_ASSERT(res->decl);
+                    res->val = res->decl->data;
                 }
                 if( constrType->len && constrType->len < res->val.toByteArray().size() )
                     error(res->pos, "literal is too large for the given array type");
@@ -3194,7 +3229,8 @@ Expression* Parser2::component(Type* constrType, int& index) {
                 if( res->kind == Expression::ConstDecl )
                 {
                     res->kind = Expression::Literal;
-                    res->val = res->val.value<Declaration*>()->data;
+                    Q_ASSERT(res->decl);
+                    res->val = res->decl->data;
                 }
                 if( constrType->len && constrType->len < res->val.toByteArray().size() )
                     error(res->pos, "literal is too large for the given array type");
@@ -3470,10 +3506,13 @@ void Parser2::CaseStatement() {
     Expression* e = expression(0);
     if( e == 0 )
         return; // already reported
-    const bool typeCase = e->getType() && e->getType()->kind == Type::Pointer &&
-                                 e->getType()->getType() && e->getType()->getType()->kind == Type::Object;
+    const bool typeCase = e->getType() && e->getType()->isObjectPointer();
     if( typeCase )
     {
+        if( ev->langLevel < 4 )
+            error(e->pos, QString("type case statements are not supported on language level %1").arg(ev->langLevel));
+        if( e->decl == 0 && !e->isVariable() )
+            error(e->pos, QString("type case expression must represent a variable"));
         Expression::lockArena();
         expect(Tok_OF, true, "CaseStatement");
         line(cur).if_();
@@ -3617,7 +3656,7 @@ void Parser2::TypeCase(Expression* e)
     // override the type of the guarded variable
     // NOTE that we cannot simply replace the type of the existing symbol (this fails e.g. in a recursive procedure
     // calling itself in a type case of one of its parameters), but likely need a new temporary symbol and then fix to the correct symbol
-    Declaration* d = e->getDecl(ev->getCurProc());
+    Declaration* d = e->decl;
     if( d )
         typeOverrides.push_back(qMakePair(d, tyname->getType()));
     StatementSequence();
@@ -3817,7 +3856,7 @@ Type* Parser2::ProcedureType() {
     typeStack.push_back(p);
     if( la.d_type == Tok_Lpar && (peek(2).d_type == Tok_POINTER || peek(2).d_type == Tok_Hat) ) {
         expect(Tok_Lpar, false, "ProcedureType");
-        if( langLevel < 1 )
+        if( ev->langLevel < 1 )
             error(cur,"bound procedure types not available on current language level");
         if( la.d_type == Tok_POINTER ) {
             expect(Tok_POINTER, false, "ProcedureType");
@@ -3843,12 +3882,12 @@ Declaration* Parser2::ProcedureHeader(bool inForward, QByteArray* rt) {
     NameAndType receiver;
     bool autoself = false;
     if( FIRST_Receiver(la.d_type) ) {
-        if( langLevel < 1 )
+        if( ev->langLevel < 1 )
             error(la, "type-bound procedures not available on current language level");
         receiver = Receiver();
     }else if( la.d_type == Tok_ident && peek(2).d_type == Tok_Dot )
     {
-        if( langLevel < 1 )
+        if( ev->langLevel < 1 )
             error(la, "type-bound procedures not available on current language level");
         receiver = Receiver2();
         autoself = true;
@@ -3973,7 +4012,7 @@ void Parser2::ProcedureDeclaration() {
                 expect(Tok_Semi, false, "ProcedureDeclaration");
             }
             expect(Tok_EXTERN, true, "ProcedureDeclaration");
-            if( langLevel == 0 )
+            if( ev->langLevel == 0 )
                 error(cur, "EXTERN not allowed in language level 0");
             procDecl->extern_ = true;
             if( la.d_type == Tok_ident ) {
@@ -4009,8 +4048,8 @@ void Parser2::ProcedureDeclaration() {
 
             out->endProc(cur.toRowCol());
         } else if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR || la.d_type == Tok_Semi || FIRST_ProcedureBody(la.d_type) ) {
-            quint8 kind = langLevel == 0 ?
-                        Mil::ProcData::Inline // on langLevel 0 all procedures are implicitly inline
+            quint8 kind = ev->langLevel == 0 ?
+                        Mil::ProcData::Inline // on ev->langLevel 0 all procedures are implicitly inline
                       : Mil::ProcData::Normal;
 			if( la.d_type == Tok_INLINE || la.d_type == Tok_INVAR ) {
 				if( la.d_type == Tok_INLINE ) {
@@ -4149,7 +4188,7 @@ void Parser2::block() {
     beginFinallyEnd(false, cur.toRowCol());
     if( la.d_type == Tok_FINALLY ) {
         expect(Tok_FINALLY, false, "block");
-        if( langLevel < 2 )
+        if( ev->langLevel < 2 )
             error(cur,"FINALLY sections are only supported on language level 2 and above");
         beginFinallyEnd(true, cur.toRowCol());
     }
@@ -4489,7 +4528,7 @@ void Parser2::module(const Import & import) {
         Declaration* procDecl = addDecl(id, Declaration::Procedure);
         ev->pushCurProc(procDecl);
         mdl->openScope(procDecl);
-        out->beginProc("begin$", la.toRowCol(),0, langLevel == 0 ? Mil::ProcData::ModuleEntry : Mil::ProcData::ModuleInit);
+        out->beginProc("begin$", la.toRowCol(),0, ev->langLevel == 0 ? Mil::ProcData::ModuleEntry : Mil::ProcData::ModuleInit);
         resolveDeferreds();
         block();
         out->endProc(RowCol());
@@ -4898,7 +4937,7 @@ QByteArray Parser2::Attribute()
             error(t, "expecting a level number 0..4");
             return name;
         }else
-            langLevel = v.val.toInt();
+            ev->langLevel = v.val.toInt();
     } else if( name == "visibility" )
     {
         if( v.type == 0 || v.type->kind != Type::StrLit )

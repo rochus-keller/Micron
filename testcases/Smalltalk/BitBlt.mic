@@ -148,7 +148,7 @@ const
             hDir := -1
             sx := sx + w - 1
             dx := dx + w - 1
-            skewMask := usig(not16(sig(skewMask)))
+            skewMask := usig(not16(sigc(skewMask)))
             t := mask1
             mask1 := mask2
             mask2 := t
@@ -244,7 +244,7 @@ const
             end
             if (destIndex < 0) or (val(uint32, destIndex) >= ctx.destBits.buflen div 2) then return end
             destWord := D.wordAt(ctx.destBits, destIndex + 1 )
-            mergeWord := usig(merge( ctx.combinationRule, sig(band(skewWord, halftoneWord)), sig(destWord) ) )
+            mergeWord := usig(merge( ctx.combinationRule, sigc(band(skewWord, halftoneWord)), sigc(destWord) ) )
             D.wordAtPut(ctx.destBits, destIndex + 1, 
                 bor( band(mergeMask, mergeWord), band( bnot(mergeMask), destWord ) ) )
             sourceIndex := sourceIndex + val(int32, hDir)
@@ -276,6 +276,6 @@ begin
       0, 01h, 03h, 07h, 0fh,
       01fh, 03fh, 07fh, 0ffh,
       01ffh, 03ffh, 07ffh, 0fffh,
-      01fffh, 03fffh, 07fffh, sig(0ffffh) }
+      01fffh, 03fffh, 07fffh, sigc(0ffffh) }
        
 end BitBlt

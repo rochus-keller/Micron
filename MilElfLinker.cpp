@@ -197,6 +197,45 @@ bool ElfLinker::extractFromArchives() {
     return true;
 }
 
+QList<QByteArray> ElfLinker::referencingFunctions(InputFile* file, const QByteArray& name)
+{
+    // the relocations which use the symbol point into a section, whose function symbol
+    // whose range covers the relocation is the referencing procedure
+    const QList<ElfReader::Symbol> syms = file->reader->symbols();
+    int idx = -1;
+    for (int s = 0; s < syms.size(); ++s) {
+        if (syms[s].name == name && syms[s].shndx == 0) {
+            idx = s;
+            break;
+        }
+    }
+    QList<QByteArray> res;
+    if (idx < 0)
+        return res;
+    QSet<QByteArray> found;
+    foreach (const ElfReader::Relocation& r, file->reader->relocations()) {
+        if ((int)r.symbolIdx != idx)
+            continue;
+        QByteArray fn;
+        quint32 best = 0;
+        foreach (const ElfReader::Symbol& s, syms) {
+            if (s.type != 2 /*STT_FUNC*/ || s.shndx != r.targetSection || s.name.isEmpty())
+                continue;
+            if (r.offset < s.value || (s.size && r.offset >= s.value + s.size))
+                continue;
+            if (fn.isEmpty() || s.value >= best) {
+                fn = s.name; // the innermost function which starts before the relocation
+                best = s.value;
+            }
+        }
+        if (!fn.isEmpty() && !found.contains(fn)) {
+            found.insert(fn);
+            res << fn;
+        }
+    }
+    return res;
+}
+
 bool ElfLinker::link(const QString& outPath) {
     if (!extractFromArchives())
         return false;
@@ -435,7 +474,7 @@ bool ElfLinker::link(const QString& outPath) {
     defineSym("__heap_end", d_bssAddr + d_bssSize);
 
     // Bind undefined symbols and override weak definitions with strong ones
-    QSet<QByteArray> missing;
+    QMap<QByteArray, QSet<int> > missing; // symbol -> the files which reference it
     for (int i = 0; i < d_files.size(); ++i) {
         InputFile* file = d_files[i];
         QList<ElfReader::Symbol> syms = file->reader->symbols();
@@ -448,7 +487,7 @@ bool ElfLinker::link(const QString& outPath) {
                 if (d_globalSymbols.contains(sym.name)) {
                     file->symAddr[s] = d_globalSymbols[sym.name];
                 } else {
-                    missing.insert(sym.name);
+                    missing[sym.name].insert(i);
                 }
             } else if (sym.binding == STB_WEAK && d_globalSymbols.contains(sym.name)) {
                 // Override local weak address with the global (possibly strong) address
@@ -458,9 +497,19 @@ bool ElfLinker::link(const QString& outPath) {
     }
     if (!missing.isEmpty()) {
         QStringList names;
-        foreach (const QByteArray& n, missing)
-            names << QString::fromUtf8(n);
-        names.sort();
+        QMap<QByteArray, QSet<int> >::const_iterator m;
+        for (m = missing.begin(); m != missing.end(); ++m) {
+            QStringList where;
+            foreach (int i, m.value()) {
+                foreach (const QByteArray& f, referencingFunctions(d_files[i], m.key()))
+                    where << QFileInfo(d_files[i]->filename).fileName() + "!" + QString::fromUtf8(f);
+            }
+            where.sort();
+            if (where.isEmpty())
+                names << QString::fromUtf8(m.key());
+            else
+                names << QString::fromUtf8(m.key()) + ", referenced by " + where.join(", ");
+        }
         d_error = "Undefined references:\n  " + names.join("\n  ");
         return false;
     }

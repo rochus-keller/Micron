@@ -248,11 +248,11 @@ var
   begin
     evt := S.NextEvent()
     while evt # 0 do
-      evtType := band(sig(shr(evt, 24)), 0ffh )
+      evtType := band(sigc(shr(evt, 24)), 0ffh )
       evtData := band(evt, 0ffffffh)
       case evtType of
       | 1: // EvtMouseMove
-        mx := band(sig(shr(evtData, 12)), 0fffh )
+        mx := band(sigc(shr(evtData, 12)), 0fffh )
         my := band( evtData, 0fffh )
         handleMouseMove(mx, my)
       | 2: // EvtMouseDown
@@ -327,7 +327,7 @@ var
   procedure setScreenBitmap*(bm: Bitmap)
   begin
     bitmap := bm
-    S.Open(bm.buffer, sig(bm.buflen), bm.pixWidth, bm.pixHeight, {})
+    S.Open(bm.buffer, sigc(bm.buflen), bm.pixWidth, bm.pixHeight, {})
   end setScreenBitmap
        
   procedure createBitmap*(bs: pointer to array of byte; bslen: uint32; pixWidth, pixHeight: int16): Bitmap

@@ -47,7 +47,8 @@ bool Evaluator::unaryOp(quint8 op, const RowCol& pos)
         notOp(v, pos);
         break;
     case Expression::Plus:
-        unaryPlusOp(v, pos);
+        // this is a no-op; if a number conversion is required, it is done by preceding autoconv
+        // unaryPlusOp(v, pos);
         break;
     case Expression::Minus:
         unaryMinusOp(v, pos);
@@ -90,7 +91,8 @@ bool Evaluator::bindUniInt(Expression * e, bool isSigned) const
 {
     if( e && e->hasConstValue() && e->getType()->kind == Type::UniInt )
     {
-        e->setType(isSigned ? smallestIntType(e->val) : smallestUIntType(e->val));
+        const QVariant v = e->getConstValue(); // val holds a Declaration* if e is a ConstDecl
+        e->setType(isSigned ? smallestIntType(v) : smallestUIntType(v));
         return true;
     }else
         return false;
@@ -295,54 +297,7 @@ bool Evaluator::assign(const RowCol& pos)
         } // else copy memory block TODO
     }
 
-    switch(lhs.type->kind)
-    {
-    case Type::BOOL:
-    case Type::CHAR:
-    case Type::UINT8:
-    case Type::INT8:
-        out->stind_(Mil::EmiTypes::I1);
-        break;
-    case Type::UINT16:
-    case Type::INT16:
-        out->stind_(Mil::EmiTypes::I2);
-        break;
-    case Type::UINT32:
-    case Type::INT32:
-    case Type::SET:
-    case Type::ConstEnum:
-        out->stind_(Mil::EmiTypes::I4);
-        break;
-    case Type::UINT64:
-    case Type::INT64:
-        out->stind_(Mil::EmiTypes::I8);
-        break;
-    case Type::FLT32:
-        out->stind_(Mil::EmiTypes::R4);
-        break;
-    case Type::FLT64:
-        out->stind_(Mil::EmiTypes::R8);
-        break;
-    case Type::Nil:
-    case Type::StrLit:
-    case Type::Pointer:
-        out->stind_(Mil::EmiTypes::IntPtr);
-        break;
-    case Type::Proc:
-        if( lhs.type->typebound )
-            out->stind_(Mil::EmiTypes::IPP);
-        else
-            out->stind_(Mil::EmiTypes::IntPtr);
-        break;
-    case Type::Record:
-    case Type::Object:
-    case Type::Array:
-    case Type::Generic:
-        out->stind_(toQuali(lhs.type));
-        break;
-    default:
-        Q_ASSERT( false );
-    }
+    stind(lhs.type, pos);
 
     return err.isEmpty();
 }
@@ -849,6 +804,7 @@ bool Evaluator::convNum(Type* to, const RowCol& pos)
 
         out->line_(pos);
         out->conv_(tt);
+        stack.back().type = to;
     }
     return err.isEmpty();
 }
@@ -1955,15 +1911,21 @@ void Evaluator::unaryMinusOp(Value& v, const RowCol& pos)
     {
         if( v.type->isUInt() )
         {
+            qWarning() << "Evaluator::unaryMinusOp: unexpected unsigned type on stack";
             if( v.isConst() )
                 v.val = -v.val.toLongLong();
             else
             {
                 out->line_(pos);
-                if( v.type->kind == Type::INT32 )
-                    out->conv_(Mil::EmiTypes::I4);
-                else
+                if( v.type->is64() )
+                {
                     out->conv_(Mil::EmiTypes::I8);
+                    v.type = mdl->getType(Type::INT64);
+                }else
+                {
+                    out->conv_(Mil::EmiTypes::I4);
+                    v.type = mdl->getType(Type::INT32);
+                }
                 out->neg_();
             }
         }else if( v.type->isInteger() )
@@ -1975,6 +1937,7 @@ void Evaluator::unaryMinusOp(Value& v, const RowCol& pos)
                 out->line_(pos);
                 out->neg_();
             }
+            // no type change
         }else if( v.type->isReal() )
         {
             if( v.isConst() )
@@ -1984,8 +1947,11 @@ void Evaluator::unaryMinusOp(Value& v, const RowCol& pos)
                 out->line_(pos);
                 out->neg_();
             }
+            // no type change
         }else
             Q_ASSERT(false);
+#if 0
+        // unnecessary. there must have been a preceding auto cast!
         Type* to = 0;
         switch(v.type->kind)
         {
@@ -2010,7 +1976,7 @@ void Evaluator::unaryMinusOp(Value& v, const RowCol& pos)
             castNum(to, pos);
             v.type = to;
         }
-
+#endif
     }else if( v.type->isSet() )
     {
         if( v.isConst() )
@@ -2223,7 +2189,8 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::FieldSelect:
         if( !recursiveRun(e->lhs) )
             return false;
-        desigField(e->val.value<Declaration*>(), e->byVal, e->pos);
+        Q_ASSERT(e->decl);
+        desigField(e->decl, e->byVal, e->pos);
         break;
     case Expression::Index:
         if( !recursiveRun(e->lhs) )
@@ -2310,7 +2277,8 @@ bool Evaluator::recursiveRun(Expression* e)
         {
             Value tmp;
             tmp.mode = Value::Const;
-            tmp.val = e->val.value<Declaration*>()->data;
+            Q_ASSERT(e->decl);
+            tmp.val = e->decl->data;
             tmp.type = e->getType();
             stack.push_back(tmp);
         }
@@ -2371,6 +2339,10 @@ bool Evaluator::recursiveRun(Expression* e)
                 {
                     // in case of built-ins, either all args or none are pushed to MIL-stack.
                     // otherwise we get in trouble with the order. If none is pushed, Builtins::callBuiltin will do so
+
+                    if( bi == Builtin::PUTREG || bi == Builtin::GETREG )
+                        allConst = true; // require special treatment, don't push register value to mil stack; in contrast, second arg is pushed
+
                     if( !allConst )
                     {
                         if( i == 0 && bi == Builtin::ORD && args[i]->getType()->kind == Type::StrLit )
@@ -2403,7 +2375,8 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Super: {
             Q_ASSERT(e->lhs && e->lhs->kind == Expression::MethSelect);
 
-            Declaration* method = e->lhs->val.value<Declaration*>();
+            Declaration* method = e->lhs->decl;
+            Q_ASSERT(method);
 
             if( curProcs.isEmpty() || curProcs.back() != method )
             {
@@ -2452,16 +2425,15 @@ bool Evaluator::dynamicSetConstructor(Expression* e)
             out->line_(c->pos);
             out->call_(coreName("SetRange"), 2, true);
             out->or_();
-        }
-        else
+        } else
         {
             out->line_(c->pos);
+            out->ldc_i4(1); // the value to be shifted, the element is the shift count
             bindUniInt(c, false);
             if( !evaluate(c) )
                 return false;
             if( !assureTopOnMilStack(true, c->pos) )
                 return false;
-            out->ldc_i4(1);
             out->shl_();
             out->or_();
         }
@@ -2497,7 +2469,8 @@ bool Evaluator::dynamicStructConstructor(Expression* e)
         if( e->getType()->kind == Type::Record || e->getType()->kind == Type::Object )
         {
             Q_ASSERT( c->kind == Expression::NameValue || c->kind == Expression::Value );
-            Declaration* field = c->val.value<Declaration*>();
+            Declaration* field = c->decl;
+            Q_ASSERT(field);
 
             if( !evaluate(c->rhs) )
                 return false;
@@ -2641,8 +2614,8 @@ bool Evaluator::recurseConstConstructor(Expression* e)
                 if( !evaluate(c->rhs) )
                     return false;
                 Value v = stack.takeLast();
-                Q_ASSERT( v.isConst() );
-                rec.append(qMakePair(c->val.value<Declaration*>()->name, v.val));
+                Q_ASSERT( v.isConst() && c->decl );
+                rec.append(qMakePair(c->decl->name, v.val));
                 c = c->next;
             }
             Value v;
@@ -2777,6 +2750,59 @@ bool Evaluator::stind(Expression* lhs, Expression* rhs, const RowCol& pos)
     return true;
 }
 
+bool Evaluator::stind(Type *lhs, const RowCol &pos)
+{
+    switch(lhs->kind)
+    {
+    case Type::BOOL:
+    case Type::CHAR:
+    case Type::UINT8:
+    case Type::INT8:
+        out->stind_(Mil::EmiTypes::I1);
+        break;
+    case Type::UINT16:
+    case Type::INT16:
+        out->stind_(Mil::EmiTypes::I2);
+        break;
+    case Type::UINT32:
+    case Type::INT32:
+    case Type::SET:
+    case Type::ConstEnum:
+        out->stind_(Mil::EmiTypes::I4);
+        break;
+    case Type::UINT64:
+    case Type::INT64:
+        out->stind_(Mil::EmiTypes::I8);
+        break;
+    case Type::FLT32:
+        out->stind_(Mil::EmiTypes::R4);
+        break;
+    case Type::FLT64:
+        out->stind_(Mil::EmiTypes::R8);
+        break;
+    case Type::Nil:
+    case Type::StrLit:
+    case Type::Pointer:
+        out->stind_(Mil::EmiTypes::IntPtr);
+        break;
+    case Type::Proc:
+        if( lhs->typebound )
+            out->stind_(Mil::EmiTypes::IPP);
+        else
+            out->stind_(Mil::EmiTypes::IntPtr);
+        break;
+    case Type::Record:
+    case Type::Object:
+    case Type::Array:
+    case Type::Generic:
+        out->stind_(toQuali(lhs));
+        break;
+    default:
+        return false; // already reported
+    }
+    return true;
+}
+
 bool Evaluator::stelem(Expression* lhs, Expression* rhs, const RowCol& pos)
 {
     err.clear();
@@ -2823,7 +2849,7 @@ bool Evaluator::stfld(Expression* lhs, Expression* rhs, const RowCol &pos)
         return false;
 
     Q_ASSERT(lhs->kind == Expression::FieldSelect);
-    Declaration* field = lhs->val.value<Declaration*>();
+    Declaration* field = lhs->decl;
     Q_ASSERT(field);
 
     if( !evaluate(lhs->lhs) ) // pointer to record

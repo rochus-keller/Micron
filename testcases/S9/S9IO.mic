@@ -236,7 +236,7 @@ begin
   if y # S9Types._NIL then
     return y
   end
-  len := sig(strlen(s))
+  len := sigc(strlen(s))
   new := make_symbol(s, len)
   G.Symbols := M.cons(new, G.Symbols)
   return G.car(G.Symbols)
@@ -376,7 +376,7 @@ begin
     buf[i] := chr(c)
     inc(i)
   end
-  reject(sig(c))
+  reject(sigc(c))
   buf[i] := 0X
   
   if i = 0 then
@@ -390,7 +390,7 @@ begin
   else
     return G.error("unknown character literal", S9Types._NOEXPR)
   end
-  return make_char(sig(c))
+  return make_char(sigc(c))
 end read_character
 
 (* Read a string literal *)
@@ -409,7 +409,7 @@ begin
   inv := false
   
   loop
-    if not (q or (c # sig(ord('"')))) then exit end
+    if not (q or (c # sigc(ord('"')))) then exit end
     if c = -1 then
       return G.error("missing quote in string literal", S9Types._NOEXPR)
     end
@@ -420,13 +420,13 @@ begin
       G.error("string literal too long", S9Types._NOEXPR)
       dec(i)
     end
-    if q & (c # sig(ord('"'))) & (c # sig(ord('\'))) then
+    if q & (c # sigc(ord('"'))) & (c # sigc(ord('\'))) then
       s[i] := '\'
       inc(i)
       inv := true
     end
     s[i] := chr(c)
-    q := ~q & (c = sig(ord('\')))
+    q := ~q & (c = sigc(ord('\')))
     if ~q then
       inc(i)
     end
@@ -497,7 +497,7 @@ begin
     inc(i)
   end
   
-  k := sig(strlen(@s[i]))
+  k := sigc(strlen(@s[i]))
   n := S9Types._NIL
   
   while k > 0 do
@@ -510,7 +510,7 @@ begin
     (* Parse j digits from position k-j *)
     v := 0
     for d := k - j to k - 1 do
-      digit := sig(ord(s[i + d]) - ord('0'))
+      digit := sigc(ord(s[i + d]) - ord('0'))
       v := v * 10 + digit
     end
     
@@ -569,7 +569,7 @@ var
 begin
   c := read_c_ci()
   reject(c)
-  return c = sig(ord(')'))
+  return c = sigc(ord(')'))
 end closing_paren
 
 (* Read a list *)
@@ -668,7 +668,7 @@ begin
     inc(k)
     n := G.cdr(n)
   end
-  vec := M.new_vec(S9Types.T_VECTOR, k * sig(size(S9Types.cell)))
+  vec := M.new_vec(S9Types.T_VECTOR, k * sigc(size(S9Types.cell)))
   G.Tag[vec] := chr(bor(ord(G.Tag[vec]), usig(flags)))
   p := G.vector(vec)
   n := m
@@ -742,8 +742,8 @@ begin
   
   (* Skip whitespace and comments *)
   loop
-    while (c = +ord(' ')) or (c = +ord(09X)) or (c = +ord(0AX)) or (c = sig(ord(0DX))) do
-      if c = sig(ord(0AX)) then
+    while (c = +ord(' ')) or (c = +ord(09X)) or (c = +ord(0AX)) or (c = sigc(ord(0DX))) do
+      if c = sigc(ord(0AX)) then
         inc(G.Line_no)
       end
       if G.Error_flag # 0 then
@@ -751,24 +751,24 @@ begin
       end
       c := read_c_ci()
     end
-    if c = sig(ord('#')) then
+    if c = sigc(ord('#')) then
       c := read_c_ci()
-      if c = sig(ord('!')) then
+      if c = sigc(ord('!')) then
         (* Shebang - skip to end of line *)
         while (c # +ord(0AX)) & (c # -1) do
           c := read_c_ci()
         end
-      elsif c = sig(ord('|')) then
+      elsif c = sigc(ord('|')) then
         c := block_comment()
       else
         reject(c)
         c := +ord('#')
         exit
       end
-    elsif c # sig(ord(';')) then
+    elsif c # sigc(ord(';')) then
       exit
     end
-    while (G.Error_flag = 0) & (c # sig(ord(0AX))) & (c # -1) do
+    while (G.Error_flag = 0) & (c # sigc(ord(0AX))) & (c # -1) do
       c := read_c_ci()
     end
     if G.Error_flag # 0 then
@@ -783,28 +783,28 @@ begin
     return S9Types._UNSPECIFIC
   end
   
-  if c = sig(ord('(')) then
+  if c = sigc(ord('(')) then
     return read_list(flags, S9Types._RPAREN)
-  elsif c = sig(ord('[')) then
+  elsif c = sigc(ord('[')) then
     return read_list(flags, S9Types._RBRACK)
-  elsif (c = +ord("'")) or (c = sig(ord('`'))) then
+  elsif (c = +ord("'")) or (c = sigc(ord('`'))) then
     if closing_paren() then
       return G.error("missing form after quote", S9Types._NOEXPR)
     end
     inc(G.Level)
-    if c = sig(ord('`')) then
+    if c = sigc(ord('`')) then
       n := quote(read_form(S9Types.ConstTag), G.S_quasiquote)
     else
       n := quote(read_form(S9Types.ConstTag), G.S_quote)
     end
     dec(G.Level)
     return n
-  elsif c = sig(ord(',')) then
+  elsif c = sigc(ord(',')) then
     if closing_paren() then
       return G.error("missing form after ','", S9Types._NOEXPR)
     end
     c := read_c_ci()
-    if c = sig(ord('@')) then
+    if c = sigc(ord('@')) then
       return quote(read_form(0), G.S_unquote_splicing)
     else
       reject(c)
@@ -814,7 +814,7 @@ begin
       end
       return quote(read_form(0), G.S_unquote)
     end
-  elsif c = sig(ord('#')) then
+  elsif c = sigc(ord('#')) then
     c := read_c_ci()
     case c of
     | +ord('f'): return S9Types._FALSE
@@ -824,19 +824,19 @@ begin
     else
       return G.error("unknown # syntax", S9Types._NOEXPR)
     end
-  elsif c = sig(ord('"')) then
+  elsif c = sigc(ord('"')) then
     return read_string()
-  elsif c = sig(ord(')')) then
+  elsif c = sigc(ord(')')) then
     if G.Level = 0 then
       return G.error("unexpected ')'", S9Types._NOEXPR)
     end
     return S9Types._RPAREN
-  elsif c = sig(ord(']')) then
+  elsif c = sigc(ord(']')) then
     if G.Level = 0 then
       return G.error("unexpected ']'", S9Types._NOEXPR)
     end
     return S9Types._RBRACK
-  elsif c = sig(ord('.')) then
+  elsif c = sigc(ord('.')) then
     c2 := read_c_ci()
     reject(c2)
     if separator(c2) then
@@ -899,9 +899,9 @@ begin
   c := val(int32,G.char_value(n))
   if G.Displaying # 0 then
     write_c(chr(c))
-  elsif c = sig(ord(' ')) then
+  elsif c = sigc(ord(' ')) then
     pr("#\space")
-  elsif c = sig(ord(0AX)) then
+  elsif c = sigc(ord(0AX)) then
     pr("#\newline")
   else
     pr("#\")

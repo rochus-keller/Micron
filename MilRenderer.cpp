@@ -1349,8 +1349,13 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
         case IL_strcpy:
         case IL_free:
         case IL_exit:
+        case IL_sti:
+        case IL_cli:
             break;
         case IL_ret:
+            break;
+        case IL_putreg:
+            tmp->id = ops[pc].arg.toUInt();
             break;
         default:
             error(curProc,QString("unexpected operation '%1'").arg(s_opName[ops[pc].op]), pc);
@@ -1488,6 +1493,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
         case IL_ldloca_s:
         case IL_ldloca:
         case IL_ldloc:
+        case IL_getreg:
             tmp->id = ops[pc].arg.toUInt();
             break;
         case IL_ldc_obj: {

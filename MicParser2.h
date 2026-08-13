@@ -223,7 +223,6 @@ namespace Mic {
         Depth blockDepth; // stack of RowCol, top is current StatSeq
 
         bool inFinally;
-        quint8 langLevel;
         quint8 defaultVisi;
         bool haveExceptions;
 

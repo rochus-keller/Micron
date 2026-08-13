@@ -357,7 +357,7 @@ end register_core_primitives
 procedure get_library_path(): T.cell
 begin
   // TODO check S9FES_LIBRARY_PATH env var
-  return IO.make_string(DefaultLibraryPath, sig(strlen(DefaultLibraryPath)))
+  return IO.make_string(DefaultLibraryPath, sigc(strlen(DefaultLibraryPath)))
 end get_library_path
 
 procedure make_initial_env()
@@ -554,7 +554,7 @@ begin
     return -1
   end
   G.Port_flags[new_port] := chr(bor(ord(G.Port_flags[new_port]), T.LockTag))
-  G.File_list := M.cons(IO.make_string(file, sig(strlen(file))), G.File_list)
+  G.File_list := M.cons(IO.make_string(file, sigc(strlen(file))), G.File_list)
   M.save(G.Environment)
   while G.cdr(G.Environment) # T._NIL do
     G.Environment := G.cdr(G.Environment)

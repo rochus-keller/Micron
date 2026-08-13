@@ -141,7 +141,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,1);
         if( args.first()->getType()->kind == Type::UniInt )
         {
-            Type* t = ev->smallestUIntType(args.first()->val);
+            Type* t = ev->smallestUIntType(args.first()->getConstValue());
             args.first()->setType(t);
         }
         *ret = args.first()->getType();
@@ -183,8 +183,9 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         if( (args.first()->getType()->isNumber() && !args.last()->getType()->isNumber()) ||
             (args.first()->getType()->kind == Type::Pointer && args.last()->getType()->kind != Type::Pointer) )
             throw QString("both arguments must be either number or pointer type");
+        ev->bindUniInt(args.last(), args.first()->getType()->isInt());
         if( args.first()->getType()->getByteSize() != args.last()->getType()->getByteSize())
-            throw QString("can only cast between types of same byte width");
+            throw QString("can only cast between types of same byte width (%1,%2)").arg(args.first()->getType()->getName()).arg(args.last()->getType()->getName());
         *ret = args.first()->getType();
         break;
     case Builtin::VAL:
@@ -302,7 +303,7 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
             throw "expecting CHAR, BOOLEAN, SET, enumeration or pointer/procedure type";
         }
         break;
-    case Builtin::SIG:
+    case Builtin::SIGC:
         expectingNArgs(args,1);
         ev->bindUniInt(args[0], false);
         *ret = args[0]->getType(); // to avoid crash
@@ -319,6 +320,28 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
             break;
         case Type::UINT64:
             *ret = ev->mdl->getType(Type::INT64);
+            break;
+        default:
+            throw "expecting unsigned integer";
+        }
+        break;
+    case Builtin::SIGL:
+        expectingNArgs(args,1);
+        ev->bindUniInt(args[0], false);
+        *ret = args[0]->getType(); // to avoid crash
+        switch(args.first()->getType()->kind)
+        {
+        case Type::UINT8:
+            *ret = ev->mdl->getType(Type::INT16);
+            break;
+        case Type::UINT16:
+            *ret = ev->mdl->getType(Type::INT32);
+            break;
+        case Type::UINT32:
+            *ret = ev->mdl->getType(Type::INT64);
+            break;
+        case Type::UINT64:
+            throw "cannot convert UINT64 with this operator";
             break;
         default:
             throw "expecting unsigned integer";
@@ -432,15 +455,23 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::GETREG:
         expectingNArgs(args,2);
+        ev->bindUniInt(args[0], false);
+        if( !args[0]->isConst() || !args[0]->getType()->isUInt())
+            throw "expecting an unsigned integer constant as the first argument";
         break;
     case Builtin::NOP:
         expectingNArgs(args,0);
         break;
     case Builtin::PUTREG:
         expectingNArgs(args,2);
+        ev->bindUniInt(args[0], false);
+        if( !args[0]->isConst() || !args[0]->getType()->isUInt())
+            throw "expecting an unsigned integer constant as the first argument";
         break;
     case Builtin::STI:
         expectingNArgs(args,0);
+        if( ev->langLevel > 2 )
+            throw "operation not supported on selected language level";
         break;
     case Builtin::COPY:
         expectingNArgs(args,3);
@@ -865,6 +896,35 @@ void Builtins::doSig(const RowCol &pos)
     ev->stack.back().type = to;
 }
 
+void Builtins::doLsig(const RowCol &pos)
+{
+    Value value = ev->stack.takeLast();
+    Type* to = 0;
+    switch(value.type->kind)
+    {
+    case Type::UINT8:
+        to = ev->mdl->getType(Type::INT16);
+        break;
+    case Type::UINT16:
+        to = ev->mdl->getType(Type::INT32);
+        break;
+    case Type::UINT32:
+        to = ev->mdl->getType(Type::INT64);
+        break;
+    case Type::UINT64:
+        break;
+    default:
+        //Q_ASSERT(false);
+        break;
+    }
+    ev->stack.push_back(value);
+    if( to )
+    {
+        ev->convNum(to, pos);
+        ev->stack.back().type = to;
+    }
+}
+
 void Builtins::doUsig(const RowCol &pos)
 {
     Value value = ev->stack.takeLast();
@@ -1256,6 +1316,8 @@ void Builtins::GETREG(const RowCol &pos)
     }
 
     ev->out->getreg_(reg.val.toUInt(), toBasic(to.type));
+    // the address of the lvalue was already pushed to mil stack in Evaluator Expression::Call
+    ev->stind(to.type, pos);
 }
 
 void Builtins::PUTREG(const RowCol &pos)
@@ -1275,7 +1337,9 @@ void Builtins::PUTREG(const RowCol &pos)
         return;
     }
 
-    ev->out->putreg_(reg.val.toUInt(), toBasic(from.type));
+    // ev->pushMilStack(from, pos); // the value was already pushed to mil stack in Evaluator Expression::Call
+
+    ev->out->putreg_(reg.val.toUInt(), toBasic(from.type)); // encodes register id and byte width into single integer
 }
 
 void Builtins::LEN(int nArgs,const RowCol& pos)
@@ -1603,9 +1667,14 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         doStrlen(pos);
         handleStack = false;
         break;
-    case Builtin::SIG:
+    case Builtin::SIGC:
         checkNumOfActuals(nArgs, 1);
         doSig(pos);
+        handleStack = false;
+        break;
+    case Builtin::SIGL:
+        checkNumOfActuals(nArgs, 1);
+        doLsig(pos);
         handleStack = false;
         break;
     case Builtin::USIG:
@@ -1633,13 +1702,11 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
         break;
     case Builtin::GETREG:
         checkNumOfActuals(nArgs, 2);
-        pushActualsToMilStack(nArgs,pos);
         GETREG(pos);
         handleStack = false;
         break;
     case Builtin::PUTREG:
         checkNumOfActuals(nArgs, 2);
-        pushActualsToMilStack(nArgs,pos);
         PUTREG(pos);
         handleStack = false;
         break;
