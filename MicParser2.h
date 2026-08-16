@@ -96,7 +96,7 @@ namespace Mic {
         quint8 AddOperator();
         Expression* term(Type* hint, bool lvalue = false);
         quint8 MulOperator();
-        Expression* literal();
+        Expression* literal(Type* hint);
         Expression* constructor(Type* hint);
         enum { FirstComponent, Named, Anonymous };
         Expression* component(Type* constrType, int& index);
@@ -115,7 +115,7 @@ namespace Mic {
         void CaseLabelList(Type* t, CaseLabels&);
         void LabelRange(Type* t,CaseLabels&);
         void TypeCase(Expression*);
-        Value label(Type* t);
+        qint64 label(Type* t);
 		void WhileStatement();
 		void RepeatStatement();
 		void ForStatement();

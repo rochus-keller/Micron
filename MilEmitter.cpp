@@ -865,10 +865,13 @@ void Emitter::ldloca_(quint16 loc)
     delta(+1);
 }
 
-void Emitter::ldnull_()
+void Emitter::ldnull_(bool ipp)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
-    ops->append(ProcData::Op(IL_ldnull));
+    if( ipp )
+        ops->append(ProcData::Op(IL_ldnull_ipp));
+    else
+        ops->append(ProcData::Op(IL_ldnull));
     delta(+1);
 }
 

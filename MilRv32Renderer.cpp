@@ -1381,6 +1381,10 @@ int Renderer::emitOp(Procedure& proc, int pc)
         pushReg(Zero);
         return 1;
 
+    case LL_ldnull_pp:
+        pushRegPair(Zero, Zero);
+        return 1;
+
     case LL_ldstr: {
         const char* str = d_code.getString(val);
         quint32 rodataOff;

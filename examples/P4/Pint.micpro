@@ -1,5 +1,5 @@
 [General]
-Arguments=@ByteArray(/home/me/Entwicklung/Modules/Micron/testcases/P4/prr)
+Arguments=@ByteArray(prr)
 BuildDir=
 BuiltInOakwood=true
 MainModule=@ByteArray()

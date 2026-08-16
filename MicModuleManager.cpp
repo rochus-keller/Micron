@@ -52,7 +52,7 @@ ModuleManager::ModuleLocator::~ModuleLocator() {}
 
 ModuleManager::ModuleManager(ModuleLocator* loc, bool d):locator(loc),d_milImporter(0),dbg(d)
 {
-    loadRuntime();
+    // the runtime is loaded on demand, see loadRuntime and clearModel
 }
 
 static QString s_runtimePath;
@@ -131,11 +131,10 @@ Mil::Declaration* ModuleManager::loadMil(QIODevice* in, const QString& path)
 
 ModuleManager::~ModuleManager()
 {
-    QHash<QByteArray, Entry*>::const_iterator i;
-    for( i = cache.begin(); i != cache.end(); ++i )
+    foreach( Entry* e, cache )
     {
-        delete i.value()->mic;
-        delete i.value();
+        delete e->mic;
+        delete e;
     }
 }
 
@@ -158,21 +157,22 @@ QByteArray ModuleManager::moduleSuffix(const MetaActualList&)
     return "$" + QByteArray::number(cache.size());
 }
 
-ModuleManager::Entry* ModuleManager::entryFor(const QByteArrayList& path)
+ModuleManager::Entry* ModuleManager::entryFor(const Import& imp)
 {
-    const QByteArray key = path.join('/');
-    Entry* e = cache.value(key, 0);
-    if( e == 0 )
-    {
-        e = new Entry();
-        cache.insert(key, e);
-    }
+    // compare the full import spec including meta actuals, so that each
+    // instantiation of a generic module gets its own entry
+    foreach( Entry* e, cache )
+        if( e->imp == imp )
+            return e;
+    Entry* e = new Entry();
+    e->imp = imp;
+    cache.append(e);
     return e;
 }
 
 Declaration* ModuleManager::loadModule(const Import& imp)
 {
-    Entry* e = entryFor(imp.path);
+    Entry* e = entryFor(imp);
     if( e->mic )
         return e->mic;
     if( e->loading )
@@ -182,7 +182,7 @@ Declaration* ModuleManager::loadModule(const Import& imp)
         return 0;
     }
 
-    Location loc = locator ? locator->locate(imp.path) : Location();
+    Location loc = locator ? locator->locate(imp) : Location();
     if( loc.kind == NotFound )
     {
         error(QString("cannot locate module '%1'").arg(QString::fromUtf8(imp.path.join('.'))));
@@ -371,16 +371,17 @@ Mil::Declaration* ModuleManager::invarBody(Declaration* micProc) const
 
 Mil::Declaration* ModuleManager::milModuleFor(const Import& imp) const
 {
-    Entry* e = cache.value(imp.path.join('/'), 0);
-    return e ? e->mil : 0;
+    foreach( Entry* e, cache )
+        if( e->imp == imp )
+            return e->mil;
+    return 0;
 }
 
 QList<Declaration*> ModuleManager::getMicModules() const
 {
     QList<Declaration*> res;
-    QHash<QByteArray, Entry*>::const_iterator i;
-    for( i = cache.begin(); i != cache.end(); ++i )
-        if( i.value()->mic )
-            res.append(i.value()->mic);
+    foreach( Entry* e, cache )
+        if( e->mic )
+            res.append(e->mic);
     return res;
 }

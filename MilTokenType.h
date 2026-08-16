@@ -158,6 +158,7 @@ namespace Mil {
 		Tok_LDLOC_S,
 		Tok_LDMETH,
 		Tok_LDNULL,
+		Tok_LDNULL_IPP,
 		Tok_LDPROC,
 		Tok_LDSTR,
 		Tok_LDVAR,

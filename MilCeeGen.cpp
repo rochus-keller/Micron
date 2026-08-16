@@ -372,6 +372,8 @@ QByteArray CeeGen::typeRef(Type* t)
         return "const unsigned char*";
     case Type::NIL:
         return "NULL";
+    case Type::DBLNIL:
+        return "DBLINTPTR"; // TODO
     case Type::BOOL:
         return "unsigned char";
     case Type::CHAR:
@@ -1354,6 +1356,10 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_ldnull:
         out << "NULL";
         break;
+    case IL_ldnull_ipp:
+        out << "{ NULL, NULL }";
+        break;
+
 
     case IL_ldstr:
     case IL_ldc_obj:

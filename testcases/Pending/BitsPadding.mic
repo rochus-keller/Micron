@@ -1,0 +1,10 @@
+module BitsPadding
+type
+    Status = record
+        ready: bool bits 1
+        ..     bits 3      // parse error
+        count: uint8 bits 4
+    end
+begin
+    println("ok")
+end BitsPadding

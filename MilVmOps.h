@@ -115,7 +115,7 @@ OPDEF(ldc_i4_2, NoOpArgs), OPDEF(ldc_i4_3, NoOpArgs),
 OPDEF(ldc_i4_4, NoOpArgs), OPDEF(ldc_i4_5, NoOpArgs),OPDEF(ldc_i4_6, NoOpArgs),
 OPDEF(ldc_i4_7, NoOpArgs), OPDEF(ldc_i4_8, NoOpArgs),
 
-OPDEF(ldnull, NoOpArgs), OPDEF(ldstr, StrArg),
+OPDEF(ldnull, NoOpArgs), OPDEF(ldnull_pp, NoOpArgs), OPDEF(ldstr, StrArg),
 OPDEF(ldobj, ByteArrayArg),
 
 OPDEF(br, JumpArg),

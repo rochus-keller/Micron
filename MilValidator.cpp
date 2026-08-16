@@ -203,7 +203,7 @@ void Validator::visitProcedure(Declaration* proc)
     }
 
     // If the procedure type is not null, it's expected to return a value.
-    if( proc->getType() != 0 && fallsThrough(proc->body) )
+    if( !proc->nobody && proc->getType() != 0 && fallsThrough(proc->body) )
         error(proc, "not all control paths return a value");
 
     curProc = 0;
@@ -625,6 +625,14 @@ static bool isPointer(Type* t)
         return t->isPointer();
 }
 
+static bool isInterface(Type* t)
+{
+    if( t == 0 )
+        return false;
+    else
+        return t->kind == Type::Interface || t->kind == Type::DBLINTPTR || t->kind == Type::DBLNIL;
+}
+
 static bool isFunc(Type* t)
 {
     if( t == 0 )
@@ -784,9 +792,12 @@ Expression* Validator::visitExpr(Expression* e)
             e->setType(mdl->getBasicType(Type::FLOAT64));
             stack.push_back(e);
             break;
-        // TODO: LDC_ip
         case IL_ldnull:
             e->setType(mdl->getBasicType(Type::NIL));
+            stack.push_back(e);
+            break;
+        case IL_ldnull_ipp:
+            e->setType(mdl->getBasicType(Type::DBLNIL));
             stack.push_back(e);
             break;
         case IL_ldstr:
@@ -985,6 +996,7 @@ Expression* Validator::visitExpr(Expression* e)
                         (isInt32(lhs) && isPointer(rhs)) ||
                         (isPointer(lhs) && isInt32(rhs)) ||
                         (isPointer(lhs) && isPointer(rhs)) ||
+                        (isInterface(lhs) && isInterface(rhs)) ||
                         (isFunc(lhs) && isFunc(rhs)) ||
                         (isMeth(lhs) && isMeth(rhs)))
                     t = mdl->getBasicType(Type::INT32);
@@ -1685,6 +1697,8 @@ Type*Validator::tokToBasicType(AstModel* mdl, int t)
         return mdl->getBasicType(Type::UINT64);
     case IL_ldnull:
         return mdl->getBasicType(Type::NIL);
+    case IL_ldnull_ipp:
+        return mdl->getBasicType(Type::DBLNIL);
     case IL_ldstr:
         return mdl->getBasicType(Type::StringLit);
     default:
@@ -1772,8 +1786,9 @@ bool Validator::assigCompat(Type* lhs, Type* rhs)
         return false;
     if( equal(lhs,rhs) )
         return true;
-    if( (lhs->kind == Type::Pointer || lhs->kind == Type::INTPTR || lhs->kind == Type::Proc) &&
-            rhs->kind == Type::NIL )
+    if( (lhs->kind == Type::Pointer || lhs->kind == Type::INTPTR || (lhs->kind == Type::Proc && !lhs->typebound)) && rhs->kind == Type::NIL )
+        return true;
+    if( (lhs->kind == Type::Interface || lhs->kind == Type::DBLINTPTR || (lhs->kind == Type::Proc && lhs->typebound)) && rhs->kind == Type::DBLNIL )
         return true;
 
     if( lhs->kind == Type::Pointer && deref(lhs->getType())->kind == Type::Struct &&

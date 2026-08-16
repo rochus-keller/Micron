@@ -1,4 +1,4 @@
-MODULE Hennessy;
+MODULE Hennessy [LEVEL=4];
 (*  This is a suite of benchmarks that are relatively short, both in program
     size and execution time.  It requires no input, and prints the execution
     time for each program, using the system- dependent routine Getclock,

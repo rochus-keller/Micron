@@ -133,7 +133,7 @@ bool Project::parse()
                 ok++;
         }
     }
-    qDebug() << "#### finished with" << ok << "files ok of total" << all << "files" << "in" <<
+    qDebug() << "micc: finished with" << ok << "files ok of total" << all << "files" << "in" <<
                 timer.elapsed() << " [ms]";
     return ok == all;
 }

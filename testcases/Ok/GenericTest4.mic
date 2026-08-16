@@ -1,4 +1,4 @@
-module GenericTest4
+module GenericTest4 [ level = 4 ]
 
 type
 	String = array 20 of char

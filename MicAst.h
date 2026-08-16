@@ -149,6 +149,7 @@ namespace Mic
         bool isByteArray() const { return kind == Array && getType() && getType()->kind == UINT8; }
         bool isObjectPointer() const;
         bool isPointerProcType() const { return kind == Pointer || (kind == Proc && !typebound); }
+        bool isCompoundPointer() const { return kind == Interface || (kind == Proc && typebound); }
 
         Declaration* findSub(const QByteArray& name) const;
         Declaration* findMember(const QByteArray& name, bool recurseSuper = false) const;
@@ -305,6 +306,8 @@ namespace Mic
         MetaActualList metaActuals;
         QByteArray suffix;
         QByteArray fullName; // path.join('/') + suffix as symbol
+        quint8 langLevel;
+        ModuleData():langLevel(0){}
     };
 
     class Symbol

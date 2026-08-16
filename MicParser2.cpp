@@ -661,6 +661,7 @@ void Parser2::RunParser(const Import &import) {
     deferred.push_back(DeferredLevel());
     forwards.clear();
     allTypes.clear();
+    ev->langLevel = 3;
 	next();
     module(import);
 #if 0
@@ -908,8 +909,8 @@ bool Parser2::assigCompat(Type* lhs, Type* rhs, const RowCol& pos)
             equalTypes(lhs->getType(), rhs->getType()) )
         return true;
 
-    // Tv is a pointer or a procedure type and e is NIL;
-    if( ( lhs->kind == Type::Pointer || lhs->kind == Type::Proc ) && rhs->kind == Type::Nil )
+    // T~v~ is a pointer, a procedure or interface type and `e` is NIL;
+    if( ( lhs->kind == Type::Pointer || lhs->kind == Type::Proc || lhs->kind == Type::Interface ) && rhs->kind == Type::Nil )
         return true;
 
     // Te and Tv are pointer types and Tv is a POINTER TO ANY;
@@ -2297,6 +2298,20 @@ bool Parser2::checkRelOp(Expression* e)
     {
         if( (e->lhs->getType()->typebound || e->rhs->getType()->typebound) && e->kind != Expression::Eq && e->kind != Expression::Neq )
             return error(e->pos.d_row, e->pos.d_col, "operation not supported for type-bound procedure types");
+        if( e->lhs->getType()->typebound && e->rhs->getType()->kind == Type::Nil)
+            e->rhs->val = 2; // double nil
+        if( e->rhs->getType()->typebound && e->lhs->getType()->kind == Type::Nil)
+            e->lhs->val = 2; // double nil
+    }else if((e->lhs->getType()->kind == Type::Interface && e->rhs->getType()->kind == Type::Interface) ||
+             (e->lhs->getType()->kind == Type::Interface && e->rhs->getType()->kind == Type::Nil) ||
+             (e->lhs->getType()->kind == Type::Nil && e->rhs->getType()->kind == Type::Interface) )
+    {
+        if( e->kind != Expression::Eq && e->kind != Expression::Neq )
+            return error(e->pos.d_row, e->pos.d_col, "operation not supported for interface types");
+        if( e->lhs->getType()->kind == Type::Nil )
+            e->lhs->val = 2; // double nil
+        if( e->rhs->getType()->kind == Type::Nil )
+            e->rhs->val = 2; // double nil
     }else if( ( e->lhs->getType()->isSet() && e->rhs->getType()->isSet() ) ||
               (e->lhs->getType()->isBoolean() && e->rhs->getType()->isBoolean()) )
     {
@@ -2546,9 +2561,7 @@ Expression* Parser2::designator(bool needsLvalue) {
             {
                 Builtins bi(ev);
                 const quint8 id = proc->val.toInt();
-                if( (ev->langLevel < 3 && (id == Builtin::NEW || id == Builtin::DISPOSE || id == Builtin::NEWGC || id == Builtin::NEWINIT)) ||
-                    ((ev->langLevel < 2 || !haveExceptions) && (id == Builtin::PCALL || id == Builtin::RAISE)) ||
-                    (ev->langLevel > 2 && (id == Builtin::CLI || id == Builtin::GETREG || id == Builtin::NOP || id == Builtin::PUTREG || id == Builtin::STI)) )
+                if( ((ev->langLevel < 3 || !haveExceptions) && (id == Builtin::PCALL || id == Builtin::RAISE)) )
                     error(lpar, QString("operation not supported on language level %1").arg(ev->langLevel));
 
                 const QString err = bi.checkArgs(id, args, &retType, mdl);
@@ -2629,7 +2642,7 @@ Expression* Parser2::designator(bool needsLvalue) {
         }
     }
 
-    if( !needsLvalue )
+    if( !needsLvalue && res )
     {
         Expression* candidate = res;
         if( res->kind == Expression::Cast && res->getType()->isObjectPointer() )
@@ -2951,7 +2964,7 @@ quint8 Parser2::MulOperator() {
     return cur.d_type;
 }
 
-Expression* Parser2::literal() {
+Expression* Parser2::literal(Type* hint) {
     Expression* res;
 	if( FIRST_number(la.d_type) ) {
         res = number();
@@ -2986,7 +2999,10 @@ Expression* Parser2::literal() {
 		expect(Tok_NIL, true, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
         res->setType(mdl->getType(Type::Nil));
-        res->val = QVariant();
+        if( hint && hint->isCompoundPointer() )
+            res->val = 2;
+        else
+            res->val = QVariant();
     } else if( la.d_type == Tok_TRUE ) {
 		expect(Tok_TRUE, true, "literal");
         res = Expression::create(Expression::Literal,cur.toRowCol());
@@ -3204,7 +3220,8 @@ Expression* Parser2::component(Type* constrType, int& index) {
                 return 0;
             }
             Expression* res2 = Expression::create(Expression::Value, res->pos);
-            res2->val = QVariant::fromValue(constrType->subs[index]);
+            res2->decl = constrType->subs[index];
+            res2->val = QVariant::fromValue(res2->decl);
             res2->rhs = res;
             if( !assigCompat(constrType->subs[index]->getType(), res, res->pos ) )
                 error(res->pos, "incompatible value");
@@ -3259,7 +3276,7 @@ Expression* Parser2::component(Type* constrType, int& index) {
 Expression* Parser2::factor(Type* hint, bool lvalue) {
     Expression* res = 0;
     if( FIRST_literal(la.d_type) ) {
-        res = literal();
+        res = literal(hint);
     } else if( FIRST_constructor(la.d_type) ) {
         res = constructor(hint);
 	} else if( FIRST_variableOrFunctionCall(la.d_type) ) {
@@ -3593,13 +3610,13 @@ void Parser2::CaseLabelList(Type* t, CaseLabels& l) {
 
 void Parser2::LabelRange(Type* t, CaseLabels& l) {
     Token tok = la;
-    qint64 lhs = label(t).val.toLongLong();
+    qint64 lhs = label(t);
     if( l.contains(lhs) )
         error(tok,"label not unique in list");
 	if( la.d_type == Tok_2Dot ) {
 		expect(Tok_2Dot, false, "LabelRange");
         Token tok = la;
-        const qint64 rhs = label(t).val.toLongLong();
+        const qint64 rhs = label(t);
         if( l.contains(rhs) )
             error(tok,"label not unique in list");
         else
@@ -3633,7 +3650,7 @@ void Parser2::TypeCase(Expression* e)
     if( !ev->evaluate(tyname) )
         errorEv();
     if( tyname->getType()->kind == Type::Nil )
-        line(e->pos).ldnull_();
+        line(e->pos).ldnull_(false);
 
     ev->pop(); // pop tyname
     ev->pop(); // pop e
@@ -3664,7 +3681,7 @@ void Parser2::TypeCase(Expression* e)
         typeOverrides.pop_back();
 }
 
-Value Parser2::label(Type* t) {
+qint64 Parser2::label(Type* t) {
     Token tok = la;
     Expression* e = ConstExpression(0);
     if( e && !ev->evaluate(e) )
@@ -3672,8 +3689,16 @@ Value Parser2::label(Type* t) {
     Value res = ev->pop();
     if( !assigCompat(t, e, e->pos) )
         error(tok,"label has incompatible type");
+    if( res.type->kind == Type::StrLit )
+    {
+        QByteArray str = res.val.toByteArray();
+        if( str.size() > 2 || str[1] != 0 )
+            error(tok,"invalid character literal");
+        else
+            res.val = quint8(str[0]);
+    }
     Expression::deleteAllExpressions();
-    return res;
+    return res.val.toLongLong();
 }
 
 void Parser2::WhileStatement() {
@@ -4012,7 +4037,7 @@ void Parser2::ProcedureDeclaration() {
                 expect(Tok_Semi, false, "ProcedureDeclaration");
             }
             expect(Tok_EXTERN, true, "ProcedureDeclaration");
-            if( ev->langLevel == 0 )
+            if( ev->langLevel < 1 )
                 error(cur, "EXTERN not allowed in language level 0");
             procDecl->extern_ = true;
             if( la.d_type == Tok_ident ) {
@@ -4470,11 +4495,12 @@ void Parser2::module(const Import & import) {
     }else if( !import.metaActuals.isEmpty() )
         errors << Error("cannot instantiate a non generic module",importer);
 
-    modecl->data = QVariant::fromValue(modata);
-
     if( la.d_type == Tok_Lbrack ) {
         ModuleAttributes();
     }
+
+    modata.langLevel = ev->langLevel;
+    modecl->data = QVariant::fromValue(modata);
 
     if( la.d_type == Tok_Semi ) {
 		expect(Tok_Semi, false, "module");
@@ -4648,6 +4674,11 @@ void Parser2::import() {
             import.resolved = mod;
             ModuleData md = mod->data.value<ModuleData>();
             out->addImport(md.fullName, localName.toRowCol());
+
+            if( md.langLevel > ev->langLevel )
+                error(localName, QString("cannot import a module with a higher language level (this: %1, imported: %2)").
+                      arg(ev->langLevel).arg(md.langLevel));
+
 #if 0
             if(hasAlias)
                 markRef(mod, path.last().toRowCol());
@@ -4932,9 +4963,9 @@ QByteArray Parser2::Attribute()
     }
     if( name == "standard" || name == "level" )
     {
-        if( v.type == 0 || !v.type->isInteger() || v.val.toInt() < 0 || v.val.toInt() > 4 )
+        if( v.type == 0 || !v.type->isInteger() || v.val.toInt() < 0 || v.val.toInt() > 5 )
         {
-            error(t, "expecting a level number 0..4");
+            error(t, "expecting a level number 0..5");
             return name;
         }else
             ev->langLevel = v.val.toInt();

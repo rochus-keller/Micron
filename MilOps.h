@@ -47,7 +47,7 @@ enum IL_op
     IL_ldind_i1, IL_ldind_i2, IL_ldind_i4, IL_ldind_i8, IL_ldind_u1, IL_ldind_u2,
     IL_ldind_u4, IL_ldind_r4, IL_ldind_u8, IL_ldind_r8, IL_ldind_ip, IL_ldind_ipp,
     IL_ldloc, IL_ldloc_s, IL_ldloca, IL_ldloca_s,
-    IL_ldloc_0, IL_ldloc_1, IL_ldloc_2, IL_ldloc_3, IL_ldnull,
+    IL_ldloc_0, IL_ldloc_1, IL_ldloc_2, IL_ldloc_3, IL_ldnull, IL_ldnull_ipp,
     IL_ldind, IL_ldproc, IL_ldmeth, IL_ldstr,
     IL_ldvar, IL_ldvara, IL_mul, IL_neg,
     IL_newarr, IL_newvla, IL_newobj,

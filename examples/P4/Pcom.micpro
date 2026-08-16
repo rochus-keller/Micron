@@ -1,20 +1,21 @@
 [General]
-Arguments=@ByteArray(/home/me/Entwicklung/Modules/Micron/testcases/P4/test1.pas)
+Arguments=@ByteArray(test1.pas)
 BuildDir=
 BuiltInOakwood=true
 MainModule=@ByteArray()
 MainProc=@ByteArray()
+OakwoodScreen=false
 Options=@ByteArray()
-Suffixes=@Invalid()
+Suffixes=.mic, .mil, .mob
 WorkingDir=
 
 [.]
 size=0
 
 [Modules]
-1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/P4/PcomTypes.mic
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/examples/P4/PcomTypes.mic
 1\RelPath=PcomTypes.mic
-2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/P4/Pcom.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/examples/P4/Pcom.mic
 2\RelPath=Pcom.mic
 3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/P4/Pint.mic
 3\RelPath=Pint.mic

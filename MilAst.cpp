@@ -857,7 +857,7 @@ bool Type::isFuncOnStack() const
 
 bool Type::isMethOnStack() const
 {
-    return (kind == Proc && typebound) || kind == NIL || kind == INTPTR;
+    return (kind == Proc && typebound) || kind == DBLNIL || kind == DBLINTPTR;
 }
 
 Declaration*Type::findSubByName(const QByteArray& name, bool recursive) const
@@ -1032,6 +1032,8 @@ quint32 Type::getByteSize(quint8 pointerWidth) const
     {
     case NIL:
         return pointerWidth;
+    case DBLNIL:
+        return 2 * pointerWidth;
     case BOOL:
     case CHAR:
     case INT8:

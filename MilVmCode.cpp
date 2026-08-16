@@ -917,6 +917,9 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
     case IL_ldnull:
         emitOp(proc, LL_ldnull);
         break;
+    case IL_ldnull_ipp:
+        emitOp(proc, LL_ldnull_pp);
+        break;
     case IL_ldstr:
         emitOp(proc, LL_ldstr, addString(e->c->s) );
         break;
@@ -1085,11 +1088,12 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         else if(t->kind == Type::FLOAT64)
             emitOp(proc, LL_ceq_r8);
         else if(lhsT->kind == Type::Pointer || (lhsT->kind == Type::Proc && !lhsT->typebound) ||
-                rhsT->kind == Type::Pointer || (rhsT->kind == Type::Proc && !rhsT->typebound) )
+                rhsT->kind == Type::Pointer || (rhsT->kind == Type::Proc && !rhsT->typebound) ||
+                lhsT->kind == Type::NIL || rhsT->kind == Type::NIL)
             emitOp(proc, LL_ceq_p);
-        else if( (lhsT->kind == Type::Proc && lhsT->typebound) || (rhsT->kind == Type::Proc && rhsT->typebound) )
-            emitOp(proc, LL_ceq_pp);
-        else if( (lhsT->kind == Type::Interface) || (rhsT->kind == Type::Interface) )
+        else if( (lhsT->kind == Type::Proc && lhsT->typebound) || (rhsT->kind == Type::Proc && rhsT->typebound) ||
+                 (lhsT->kind == Type::Interface) || (rhsT->kind == Type::Interface) ||
+                 lhsT->kind == Type::DBLNIL || rhsT->kind == Type::DBLNIL )
             emitOp(proc, LL_ceq_pp);
         else
             Q_ASSERT(false);

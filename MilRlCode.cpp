@@ -668,6 +668,15 @@ bool Rl::Code::compileProc(int procIdx)
             break;
         }
 
+        case LL_ldnull_pp:
+        {
+            quint16 d = L.allocR(L.SA2);
+            L.emitOp(op.op, d);
+            L.pushR(d, L.SA2);
+            pc++;
+            break;
+        }
+
         case LL_ldstr:
         {
             quint16 d = L.allocR(L.SA);
@@ -1403,6 +1412,10 @@ bool Rl::Code::dumpProc(QTextStream& out, int procIdx)
         case LL_ldnull:
             printReg(out, o.r1);
             out << " = ldnull";
+            break;
+        case LL_ldnull_pp:
+            printReg(out, o.r1);
+            out << " = ldnull_pp";
             break;
         case LL_ldstr:
             printReg(out, o.r1);

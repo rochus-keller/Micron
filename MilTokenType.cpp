@@ -151,6 +151,7 @@ namespace Mil {
 			case Tok_LDLOC_S: return "LDLOC_S";
 			case Tok_LDMETH: return "LDMETH";
 			case Tok_LDNULL: return "LDNULL";
+			case Tok_LDNULL_IPP: return "LDNULL_IPP";
 			case Tok_LDPROC: return "LDPROC";
 			case Tok_LDSTR: return "LDSTR";
 			case Tok_LDVAR: return "LDVAR";
@@ -387,6 +388,7 @@ namespace Mil {
 			case Tok_LDLOC_S: return "Tok_LDLOC_S";
 			case Tok_LDMETH: return "Tok_LDMETH";
 			case Tok_LDNULL: return "Tok_LDNULL";
+			case Tok_LDNULL_IPP: return "Tok_LDNULL_IPP";
 			case Tok_LDPROC: return "Tok_LDPROC";
 			case Tok_LDSTR: return "Tok_LDSTR";
 			case Tok_LDVAR: return "Tok_LDVAR";
@@ -1325,7 +1327,17 @@ namespace Mil {
 					if( at(str,len,i+3) == 'U' ){
 						if( at(str,len,i+4) == 'L' ){
 							if( at(str,len,i+5) == 'L' ){
-								res = Tok_LDNULL; i += 6;
+								if( at(str,len,i+6) == '_' ){
+									if( at(str,len,i+7) == 'I' ){
+										if( at(str,len,i+8) == 'P' ){
+											if( at(str,len,i+9) == 'P' ){
+												res = Tok_LDNULL_IPP; i += 10;
+											}
+										}
+									}
+								} else {
+									res = Tok_LDNULL; i += 6;
+								}
 							}
 						}
 					}

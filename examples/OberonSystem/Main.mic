@@ -1,4 +1,4 @@
-MODULE Main;
+MODULE Main [LEVEL=4];
 
 IMPORT Modules, Oberon, System, Edit, Hilbert, Sierpinski, Stars, Hennessy;
 

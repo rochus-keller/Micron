@@ -116,6 +116,7 @@ namespace Mic
         QByteArray getArgs() const { return d_args; }
         void setArgs( const QByteArray&);
         void setDbg(bool on) { d_dbg = on; }
+        void setSearchPaths( const QStringList& );
 
         bool addFile(const QString& filePath, const VirtualPath& package = QByteArrayList() );
         bool removeFile( const QString& filePath );
@@ -198,6 +199,7 @@ namespace Mic
         const ModuleSlot* find(const QByteArray& ) const;
         const ModuleSlot* find(Declaration*) const;
         File* toFile(const Mic::Import& imp);
+        File* findInSearchPaths(const Mic::Import& imp);
         void parseLib(const QString&);
         QString writeC(const QString &in, const QString& what, const QString& out);
 
@@ -207,6 +209,7 @@ namespace Mic
         ModuleManager d_modMan;
         FileHash d_files;
         QList<File*> d_libs; // temporary solution
+        QStringList d_searchPaths;
         typedef QList<ModuleSlot> Modules;
         Modules d_modules;
         DeclList d_dependencyOrder;

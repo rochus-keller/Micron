@@ -48,7 +48,7 @@ namespace Mic
         {
         public:
             virtual ~ModuleLocator();
-            virtual Location locate( const QByteArrayList& path ) = 0;
+            virtual Location locate( const Import& imp ) = 0;
         };
 
         ModuleManager( ModuleLocator* locator, bool dbg = false );
@@ -96,13 +96,14 @@ namespace Mic
 
     private:
         struct Entry {
+            Import imp; // full import spec including meta actuals
             Declaration* mic; // reconstructed or parsed Mic module
             Mil::Declaration* mil; // the module as present in the Mil::AstModel
             bool loading; // in-progress marker for cycle detection
             Entry():mic(0),mil(0),loading(false){}
         };
 
-        Entry* entryFor( const QByteArrayList& path );
+        Entry* entryFor( const Import& imp );
         Declaration* loadMicSource( const Import& imp, const QString& file, Entry* e );
         Declaration* loadMilProvider( const Import& imp, const Location& loc, Entry* e );
         Mil::Declaration* findMil( const QByteArray& milName );
@@ -113,7 +114,7 @@ namespace Mic
         Mil::Importer* d_milImporter;
         Mic::AstModel mics;
         Mil::AstModel mdl;
-        QHash<QByteArray, Entry*> cache;   // key: import path joined by '/'
+        QList<Entry*> cache; // one entry per import incl. meta actuals, i.e. per generic instantiation
         QHash<Declaration*, Mil::Declaration*> invarProcs;
         QStringList linkObjects;     // .mob paths to add to the linker input
         QString d_error;

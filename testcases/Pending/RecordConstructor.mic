@@ -1,0 +1,7 @@
+module RecordConstructor
+type Point = record x, y: integer end
+var p: Point
+begin
+    p := Point{1,2}     // not implemented
+    println(p.y)
+end RecordConstructor

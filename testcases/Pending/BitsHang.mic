@@ -1,0 +1,9 @@
+module BitsHang
+type
+    Status = record
+        ready: bool bits 1
+        count: uint8 bits 4
+    end
+begin
+    println("ok")   // never reached
+end BitsHang

@@ -857,9 +857,12 @@ bool Interpreter::Imp::execute(Frame* frame)
         vmcase(ceq_p)
                 VM_COMPARE_OP(void*,==)
             vmbreak;
-        vmcase(ceq_pp)
-                qWarning() << "TODO: interpreter ceq_pp not yet implemented";
-            vmbreak;
+        vmcase(ceq_pp) {
+                IfaceRef a = frame->popIfaceRef();
+                IfaceRef b = frame->popIfaceRef();
+                frame->pushI4( a.iface == b.iface && a.obj == b.obj );
+                pc++;
+            } vmbreak;
         vmcase(cgt_i4)
                 VM_COMPARE_OP(qint32,>)
             vmbreak;
@@ -1608,6 +1611,13 @@ bool Interpreter::Imp::execute(Frame* frame)
                 frame->pushP(0);
                 pc++;
             vmbreak;
+        vmcase(ldnull_pp) {
+                IfaceRef r; // or MethRef, don't care
+                r.obj = 0;
+                r.iface = 0;
+                frame->push(&r, StackAlignedDblPtrSize);
+                pc++;
+            } vmbreak;
         vmcase(ldstr)
                 frame->pushP((void*)code.getString(frame->proc->ops[pc].val));
                 pc++;

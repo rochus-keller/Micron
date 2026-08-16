@@ -248,6 +248,7 @@ bool Code2::expression(Procedure &proc, Expression* e)
     case IL_ldc_r4:
     case IL_ldc_r8:
     case IL_ldnull:
+    case IL_ldnull_ipp:
     case IL_ldstr:
     case IL_ldc_obj:
         translateExpr(proc, e);

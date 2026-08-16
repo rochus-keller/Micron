@@ -122,7 +122,7 @@ namespace Mil
         void ldind_(EmiTypes::Basic);
         void ldloc_(quint16);
         void ldloca_(quint16);
-        void ldnull_();
+        void ldnull_(bool ipp);
         void ldvar_(const Quali& memberRef); // CIL ldsfld
         void ldvara_(const Quali& memberRef); // CIL ldsflda
         void ldstr_(const QByteArray& str);

@@ -1,4 +1,4 @@
-module GenericTest5
+module GenericTest5 [ level = 4 ]
 
 const 
 	StrLen = 20

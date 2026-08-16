@@ -1,5 +1,5 @@
 [General]
-Arguments=@ByteArray(/home/me/Entwicklung/Modules/Luon/testcases/Smalltalk80/Image/VirtualImage)
+Arguments=@ByteArray(Image/VirtualImage)
 BuildDir=
 BuiltInOakwood=true
 MainModule=@ByteArray()

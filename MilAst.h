@@ -101,7 +101,7 @@ namespace Mil
             Any,
             StringLit,
             ByteArrayLit,
-            NIL,
+            NIL, DBLNIL,
             BOOL,
             CHAR,
             INT8, INT16, INT32, INT64,

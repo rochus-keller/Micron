@@ -86,7 +86,7 @@ QStringList Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, bool
             break;
         }
 
-        const QString objFile = QDir(outPath).absoluteFilePath(Mil::CeeGen::escapeFilename(module->name) + ".o");
+        const QString objFile = QDir(outPath).absoluteFilePath(Mil::CeeGen::escapeFilename(module->name) + ".mob");
 
         if( !renderer.writeToFile(objFile) )
         {
@@ -100,7 +100,7 @@ QStringList Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, bool
 
     if( !hasErrors )
     {
-        qDebug() << "#### generated" << objFiles.size() << "x86 object files";
+        qDebug() << "micc: generated" << objFiles.size() << "x86 object files";
 
         // Generate main.o that calls all module inits in dependency order
         QByteArrayList moduleNames;
@@ -115,9 +115,11 @@ QStringList Backend::compileX86(Mil::AstModel& mdl, const QString& outPath, bool
         {
             qDebug() << "  generated" << mainObj;
             objFiles << mainObj;
-        }
-        else
+        }else
+        {
             qCritical() << "cannot generate main+.o";
+            objFiles.clear();
+        }
     }else
         objFiles.clear();
     return objFiles;
@@ -167,7 +169,9 @@ QStringList Backend::compileRv32(Mil::AstModel& mdl, const QString& outPath, boo
             break;
         }
 
-        const QString objFile = QDir(outPath).absoluteFilePath(module->name + ".o");
+        // a generated object carries the module interface, hence .mob
+        const QString objFile = QDir(outPath).absoluteFilePath(
+                    Mil::CeeGen::escapeFilename(module->name) + ".mob");
 
         if( !renderer.writeToFile(objFile) )
         {
@@ -181,7 +185,7 @@ QStringList Backend::compileRv32(Mil::AstModel& mdl, const QString& outPath, boo
 
     if( !hasErrors )
     {
-        qDebug() << "#### generated" << objFiles.size() << "RV32 ELF relocatable object files";
+        qDebug() << "micc: generated" << objFiles.size() << "RV32 ELF relocatable object files";
 
         // Generate main.o that calls all module inits in dependency order
         QByteArrayList moduleNames;
@@ -196,9 +200,11 @@ QStringList Backend::compileRv32(Mil::AstModel& mdl, const QString& outPath, boo
         {
             qDebug() << "  generated" << mainObj;
             objFiles << mainObj;
-        }
-        else
+        }else
+        {
             qCritical() << "cannot generate main+.o";
+            objFiles.clear();
+        }
     }else
         objFiles.clear();
     return objFiles;
@@ -246,7 +252,8 @@ QStringList Backend::compileArm(Mil::AstModel& mdl, const QString& outPath, bool
             break;
         }
 
-        const QString objFile = QDir(outPath).absoluteFilePath(module->name + ".o");
+        const QString objFile = QDir(outPath).absoluteFilePath(
+                    Mil::CeeGen::escapeFilename(module->name) + ".mob");
 
         if( !renderer.writeToFile(objFile) )
         {
@@ -260,7 +267,7 @@ QStringList Backend::compileArm(Mil::AstModel& mdl, const QString& outPath, bool
 
     if( !hasErrors )
     {
-        qDebug() << "#### generated" << objFiles.size() << "ELF relocatable object files";
+        qDebug() << "micc: generated" << objFiles.size() << "ELF relocatable object files";
 
         // Generate main.o that calls all module inits in dependency order
         QByteArrayList moduleNames;
@@ -275,9 +282,11 @@ QStringList Backend::compileArm(Mil::AstModel& mdl, const QString& outPath, bool
         {
             qDebug() << "  generated" << mainObj;
             objFiles << mainObj;
-        }
-        else
+        }else
+        {
             qCritical() << "cannot generate main+.o";
+            objFiles.clear();
+        }
     }else
         objFiles.clear();
     return objFiles;
@@ -285,13 +294,13 @@ QStringList Backend::compileArm(Mil::AstModel& mdl, const QString& outPath, bool
 
 bool Backend::linkExecutable(const QStringList& objFiles, const QStringList& libDirs,
                            const QStringList& linkLibs, const QStringList& linkObjs,
-                           const QString& outPath, const QString& exeName,
+                           const QString& exePath,
                            bool esp32, qint64 baseAddress)
 {
-    if( libDirs.isEmpty() && linkLibs.isEmpty() && linkObjs.isEmpty() )
+    if( objFiles.isEmpty() )
     {
-        qDebug() << "#### no link options given, skipping link step";
-        return true;
+        qCritical() << "link error: no object files to link";
+        return false;
     }
 
     Mil::ElfLinker linker;
@@ -308,18 +317,18 @@ bool Backend::linkExecutable(const QStringList& objFiles, const QStringList& lib
     {
         if( !linker.addFile(objFiles[i]) )
         {
-            qCritical() << "link error:" << linker.errorMessage();
+            qCritical().noquote() << "link error:" << linker.errorMessage();
             return false;
         }
     }
 
-    // Add explicitly specified additional object files (-f)
+    // Add the foreign object files given as positional arguments
     for( int i = 0; i < linkObjs.size(); i++ )
     {
         qDebug() << "  linking" << linkObjs[i];
         if( !linker.addFile(linkObjs[i]) )
         {
-            qCritical() << "link error:" << linker.errorMessage();
+            qCritical().noquote() << "link error:" << linker.errorMessage();
             return false;
         }
     }
@@ -337,7 +346,7 @@ bool Backend::linkExecutable(const QStringList& objFiles, const QStringList& lib
                 qDebug() << "  linking archive" << path;
                 if( !linker.addArchive(path) )
                 {
-                    qCritical() << "link error:" << linker.errorMessage();
+                    qCritical().noquote() << "link error:" << linker.errorMessage();
                     return false;
                 }
                 found = true;
@@ -352,13 +361,14 @@ bool Backend::linkExecutable(const QStringList& objFiles, const QStringList& lib
         }
     }
 
-    const QString exePath = QDir(outPath).absoluteFilePath(exeName);
-    qDebug() << "#### linking" << exePath;
+    qDebug() << "micc: linking" << exePath;
+    QFile::remove(exePath); // no stale executable on error
     if( !linker.link(exePath) )
     {
-        qCritical() << "link error:" << linker.errorMessage();
+        qCritical().noquote() << "link error:" << linker.errorMessage();
+        QFile::remove(exePath);
         return false;
     }
-    qDebug() << "#### successfully linked" << exePath;
+    qDebug() << "micc: successfully linked" << exePath;
     return true;
 }

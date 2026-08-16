@@ -125,7 +125,7 @@ public:
     {
         // MIL resolves imports by name in the already populated model first
         foreach( Mil::Declaration* m, prj->d_modMan.getModel().getModules() )
-            if( m->name.constData() == imp.moduleName.constData() ) // || m->name == imp.moduleName )
+            if( m->name == imp.moduleName ) // by value; the name may originate from a split/parse
                 return m;
 
         // otherwise locate and load the module into Mil::AstModel and lookup the module again afterwards
@@ -134,7 +134,7 @@ public:
         prj->loadModule(micImp);
 
         foreach( Mil::Declaration* m, prj->d_modMan.getModel().getModules() )
-            if( m->name.constData() == imp.moduleName.constData() ) // || m->name == imp.moduleName )
+            if( m->name == imp.moduleName ) // by value; the name may originate from a split/parse
                 return m;
         return 0;
     }
@@ -160,14 +160,14 @@ void Project2::clear(bool all, bool reloadMic)
     errors.clear();
     d_subs.clear();
     d_modMan.clearModel(reloadMic); // clears the shared Mil model + link objects, reloads MIC+.mil
+    foreach(File* f, d_libs)
+        delete f;
+    d_libs.clear();
     if( all )
     {
         d_groups.clear();
         d_filePath.clear();
         d_files.clear();
-        foreach(File* f, d_libs)
-            delete f;
-        d_libs.clear();
         d_groups.append( FileGroup() ); // root file group
     }
 }
@@ -753,6 +753,8 @@ Declaration *Project2::loadModule(const Import &imp)
     // we must thus look for the file first, so that we can complete the Import spec if necessary
     File* file = toFile(imp);
     if( file == 0 )
+        file = findInSearchPaths(imp);
+    if( file == 0 )
     {
         QString importer;
         if( imp.importer )
@@ -998,6 +1000,35 @@ Project2::File *Project2::toFile(const Import &imp)
     return 0;
 }
 
+void Project2::setSearchPaths(const QStringList& paths)
+{
+    d_searchPaths = paths;
+}
+
+Project2::File* Project2::findInSearchPaths(const Import& imp)
+{
+    // an import which is not part of the project is looked up in the -I directories
+    if( d_searchPaths.isEmpty() )
+        return 0;
+    static const char* const exts[] = { ".mic", ".mil", ".mob" };
+    const QString rel = QString::fromUtf8(imp.path.join('/'));
+    for( int k = 0; k < 3; k++ )
+    {
+        foreach( const QString& dir, d_searchPaths )
+        {
+            const QString path = QDir(dir).absoluteFilePath(rel + exts[k]);
+            if( !QFile::exists(path) )
+                continue;
+            File* f = new File();
+            f->d_filePath = path;
+            f->d_name = imp.path.back();
+            d_libs.append(f);
+            return f;
+        }
+    }
+    return 0;
+}
+
 void Project2::parseLib(const QString & name)
 {
     Mil::RenderSplitter imr; // dummy target
@@ -1095,7 +1126,7 @@ bool Project2::save()
 
 bool Project2::loadFrom(const QString& filePath)
 {
-    clear();
+    clear(true, false); // the runtime is loaded by parse, when the module files are known
 
     d_filePath = filePath;
 

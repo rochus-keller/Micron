@@ -44,7 +44,7 @@ const char* s_opName[] =
     "ldind_i1", "ldind_i2", "ldind_i4", "ldind_i8", "ldind_u1", "ldind_u2",
     "ldind_u4", "ldind_r4", "ldind_u8", "ldind_r8", "ldind_ip", "ldind_ipp",
     "ldloc", "ldloc_s", "ldloca", "ldloca_s",
-    "ldloc_0", "ldloc_1", "ldloc_2", "ldloc_3", "ldnull",
+    "ldloc_0", "ldloc_1", "ldloc_2", "ldloc_3", "ldnull", "ldnull_ipp",
     "ldind", "ldproc", "ldmeth", "ldstr",
     "ldvar", "ldvara", "mul", "neg",
     "newarr", "newvla", "newobj",

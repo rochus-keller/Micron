@@ -267,6 +267,7 @@ static inline bool FIRST_Expression(int tt) {
     case Tok_LDLOC_S:
     case Tok_LDMETH:
     case Tok_LDNULL:
+    case Tok_LDNULL_IPP:
     case Tok_LDPROC:
     case Tok_LDSTR:
     case Tok_LDVAR:
@@ -400,6 +401,7 @@ static inline bool FIRST_ExpInstr(int tt) {
     case Tok_LDLOC_S:
     case Tok_LDMETH:
     case Tok_LDNULL:
+    case Tok_LDNULL_IPP:
     case Tok_LDPROC:
     case Tok_LDSTR:
     case Tok_LDVAR:
@@ -542,6 +544,7 @@ static inline bool FIRST_StatementSequence(int tt) {
     case Tok_LDLOC_S:
     case Tok_LDMETH:
     case Tok_LDNULL:
+    case Tok_LDNULL_IPP:
     case Tok_LDPROC:
     case Tok_LDSTR:
     case Tok_LDVAR:
@@ -1462,6 +1465,7 @@ void Parser2::ProcedureDeclaration() {
             expect(Tok_ABSTRACT, true, "ProcedureDeclaration");
             if( object == 0 || object->getType() == 0 || object->getType()->kind != Type::Interface )
                 error(cur, "ABSTRACT only supported for procedures bound to interface types");
+            proc->nobody = true;
         }else if( la.d_code == Tok_FORWARD ) {
             if( la.d_type == Tok_Semi ) {
                 expect(Tok_Semi, false, "ProcedureDeclaration");
@@ -1469,7 +1473,11 @@ void Parser2::ProcedureDeclaration() {
             expect(Tok_FORWARD, true, "ProcedureDeclaration");
             proc->forward = true;
         }else
+        {
+            if( object && object->kind == Type::Interface )
+                error(cur, "Only ABSTRACT procedures can be bound to interfaces");
             ProcedureBody(proc);
+        }
         scopeStack.pop_back();
 	} else if( FIRST_identdef(la.d_type) ) {
         Declaration* p = identdef(Declaration::Procedure);
@@ -2258,6 +2266,9 @@ Expression* Parser2::ExpInstr() {
     } else if( la.d_code == Tok_LDNULL ) {
         expect(Tok_LDNULL, true, "ExpInstr");
         res->kind = IL_ldnull;
+    } else if( la.d_code == Tok_LDNULL_IPP ) {
+        expect(Tok_LDNULL_IPP, true, "ExpInstr");
+        res->kind = IL_ldnull_ipp;
     } else if( la.d_code == Tok_LDIND ) {
         expect(Tok_LDIND, true, "ExpInstr");
         res->kind = IL_ldind;

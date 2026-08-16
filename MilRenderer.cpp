@@ -928,7 +928,8 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
             {
                 resolveAll(); // because of binding pointer which can point to a named ref
                 Type* rt = receiver->getType();
-                if( rt ) rt = rt->deref();
+                if( rt )
+                    rt = rt->deref();
                 Declaration* forward = rt->findSubByName(decl->name, false);
                 if( forward && forward->forward && forward->kind == Declaration::Procedure )
                 {

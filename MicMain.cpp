@@ -22,12 +22,14 @@
 #include "MicAst.h"
 #include "MilInterpreter.h"
 #include "MilVmCode.h"
+#include "MilRlCode.h"
 #include "MilVmOakwood.h"
 #include "MicPpLexer.h"
 #include "MicParser2.h"
 #include "MilEmitter.h"
 #include "MilAstSerializer.h"
 #include "MilBackend.h"
+#include "MilCeeGen.h"
 #include "Version.h"
 #ifdef _MIC_HAVE_SCREEN_QT_
 #include <QApplication>
@@ -48,15 +50,31 @@ extern "C" {
 void Args_setArgcArgv(unsigned int c, char** v);
 }
 
+// exit codes, see the user guide
+enum ExitCode { Ok = 0, CompileError = 1, LinkError = 2, UsageError = 3 };
+
+static bool s_verbose = false;
+static bool s_quiet = false;
+
+static void messageHandler(QtMsgType type, const QMessageLogContext& ctx, const QString& msg)
+{
+    // -q suppresses the progress notes, but never errors and warnings
+    if( s_quiet && type == QtDebugMsg )
+        return;
+    QByteArray text = msg.toUtf8();
+    text += '\n';
+    fputs(text.constData(), type == QtDebugMsg || type == QtInfoMsg ? stdout : stderr);
+    Q_UNUSED(ctx)
+}
+
 class ModuleLocator : public Mic::ModuleManager::ModuleLocator
 {
 public:
     QList<QDir> searchPath;
 
-    Mic::ModuleManager::Location locate( const QByteArrayList& path )
+    Mic::ModuleManager::Location find( const QByteArrayList& path )
     {
-        // auto-discovery: a module import path is resolved against the current and include directories,
-        // preferring source over prebuilt artifacts
+        // source is preferred over a prebuilt artifact
         const QString rel = QString::fromUtf8(path.join('/'));
         static const char* const exts[] = { ".mic", ".mil", ".mob" };
         static const Mic::ModuleManager::ProviderKind kinds[] = {
@@ -70,110 +88,223 @@ public:
             {
                 const QString tmp = dir.absoluteFilePath(rel + exts[k]);
                 if( QFile::exists(tmp) )
+                {
+                    if( s_verbose )
+                        qDebug() << "  provider for" << rel << "is" << tmp;
                     return Mic::ModuleManager::Location(kinds[k], tmp);
+                }
             }
         }
         return Mic::ModuleManager::Location();
+    }
+    Mic::ModuleManager::Location locate( const Mic::Import& imp )
+    {
+        Mic::ModuleManager::Location res = find(imp.path);
+        if( res.kind == Mic::ModuleManager::NotFound && imp.importer )
+        {
+            QByteArrayList path = imp.importer->data.value<Mic::ModuleData>().path;
+            path.pop_back();
+            path += imp.path;
+            res = find(path);
+        }
+        return res;
     }
 };
 
 struct BuildOpts
 {
+    // exactly one mode per invocation
+    enum Mode { Link, Compile, Check, Run };
+    Mode mode;
     bool dbg;
-    bool doDump;
-    bool dump2;
-    bool doRun;
-    bool cdeclRet;
-    bool aapcs;
-    bool esp32;
+    bool dumpMil, dumpMll, dumpMrl;
+    bool cAbi; // --abi c instead of the stack-only default convention
+    bool esp32; // --target rv32-esp32
+    bool hasFloat, hasHwDiv;
     qint64 base;
-    QString arch;
-    QString outPath;
-    QString exeName;
+    QString target; // empty, rv32, armv7 or x86
+    QString outDir;
+    QString exeFile;
     QStringList libDirs;
     QStringList linkLibs;
     QStringList linkObjs;
-    BuildOpts():dbg(false),doDump(false),dump2(false),doRun(false),
-        cdeclRet(false),aapcs(false),esp32(false),base(-1){}
+    BuildOpts():mode(Link),dbg(false),dumpMil(false),dumpMll(false),dumpMrl(false),
+        cAbi(false),esp32(false),hasFloat(true),hasHwDiv(true),base(-1){}
 };
+
+static bool writeDump(const QString& path, Mil::Declaration* module, bool dbg)
+{
+    QFile out(path);
+    if( !out.open(QIODevice::WriteOnly) )
+    {
+        qCritical() << "cannot write" << path;
+        return false;
+    }
+    Mil::IlAsmRenderer r(&out, dbg);
+    Mil::AstSerializer::render(&r, module,
+                               dbg ? Mil::AstSerializer::RowsOnly : Mil::AstSerializer::None);
+    if( s_verbose )
+        qDebug() << "  generated" << path;
+    return true;
+}
+
+static bool dumpMil(Mil::AstModel& model, const BuildOpts& opts)
+{
+    // --dump=mil
+    foreach( Mil::Declaration* m, model.getModulesInDependencyOrder() )
+    {
+        if( m->name == "MIC$" || m->extern_ || m->generic )
+            continue;
+        if( !writeDump(QDir(opts.outDir).absoluteFilePath(
+                           QString::fromUtf8(Mil::CeeGen::escapeFilename(m->name)) + ".mil"),
+                       m, opts.dbg) )
+            return false;
+    }
+    return true;
+}
+
+static bool dumpVmCode(Mil::AstModel& model, Mil::Interpreter& r, const BuildOpts& opts)
+{
+    // --dump=mll and --dump=mrl
+    Mil::Rl::Code mrl(*r.getCode(), sizeof(void*));
+    if( opts.dumpMrl && ( !mrl.compile() || !mrl.compactAll() ) )
+    {
+        qCritical() << "cannot generate register-level code";
+        return false;
+    }
+
+    foreach( Mil::Declaration* m, model.getModules() )
+    {
+        if( m->extern_ || m->generic )
+            continue;
+        const QString base = QDir(opts.outDir).absoluteFilePath(
+                    QString::fromUtf8(Mil::CeeGen::escapeFilename(m->name)));
+        if( opts.dumpMll )
+        {
+            QFile f(base + ".mll");
+            if( !f.open(QIODevice::WriteOnly) )
+            {
+                qCritical() << "cannot write" << f.fileName();
+                return false;
+            }
+            QTextStream out(&f);
+            r.dumpModule(out, m);
+            if( s_verbose )
+                qDebug() << "  generated" << f.fileName();
+        }
+        if( opts.dumpMrl )
+        {
+            QFile f(base + ".mrl");
+            if( !f.open(QIODevice::WriteOnly) )
+            {
+                qCritical() << "cannot write" << f.fileName();
+                return false;
+            }
+            QTextStream out(&f);
+            mrl.dumpModule(out, m);
+            if( s_verbose )
+                qDebug() << "  generated" << f.fileName();
+        }
+    }
+    return true;
+}
 
 static int emitAndRun(Mil::AstModel& model, const BuildOpts& opts, int all, int ok, Mic::Project2* pro = 0)
 {
-    if( opts.doDump )
+    if( all != ok )
     {
-        QFile out;
-        out.open(stdout, QIODevice::WriteOnly);
-        out.write("\n");
-        foreach( Mil::Declaration* m, model.getModulesInDependencyOrder() )
-        {
-            if( m->name == "MIC$" )
-                continue;
-            Mil::IlAsmRenderer r(&out, opts.dbg);
-            Mil::AstSerializer::render(&r,m, Mil::AstSerializer::RowsOnly);
-            out.putChar('\n');
-        }
+        // a module with errors is never handed to a back end or to the linker
+        qCritical() << "errors in" << (all-ok) << "of" << all << "modules; no code generated";
+        return CompileError;
     }
 
-    QStringList objFiles;
-    if( all == ok && (opts.arch == "arm7" || opts.arch == "armv7") )
-        objFiles = Mil::Backend::compileArm(model, opts.outPath, opts.dbg, true, opts.aapcs);
-    if( all == ok && (opts.arch == "rv32" || opts.arch == "riscv32") )
-        objFiles = Mil::Backend::compileRv32(model, opts.outPath, opts.dbg, /*indirectMain*/false, opts.aapcs,
-                    /*hasFloat*/true, /*hasHwDiv*/true, opts.esp32);
-    if( all == ok && (opts.arch == "x86" || opts.arch == "i386") )
-        objFiles = Mil::Backend::compileX86(model, opts.outPath, opts.dbg, true, opts.cdeclRet);
+    if( opts.dumpMil && !dumpMil(model, opts) )
+        return CompileError;
 
-    if( !objFiles.isEmpty() || !opts.libDirs.isEmpty() || !opts.linkLibs.isEmpty() || !opts.linkObjs.isEmpty() )
-        Mil::Backend::linkExecutable(objFiles, opts.libDirs, opts.linkLibs, opts.linkObjs, opts.outPath,
-                                     opts.exeName, opts.esp32, opts.base); // TODO: link errors
-
-    if( all == ok && opts.doRun )
+    if( opts.mode == BuildOpts::Run || opts.dumpMll || opts.dumpMrl )
     {
+        // the same interpreter dumps and runs the low-level code
+        model.calcMemoryLayouts(sizeof(void*), 8);
+        Mil::Interpreter r(&model);
         if( pro )
         {
-            pro->interpret();
-            return 0;
-        }
-        Mil::Interpreter r(&model);
-
+            if( pro->useBuiltInOakwood() )
+                Mil::VmOakwood::addTo(&r, pro->oakwoodScreen());
+        }else
+        {
 #ifdef _MIC_HAVE_SCREEN_
-        Mil::VmOakwood::addTo(&r, true);
+            Mil::VmOakwood::addTo(&r, true);
 #else
-        Mil::VmOakwood::addTo(&r, false);
+            Mil::VmOakwood::addTo(&r, false);
 #endif
+        }
 
         if( !r.compile() )
-            return -1;
-        if( opts.dump2 )
         {
-            QTextStream out(stdout);
-            r.dumpAll(out);
+            qCritical() << "cannot generate low-level code";
+            return CompileError;
         }
 
-        QByteArrayList args_;
-        QVector<char*> argv_;
-        argv_.reserve(10);
-        argv_.append("Micron Interpreter");
+        if( ( opts.dumpMll || opts.dumpMrl ) && !dumpVmCode(model, r, opts) )
+            return CompileError;
 
-        const int start = qApp->arguments().indexOf("--");
-        if( start != -1 )
+        if( opts.mode == BuildOpts::Run )
         {
-            for( int i = start+1; i < qApp->arguments().size(); i++ )
-                args_.append( qApp->arguments()[i].toUtf8() );
+            QByteArrayList args_;
+            QVector<char*> argv_;
+            argv_.reserve(10);
+            argv_.append("Micron Interpreter");
 
+            if( pro )
+                args_ = pro->getArgs().simplified().split(' ');
+
+            const int start = qApp->arguments().indexOf("--");
+            if( start != -1 )
+            {
+                for( int i = start+1; i < qApp->arguments().size(); i++ )
+                    args_.append( qApp->arguments()[i].toUtf8() );
+            }
             for( int i = 0; i < args_.size(); i++ )
             {
                 if( !args_[i].isEmpty() )
                     argv_.append(args_[i].data());
             }
+
+            Args_setArgcArgv( argv_.size(), argv_.data() );
+
+            return r.run() ? Ok : CompileError;
         }
-
-        Args_setArgcArgv( argv_.size(), argv_.data() );
-
-        r.run();
     }
 
-    return 0;
+    if( opts.mode == BuildOpts::Check || opts.mode == BuildOpts::Run )
+        return Ok;
+
+    QStringList objFiles;
+    if( opts.target == "armv7" )
+        objFiles = Mil::Backend::compileArm(model, opts.outDir, opts.dbg, true, opts.cAbi, opts.hasHwDiv);
+    else if( opts.target == "rv32" )
+        objFiles = Mil::Backend::compileRv32(model, opts.outDir, opts.dbg, /*indirectMain*/false, opts.cAbi,
+                    opts.hasFloat, opts.hasHwDiv, opts.esp32);
+    else if( opts.target == "x86" )
+        objFiles = Mil::Backend::compileX86(model, opts.outDir, opts.dbg, true, opts.cAbi);
+
+    if( objFiles.isEmpty() )
+        return CompileError; // the back end reported the reason
+
+    if( opts.mode == BuildOpts::Compile )
+        return Ok;
+
+    if( s_verbose )
+    {
+        foreach( const QString& obj, opts.linkObjs )
+            qDebug() << "  link input" << obj;
+    }
+
+    if( !Mil::Backend::linkExecutable(objFiles, opts.libDirs, opts.linkLibs, opts.linkObjs,
+                                      opts.exeFile, opts.esp32, opts.base) )
+        return LinkError;
+
+    return Ok;
 }
 
 static int buildSingle(const QFileInfo& info, const QStringList& searchPaths, BuildOpts& opts)
@@ -184,6 +315,7 @@ static int buildSingle(const QFileInfo& info, const QStringList& searchPaths, Bu
         locator.searchPath.append(QDir(searchPaths[i]));
 
     Mic::ModuleManager mm(&locator, opts.dbg);
+    mm.loadRuntime();
 
     Mic::Import imp;
     imp.path.append(Mic::Token::getSymbol(info.baseName().toUtf8()));
@@ -202,26 +334,27 @@ static int buildSingle(const QFileInfo& info, const QStringList& searchPaths, Bu
 
     opts.linkObjs += mm.getLinkObjects(); // link the .mob objects of prebuilt providers
 
-    if( opts.outPath.isEmpty() )
-        opts.outPath = info.absolutePath();
-    if( opts.exeName.isEmpty() )
-        opts.exeName = info.baseName();
+    if( opts.outDir.isEmpty() )
+        opts.outDir = info.absolutePath();
+    if( opts.exeFile.isEmpty() )
+        opts.exeFile = QDir(opts.outDir).absoluteFilePath(info.baseName());
 
     // the reconstructed Mic ASTs are no longer needed for code generation
     const int res = emitAndRun(mm.getModel(), opts, all, ok);
 
-    qDebug() << "#### finished with" << ok << "modules ok of total" << all << "modules";
+    qDebug() << "micc: finished with" << ok << "modules ok of total" << all << "modules";
     return res;
 }
 
-static int buildProject(const QString& projFile, BuildOpts& opts)
+static int buildProject(const QString& projFile, const QStringList& searchPaths, BuildOpts& opts)
 {
     Mic::Project2 prj;
     prj.setDbg(opts.dbg);
+    prj.setSearchPaths(searchPaths);
     if( !prj.loadFrom(projFile) )
     {
         qCritical() << "cannot load project file" << projFile;
-        return -1;
+        return UsageError;
     }
 
     prj.parse();
@@ -239,15 +372,15 @@ static int buildProject(const QString& projFile, BuildOpts& opts)
     opts.linkObjs += prj.getLinkObjects(); // link the .mob objects of prebuilt providers
 
     QFileInfo info(projFile);
-    if( opts.outPath.isEmpty() )
-        opts.outPath = info.absolutePath();
-    if( opts.exeName.isEmpty() )
-        opts.exeName = prj.getMain().first.isEmpty() ?
-                    info.baseName().toUtf8() : QString::fromUtf8(prj.getMain().first);
+    if( opts.outDir.isEmpty() )
+        opts.outDir = info.absolutePath();
+    if( opts.exeFile.isEmpty() )
+        opts.exeFile = QDir(opts.outDir).absoluteFilePath( prj.getMain().first.isEmpty() ?
+                    info.baseName() : QString::fromUtf8(prj.getMain().first) );
 
     const int res = emitAndRun(prj.getMilModel(), opts, all, ok, &prj);
 
-    qDebug() << "#### finished with" << ok << "modules ok of total" << all << "modules";
+    qDebug() << "micc: finished with" << ok << "modules ok of total" << all << "modules";
     return res;
 }
 
@@ -259,117 +392,297 @@ int main(int argc, char *argv[])
     QCoreApplication a(argc, argv);
 #endif
     a.setOrganizationName("Dr. Rochus Keller");
-    a.setOrganizationDomain("www.rochus-keller.ch");
+    a.setOrganizationDomain("rochus-keller.ch");
     a.setApplicationName("micc");
     a.setApplicationVersion(MICRON_VERSION);
+
+    qInstallMessageHandler(messageHandler);
 
     QCommandLineParser cp;
     cp.setApplicationDescription(QString("Micron compiler, version %1").arg(MICRON_VERSION));
     cp.addHelpOption();
     cp.addVersionOption();
     cp.addPositionalArgument("main", "the main module (.mic/.mil/.mob) or a project (.micpro)");
-    QCommandLineOption sp("I", "add a path where to look for modules", "path");
-    cp.addOption(sp);
-    QCommandLineOption op("O", "set the path where compiled modules are stored", "path");
-    cp.addOption(op);
-    QCommandLineOption run("r", "run in interpreter");
+    cp.addPositionalArgument("objects", "foreign object files (.o) and archives (.a) for the linker", "[objects...]");
+
+    // modes, mutually exclusive; the default is to compile and link
+    QCommandLineOption compileOnly(QStringList() << "c" << "compile", "compile all modules, but don't link");
+    cp.addOption(compileOnly);
+    QCommandLineOption checkOnly("check", "only parse and check, generate no code");
+    cp.addOption(checkOnly);
+    QCommandLineOption run("run", "run the program in the interpreter instead of generating code");
     cp.addOption(run);
-    QCommandLineOption dump("d", "dump MIL code");
+
+    // output
+    QCommandLineOption exeOpt(QStringList() << "o" << "output", "the executable to be generated (link mode only)", "file");
+    cp.addOption(exeOpt);
+    QCommandLineOption outDir("out-dir", "the directory for all generated files (default: the main module's)", "path");
+    cp.addOption(outDir);
+    QCommandLineOption dump("dump", "also generate <Module>.mil, .mll or .mrl in the output directory", "mil|mll|mrl");
     cp.addOption(dump);
-    QCommandLineOption dump2("l", "dump low-level bytecode");
-    cp.addOption(dump2);
-    QCommandLineOption arch("a", "generate code for the given architecture", "arch");
-    cp.addOption(arch);
     QCommandLineOption dbg("g", "generate debug information");
     cp.addOption(dbg);
-    QCommandLineOption cdeclRet("cdecl", "use cdecl-compatible return values (EAX/EAX:EDX for <=8 bytes, x86 only)");
-    cp.addOption(cdeclRet);
-    QCommandLineOption aapcs("aapcs", "use AAPCS32 calling convention (args in R0-R3, return in R0/R0-R1, ARM only)");
-    QCommandLineOption esp32opt("esp32", "generate ESP32-P4 Harvard architecture ELF (split Flash/SRAM memory map)");
-    cp.addOption(aapcs);
-    cp.addOption(esp32opt);
+    QCommandLineOption verbose("verbose", "report each module provider and each linker input");
+    cp.addOption(verbose);
+    QCommandLineOption quiet(QStringList() << "q" << "quiet", "report only warnings and errors");
+    cp.addOption(quiet);
+
+    // input
+    QCommandLineOption sp("I", "add a path where to look for modules (.mic, .mil, .mob)", "path");
+    cp.addOption(sp);
     QCommandLineOption rtOpt("runtime", "MIL file implementing MIC$, for freestanding targets", "file");
     cp.addOption(rtOpt);
-    QCommandLineOption baseOpt("base", "set the load address of the executable (hex, default 8048000)", "addr");
-    cp.addOption(baseOpt);
-    QCommandLineOption libs("L", "add a library search directory for the linker", "path");
+    QCommandLineOption libs("L", "add a search directory for archives given by -l", "path");
     cp.addOption(libs);
-    QCommandLineOption linkLib("n", "link with archive library lib<name>.a (searched in -L dirs)", "name");
+    QCommandLineOption linkLib("l", "link with the archive lib<name>.a, searched in the -L directories", "name");
     cp.addOption(linkLib);
-    QCommandLineOption linkObj("f", "add an object file (.o) to the linker input", "file");
-    cp.addOption(linkObj);
+
+    // target
+    QCommandLineOption target("target", "generate code for rv32, rv32-esp32, armv7 or x86", "target");
+    cp.addOption(target);
+    QCommandLineOption abi("abi", "'default' is the stack-only Micron convention, 'c' the one close to C", "default|c");
+    cp.addOption(abi);
+    QCommandLineOption noFloat("no-float", "the target has no floating point unit (rv32 only)");
+    cp.addOption(noFloat);
+    QCommandLineOption noHwDiv("no-hwdiv", "the target has no divide instruction (rv32 and armv7 only)");
+    cp.addOption(noHwDiv);
+    QCommandLineOption baseOpt("base", "the load address of the executable, hex (default 8048000)", "addr");
+    cp.addOption(baseOpt);
 
     QStringList allArgs = a.arguments();
 
-    // cut away all arguments starting from "--"; they are sent to the interpreter instead
+    // cut away all arguments starting from "--"; they are sent to the interpreted program instead
     const int doubledash = allArgs.indexOf("--");
     if( doubledash != -1 )
         allArgs = allArgs.mid(0, doubledash);
 
-    cp.process(allArgs);
-    const QStringList args = cp.positionalArguments();
-    if( args.size() != 1 )
+    // parse instead of process, so that a usage error has the documented exit code
+    if( !cp.parse(allArgs) )
     {
-        qCritical() << "expecting exactly one source or project file";
-        return -1;
+        qCritical().noquote() << cp.errorText();
+        return UsageError;
+    }
+    if( cp.isSet("help") )
+        cp.showHelp(Ok); // exits the app
+    if( cp.isSet("version") )
+    {
+        qDebug().noquote() << a.applicationName() + " " + a.applicationVersion();
+        return Ok;
     }
 
-    const QStringList searchPaths = cp.values(sp);
-    const QStringList outPaths = cp.values(op);
-    if( outPaths.size() > 1 )
+    QStringList args = cp.positionalArguments();
+    if( args.isEmpty() )
     {
-        qCritical() << "only one output path can be set";
-        return -1;
+        qCritical() << "expecting a source or project file";
+        return UsageError;
     }
+
+    s_verbose = cp.isSet(verbose);
+    s_quiet = cp.isSet(quiet);
 
     BuildOpts o;
     o.dbg = cp.isSet(dbg);
-    o.doDump = cp.isSet(dump);
-    o.dump2 = cp.isSet(dump2);
-    o.doRun = cp.isSet(run);
-    o.cdeclRet = cp.isSet(cdeclRet);
-    o.aapcs = cp.isSet(aapcs);
-    o.esp32 = cp.isSet(esp32opt);
+
+    // exactly one mode
+    const int modes = (cp.isSet(compileOnly)?1:0) + (cp.isSet(checkOnly)?1:0) + (cp.isSet(run)?1:0);
+    if( modes > 1 )
+    {
+        qCritical() << "-c, --check and --run are mutually exclusive";
+        return UsageError;
+    }
+    if( cp.isSet(compileOnly) )
+        o.mode = BuildOpts::Compile;
+    else if( cp.isSet(checkOnly) )
+        o.mode = BuildOpts::Check;
+    else if( cp.isSet(run) )
+        o.mode = BuildOpts::Run;
+
+    // target
+    if( cp.isSet(target) )
+    {
+        const QString t = cp.value(target);
+        if( t == "rv32" || t == "rv32-esp32" )
+        {
+            o.target = "rv32";
+            o.esp32 = t.endsWith("esp32");
+        }else if( t == "armv7" || t == "x86" )
+            o.target = t;
+        else
+        {
+            qCritical().noquote() << "unknown target '" + t + "'; expecting rv32, rv32-esp32, armv7 or x86";
+            return UsageError;
+        }
+    }
+    if( o.mode == BuildOpts::Link || o.mode == BuildOpts::Compile )
+    {
+        if( o.target.isEmpty() )
+        {
+            qCritical() << "no --target given; use --check to only parse and check, or --run to interpret";
+            return UsageError;
+        }
+    }else if( !o.target.isEmpty() )
+    {
+        qCritical() << "--target cannot be combined with --check or --run";
+        return UsageError;
+    }
+
+    // ABI and target features
+    if( cp.isSet(abi) )
+    {
+        const QString v = cp.value(abi);
+        if( v == "c" )
+            o.cAbi = true;
+        else if( v != "default" )
+        {
+            qCritical().noquote() << "unknown ABI '" + v + "'; expecting 'default' or 'c'";
+            return UsageError;
+        }
+    }
+    if( cp.isSet(noFloat) )
+    {
+        if( o.target != "rv32" )
+        {
+            qCritical() << "--no-float is only supported for rv32";
+            return UsageError;
+        }
+        o.hasFloat = false;
+    }
+    if( cp.isSet(noHwDiv) )
+    {
+        if( o.target != "rv32" && o.target != "armv7" )
+        {
+            qCritical() << "--no-hwdiv is only supported for rv32 and armv7";
+            return UsageError;
+        }
+        o.hasHwDiv = false;
+    }
     if( cp.isSet(baseOpt) )
     {
         bool ok = false;
-        o.base = cp.value(baseOpt).toUInt(&ok,16);
+        QString str = cp.value(baseOpt);
+        if( str.startsWith("0x", Qt::CaseInsensitive) )
+            str = str.mid(2);
+        o.base = str.toUInt(&ok,16);
         if( !ok )
         {
-            qCritical() << "invalid base address" << cp.value(baseOpt);
-            return -1;
+            qCritical().noquote() << "invalid base address" << cp.value(baseOpt);
+            return UsageError;
         }
     }
+
+    // dumps
+    foreach( const QString& d, cp.values(dump) )
+    {
+        if( d == "mil" )
+            o.dumpMil = true;
+        else if( d == "mll" )
+            o.dumpMll = true;
+        else if( d == "mrl" )
+            o.dumpMrl = true;
+        else
+        {
+            qCritical().noquote() << "unknown dump format '" + d + "'; expecting mil, mll or mrl";
+            return UsageError;
+        }
+    }
+
+    // output
+    if( cp.values(outDir).size() > 1 )
+    {
+        qCritical() << "only one output directory can be set";
+        return UsageError;
+    }
+    if( cp.isSet(outDir) )
+    {
+        o.outDir = QFileInfo(cp.value(outDir)).absoluteFilePath();
+        if( !QDir(o.outDir).exists() )
+        {
+            qCritical().noquote() << "output directory does not exist" << o.outDir;
+            return UsageError;
+        }
+    }
+    if( cp.isSet(exeOpt) )
+    {
+        if( o.mode != BuildOpts::Link )
+        {
+            // micc compiles the whole dependency tree, so -o only makes sense for the executable
+            qCritical() << "-o names the executable and cannot be combined with -c, --check or --run;"
+                        << "use --out-dir instead";
+            return UsageError;
+        }
+        if( cp.values(exeOpt).size() > 1 )
+        {
+            qCritical() << "only one executable can be generated";
+            return UsageError;
+        }
+        o.exeFile = QFileInfo(cp.value(exeOpt)).absoluteFilePath();
+    }
+
+    // input
+    const QStringList searchPaths = cp.values(sp);
     if( cp.isSet(rtOpt) )
     {
-        const QString path = cp.value(rtOpt);
-        if( !QFile::exists(path) )
+        // looked up in the -I directories as well
+        const QString file = cp.value(rtOpt);
+        QString path;
+        if( QFile::exists(file) )
+            path = file;
+        else
+            foreach( const QString& dir, searchPaths )
+            {
+                const QString tmp = QDir(dir).absoluteFilePath(file);
+                if( QFile::exists(tmp) )
+                {
+                    path = tmp;
+                    break;
+                }
+            }
+        if( path.isEmpty() )
         {
-            qCritical() << "runtime file not found" << path;
-            return -1;
+            qCritical().noquote() << "runtime file not found" << file;
+            return UsageError;
         }
+        if( s_verbose )
+            qDebug() << "  runtime is" << path;
         Mic::ModuleManager::setRuntimePath(path);
     }
-    o.arch = cp.value(arch);
     o.libDirs = cp.values(libs);
     o.linkLibs = cp.values(linkLib);
-    o.linkObjs = cp.values(linkObj);
-    if( !outPaths.isEmpty() )
-        o.outPath = outPaths.first();
+
+    // the remaining positional arguments are foreign objects and archives
+    const QString mainFile = args.takeFirst();
+    foreach( const QString& file, args )
+    {
+        if( !file.endsWith(".o") && !file.endsWith(".a") )
+        {
+            qCritical().noquote() << "expecting an object file (.o) or an archive (.a), not" << file;
+            return UsageError;
+        }
+        if( !QFile::exists(file) )
+        {
+            qCritical().noquote() << "file not found" << file;
+            return UsageError;
+        }
+        o.linkObjs.append(file);
+    }
+    if( o.mode != BuildOpts::Link && ( !o.linkObjs.isEmpty() || !o.libDirs.isEmpty() || !o.linkLibs.isEmpty() ) )
+        qWarning() << "no link step, so the given objects, archives and library paths are not used";
 
     QElapsedTimer timer;
     timer.start();
 
-    const QFileInfo info(args.first());
+    const QFileInfo info(mainFile);
+    qDebug() << "micc: compiling" << mainFile;
     int res = 0;
     if( info.suffix() == "micpro" )
-        res = buildProject(args.first(), o); // .micpro file selects the project build
-    else
+    {
+        res = buildProject(mainFile, searchPaths, o); // .micpro file selects the project build
+    }else
         res = buildSingle(info, searchPaths, o); // everything else is treated as a single main module with auto-discovery
 
     Mic::Expression::killArena();
     Mic::AstModel::cleanupGlobals();
-    qDebug() << "#### elapsed" << timer.elapsed() << "[ms]";
+    qDebug() << "micc: elapsed" << timer.elapsed() << "[ms]";
 
     return res;
 }

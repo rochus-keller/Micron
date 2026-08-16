@@ -409,6 +409,8 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         expectingNArgs(args,1);
         if( args[0]->getType()->kind != Type::Pointer )
             throw "expecting a pointer argument";
+        if( ev->langLevel < 3 )
+            throw "operation not supported on selected language level";
         break;
     case Builtin::EXCL:
         expectingNArgs(args,2);
@@ -433,8 +435,14 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
             if( args[0]->getType()->getType()->kind != Type::Array || args[0]->getType()->getType()->len != 0 )
                 throw "second argument only supported for open arrays";
         }
+        if( builtin == Builtin::NEWGC && ev->langLevel < 5 )
+            throw "operation only available on level 5";
+        if( ev->langLevel < 3 )
+            throw "operation not available on level 0, 1 and 2";
         break;
     case Builtin::PCALL:
+        if( ev->langLevel < 3 )
+            throw "operation not supported on selected language level";
         break;
     case Builtin::PRINT:
     case Builtin::PRINTLN: {
@@ -446,31 +454,41 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         } break;
     case Builtin::RAISE:
         expectingNArgs(args,1);
+        if( ev->langLevel < 3 )
+            throw "operation not supported on selected language level";
         break;
     case Builtin::SETENV:
         expectingNArgs(args,2);
         break;
     case Builtin::CLI:
         expectingNArgs(args,0);
+        if( ev->langLevel > 1 )
+            throw "operation not supported on selected language level";
         break;
     case Builtin::GETREG:
         expectingNArgs(args,2);
         ev->bindUniInt(args[0], false);
         if( !args[0]->isConst() || !args[0]->getType()->isUInt())
             throw "expecting an unsigned integer constant as the first argument";
+        if( ev->langLevel > 1 )
+            throw "operation not supported on selected language level";
         break;
     case Builtin::NOP:
         expectingNArgs(args,0);
+        if( ev->langLevel > 1 )
+            throw "operation not supported on selected language level";
         break;
     case Builtin::PUTREG:
         expectingNArgs(args,2);
         ev->bindUniInt(args[0], false);
         if( !args[0]->isConst() || !args[0]->getType()->isUInt())
             throw "expecting an unsigned integer constant as the first argument";
+        if( ev->langLevel > 1 )
+            throw "operation not supported on selected language level";
         break;
     case Builtin::STI:
         expectingNArgs(args,0);
-        if( ev->langLevel > 2 )
+        if( ev->langLevel > 1 )
             throw "operation not supported on selected language level";
         break;
     case Builtin::COPY:

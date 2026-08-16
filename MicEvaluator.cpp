@@ -225,6 +225,9 @@ bool Evaluator::prepareRhs(Type* lhs, bool assig, const RowCol& pos)
         const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
         out->line_(pos);
         out->ldmeth_(trident);
+    }else if( lhs && lhs->kind == Type::Interface && rhs.type && rhs.type->kind == Type::Nil )
+    {
+        assureTopOnMilStack(false, pos); // this is required otherwise ldnull_ipp is missing in the output
     }else if( lhs && lhs->kind == Type::Interface && rhs.type && rhs.type->kind != Type::Interface )
     {
         if( rhs.type->kind != Type::Pointer || rhs.type->getType() == 0
@@ -311,6 +314,9 @@ bool Evaluator::assign(Expression* lhs, Expression* rhs, const RowCol& pos)
             ( (rhs->getType() && rhs->getType()->isCharArray() && rhs->getType()->len == 0) ||
                rhs->getType()->kind == Type::StrLit ) )
         return stind(lhs, rhs, pos);
+
+    if( rhs->getType() && rhs->getType()->kind == Type::Nil && lhs->getType() && lhs->getType()->isCompoundPointer())
+        Q_ASSERT( rhs->val.toInt() == 2 ); // set in Parser2::literal
 
     switch( lhs->kind )
     {
@@ -457,14 +463,14 @@ bool Evaluator::derefValue(const RowCol& pos)
         else
             out->ldind_(Mil::EmiTypes::IntPtr);
         break;
+    case Type::Interface:
+        out->ldind_(Mil::EmiTypes::IPP);
+        break;
     case Type::Record:
     case Type::Object:
     case Type::Array:
     case Type::Generic:
         out->ldind_(toQuali(v.type));
-        break;
-    case Type::Interface:
-        out->ldind_(Mil::EmiTypes::IPP);
         break;
     default:
         return false;
@@ -657,8 +663,14 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
             ret = proc->getType();
-            out->line_(pos);
-            out->call_(toQuali(proc),nArgs, ret != 0);
+            if( proc->invar )
+            {
+                // TODO: run at compile time
+            }else
+            {
+                out->line_(pos);
+                out->call_(toQuali(proc),nArgs, ret != 0);
+            }
         }
         break;
     case Value::Super:
@@ -1109,7 +1121,7 @@ bool Evaluator::pushMilStack(const Value& v, const RowCol& pos)
                 out->ldstr_( v.val.toByteArray() );
                 break;
             case Type::Nil:
-                out->ldnull_();
+                out->ldnull_( v.val.toInt() == 2 );
                 break;
             case Type::UINT8:
             case Type::UINT16:
@@ -1844,6 +1856,12 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
         {
             emitRelOp(op,true, pos);
         }
+    }else if( lhs.type->kind == Type::Interface && rhs.type->kind == Type::Interface ||
+              lhs.type->kind == Type::Interface && rhs.type->kind == Type::Nil ||
+              lhs.type->kind == Type::Nil && rhs.type->kind == Type::Interface )
+    {
+        // there are no const interface values
+        emitRelOp(op,true, pos);
     }else
     {
         error(QString("operands not compatible: %1 %3 %2").arg(Type::name[lhs.type->kind]).
@@ -2288,6 +2306,7 @@ bool Evaluator::recursiveRun(Expression* e)
         break;
     case Expression::Call:
         {
+            bool invar = false;
             if( e->lhs->lhs && (e->lhs->kind == Expression::MethSelect || e->lhs->kind == Expression::Super) &&
                     e->lhs->lhs->getType()->kind != Type::Interface )
             {
@@ -2298,6 +2317,10 @@ bool Evaluator::recursiveRun(Expression* e)
                 if( !recursiveRun(proc->lhs) ) // fetch self
                     return false;
                 proc->lhs = 0; // to avoid yet another evaluation
+            }else if( e->lhs && e->lhs->kind == Expression::ProcDecl )
+            {
+                Declaration* proc = e->lhs->val.value<Declaration*>();
+                invar = proc->invar;
             }
 
             ExpList args = e->val.value<ExpList>();
@@ -2319,6 +2342,9 @@ bool Evaluator::recursiveRun(Expression* e)
                 }
             }
 
+            if( invar && !allConst )
+                return error("can only call INVAR procedure with constant arguments", e->pos);
+
             for(int i = 0; i < args.size(); i++ )
             {
                 bindUniInt(args[i], i < formals.size() ? formals[i]->getType()->isInt() : false);
@@ -2328,10 +2354,19 @@ bool Evaluator::recursiveRun(Expression* e)
                     // we need a special treatment of LEN because we have to avoid that in case of LEN(variable) anything is pushed to MIL stack.
                     // we cannot get rid of the unused stack element because pop is a statement, not an expression
                     stack.push_back(Value(args[0]->getType(), QVariant::fromValue(toQuali(args[0]->getType())), Value::TypeDecl));
-                }else if( !recursiveRun(args[i]) )
-                    return false;
+                }else
+                {
+                    if( i < formals.size() && formals[i]->getType()->isCompoundPointer() && args[i]->getType()->kind == Type::Nil )
+                        Q_ASSERT( args[i]->val.toInt() == 2 ); // set in Parser2::literal
 
-                if( i < formals.size() )
+                    if( !recursiveRun(args[i]) )
+                        return false;
+                }
+
+                if( invar )
+                {
+                    ; // NOP
+                }else if( i < formals.size() )
                 {
                     Q_ASSERT( bi == Builtin::Invalid );
                     prepareRhs(formals[i]->getType(), false, args[i]->pos);
@@ -2743,6 +2778,10 @@ bool Evaluator::stind(Expression* lhs, Expression* rhs, const RowCol& pos)
 {
     if( !evaluate(lhs, true) )
         return false;
+
+    if( rhs->getType()->kind == Type::Nil && lhs->getType()->isCompoundPointer() )
+        Q_ASSERT( rhs->val.toInt() == 2 ); // set in Parser2::literal
+
     if( rhs && !evaluate(rhs) ) // don't assure milonstack here because ch := " " pushes a string otherwise
         return false;         // value is pushed in assign
     if( rhs && !assign(pos) )
@@ -2790,6 +2829,9 @@ bool Evaluator::stind(Type *lhs, const RowCol &pos)
             out->stind_(Mil::EmiTypes::IPP);
         else
             out->stind_(Mil::EmiTypes::IntPtr);
+        break;
+    case Type::Interface:
+        out->stind_(Mil::EmiTypes::IPP);
         break;
     case Type::Record:
     case Type::Object:
