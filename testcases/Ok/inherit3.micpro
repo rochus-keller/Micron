@@ -1,0 +1,21 @@
+[General]
+Arguments=@ByteArray()
+BuildDir=
+BuiltInOakwood=false
+MainModule=@ByteArray()
+MainProc=@ByteArray()
+OakwoodScreen=false
+Options=@ByteArray()
+Suffixes=.mic, .mil, .mob
+WorkingDir=
+
+[Modules]
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/Inherit3b.mic
+1\RelPath=Inherit3b.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/Inherit3.mic
+2\RelPath=Inherit3.mic
+size=2
+
+[Packages]
+1\Name=@ByteArray()
+size=1

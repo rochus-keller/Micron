@@ -1,0 +1,11 @@
+module Main [level=4]
+import P := P1, B4 := Buf(4), B8 := Buf(2+2), B9 := Buf(8)
+var x: B4.BufPtr
+    y: B8.BufPtr
+    z: B9.BufPtr
+begin
+  x := P.make()
+  println(x.cap())
+  new(z)
+  println(z.cap())
+end Main

@@ -508,8 +508,8 @@ bool Interpreter::compile()
 {
     imp->mdl->calcMemoryLayouts(sizeof(void*), 8);
 
-    QList<Mil::Declaration*> mods = imp->mdl->getModules();
-    for(int i = mods.size()-1; i >= 0; i--)
+    QList<Mil::Declaration*> mods = imp->mdl->getModulesInDependencyOrder();
+    for(int i = 0; i < mods.size(); i++)
     {
         Mil::Declaration* module = mods[i];
         if( module->generic )

@@ -1,0 +1,22 @@
+module GD [level=4]
+import BI := Box(integer)
+
+type Sum = object(BI.ForEach) total: integer end
+
+procedure Sum.apply(const e: ^integer)
+begin 
+  self.total := self.total + e^ 
+end apply
+
+var s: ^Sum
+    b: BI.BoxPtr
+    f: BI.ForEachPtr
+    i: integer
+begin
+  new(s) new(b)
+  for i := 1 to 5 do b.append(@i) end
+  f := s
+  b.forEach(f)
+  println(s.total)
+  b.forEach(s)
+end GD

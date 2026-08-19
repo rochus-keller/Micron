@@ -1,0 +1,36 @@
+module Box(T) [visibility="*", level=4]
+import I := Iter(T)
+
+type
+  ForEach* = I.ForEach
+  ForEachPtr* = I.ForEachPtr
+  Box* = object
+    data: array 8 of T
+    n: integer
+  end
+  BoxPtr* = pointer to Box
+
+procedure Box.append*(const e: ^T)
+begin
+  self.data[self.n] := e^
+  inc(self.n)
+end append
+
+procedure Box.forEach*(fn: I.ForEachPtr)
+var i: integer
+begin
+  for i := 0 to self.n-1 do
+    fn.apply(@self.data[i])
+  end
+end forEach
+
+procedure Box.countIf*(t: I.TestPtr): integer
+var i, c: integer
+begin
+  for i := 0 to self.n-1 do
+    if t.test(@self.data[i]) then inc(c) end
+  end
+  return c
+end countIf
+
+end Box

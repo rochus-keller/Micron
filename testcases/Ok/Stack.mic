@@ -1,0 +1,20 @@
+module Stack(T; const L: uint32)
+
+var
+    a: array L of T
+    n*: integer
+
+procedure push*(x: T)
+begin
+    a[n] := x; inc(n)
+end push
+
+procedure pop*(): T
+begin
+    dec(n)
+    return a[n]
+end pop
+
+begin
+    n := 0
+end Stack

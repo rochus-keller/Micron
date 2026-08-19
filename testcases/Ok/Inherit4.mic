@@ -1,0 +1,13 @@
+module Inherit4 [level=4]
+import B := BaseM, M := MidM
+
+type
+  C = object(M.B2) end
+  CPtr = pointer to C
+
+var a: B.APtr; c: CPtr
+begin
+  new(c)
+  a := c
+  println(a.name())
+end Inherit4

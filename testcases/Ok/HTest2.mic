@@ -1,0 +1,21 @@
+module HTest2 [level=4]
+
+type Sym = object v: integer end
+     SymPtr = pointer to Sym
+     SymHash = record end
+     
+procedure SymHash.hash*(const s: ^SymPtr): integer
+begin 
+  return s^.v * 31 
+end hash
+
+import H := Hashed2(SymPtr, SymHash)
+
+var t: ^H.Tab
+    s: SymPtr
+begin
+  new(t) new(s)
+  s.v := 3
+  t.put(@s)
+  println(t.n)
+end HTest2

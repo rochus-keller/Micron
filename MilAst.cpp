@@ -139,15 +139,20 @@ bool AstModel::addModule(Declaration* module)
     return true;
 }
 
-static void visitImports(AstModel* loader, Declaration* top, QList<Declaration*>& res )
+static void visitImports(AstModel* loader, Declaration* top, QList<Declaration*>& res,
+                         QSet<Declaration*>& visited )
 {
+    if( top == 0 || visited.contains(top) )
+        return; // also breaks import cycles
+    visited.insert(top);
     Declaration* sub = top->subs;
     while(sub)
     {
-        if( sub->kind == Declaration::Import && !res.contains(sub->imported) )
+        if( sub->kind == Declaration::Import && sub->imported )
         {
-            res.append(sub->imported);
-            visitImports(loader, sub->imported, res);
+            visitImports(loader, sub->imported, res, visited); // must be first
+            if( !res.contains(sub->imported) )
+                res.append(sub->imported);
         }
         sub = sub->next;
     }
@@ -158,9 +163,10 @@ DeclList AstModel::getModulesInDependencyOrder()
     QList<Declaration*> res;
     DeclList modules = getModules();
 
+    QSet<Declaration*> visited;
     for( int i = 0; i < modules.size(); i++ )
     {
-        visitImports(this, modules[i], res);
+        visitImports(this, modules[i], res, visited);
         if( !res.contains(modules[i]) )
             res << modules[i];
     }

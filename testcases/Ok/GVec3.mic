@@ -1,0 +1,28 @@
+module GVec3(T) [level=4]
+
+type
+  ForEach* = object end
+  ForEachPtr* = pointer to ForEach
+
+procedure ForEach.apply*(const elem: ^T)
+begin
+end apply
+
+type
+  MyIter = object(ForEach) hit*: integer end
+
+procedure MyIter.apply(const elem: ^T)
+begin
+  inc(self.hit)
+end apply
+
+procedure count*(const val: ^T): integer
+var it: MyIter; p: ForEachPtr
+begin
+  it.hit := 0
+  p := @it
+  p.apply(val)
+  return it.hit
+end count
+
+end GVec3

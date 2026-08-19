@@ -1,0 +1,26 @@
+module Vec(T) [visibility="*", level=4]
+
+type
+  VecDesc* = object
+    data: array 8 of T
+    n: integer
+  end
+  VecPtr* = pointer to VecDesc
+
+procedure VecDesc.append*(const e: ^T)
+begin
+  self.data[self.n] := e^
+  inc(self.n)
+end append
+
+procedure VecDesc.size*(): integer
+begin
+  return self.n
+end size
+
+procedure VecDesc.at*(i: integer): ^T
+begin
+  return @self.data[i]
+end at
+
+end Vec

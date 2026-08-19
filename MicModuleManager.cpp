@@ -172,20 +172,26 @@ ModuleManager::Entry* ModuleManager::entryFor(const Import& imp)
 
 Declaration* ModuleManager::loadModule(const Import& imp)
 {
-    Entry* e = entryFor(imp);
+    Location loc = locator ? locator->locate(imp) : Location();
+    if( loc.kind == NotFound )
+    {
+        error(QString("cannot locate module '%1'").arg(QString::fromUtf8(imp.path.join('.'))));
+        return 0;
+    }
+
+     // as in Project2: make sure each module is registered under full virtual path
+    Import fixedImp = imp;
+    if( !loc.path.isEmpty() )
+        // TODO: check the logic that the new module is in the package where it was actually found
+        fixedImp.path = loc.path;
+
+    Entry* e = entryFor(fixedImp);
     if( e->mic )
         return e->mic;
     if( e->loading )
     {
         error(QString("cyclic module dependency involving '%1'").arg(
-                  QString::fromUtf8(imp.path.join('.'))));
-        return 0;
-    }
-
-    Location loc = locator ? locator->locate(imp) : Location();
-    if( loc.kind == NotFound )
-    {
-        error(QString("cannot locate module '%1'").arg(QString::fromUtf8(imp.path.join('.'))));
+                  QString::fromUtf8(fixedImp.path.join('.'))));
         return 0;
     }
 
@@ -194,11 +200,11 @@ Declaration* ModuleManager::loadModule(const Import& imp)
     switch( loc.kind )
     {
     case MicSource:
-        res = loadMicSource(imp, loc.file, e);
+        res = loadMicSource(fixedImp, loc.file, e);
         break;
     case MilSource:
     case MilObject:
-        res = loadMilProvider(imp, loc, e);
+        res = loadMilProvider(fixedImp, loc, e);
         break;
     default:
         break;

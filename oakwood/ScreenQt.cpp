@@ -433,7 +433,7 @@ DllExport void Screen$begin$()
     // NOP
 }
 
-DllExport int32_t Screen$Open(uint8_t* buf, int32_t bLen, int32_t w, int32_t h, unsigned int fl)
+DllExport unsigned char Screen$Open(uint8_t* buf, int32_t bLen, int32_t w, int32_t h, unsigned int fl)
 {
     Widget::inst()->setBuffer(buf, bLen, w, h, fl);
     return 1;

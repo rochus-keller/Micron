@@ -1,0 +1,10 @@
+module VtIter(T) [level=4]
+
+type
+  ForEach* = object end
+  ForEachPtr* = pointer to ForEach
+
+procedure ForEach.apply*(const elem: ^T)
+begin
+end apply
+end VtIter

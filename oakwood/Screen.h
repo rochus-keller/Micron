@@ -10,7 +10,7 @@
 #endif
 
 DllExport void Screen$begin$();
-DllExport int32_t Screen$Open(uint8_t* buf, int32_t bLen, int32_t w, int32_t h, unsigned int fl);
+DllExport unsigned char Screen$Open(uint8_t* buf, int32_t bLen, int32_t w, int32_t h, unsigned int fl);
 DllExport void Screen$Close();
 DllExport void Screen$UpdateArea(int32_t x, int32_t y, int32_t w, int32_t h);
 DllExport int32_t Screen$ProcessEvents(int32_t sleep);

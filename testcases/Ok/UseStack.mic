@@ -1,0 +1,9 @@
+module UseStack
+import si := Stack(integer, 10)
+    cs := Stack(char, 4)
+begin
+    si.push(3); si.push(4)
+    cs.push('x')
+    println(si.pop() + si.pop())    // 7
+    println(cs.pop())               // x
+end UseStack

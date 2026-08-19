@@ -20,7 +20,7 @@
 #include "MilVmOakwood.h"
 #include "MilInterpreter.h"
 extern "C" {
-#include "oakwood/Input.h"
+#include "oakwood/Time.h"
 #include "oakwood/MathL.h"
 #include "oakwood/Math.h"
 #include "oakwood/Out.h"
@@ -32,11 +32,11 @@ extern "C" {
 }
 using namespace Mil;
 
-// int Input$Time()
-static bool Input_Time(void* args, void* ret)
+// int Time$Ticks()
+static bool Time_Ticks(void* args, void* ret)
 {
-    int res = Input$Time();
-    Interpreter::retI4(ret, res);
+    const quint64 res = Time$Ticks();
+    Interpreter::retI8(ret, res);
     return true;
 }
 
@@ -566,7 +566,7 @@ static bool Screen_getMouseState(void* args, void* ret)
 
 void VmOakwood::addTo(Interpreter* ip, bool useScreen)
 {
-    ip->registerProc("Input", "Time", Input_Time);
+    ip->registerProc("Time", "Ticks", Time_Ticks);
     ip->registerProc("Out", "Int", Out_Int);
     ip->registerProc("Out", "Real", Out_Real);
     ip->registerProc("Out", "LongReal", Out_LongReal);

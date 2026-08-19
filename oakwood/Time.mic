@@ -1,0 +1,6 @@
+(* This module replaces Input.Time, which was part of the Oakwood Guidelines for Oberon-2 Compiler Developers, Revision: 1A First Issue, Oct. 1995 *)
+MODULE Time [visibility="*"];
+	CONST TimeUnit = 1000000;
+	(* monotonic, starts at 0 at module initialization *)
+	PROCEDURE Ticks (): UINT64 EXTERN;
+END Time.

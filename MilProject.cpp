@@ -56,13 +56,11 @@ void Project::setFiles(const QStringList& files)
     {
         moduleFiles << ModuleFile(":/oakwood/mil/Args.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Args"),0) );
         moduleFiles << ModuleFile(":/oakwood/mil/Files.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Files"),0) );
-        moduleFiles << ModuleFile(":/oakwood/mil/In.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("In"),0) );
-        moduleFiles << ModuleFile(":/oakwood/mil/Input.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Input"),0) );
+        moduleFiles << ModuleFile(":/oakwood/mil/Time.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Time"),0) );
         moduleFiles << ModuleFile(":/oakwood/mil/Math.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Math"),0) );
         moduleFiles << ModuleFile(":/oakwood/mil/MathL.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("MathL"),0) );
         moduleFiles << ModuleFile(":/oakwood/mil/Out.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Out"),0) );
         moduleFiles << ModuleFile(":/oakwood/mil/Screen.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Screen"),0) );
-        moduleFiles << ModuleFile(":/oakwood/mil/Strings.mil", ModuleFile::Mods() << ModuleFile::Mod(Token::getSymbol("Strings"),0) );
     }
 #endif
     foreach( const QString& path, files )

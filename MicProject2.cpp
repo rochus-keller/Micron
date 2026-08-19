@@ -499,13 +499,11 @@ bool Project2::parse()
     if( useBuiltInOakwood() )
     {
         parseLib("Args");
-        parseLib("In");
         parseLib("Out");
         parseLib("Files");
-        parseLib("Input");
+        parseLib("Time");
         parseLib("Math");
         parseLib("MathL");
-        parseLib("Strings");
 #ifdef _MIC_HAVE_SCREEN_
         if( oakwoodScreen() )
             parseLib("Screen");
@@ -645,13 +643,11 @@ bool Project2::copyCResources(const QString &outDir, QStringList &cFiles, bool w
     if( useBuiltInOakwood() )
     {
         cFiles << writeC("oakwood", "Args", outDir);
-        cFiles << writeC("oakwood", "In", outDir);
         cFiles << writeC("oakwood", "Out", outDir);
         cFiles << writeC("oakwood", "Files", outDir);
-        cFiles << writeC("oakwood", "Input", outDir);
+        cFiles << writeC("oakwood", "Time", outDir);
         cFiles << writeC("oakwood", "Math", outDir);
         cFiles << writeC("oakwood", "MathL", outDir);
-        cFiles << writeC("oakwood", "Strings", outDir);
 #ifdef _MIC_HAVE_SCREEN_
         if( oakwoodScreen() )
         {

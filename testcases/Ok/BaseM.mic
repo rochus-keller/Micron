@@ -1,0 +1,12 @@
+module BaseM [level=4, visibility="*"]
+
+type
+  A* = object end
+  APtr* = pointer to A
+
+procedure A.name*(): integer
+begin
+  return 1
+end name
+
+end BaseM

@@ -1,0 +1,33 @@
+module GVec2(T) [level=4]
+import I := GIter(T)
+
+type
+  ForEach* = I.ForEach
+  ForEachPtr* = I.ForEachPtr
+
+  Vec* = pointer to VecDesc
+  VecDesc* = object
+    val*: T
+  end
+
+  MyIter = object(I.ForEach) hit*: integer end
+
+procedure MyIter.apply(const elem: ^T)
+begin
+  inc(self.hit)
+end apply
+
+procedure VecDesc.forEach*(fn: I.ForEachPtr)
+begin
+  fn.apply(@self.val)
+end forEach
+
+procedure VecDesc.count*(): integer
+var it: MyIter
+begin
+  it.hit := 0
+  self.forEach(@it)
+  return it.hit
+end count
+
+end GVec2

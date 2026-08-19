@@ -2347,7 +2347,8 @@ bool Evaluator::recursiveRun(Expression* e)
 
             for(int i = 0; i < args.size(); i++ )
             {
-                bindUniInt(args[i], i < formals.size() ? formals[i]->getType()->isInt() : false);
+                Type* ft = i < formals.size() ? formals[i]->getType() : 0;
+                bindUniInt(args[i], ft ? ft->isInt() : false);
 
                 if( bi == Builtin::LEN && i == 0 )
                 {
@@ -2356,7 +2357,7 @@ bool Evaluator::recursiveRun(Expression* e)
                     stack.push_back(Value(args[0]->getType(), QVariant::fromValue(toQuali(args[0]->getType())), Value::TypeDecl));
                 }else
                 {
-                    if( i < formals.size() && formals[i]->getType()->isCompoundPointer() && args[i]->getType()->kind == Type::Nil )
+                    if( ft && ft->isCompoundPointer() && args[i]->getType()->kind == Type::Nil )
                         Q_ASSERT( args[i]->val.toInt() == 2 ); // set in Parser2::literal
 
                     if( !recursiveRun(args[i]) )
@@ -2369,7 +2370,7 @@ bool Evaluator::recursiveRun(Expression* e)
                 }else if( i < formals.size() )
                 {
                     Q_ASSERT( bi == Builtin::Invalid );
-                    prepareRhs(formals[i]->getType(), false, args[i]->pos);
+                    prepareRhs(ft, false, args[i]->pos);
                 }else if( bi != Builtin::Invalid )
                 {
                     // in case of built-ins, either all args or none are pushed to MIL-stack.

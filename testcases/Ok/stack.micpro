@@ -1,0 +1,21 @@
+[General]
+Arguments=@ByteArray()
+BuildDir=
+BuiltInOakwood=false
+MainModule=@ByteArray()
+MainProc=@ByteArray()
+OakwoodScreen=false
+Options=@ByteArray()
+Suffixes=.mic, .mil, .mob
+WorkingDir=
+
+[Modules]
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/UseStack.mic
+1\RelPath=UseStack.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/Stack.mic
+2\RelPath=Stack.mic
+size=2
+
+[Packages]
+1\Name=@ByteArray()
+size=1

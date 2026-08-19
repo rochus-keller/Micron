@@ -21,7 +21,7 @@
 
 module Interpreter
 
-import  OM := ObjectMemory, D := Display, I := Input, 
+import  OM := ObjectMemory, D := Display, I := Time, 
         B := BitBlt, F := Files, Args, Out
 
 type    OOP = OM.OOP
@@ -1467,7 +1467,7 @@ var    newProcessWaiting : boolean
   begin 
     TRACE_PRIMITIVE()
     oop := popStack()
-    diff := val(Int,I.Time() div 1000)
+    diff := val(Int,I.Ticks() div 1000)
     OM.storeByteOfObject(3,oop, val(byte, band( shr( diff, 24 ), 0ffh)) )
     OM.storeByteOfObject(2,oop, val(byte, band( shr( diff, 16 ), 0ffh)) )
     OM.storeByteOfObject(1,oop, val(byte, band( shr( diff, 8 ), 0ffh)) )

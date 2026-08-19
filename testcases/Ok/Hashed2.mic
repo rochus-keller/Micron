@@ -1,0 +1,22 @@
+module Hashed2(K, H) [level=4]
+
+type
+  Hasher* = interface
+    proc hash(const key: ^K): integer
+  end
+  
+where 
+  H: Hasher
+
+type
+  Tab* = object
+    n: integer
+  end
+  
+procedure Tab.put*(const k: ^K)
+var h: H
+begin
+  self.n := self.n + h.hash(k)
+end put
+
+end Hashed2

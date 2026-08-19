@@ -1,0 +1,11 @@
+module Buf(const N: uint32) [visibility="*", level=4]
+type
+  BufDesc* = object
+    data: array N of integer
+  end
+  BufPtr* = pointer to BufDesc
+procedure BufDesc.cap*(): uint32
+begin
+  return len(self.data)
+end cap
+end Buf

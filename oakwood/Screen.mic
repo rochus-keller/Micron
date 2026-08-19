@@ -64,9 +64,9 @@ CONST
    bufLen: size of buf in bytes.
    w, h: pixel dimensions.
    flags: SET of LsbFirst, BottomUp (empty set = MSB-first, top-down).
-   Returns 1 on success, 0 on failure.
+   Returns TRUE on success, FALSE on failure.
    May be called again to change buffer, size, or flags (window is recreated). *)
-PROCEDURE Open (buf: POINTER TO ARRAY OF BYTE; bufLen, w, h: INT32; flags: SET): INT32 EXTERN;
+PROCEDURE Open (buf: POINTER TO ARRAY OF BYTE; bufLen, w, h: INT32; flags: SET): BOOLEAN EXTERN;
 
 (* Close the window and release platform resources. *)
 PROCEDURE Close EXTERN;

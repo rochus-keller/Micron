@@ -120,7 +120,23 @@ public:
             d_hl->addBuiltIn(Builtin::name[i]);
         for( int i = Type::Nil; i <= Type::MaxBasicType; i++ )
             d_hl->addBuiltIn(Type::name[i]);
-        d_hl->addBuiltIn("ANYREC");
+        d_hl->addBuiltIn("BOOLEAN");
+        d_hl->addBuiltIn("BYTE");
+        d_hl->addBuiltIn("U1");
+        d_hl->addBuiltIn("I1");
+        d_hl->addBuiltIn("SHORTINT");
+        d_hl->addBuiltIn("I2");
+        d_hl->addBuiltIn("U2");
+        d_hl->addBuiltIn("INTEGER");
+        d_hl->addBuiltIn("I4");
+        d_hl->addBuiltIn("U4");
+        d_hl->addBuiltIn("LONGINT");
+        d_hl->addBuiltIn("I8");
+        d_hl->addBuiltIn("U8");
+        d_hl->addBuiltIn("REAL");
+        d_hl->addBuiltIn("R4");
+        d_hl->addBuiltIn("LONGREAL");
+        d_hl->addBuiltIn("R8");
     }
 
     void clearBackHisto()

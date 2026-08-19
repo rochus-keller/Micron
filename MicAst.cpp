@@ -1057,7 +1057,8 @@ bool Import::operator==(const Import &rhs) const
             return false;
         if( metaActuals[i].type != rhs.metaActuals[i].type )
             return false;
-        if( metaActuals[i].val != rhs.metaActuals[i].val )
+        if( metaActuals[i].mode != Value::TypeDecl &&
+                metaActuals[i].val != rhs.metaActuals[i].val )
             return false;
    }
     return true;

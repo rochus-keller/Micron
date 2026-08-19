@@ -1,0 +1,7 @@
+module GV3Use [level=4]
+import V := GVec3(integer)
+var x: integer
+begin
+  x := 7
+  println(V.count(@x))
+end GV3Use

@@ -1,0 +1,13 @@
+module MidM [level=4, visibility="*"]
+import B := BaseM
+
+type
+  B2* = object(B.A) end
+  BPtr* = pointer to B2
+
+procedure B2.name*(): integer
+begin
+  return 2
+end name
+
+end MidM

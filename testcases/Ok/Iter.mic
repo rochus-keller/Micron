@@ -1,0 +1,20 @@
+module Iter(T) [visibility="*", level=4]
+
+type
+  ForEach* = object end
+  ForEachPtr* = pointer to ForEach
+
+procedure ForEach.apply*(const elem: ^T)
+begin
+end apply
+
+type
+  Test* = object end
+  TestPtr* = pointer to Test
+
+procedure Test.test*(const elem: ^T): boolean
+begin
+  return false
+end test
+
+end Iter

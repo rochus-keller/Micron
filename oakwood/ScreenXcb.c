@@ -440,7 +440,7 @@ DllExport void Screen$begin$(void)
 }
 #endif
 
-DllExport int32_t Screen$Open(uint8_t* buf, int32_t bLen, int32_t w, int32_t h, unsigned int fl)
+DllExport unsigned char Screen$Open(uint8_t* buf, int32_t bLen, int32_t w, int32_t h, unsigned int fl)
 {
     uint32_t mask;
     uint32_t values[2];

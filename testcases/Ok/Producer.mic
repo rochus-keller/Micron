@@ -1,0 +1,12 @@
+module Producer [visibility="*", level=4]
+import V := Vec(integer)
+
+procedure make*(): V.VecPtr
+var v: V.VecPtr; i: integer
+begin
+  new(v)
+  for i := 1 to 5 do v.append(@i) end
+  return v
+end make
+
+end Producer

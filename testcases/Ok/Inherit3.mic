@@ -1,0 +1,26 @@
+module Inherit3 [level=4]
+
+type
+  A = object end
+  APtr = pointer to A
+  B = object(A) end
+  BPtr = pointer to B
+  C = object(B) end
+  CPtr = pointer to C
+
+procedure A.name(): integer
+begin
+  return 1
+end name
+
+procedure B.name(): integer
+begin
+  return 2
+end name
+
+var a: APtr; c: CPtr
+begin
+  new(c)
+  a := c
+  println(a.name())
+end Inherit3

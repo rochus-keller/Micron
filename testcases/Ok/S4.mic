@@ -1,0 +1,22 @@
+module S4 [level=4]
+type
+  Base = object end
+  BasePtr = pointer to Base
+  Sub = object(Base) end
+  SubPtr = pointer to Sub
+  
+procedure Base.hello()
+begin println("hello") 
+end hello
+
+procedure Sub.value(): integer
+begin return 21 
+end value
+
+var b: BasePtr; s: SubPtr
+begin
+  new(s)
+  b := s
+  b.hello()
+  println("done")
+end S4

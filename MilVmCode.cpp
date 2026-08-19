@@ -70,7 +70,11 @@ bool Code::compile(Declaration* procOrModule)
     if(res)
     {
         foreach(Vtable* vt, vtables )
+	{
+	    if( vt->type && vt->type->getBaseObject() && vt->parent == 0 )
+		qWarning() << "Vm::Code::compile: missing vt->parent, check compilation order";
             downcopy(vt);
+	}
     }
     return res;
 
@@ -91,6 +95,15 @@ bool Code::translateModule(Declaration* module)
     module->translated = true; // re/misuse this flag to indicate that we already translated
 
     Declaration* sub = module->subs;
+    while(sub)
+    {
+        // make sure all vtables of the imported modules exist
+        if( sub->kind == Declaration::Import && sub->imported )
+            translateModule(sub->imported);
+        sub = sub->next;
+    }
+
+    sub = module->subs;
     while(sub)
     {
         if( sub->kind == Declaration::TypeDecl && sub->getType() &&
@@ -2057,10 +2070,18 @@ bool Code::initMemory(char* mem, Type* t, bool doPointerInit )
             if( vt == 0 )
                 return false;
             memcpy(mem, &vt, sizeof(vt));
-            foreach( Declaration* d, t->subs )
+
+            // downcopy cannot be relied on here because the inherited implementation might
+            // not be translated yet when downcopy runs
+            const DeclList mt = t->getMethodTable(true);
+            foreach( Declaration* d, mt )
             {
-                if( d->kind == Declaration::Procedure )
-                    translateProcDecl(d);
+                if( d->kind != Declaration::Procedure || !translateProcDecl(d) )
+                    continue;
+                const int id = findProc(d);
+                const int slot = d->getPd()->slot;
+                if( id >= 0 && slot < vt->methods.size() )
+                    vt->methods[slot] = procs[id];
             }
         }
 

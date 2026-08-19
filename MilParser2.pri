@@ -28,7 +28,7 @@ SOURCES += \
     $$PWD/MilCeeGen.cpp \
     $$PWD/MilInterpreter.cpp \
     $$PWD/runtime/MIC++.c \
-    $$PWD/oakwood/Input+.c \
+    $$PWD/oakwood/Time+.c \
     $$PWD/oakwood/MathL+.c \
     $$PWD/oakwood/Math+.c \
     $$PWD/oakwood/Out+.c \

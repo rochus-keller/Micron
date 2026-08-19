@@ -1,0 +1,24 @@
+module PkgUse [level=4]
+
+(* Same as GC.mic, but the generic modules live in pkg,
+   even if in the same file system directory *)
+
+import BI := pkg.Box(integer)
+import II := pkg.Iter(integer)
+
+type Sum = object(II.ForEach) total: integer end
+
+procedure Sum.apply(const e: ^integer)
+begin 
+  self.total := self.total + e^ 
+end apply
+
+var s: ^Sum
+    b: BI.BoxPtr
+    i: integer
+begin
+  new(s) new(b)
+  for i := 1 to 5 do b.append(@i) end
+  b.forEach(s)     
+  println(s.total)
+end PkgUse

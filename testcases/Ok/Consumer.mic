@@ -1,0 +1,14 @@
+module Consumer [visibility="*", level=4]
+import V := Vec(integer)
+
+procedure sum*(v: V.VecPtr): integer
+var i, s: integer
+begin
+  s := 0
+  for i := 0 to v.size()-1 do
+    s := s + v.at(i)^
+  end
+  return s
+end sum
+
+end Consumer

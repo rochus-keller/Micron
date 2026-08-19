@@ -1,0 +1,9 @@
+module S6 [level=4]
+import B := Bench2
+
+var b: B.BasePtr
+begin
+  new(b)
+  b.hello()
+  println("done")
+end S6

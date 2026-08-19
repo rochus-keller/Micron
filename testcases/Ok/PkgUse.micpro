@@ -1,0 +1,27 @@
+[General]
+Arguments=@ByteArray()
+BuildDir=
+BuiltInOakwood=false
+MainModule=@ByteArray()
+MainProc=@ByteArray()
+OakwoodScreen=false
+Options=@ByteArray()
+Suffixes=.mic, .mil, .mob
+WorkingDir=
+
+[.pkg]
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/Iter.mic
+1\RelPath=Iter.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/Box.mic
+2\RelPath=Box.mic
+size=2
+
+[Modules]
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Ok/PkgUse.mic
+1\RelPath=PkgUse.mic
+size=1
+
+[Packages]
+1\Name=@ByteArray()
+2\Name=@ByteArray(pkg)
+size=2

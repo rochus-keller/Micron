@@ -1,0 +1,6 @@
+module P1 [visibility="*", level=4]
+import B := Buf(4)
+procedure make*(): B.BufPtr
+var b: B.BufPtr
+begin new(b) return b end make
+end P1

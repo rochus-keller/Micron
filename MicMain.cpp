@@ -91,7 +91,7 @@ public:
                 {
                     if( s_verbose )
                         qDebug() << "  provider for" << rel << "is" << tmp;
-                    return Mic::ModuleManager::Location(kinds[k], tmp);
+                    return Mic::ModuleManager::Location(kinds[k], tmp, path);
                 }
             }
         }
@@ -99,15 +99,22 @@ public:
     }
     Mic::ModuleManager::Location locate( const Mic::Import& imp )
     {
-        Mic::ModuleManager::Location res = find(imp.path);
-        if( res.kind == Mic::ModuleManager::NotFound && imp.importer )
+        if( imp.importer )
         {
+            // an import is resolved in the package of the importer first
+            // a module of a package can refer to its siblings by their plain name
+            // there is a risk that a module of the same name exists in a search path root
             QByteArrayList path = imp.importer->data.value<Mic::ModuleData>().path;
             path.pop_back();
-            path += imp.path;
-            res = find(path);
+            if( !path.isEmpty() )
+            {
+                path += imp.path;
+                const Mic::ModuleManager::Location res = find(path);
+                if( res.kind != Mic::ModuleManager::NotFound )
+                    return res;
+            }
         }
-        return res;
+        return find(imp.path);
     }
 };
 

@@ -1493,7 +1493,6 @@ Type* Parser2::ArrayType() {
     typeStack.push_back(arr);
     Type* etype = 0;
     quint32 len = 0;
-    bool vla = false;
     Token tok,tok2;
 	if( la.d_type == Tok_ARRAY ) {
 		expect(Tok_ARRAY, true, "ArrayType");
@@ -1501,8 +1500,6 @@ Type* Parser2::ArrayType() {
 		if( FIRST_length(la.d_type) ) {
             tok = la;
             length(len);
-            if( len == 0 )
-                vla = true;
 		}
 		expect(Tok_OF, true, "ArrayType");
         tok2 = la;
@@ -1513,18 +1510,12 @@ Type* Parser2::ArrayType() {
         if( FIRST_length(la.d_type) ) {
             tok = la;
             length(len);
-            if( len == 0 )
-                vla = true;
         }
 		expect(Tok_Rbrack, false, "ArrayType");
         tok2 = la;
         etype = type();
 	} else
 		invalid("ArrayType");
-
-    if(vla)
-        error(tok,"VLA not yet supported"); // TODO
-    arr->vla = vla;
 
     openArrayError(tok2,etype);
     // we don't support array of open array, because MIL newarr only takes one dimension from stack
@@ -1551,21 +1542,10 @@ void Parser2::length(quint32& len) {
         }else
         {
             len = v.val.toUInt();
+            // len == 0 is allowed because that's what we get when len is generic constant before instantiation
             if( len == 0 )
-            {
-                error(tok,QString("expecting at least length 1"));
-                len = 1;
-            }
+                len = 1; // we do this because len == 0 means open array in this AST
         }
-	} else if( la.d_type == Tok_VAR ) {
-		expect(Tok_VAR, true, "length");
-        Token t = la;
-        if( !ev->evaluate(expression(0)) )
-            errorEv();
-        Value v = ev->pop();
-        // TODO
-        len = 0;
-        Expression::deleteAllExpressions();
     } else
 		invalid("length");
 }
@@ -4766,8 +4746,8 @@ MetaParamList Parser2::MetaSection(bool& isType) {
             res[i]->setType(t);
         else
         {
-            // don't share the type between the section items because it's not a variable
-            // but a type declaration
+            // don't share the generic type between the section items because it's not
+            // a variable declaration, but a type declaration
             Type* t = new Type();
             t->kind = Type::Generic;
             t->ownstype = true;

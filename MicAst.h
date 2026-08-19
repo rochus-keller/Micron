@@ -56,7 +56,7 @@ namespace Mic
     #endif
             meta(m),deferred(false),anonymous(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
-            owned(false),type(0),autoself(0),invalid(0),hasSubs(0),ffi_(0),dynamic(0),used(0),vla(0){}
+            owned(false),type(0),autoself(0),invalid(0),hasSubs(0),ffi_(0),dynamic(0),used(0){}
         ~Node();
 
         enum Meta { Inval, T, D, E };
@@ -74,7 +74,6 @@ namespace Mic
 
         // Type
         uint deferred : 1;
-        uint vla :1;
         uint owned : 1;
 
         // Declaration:
@@ -92,7 +91,7 @@ namespace Mic
         // Expression
         uint byVal : 1; // option for LocalVar, Param, ModuleVar, Select, Index
 
-        // 27
+        // 28
 
         RowCol pos; // Declaration, Expression
 

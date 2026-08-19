@@ -1,0 +1,25 @@
+[General]
+Arguments=@ByteArray()
+BuildDir=
+BuiltInOakwood=false
+MainModule=@ByteArray()
+MainProc=@ByteArray()
+OakwoodScreen=false
+Options=@ByteArray()
+Suffixes=.mic, .mil, .mob
+WorkingDir=
+
+[Modules]
+1\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/VecProducerConsumerTest.mic
+1\RelPath=VecProducerConsumerTest.mic
+2\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/Consumer.mic
+2\RelPath=Consumer.mic
+3\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/Producer.mic
+3\RelPath=Producer.mic
+4\AbsPath=/home/me/Entwicklung/Modules/Micron/testcases/Pending/Vec.mic
+4\RelPath=Vec.mic
+size=4
+
+[Packages]
+1\Name=@ByteArray()
+size=1

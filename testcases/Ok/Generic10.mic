@@ -1,6 +1,6 @@
 module Generic10(type T)
   
-  type Comparable = interface
+  type Comparable* = interface
     proc compare(other: ^T): int32;
   end;
   

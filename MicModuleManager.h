@@ -40,8 +40,10 @@ namespace Mic
         struct Location {
             ProviderKind kind;
             QString file;
+            QByteArrayList path; // the full virtual path the import was resolved to
             Location():kind(NotFound){}
-            Location( ProviderKind k, const QString& f ):kind(k),file(f){}
+            Location( ProviderKind k, const QString& f, const QByteArrayList& p = QByteArrayList() ):
+                kind(k),file(f),path(p){}
         };
 
         class ModuleLocator

@@ -1,0 +1,18 @@
+module Bench2 [level=4]
+type
+  Base* = object end
+  BasePtr* = pointer to Base
+  
+procedure Base.hello*()
+begin println("hello") 
+end hello
+
+procedure Base.value*(): integer
+begin return 1 
+end value
+
+procedure Base.twice*(): integer
+begin return 2 * self.value() 
+end twice
+
+end Bench2

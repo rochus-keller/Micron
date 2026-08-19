@@ -40,7 +40,7 @@ int gettimeofday(struct timeval * tp, struct timezone * tzp)
 
 static struct timeval start;
 
-int Input$Time()
+unsigned long long Time$Ticks()
 {
 #ifdef _USE_CPU_TIME_
 	clock_t now = clock();
@@ -56,30 +56,8 @@ int Input$Time()
 #endif
 }
 
-int Input$Available()
-{
-	return 0; // TODO
-}
-
-void Input$Read(char* ch)
-{
-    // TODO
-}
-
-static int _w = 0, _h = 0;
-
-void Input$SetMouseLimits(int w, int h)
-{
-	// TODO
-}
-
-void Input$Mouse( int* keys, int* x, int* y)
-{
-	// TODO
-}
-
 #ifndef _MIC_NO_BEGIN_
-void Input$begin$()
+void Time$begin$()
 {
 }
 #endif
