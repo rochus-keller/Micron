@@ -108,6 +108,8 @@ namespace Mil
         QHash<QByteArray, quint32> d_gotEntries; // symName -> offset in d_got
         quint32 d_gotAddr; // virtual address of GOT
 
+        QSet<quint32> d_movtPatched;
+
         // Combined DWARF/Debug sections
         QVector<DebugSection> d_debugSecs;
         QHash<QByteArray, int> d_debugMap;

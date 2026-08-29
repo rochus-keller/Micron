@@ -555,10 +555,10 @@ bool Renderer::renderModule(Declaration* module)
             name = elfSymName(d->toPath());
 
         // Module init symbols must be GLOBAL (they're called by dependent modules).
-        // Exported procedures (public_) are also GLOBAL. Everything else is LOCAL.
-        // In AAPCS mode (C-compatible linking), all procedures must be GLOBAL
+        // Exported procedures (public_) are also GLOBAL, and so are bound procedures. 
+        // Everything else is LOCAL. In C-compatible linking, all procedures must be GLOBAL
         // so the linker can resolve cross-module references (analogous to x86 cdeclReturns).
-        bool isExported = (d->kind == Declaration::Module) || d->public_ || d_useAapcs;
+        bool isExported = (d->kind == Declaration::Module) || d->public_ || d->typebound || d_useAapcs;
         quint8 binding = isExported ? STB_GLOBAL : STB_LOCAL;
 
         quint32 symIdx = d_elf.addSymbol(name, d_sections.text, 0, 0, binding, STT_FUNC);
@@ -866,6 +866,178 @@ void Renderer::pushReg(Register r)
 void Renderer::popReg(Register r)
 {
     d_emitter.ldr_(AL, r, MemOp(SP, Slot4, MemOp::PostIndexed));
+}
+
+// GETREG/PUTREG register numbers above the general registers R0..R15 designate the status,
+// VFP and CP15 registers, the banked stack pointers, and the cache, TLB and barrier operations
+enum SysRegNum {
+    CPSR_ = 16, SPSR_ = 17, FPSCR_ = 18,
+    SP_irq = 20, SP_abt = 21, SP_und = 22, SP_fiq = 23,
+    CP15First = 32, CP15Last = 79,
+    DSB_ = 80, ISB_ = 81, DMB_ = 82,
+    WFI_ = 84, WFE_ = 85, SEV_ = 86,
+    HypToSvc = 96, ParkCores = 97,
+    RetIrq = 98, RetExc = 99,
+    SemiSvc = 100, SemiHlt = 101
+};
+
+// CP15 registers and operations, addressed by coprocessor register number (opc1, CRn, CRm, opc2)
+struct Cp15Reg {
+    quint16 num;
+    quint8 opc1, crn, crm, opc2;
+    bool get, put;
+};
+
+static const Cp15Reg cp15Regs[] = {
+    { 32, 0,  0, 0, 0, true,  false },  // MIDR, main id
+    { 33, 0,  0, 0, 5, true,  false },  // MPIDR, multiprocessor affinity
+    { 34, 0,  1, 0, 0, true,  true  },  // SCTLR, system control
+    { 35, 0,  1, 0, 1, true,  true  },  // ACTLR, auxiliary control
+    { 36, 0,  1, 0, 2, true,  true  },  // CPACR, coprocessor access control
+    { 37, 0,  2, 0, 0, true,  true  },  // TTBR0, translation table base 0
+    { 38, 0,  2, 0, 1, true,  true  },  // TTBR1, translation table base 1
+    { 39, 0,  2, 0, 2, true,  true  },  // TTBCR, translation table base control
+    { 40, 0,  3, 0, 0, true,  true  },  // DACR, domain access control
+    { 41, 0,  5, 0, 0, true,  true  },  // DFSR, data fault status
+    { 42, 0,  5, 0, 1, true,  true  },  // IFSR, instruction fault status
+    { 43, 0,  6, 0, 0, true,  true  },  // DFAR, data fault address
+    { 44, 0,  6, 0, 2, true,  true  },  // IFAR, instruction fault address
+    { 45, 0, 12, 0, 0, true,  true  },  // VBAR, vector base address
+    { 46, 0, 13, 0, 1, true,  true  },  // CONTEXTIDR
+    { 47, 0, 14, 0, 0, true,  true  },  // CNTFRQ, generic timer frequency
+    { 48, 0, 14, 2, 0, true,  true  },  // CNTP_TVAL, physical timer value
+    { 49, 0, 14, 2, 1, true,  true  },  // CNTP_CTL, physical timer control
+    { 64, 0,  8, 7, 0, false, true  },  // TLBIALL, invalidate unified TLB
+    { 65, 0,  8, 7, 1, false, true  },  // TLBIMVA, invalidate TLB entry by address
+    { 66, 0,  7, 5, 0, false, true  },  // ICIALLU, invalidate instruction cache
+    { 67, 0,  7, 5, 1, false, true  },  // ICIMVAU, invalidate instruction cache line
+    { 68, 0,  7, 5, 6, false, true  },  // BPIALL, invalidate branch predictor
+    { 69, 0,  7, 10, 1, false, true },  // DCCMVAC, clean data cache line
+    { 70, 0,  7, 14, 1, false, true },  // DCCIMVAC, clean and invalidate data cache line
+    { 71, 0,  7, 6, 1, false, true  },  // DCIMVAC, invalidate data cache line
+};
+
+static const Cp15Reg* cp15RegFromNum(quint16 num)
+{
+    for( int i = 0; i < (int)(sizeof(cp15Regs)/sizeof(Cp15Reg)); i++ )
+    {
+        if( cp15Regs[i].num == num )
+            return &cp15Regs[i];
+    }
+    return 0;
+}
+
+bool Renderer::getSysReg(quint16 regNum)
+{
+    switch( regNum )
+    {
+    case CPSR_:
+        d_emitter.mrs_(AL, R0, CPSR);
+        return true;
+    case SPSR_:
+        d_emitter.mrs_(AL, R0, SPSR);
+        return true;
+    case FPSCR_:
+        d_emitter.emitWord(0xEEF10A10); // VMRS R0, FPSCR
+        return true;
+    }
+    const Cp15Reg* r = cp15RegFromNum(regNum);
+    if( r == 0 || !r->get )
+        return false;
+    d_emitter.mrc_(AL, p15, r->opc1, R0, r->crn, r->crm, r->opc2);
+    return true;
+}
+
+bool Renderer::putSysReg(quint16 regNum)
+{
+    switch( regNum )
+    {
+    case CPSR_:
+        d_emitter.msr_(AL, CPSR, Operand2(R0));
+        return true;
+    case SPSR_:
+        d_emitter.msr_(AL, SPSR, Operand2(R0));
+        return true;
+    case FPSCR_:
+        d_emitter.emitWord(0xEEE10A10); // VMSR FPSCR, R0
+        return true;
+    case SP_irq:
+    case SP_abt:
+    case SP_und:
+    case SP_fiq: {
+        // the stack pointer is banked per processor mode, so switch to the mode, set its
+        // stack pointer, and switch back; no memory is accessed in between
+        static const quint32 modes[] = { 0x12, 0x17, 0x1B, 0x11 };
+        d_emitter.mrs_(AL, R1, CPSR);
+        d_emitter.bic_(AL, false, R2, R1, Operand2((quint32)0x1F));
+        d_emitter.orr(R2, R2, Operand2(modes[regNum - SP_irq]));
+        d_emitter.msr_(AL, CPSR, Operand2(R2));
+        d_emitter.mov(SP, Operand2(R0));
+        d_emitter.msr_(AL, CPSR, Operand2(R1));
+        return true;
+        }
+    case DSB_:
+        d_emitter.dsb();
+        return true;
+    case ISB_:
+        d_emitter.isb();
+        return true;
+    case DMB_:
+        d_emitter.dmb();
+        return true;
+    case WFI_:
+        d_emitter.emitWord(0xE320F003);
+        return true;
+    case WFE_:
+        d_emitter.emitWord(0xE320F002);
+        return true;
+    case SEV_:
+        d_emitter.emitWord(0xE320F004);
+        return true;
+    case HypToSvc: {
+        // if the processor is in hypervisor mode, return to the caller in supervisor mode
+        Label done;
+        d_emitter.mrs_(AL, R1, CPSR);
+        d_emitter.and_(R2, R1, Operand2((quint32)0x1F));
+        d_emitter.cmp(R2, Operand2((quint32)0x1A));
+        d_emitter.b_(NE, done);
+        d_emitter.movw_(AL, R2, 0x1D3); // supervisor mode, interrupts disabled
+        d_emitter.msr_(AL, SPSR, Operand2(R2));
+        d_emitter.emitWord(0xE12EF30E); // MSR ELR_hyp, LR
+        d_emitter.emitWord(0xE160006E); // ERET
+        d_emitter.bind(done);
+        return true;
+        }
+    case ParkCores: {
+        // the secondary cores wait here forever
+        Label loop, done;
+        d_emitter.mrc_(AL, p15, 0, R1, 0, 0, 5); // MPIDR
+        d_emitter.and_(AL, true, R2, R1, Operand2((quint32)3));
+        d_emitter.b_(EQ, done);
+        d_emitter.bind(loop);
+        d_emitter.emitWord(0xE320F003); // WFI
+        d_emitter.b_(AL, loop);
+        d_emitter.bind(done);
+        return true;
+        }
+    case RetIrq:
+        d_emitter.emitWord(0xE25EF004); // SUBS PC, LR, #4
+        return true;
+    case RetExc:
+        d_emitter.emitWord(0xE1B0F00E); // MOVS PC, LR
+        return true;
+    case SemiSvc:
+        d_emitter.emitWord(0xEF123456); // SVC 0x123456
+        return true;
+    case SemiHlt:
+        d_emitter.emitWord(0xE10F0070); // HLT 0xF000
+        return true;
+    }
+    const Cp15Reg* r = cp15RegFromNum(regNum);
+    if( r == 0 || !r->put )
+        return false;
+    d_emitter.mcr_(AL, p15, r->opc1, R0, r->crn, r->crm, r->opc2);
+    return true;
 }
 
 void Renderer::pushRegPair(Register rLo, Register rHi)
@@ -3128,8 +3300,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         // Stack: [func_ptr] [arg1] ... [argN] (func_ptr on top, args in correct order)
         // val encodes argsSize (lower 11 bits) and returnSize (upper 11 bits).
         quint32 argsSize = val & 0x7FF;
-        quint32 returnSize = (val >> 11) & 0x7FF;
-        // TODO: Bit 0 of returnSize encodes fpReturn
+        quint32 returnSize = ((val >> 11) & 0x7FF) & ~1u; // bit 0 encodes fpReturn
 
         // Pop the function pointer
         popReg(R12);
@@ -3215,8 +3386,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         // Args underneath are already in correct order (Code2 pushes right-to-left).
         // val encodes argsSize (lower 11 bits) and returnSize (upper 11 bits).
         quint32 argsSize = val & 0x7FF;
-        quint32 returnSize = (val >> 11) & 0x7FF;
-        // TODO: Bit 0 of returnSize encodes fpReturn (same convention as LL_calli).
+        quint32 returnSize = ((val >> 11) & 0x7FF) & ~1u; // bit 0 encodes fpReturn
 
         // Pop method_ptr into R12
         popReg(R12);
@@ -3557,6 +3727,12 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_getreg: {
         const quint16 regNum = val & 0xffff;
         const quint8 byteWidth = (val >> 16) & 0xff;
+        if (regNum > 15) {
+            if (!getSysReg(regNum))
+                return setError(QString("GETREG: no such register: %1").arg(regNum)) ? -1 : -1;
+            pushReg(R0);
+            return 1;
+        }
         Arm::Register hwReg = armRegFromNum(regNum);
         if (byteWidth == 8) {
             Arm::Register hwRegHi = armRegFromNum(regNum + 1);
@@ -3570,7 +3746,19 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_putreg: {
         const quint16 regNum = val & 0xffff;
         const quint8 byteWidth = (val >> 16) & 0xff;
+        if (regNum > 15) {
+            popReg(R0);
+            if (!putSysReg(regNum))
+                return setError(QString("PUTREG: no such register: %1").arg(regNum)) ? -1 : -1;
+            return 1;
+        }
         Arm::Register hwReg = armRegFromNum(regNum);
+        if (hwReg == SP) {
+            // the value cannot be popped to the stack pointer itself
+            popReg(R0);
+            em.mov(SP, Operand2(R0));
+            return 1;
+        }
         if (byteWidth == 8) {
             Arm::Register hwRegHi = armRegFromNum(regNum + 1);
             popRegPair(hwReg, hwRegHi);

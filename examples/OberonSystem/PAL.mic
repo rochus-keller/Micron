@@ -97,7 +97,7 @@ module PAL
     screenW := w
     screenH := h
 
-    if Screen.Open(CAST(ByteBuffer, b), length * 4, w, h, {Screen.LsbFirst, Screen.BottomUp}) = 0 then
+    if ~Screen.Open(CAST(ByteBuffer, b), length * 4, w, h, {Screen.LsbFirst, Screen.BottomUp}) then
       println("PAL: failed to open screen")
     end;
     // hide system cursor

@@ -2,7 +2,8 @@ This project implements a compiler for the [Micron programming language](https:/
 
 Micron is a systems programming language with a syntax similar to Oberon+ and the flexibility of C. The name "Micron" is an abbreviation of "MicroOberon". 
 
-Code examples can be found [here](https://github.com/rochus-keller/Are-we-fast-yet/tree/main/Micron); and [here](https://github.com/rochus-keller/Micron/blob/master/testcases/mil/awfy.mil) is the corresponding intermediate representation (text version).
+Representative code examples and real, working systems and applications can be found [here](https://github.com/rochus-keller/Micron/tree/master/examples) 
+and [here](https://github.com/rochus-keller/Are-we-fast-yet/tree/main/Micron).
 
 The project is the result of the author's many years of work with the Oberon programming language and the analysis and migration of several versions of the Oberon system. It turned out that Oberon as such is in fact not particularly suitable for low-level and system-oriented programming, and that the systems mentioned could only be developed by direct memory manipulation and pointer arithmetic via SYSTEM module and other (partly undocumented) backdoors of the language, for large parts without the support of a type checker. 
 
@@ -21,9 +22,14 @@ NOTE that this project is work-in-progress and not yet released for general use.
 - [x] Implement a C99 generator
 - [x] Implement an IDE with source navigation and debugger
 - [x] Complete language and add explicit language levels
-- [x] Implement a MIL interpreter for the full language scope (WIP)
-- [x] Implement a native backend (WIP)
-- [x] Migrate some notable C and Oberon projects to Micron as a proof-of-concept and to optimize the language (WIP)
+- [x] Implement a MIL interpreter for the full language scope
+- [x] Implement a native backend
+- [x] Migrate some notable C and Oberon projects to Micron as a proof-of-concept and to optimize the language
+- [ ] Improve project format (incorporate binary modules, separate compilation)
+- [ ] Integrate cross-compilation features with IDE
+- [ ] Integrate RV32 emulator with debugging/DAP support
+- [ ] Write documentation/text book (WIP)
+- [ ] Full migration of Oberon System 3 native, running on Raspi (WIP)
 
 
 #### Status on February 4, 2024
@@ -45,10 +51,27 @@ features for different use cases, from low-level kernel and driver development u
 Several large-scale refactorings improved code organization. And IDE was added, adopted from Oberon and Luon projects, integrating comprehensive cross-reference support covering all symbol uses. A MIL interpreter was integrated into the IDE with redirected output to IDE log and export capabilities for low-level bytecode. Most MIC/MIL features from the specification are implemented. The MIL interpreter underwent dramatic performance optimizations, so that it now achieves about 60% of Lua 5.4 (which of course is still too slow). Four distinct code generation backends for the MIL intermediate language have been implemented. The CeeGen (C generator) was fully completed and works with all testcases and AWFY. Experimental work began on EiGen, LLVM 4 IR, and CIL, though these remained work-in-progress.
 A lot of time has been invested in the analysis of the Oberon System 3 and AOS/Bluebottle native implementations to assure that this code can be represented in Micron without the SYSTEM module tricks, loss of type checking, or inline assembler.
 
+#### Status on August 29, 2026
+
+A lot has happened in the third project year. I migrated many applications and systems of significant size to Micron to evaluate how the language performs and to make improvements. 
+[S9, Scheme 9 from Empty Space](./examples/S9) is a large and very well documented VM with a lot of example code; it proved that Micron can represent complex system code written in C, 
+but it required many fixes and quite a few language clarifications/extensions. After more than a year without activity (and pending show-stopper fixes), 
+I started to look for alternatives to Eigen. Extensive research and literature/code studies brought me back to the Oberon OP2 compiler which I had already refactored and re-targeted.
+The initial idea, which manifested to a certain extent, was to translate from MIL to OPIR in its C-transpiled incarnation. But the object format baked into the backend just didn't fit. 
+I came to the conclusion, that the ELF format was unavoidable, particularly for C integration. Implementing my own ELF reader/writer and even a binary x86 emitter turned out 
+to be a feasible alternative. The MLL already implemented for the interpreter was on the right level also for code generation; I essentially refactored an interpreter copy
+the OP2 backend so its load/store IR fit the MLL instructions; the generated code and calling convention thus became very similar (initially) to OP2. The same approach/architecture
+could also be applied to the ARMv7 OP2 backend, which had made progress in 2025. And I could even afford a DWARF generator and a DAP adapter which let me use GDB
+as a debugger for my IDE. Google AI Studio (Gemini 3) was very helpful, particularly for the boiler-plate stuff and to identify bugs, just by looking at the source files. An intensive
+debugging effort with the Are-we-fast-yet, S9 and the migrated Pascal P4 compiler helped to make the backends and generated code sufficiently stable over several months. 
+Adopting the ELF format turned out to be a benefit in many respects, e.g. to reuse GDB and GNU ld, and later the C standard library. Deriving the RV32 generator from the ARM's was
+straight forward, and stabilizing and initial tests with the ESP32-P4 took another three months full time work, which included migrating the Project Oberon System and an RV32
+based machine similar to Wirth's. A lot of work is still ahead, but the language/implementation have stabilized well, which has given me confidence that I'm on the right track.
+
 #### Precompiled versions
 
 Not available at this time.
 
 #### How to build
 
-Qt Creator 3.x is currently used for development. There are *.pro files which are compatible with qmake, but there is no Qt dependency otherwise.
+Qt Creator is currently used for development. There are *.pro files which are compatible with qmake and Qt5.

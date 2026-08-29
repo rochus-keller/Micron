@@ -1331,6 +1331,11 @@ void Evaluator::notOp(Value& v, const RowCol& pos)
 Value Evaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs, const RowCol& pos)
 {
     Value res;
+    if( lhs.type == 0 || rhs.type == 0 )
+    {
+        error("invalid operands of logical operator", pos);
+        return res;
+    }
     if( lhs.type->isBoolean() && rhs.type->isBoolean() )
     {
         if( lhs.isConst() && rhs.isConst() )
@@ -1343,7 +1348,18 @@ Value Evaluator::logicOp(quint8 op, const Value& lhs, const Value& rhs, const Ro
                 res.val = lhs.val.toBool() || rhs.val.toBool();
         }else
         {
-            Q_ASSERT(false); // handled elsewhere
+            // this supports SIZE of a structured type
+            if( lhs.isConst() )
+                out->ldc_i4(lhs.val.toBool() ? 1 : 0);
+            else if( rhs.isConst() )
+                out->ldc_i4(rhs.val.toBool() ? 1 : 0);
+            res.mode = Value::Val;
+            res.type = lhs.type;
+            out->line_(pos);
+            if( op == Expression::And )
+                out->and_();
+            else
+                out->or_();
         }
     }else
         Q_ASSERT(false);
@@ -1636,7 +1652,7 @@ Value Evaluator::relationOp(quint8 op, const Value& lhs, const Value& rhs, const
                 }
             }else
             {
-                emitRelOp(op,false, pos);
+                emitRelOp(op,true, pos);
             }
         }else if( lhs.type->isReal() && rhs.type->isReal() )
         {

@@ -99,6 +99,9 @@ namespace Arm
         void pushReg(Arm::Register r);
         void popReg(Arm::Register r);
 
+        bool getSysReg(quint16 regNum);  
+        bool putSysReg(quint16 regNum); 
+
         void pushRegPair(Arm::Register rLo, Arm::Register rHi);
         void popRegPair(Arm::Register rLo, Arm::Register rHi);
 

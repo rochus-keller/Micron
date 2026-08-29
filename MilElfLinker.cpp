@@ -470,7 +470,6 @@ bool ElfLinker::link(const QString& outPath) {
     defineSym("__preinit_array_end", 0);
     defineSym("_init", 0);
     defineSym("_fini", 0);
-    defineSym("__heap_start", d_bssAddr + d_bssSize);
     defineSym("__heap_end", d_bssAddr + d_bssSize);
 
     // Bind undefined symbols and override weak definitions with strong ones
@@ -744,13 +743,35 @@ bool ElfLinker::applyRelocations() {
                     insn = (insn & 0xFF000000) | ((offset >> 2) & 0x00FFFFFF);
                     writeLE32(p, insn);
                 } else if (rel.type == 43 || rel.type == 44) {
-                    // R_ARM_MOVW_ABS_NC / R_ARM_MOVT_ABS
-                    // Extract implicit 16-bit addend from MOVW/MOVT encoding: imm4=[19:16], imm12=[11:0]
-                    const qint32 movAddend = ((insn >> 4) & 0xF000) | (insn & 0x0FFF);
-                    const quint32 val = symAddr + movAddend;
-                    const quint16 imm16 = (rel.type == 44) ? ((val >> 16) & 0xFFFF) : (val & 0xFFFF);
-                    insn = (insn & 0xFFF0F000) | ((imm16 >> 12) << 16) | (imm16 & 0x0FFF);
-                    writeLE32(p, insn);
+                    // R_ARM_MOVW_ABS_NC / R_ARM_MOVT_ABS; the implicit 16-bit addend sits in
+                    // the imm4=[19:16] and imm12=[11:0] fields of the instruction
+                    const quint32 movAddend = ((insn >> 4) & 0xF000) | (insn & 0x0FFF);
+                    // the MOVW of a pair is patched together with its MOVT, see FixupTracker::recordExternalAddr
+                    quint8* movt = 0;
+                    if (rel.type == 43 && r + 1 < rels.size() && rels[r+1].type == 44 &&
+                            rels[r+1].targetSection == rel.targetSection &&
+                            rels[r+1].symbolIdx == rel.symbolIdx &&
+                            rels[r+1].offset == rel.offset + 4)
+                        movt = reinterpret_cast<quint8*>(targetData->data() + patchOffset + 4);
+                    if (d_movtPatched.remove(patchVAddr))
+                        ; // this MOVT was already patched with the MOVW of its pair
+                    else {
+                        quint32 val = symAddr + movAddend;
+                        if (movt) {
+                            const quint32 hiAddend = ((readLE32(movt) >> 4) & 0xF000) | (readLE32(movt) & 0x0FFF);
+                            val = symAddr + ((hiAddend << 16) | movAddend);
+                        }
+                        const quint16 imm16 = (rel.type == 44) ? ((val >> 16) & 0xFFFF) : (val & 0xFFFF);
+                        insn = (insn & 0xFFF0F000) | ((imm16 >> 12) << 16) | (imm16 & 0x0FFF);
+                        writeLE32(p, insn);
+                        if (movt) {
+                            const quint16 hi = (val >> 16) & 0xFFFF;
+                            quint32 mi = readLE32(movt);
+                            mi = (mi & 0xFFF0F000) | ((hi >> 12) << 16) | (hi & 0x0FFF);
+                            writeLE32(movt, mi);
+                            d_movtPatched.insert(patchVAddr + 4);
+                        }
+                    }
                 } else if (rel.type == 42) {
                     // R_ARM_PREL31
                     const qint32 offset = symAddr + addend - patchVAddr;

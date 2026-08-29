@@ -3544,7 +3544,7 @@ void Parser2::CaseStatement() {
         Type* t = ev->top().type;
         Expression::deleteAllExpressions();
         ev->pop();
-        if( !t->isInteger() && t->kind != Type::CHAR && t->kind != Type::ConstEnum )
+        if( t && !t->isInteger() && t->kind != Type::CHAR && t->kind != Type::ConstEnum )
             error(tok2, "case expression must be of integer, char or constant enumeration type");
         expect(Tok_OF, true, "CaseStatement");
         CaseLabels l;
@@ -3669,7 +3669,7 @@ qint64 Parser2::label(Type* t) {
     Value res = ev->pop();
     if( !assigCompat(t, e, e->pos) )
         error(tok,"label has incompatible type");
-    if( res.type->kind == Type::StrLit )
+    if( res.type && res.type->kind == Type::StrLit )
     {
         QByteArray str = res.val.toByteArray();
         if( str.size() > 2 || str[1] != 0 )

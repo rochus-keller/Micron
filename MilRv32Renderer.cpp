@@ -554,7 +554,8 @@ bool Renderer::renderModule(Declaration* module)
             name = elfSymName(d->toPath());
 
         // In RV-ABI mode, all procedures must be GLOBAL so the linker can resolve cross-module references.
-        bool isExported = (d->kind == Declaration::Module) || d->public_ || d_useRvAbi;
+        // Bound procedures are always GLOBAL as well so they can be reverenced in vtables of other modules.
+        bool isExported = (d->kind == Declaration::Module) || d->public_ || d->typebound || d_useRvAbi;
         quint8 binding = isExported ? STB_GLOBAL : STB_LOCAL;
 
         quint32 symIdx = d_elf.addSymbol(name, d_sections.text, 0, 0, binding, STT_FUNC);
@@ -1243,6 +1244,120 @@ static Rv32::Register rv32RegFromNum(quint16 regNum)
     case 31: return T6;
     default: return Zero;
     }
+}
+
+// GETREG/PUTREG register numbers above the general registers x0..x31 designate the control and
+// status registers and the operations which have no operand
+enum SysRegNum {
+    CsrFirst = 32, CsrLast = 79,
+    FENCE_ = 80, FENCE_I = 81,
+    WFI_ = 84,
+    MRET_ = 96, SRET_ = 97,
+    ECALL_ = 100, EBREAK_ = 101,
+    CsrSpace = 4096 // 4096+n is the control and status register n, for those not named below
+};
+
+struct CsrReg {
+    quint16 num;
+    quint16 csr;
+    bool get, put;
+};
+
+static const CsrReg csrRegs[] = {
+    { 32, 0xF14, true,  false },  // mhartid
+    { 33, 0x301, true,  false },  // misa
+    { 34, 0x300, true,  true  },  // mstatus
+    { 35, 0x305, true,  true  },  // mtvec, machine trap vector
+    { 36, 0x304, true,  true  },  // mie, machine interrupt enable
+    { 37, 0x344, true,  true  },  // mip, machine interrupt pending
+    { 38, 0x341, true,  true  },  // mepc, machine exception program counter
+    { 39, 0x342, true,  false },  // mcause
+    { 40, 0x343, true,  false },  // mtval
+    { 41, 0x340, true,  true  },  // mscratch
+    { 42, 0x307, true,  true  },  // mtvt, vectored trap table (Esp32 interrupt controller)
+    { 43, 0x3A0, true,  true  },  // pmpcfg0
+    { 44, 0x3B0, true,  true  },  // pmpaddr0
+    { 48, 0x100, true,  true  },  // sstatus
+    { 49, 0x105, true,  true  },  // stvec
+    { 50, 0x104, true,  true  },  // sie
+    { 51, 0x144, true,  true  },  // sip
+    { 52, 0x141, true,  true  },  // sepc
+    { 53, 0x142, true,  false },  // scause
+    { 54, 0x143, true,  false },  // stval
+    { 55, 0x180, true,  true  },  // satp, address translation
+    { 64, 0xB00, true,  true  },  // mcycle
+    { 65, 0xB02, true,  true  },  // minstret
+    { 66, 0xC00, true,  false },  // cycle
+    { 67, 0xC01, true,  false },  // time
+    { 72, 0x003, true,  true  },  // fcsr, floating point control and status
+    { 73, 0x002, true,  true  },  // frm, floating point rounding mode
+    { 74, 0x001, true,  true  },  // fflags
+};
+
+static const CsrReg* csrRegFromNum(quint16 num)
+{
+    for( int i = 0; i < (int)(sizeof(csrRegs)/sizeof(CsrReg)); i++ )
+    {
+        if( csrRegs[i].num == num )
+            return &csrRegs[i];
+    }
+    return 0;
+}
+
+bool Renderer::getSysReg(quint16 regNum)
+{
+    if( regNum >= CsrSpace )
+    {
+        if( regNum >= CsrSpace + 4096 )
+            return false;
+        d_emitter.csrr(T0, (Rv32::CSR)(regNum - CsrSpace));
+        return true;
+    }
+    const CsrReg* r = csrRegFromNum(regNum);
+    if( r == 0 || !r->get )
+        return false;
+    d_emitter.csrr(T0, (Rv32::CSR)r->csr);
+    return true;
+}
+
+bool Renderer::putSysReg(quint16 regNum)
+{
+    if( regNum >= CsrSpace )
+    {
+        if( regNum >= CsrSpace + 4096 )
+            return false;
+        d_emitter.csrw((Rv32::CSR)(regNum - CsrSpace), T0);
+        return true;
+    }
+    switch( regNum )
+    {
+    case FENCE_:
+        d_emitter.fence();
+        return true;
+    case FENCE_I:
+        d_emitter.fence_i();
+        return true;
+    case WFI_:
+        d_emitter.wfi();
+        return true;
+    case MRET_:
+        d_emitter.mret();
+        return true;
+    case SRET_:
+        d_emitter.emitWord(0x10200073); // sret
+        return true;
+    case ECALL_:
+        d_emitter.ecall();
+        return true;
+    case EBREAK_:
+        d_emitter.emitWord(0x00100073); // ebreak
+        return true;
+    }
+    const CsrReg* r = csrRegFromNum(regNum);
+    if( r == 0 || !r->put )
+        return false;
+    d_emitter.csrw((Rv32::CSR)r->csr, T0);
+    return true;
 }
 
 static inline const char* allocator(LL_op opcode)
@@ -3343,10 +3458,10 @@ int Renderer::emitOp(Procedure& proc, int pc)
             pushReg(T0); // arg for alloc
             emitCall(allocSym);
             emitCallStackAdj(4, 4);
-            // Stack: [ptr] [totalSize]
+            // Stack: [totalSize] [ptr], the callee returned the pointer in the argument slot
             em.lw(T0, Sp, 0);  // T0 = allocated ptr
             em.lw(T5, Sp, 4);  // T5 = totalSize
-            em.addi(Sp, Sp, 4); // pop totalSize; stack: [ptr]
+            em.addi(Sp, Sp, 8); // pop both; the pointer is pushed again below
         }
 
         if (op.minus) {
@@ -3428,7 +3543,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
 
     case LL_calli: {
         quint32 argsSize = val & 0x7FF;
-        quint32 returnSize = (val >> 11) & 0x7FF;
+        quint32 returnSize = ((val >> 11) & 0x7FF) & ~1u; // bit 0 encodes fpReturn
         popReg(T3); // func ptr
 
         if (d_useRvAbi) {
@@ -3508,7 +3623,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
     }
     case LL_callmi: {
         quint32 argsSize = val & 0x7FF;
-        quint32 returnSize = (val >> 11) & 0x7FF;
+        quint32 returnSize = ((val >> 11) & 0x7FF) & ~1u; // bit 0 encodes fpReturn
         popReg(T3); // method_ptr
         popReg(T0); // obj_ptr
 
@@ -3829,6 +3944,12 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_getreg: {
         const quint16 regNum = val & 0xffff;
         const quint8 byteWidth = (val >> 16) & 0xff;
+        if (regNum > 31) {
+            if (!getSysReg(regNum))
+                return setError(QString("GETREG: no such register: %1").arg(regNum)) ? -1 : -1;
+            pushReg(T0);
+            return 1;
+        }
         Rv32::Register hwReg = rv32RegFromNum(regNum);
         if (byteWidth == 8) {
             Rv32::Register hwRegHi = rv32RegFromNum(regNum + 1);
@@ -3842,7 +3963,19 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_putreg: {
         const quint16 regNum = val & 0xffff;
         const quint8 byteWidth = (val >> 16) & 0xff;
+        if (regNum > 31) {
+            popReg(T0);
+            if (!putSysReg(regNum))
+                return setError(QString("PUTREG: no such register: %1").arg(regNum)) ? -1 : -1;
+            return 1;
+        }
         Rv32::Register hwReg = rv32RegFromNum(regNum);
+        if (hwReg == Sp) {
+            // the value cannot be popped to the stack pointer itself
+            popReg(T0);
+            em.mv(Sp, T0);
+            return 1;
+        }
         if (byteWidth == 8) {
             Rv32::Register hwRegHi = rv32RegFromNum(regNum + 1);
             popRegPair(hwReg, hwRegHi);

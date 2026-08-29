@@ -744,8 +744,16 @@ bool Expression::isConst() const
                 return args.size() == 1 || allConst(args);
             case Builtin::GETENV:
             case Builtin::DEFAULT:
-            case Builtin::SIZE:
                 return true;
+            case Builtin::SIZE:
+                {
+                    // the size of a structured type is only known to the linker
+                    if( args.size() != 1 || args.first()->getType() == 0 )
+                        return true;
+                    return args.first()->kind != TypeDecl ?
+                                args.first()->isConst() :
+                                args.first()->getType()->kind < Type::MaxBasicType;
+                }
             case Builtin::CAST:
                 return args.size() == 2 && args[1]->isConst();
             default:

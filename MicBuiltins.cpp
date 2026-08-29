@@ -178,14 +178,17 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         if( !(args.first()->kind == Expression::TypeDecl || (args.first()->kind == Expression::Addr && args.first()->lhs->kind == Expression::TypeDecl)) ||
                 !(args.first()->getType()->isNumber() || args.first()->getType()->kind == Type::Pointer) )
             throw QString("expecting declaration of number or pointer type as first argument");
-        if( !args.last()->getType()->isNumber() && args.last()->getType()->kind != Type::Pointer )
-            throw QString("expecting a number or pointer type as second argument");
-        if( (args.first()->getType()->isNumber() && !args.last()->getType()->isNumber()) ||
-            (args.first()->getType()->kind == Type::Pointer && args.last()->getType()->kind != Type::Pointer) )
-            throw QString("both arguments must be either number or pointer type");
-        ev->bindUniInt(args.last(), args.first()->getType()->isInt());
-        if( args.first()->getType()->getByteSize() != args.last()->getType()->getByteSize())
-            throw QString("can only cast between types of same byte width (%1,%2)").arg(args.first()->getType()->getName()).arg(args.last()->getType()->getName());
+        if( args.first()->getType() && args.last()->getType() )
+        {
+            if( !args.last()->getType()->isNumber() && args.last()->getType()->kind != Type::Pointer )
+                throw QString("expecting a number or pointer type as second argument");
+            if( (args.first()->getType()->isNumber() && !args.last()->getType()->isNumber()) ||
+                (args.first()->getType()->kind == Type::Pointer && args.last()->getType()->kind != Type::Pointer) )
+                throw QString("both arguments must be either number or pointer type");
+            ev->bindUniInt(args.last(), args.first()->getType()->isInt());
+            if( args.first()->getType()->getByteSize() != args.last()->getType()->getByteSize())
+                throw QString("can only cast between types of same byte width (%1,%2)").arg(args.first()->getType()->getName()).arg(args.last()->getType()->getName());
+        }
         *ret = args.first()->getType();
         break;
     case Builtin::VAL:
@@ -493,6 +496,8 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::COPY:
         expectingNArgs(args,3);
+        if( !args[0]->getType() || !args[0]->getType()->getType() || !args[1]->getType() || !args[1]->getType()->getType() )
+            break; // already reported
         if( args[0]->getType()->kind != Type::Pointer || !args[0]->getType()->getType()->isCharArray() )
             throw "expecting a pointer to char array as the first argument";
         if( (args[1]->getType()->kind != Type::Pointer || !args[1]->getType()->getType()->isCharArray()) &&
@@ -999,6 +1004,9 @@ void Builtins::doPtroff(const RowCol &pos)
 
     // everything is on the MIL stack already
 
+    if( what.type == 0 || what.type->getType() == 0 )
+        return; // already reported
+
     if( what.type->getType()->kind == Type::Any )
     {
         ev->error("cannot apply this operation on pointers of ANY type",pos);
@@ -1145,6 +1153,8 @@ void Builtins::ASSERT(int nArgs,const RowCol& pos)
     ev->stack.push_back(res);
 }
 
+static Mil::EmiTypes::Basic toBasic(Type* t);
+
 void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
 {
     // inc(lhs,rhs) or inc(lhs)
@@ -1192,8 +1202,9 @@ void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
             ev->out->stind_(what.type->kind == Type::UINT64 ? Mil::EmiTypes::U8 : Mil::EmiTypes::I8);
         }else
         {
+            const Mil::EmiTypes::Basic bt = toBasic(what.type);
             ev->out->dup_();
-            ev->out->ldind_(what.type->isUInt() ? Mil::EmiTypes::U4 : Mil::EmiTypes::I4);
+            ev->out->ldind_(bt);
             if( nArgs == 2 )
             {
                 if( step.isConst() )
@@ -1210,7 +1221,7 @@ void Builtins::incdec(int nArgs, bool inc,const RowCol& pos)
                 ev->out->add_();
             else
                 ev->out->sub_();
-            ev->out->stind_(what.type->isUInt() ? Mil::EmiTypes::U4 : Mil::EmiTypes::I4);
+            ev->out->stind_(bt);
         }
     }else if( what.type->kind == Type::ConstEnum )
     {
@@ -1315,9 +1326,9 @@ void Builtins::GETREG(const RowCol &pos)
     Value to = ev->stack.takeLast();
     Value reg = ev->stack.takeLast();
 
-    if( !reg.isConst() || !reg.type->isUInt() || reg.val.toUInt() > 0xff )
+    if( !reg.isConst() || !reg.type->isUInt() || reg.val.toUInt() > 0xffff )
     {
-        ev->error("expecting a constant between 0 and 255 as the first argument",pos);
+        ev->error("expecting a constant between 0 and 65535 as the first argument",pos);
         return;
     }
 
@@ -1343,9 +1354,9 @@ void Builtins::PUTREG(const RowCol &pos)
     Value from = ev->stack.takeLast();
     Value reg = ev->stack.takeLast();
 
-    if( !reg.isConst() || !reg.type->isUInt() || reg.val.toUInt() > 0xff )
+    if( !reg.isConst() || !reg.type->isUInt() || reg.val.toUInt() > 0xffff )
     {
-        ev->error("expecting a constant between 0 and 255 as the first argument",pos);
+        ev->error("expecting a constant between 0 and 65535 as the first argument",pos);
         return;
     }
 
@@ -1355,7 +1366,8 @@ void Builtins::PUTREG(const RowCol &pos)
         return;
     }
 
-    // ev->pushMilStack(from, pos); // the value was already pushed to mil stack in Evaluator Expression::Call
+    if( from.isConst() )
+        ev->pushMilStack(from, pos); // otherwise the value was already pushed to mil stack in Evaluator Expression::Call
 
     ev->out->putreg_(reg.val.toUInt(), toBasic(from.type)); // encodes register id and byte width into single integer
 }

@@ -551,7 +551,8 @@ bool Renderer::renderModule(Declaration* module)
         else
             name = elfSymName(d->toPath());
 
-        bool isExported = (d->kind == Declaration::Module) || d->public_;
+        // bound procedures are always exported, so that they are available for vtables in other modules
+        bool isExported = (d->kind == Declaration::Module) || d->public_ || d->typebound;
         quint8 binding = (isExported || d_cdeclReturns) ? STB_GLOBAL : STB_LOCAL;
 
         quint32 symIdx = d_elf.addSymbol(name, d_sections.text, 0, 0, binding, STT_FUNC);

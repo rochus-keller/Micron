@@ -115,6 +115,8 @@ namespace Rv32
 
         void pushReg(Rv32::Register r);
         void popReg(Rv32::Register r);
+        bool getSysReg(quint16 regNum); 
+        bool putSysReg(quint16 regNum); 
 
         void pushRegPair(Rv32::Register rLo, Rv32::Register rHi);
         void popRegPair(Rv32::Register rLo, Rv32::Register rHi);

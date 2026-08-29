@@ -333,7 +333,7 @@ void Validator::visitStatSeq(Statement* stat)
                 Type* lhsT = deref(stat->d->getType());
                 if( !assigCompat(lhsT,stat->args) )
                 {
-                    //assigCompat(lhsT,stat->args); // TEST
+                    // assigCompat(lhsT,stat->args); // TEST
                     error(stat, "module variable type not compatible with value on stack");
                 }
             }
@@ -566,6 +566,8 @@ Statement*Validator::visitSwitch(Statement* stat)
     Q_ASSERT( stat && stat->kind == IL_switch );
     visitExpr(stat->e);
     expectN(1, stat);
+    if( stat->args == 0 )
+        return stat; // already reported
     Type* t = deref(stat->args->getType());
     if( !isInt32(t) && !t->isInt64() )
         error(stat,"expecting a 32 or 64 bit integer expression");
@@ -1777,6 +1779,20 @@ bool Validator::equal(Type* lhs, Type* rhs)
     if( (lhs->kind == Type::DBLINTPTR && rhs->kind == Type::Proc && rhs->typebound) ||
             (lhs->kind == Type::Proc && lhs->typebound && rhs->kind == Type::DBLINTPTR) )
         return true;
+    if( lhs->kind == Type::Proc && rhs->kind == Type::Proc )
+    {
+        // TODO: this is not yet specified! see "Matching formal parameter lists" and "Matching result types" in MIC spec
+        if( lhs->typebound != rhs->typebound )
+            return false;
+        if( lhs->subs.size() != rhs->subs.size() )
+            return false;
+        for( int i = 0; i < lhs->subs.size(); i++ )
+            if( !equal(deref(lhs->subs[i]->getType()), deref(rhs->subs[i]->getType()) ) )
+                return false;
+        if( !equal(deref(lhs->getType()),deref(rhs->getType() ) ) )
+            return false;
+        return true;
+    }
     return false;
 }
 

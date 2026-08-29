@@ -1622,13 +1622,13 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
         quint32 calliReturnSize = 0;
         bool calliFpReturn = false;
         if (procType->getType()) {
-            calliReturnSize = procType->getType()->getByteSize(pointerWidth);
-            if( calliReturnSize & 1 ) calliReturnSize++; // ensure even for fpReturn bit
+            // the return value occupies a stack slot, as with a direct call
+            calliReturnSize = stackAligned(procType->getType()->getByteSize(pointerWidth));
             calliFpReturn = procType->getType()->isFloat();
         }
         // Encode: lower 11 bits = argsSize, upper bits = returnSize|fpReturn.
         // Bit 0 of returnSize encodes fpReturn (safe because calliReturnSize
-        // is forced to even above).
+        // is stack aligned above).
         quint32 encodedRetSize = calliReturnSize | (calliFpReturn ? 1 : 0);
         emitOp(proc, LL_calli, (encodedRetSize << 11) | (calliArgsSize & 0x7FF));
         break;
@@ -1646,11 +1646,11 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
             quint32 paramSize = methType->subs[i]->getType()->getByteSize(pointerWidth);
             callmiArgsSize += qMax(paramSize, (quint32)stackAlignment);
         }
+        callmiArgsSize = stackAligned(callmiArgsSize);
         quint32 callmiReturnSize = 0;
         bool callmiFpReturn = false;
         if (methType->getType()) {
-            callmiReturnSize = methType->getType()->getByteSize(pointerWidth);
-            if( callmiReturnSize & 1 ) callmiReturnSize++; // ensure even for fpReturn bit
+            callmiReturnSize = stackAligned(methType->getType()->getByteSize(pointerWidth));
             callmiFpReturn = methType->getType()->isFloat();
         }
         // Encode: lower 11 bits = argsSize, upper bits = returnSize|fpReturn.
@@ -2069,7 +2069,8 @@ bool Code::initMemory(char* mem, Type* t, bool doPointerInit )
             Vtable* vt = getVtable(t);
             if( vt == 0 )
                 return false;
-            memcpy(mem, &vt, sizeof(vt));
+            const quint64 vtBits = (quint64)(quintptr)vt;   // zero extended
+            memcpy(mem, &vtBits, pointerWidth);
 
             // downcopy cannot be relied on here because the inherited implementation might
             // not be translated yet when downcopy runs
