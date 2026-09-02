@@ -14,10 +14,10 @@ if (build_mode == `optimized) && (target_toolchain == `msvc) {
     set_defaults(target_toolchain,mtconf)
 }
 
-submod qt = ../LeanQt (HAVE_FILEIO, HAVE_COREAPP, HAVE_CMDLINE)
+submod qtmini = ../LeanQt (HAVE_FILEIO, HAVE_COREAPP, HAVE_CMDLINE)
 
 let config : Config {
-    .configs += [ qt.core_client_config ]
+    .configs += [ qtmini.core_client_config ]
     .include_dirs += ..
     if build_mode == `debug {
         .defines += "_DEBUG"
@@ -55,14 +55,31 @@ let mic : SourceSet {
         ./MicEvaluator.h
         ./MicBuiltins.cpp
         ./MicBuiltins.h
-        ./MicMilLoader2.cpp
-        ./MicMilLoader2.h
+        ./MicAstLoader.cpp
+        ./MicModuleManager.cpp
     ]
 }
 
 let mil : SourceSet {
     .configs += config;
     .sources += [
+        ./MilArmFixup.cpp
+        ./MilArmv7Emitter.cpp
+        ./MilArmv7Renderer.cpp
+        ./MilAstSerializer.cpp
+        ./MilBackend.cpp
+        ./MilDwarfEmitter.cpp
+        ./MilElfLinker.cpp
+        ./MilElfReader.cpp
+        ./MilElfWriter.cpp
+        ./MilRlCode.cpp
+        ./MilRv32Emitter.cpp
+        ./MilRv32Fixup.cpp
+        ./MilRv32Renderer.cpp
+        ./MilVmCode2.cpp
+        ./MilX86Emitter.cpp
+        ./MilX86Renderer.cpp
+        ./oakwood/Args+.c
         ./MilLexer.cpp
         ./MilToken.cpp
         ./MilTokenType.cpp
@@ -73,33 +90,15 @@ let mil : SourceSet {
         ./MilCeeGen.cpp
         ./MilInterpreter.cpp
         ./runtime/MIC++.c
-        ./oakwood/Input+.c
+        ./oakwood/Time+.c
         ./oakwood/MathL+.c
+        ./oakwood/Math+.c
         ./oakwood/Out+.c
+        ./oakwood/Files+.c
         ./MilVmCode.cpp
         ./MilVmOakwood.cpp
-        ./MilEiGen.cpp
-        ./MilLexer.h
-        ./MilToken.h
-        ./MilTokenType.h
-        ./MilParser2.h
-        ./MilAst.h
-        ./MilProject.h
-        ./MilValidator.h
-        ./MilCeeGen.h
-        ./MilInterpreter.h
-        ./MilVmOps.h
-        ./MilVmCode.h
-        ./MilVmOakwood.h
-        ./MilEiGen.h
         ./MilEmitter.cpp
-        ./MilEmitter.h
         ./MilRenderer.cpp
-        ./MilAstSerializer.cpp
-        ./MilBackend.cpp
-        ./MilRenderer.h
-        ./MilAstSerializer.h
-        ./MilBackend.h
     ]
 }
 
@@ -136,12 +135,15 @@ let ide_moc : Moc {
 
 let rcc : Rcc {
     .sources += [ ./MilCompiler.qrc ]
-    .deps += qt.copy_rcc
+    .deps += qtmini.copy_rcc
 }
 
-let compiler ! : Executable {
-    .sources += [ ./MicMain.cpp ]
-    .deps += [ utils mic mil rcc qt.core_sources ]
+let micc ! : Executable {
+    .sources += [
+        ./MicMain.cpp
+        ./MicProject2.cpp
+    ]
+    .deps += [ utils mic mil rcc qtmini.core_sources ]
     .configs += config
 }
 

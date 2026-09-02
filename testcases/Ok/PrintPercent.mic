@@ -1,0 +1,11 @@
+module PrintPercent
+ 
+var c: char
+ 
+begin
+    print('%'); println("")     // expected: %    
+    println("%")                // expected: %     
+    println("a%%b")             // expected: a%%b  
+    c := '%'
+    print(c); println("")       // expected: %   
+end PrintPercent

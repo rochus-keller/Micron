@@ -2069,8 +2069,7 @@ bool Code::initMemory(char* mem, Type* t, bool doPointerInit )
             Vtable* vt = getVtable(t);
             if( vt == 0 )
                 return false;
-            const quint64 vtBits = (quint64)(quintptr)vt;   // zero extended
-            memcpy(mem, &vtBits, pointerWidth);
+            memcpy(mem, &vt, qMin((size_t)pointerWidth, sizeof(vt)));
 
             // downcopy cannot be relied on here because the inherited implementation might
             // not be translated yet when downcopy runs

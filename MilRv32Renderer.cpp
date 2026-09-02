@@ -26,6 +26,7 @@
 #include <QtDebug>
 #include <QFile>
 #include <QBuffer>
+#include <QFileInfo>
 using namespace Mil;
 using namespace Vm;
 using namespace Rv32;
@@ -482,7 +483,11 @@ bool Renderer::renderModule(Declaration* module)
         QByteArray srcFile = module->name + ".mic";
         QByteArray srcDir;
         if (module->md && !module->md->source.isEmpty())
-            srcDir = module->md->source.toUtf8();
+        {
+            QFileInfo info(module->md->source);
+            srcDir = info.absolutePath().toUtf8();
+            srcFile = info.fileName().toUtf8();
+        }
         d_dwarf->beginCompilationUnit(srcFile, srcDir);
     }
 
@@ -765,6 +770,18 @@ void Renderer::loadAddr(Register rd, quint32 symbolIdx, qint32 addend)
     d_fixups.recordAbsAddr(luiOff, symbolIdx, addend);
 }
 
+
+void Renderer::loadFromSp(Register rd, quint32 offset, Register tmp)
+{
+    if (offset <= 2047)
+        d_emitter.lw(rd, Sp, (qint32)offset);
+    else
+    {
+        loadImm32(tmp, offset);
+        d_emitter.add(tmp, Sp, tmp);
+        d_emitter.lw(rd, tmp, 0);
+    }
+}
 
 void Renderer::copyWords(Register dst, qint32 dstOff, Register src, qint32 srcOff,
                          quint32 size, Register word, Register tmpDst, Register tmpSrc)
@@ -1181,8 +1198,25 @@ void Renderer::emitExternCall(quint32 symbolIdx, quint32 argsSize, quint32 retur
         else if (returnSize >= 4)
             pushReg(A0);
     } else {
+        // The callee writes its return value to the base of the argument area
+        // so the area must be at least returnSize wide
+        quint32 padding = 0;
+        if (returnSize > argsSize)
+            padding = returnSize - argsSize;
+        if (padding > 0) {
+            if (padding <= 2047)
+                em.addi(Sp, Sp, -(qint32)padding);
+            else {
+                loadImm32(T3, padding);
+                em.sub(Sp, Sp, T3);
+            }
+            for (quint32 w = 0; w < argsSize; w += 4) {
+                em.lw(T0, Sp, (qint32)(padding + w));
+                em.sw(T0, Sp, (qint32)w);
+            }
+        }
         emitCall(symbolIdx);
-        emitCallStackAdj(argsSize, returnSize);
+        emitCallStackAdj(argsSize + padding, returnSize);
     }
 }
 
@@ -2976,7 +3010,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_stind_vt: {
         quint32 size = val;
         quint32 aligned = (size + 3) & ~3;
-        em.lw(T3, Sp, (qint32)aligned);
+        loadFromSp(T3, aligned);
         copyWords(T3, 0, Sp, 0, aligned);
         quint32 total = aligned + Slot4;
         if (total <= 2047)
@@ -3194,7 +3228,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         Q_ASSERT(pc + 1 < (int)proc.ops.size());
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
-        em.lw(T3, Sp, (qint32)aligned);
+        loadFromSp(T3, aligned);
         if (val != 0) {
             if ((qint32)val >= -2048 && (qint32)val <= 2047)
                 em.addi(T3, T3, (qint32)val);
@@ -3345,8 +3379,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_stelem_vt: {
         quint32 elemSize = val;
         quint32 aligned = (elemSize + 3) & ~3;
-        em.lw(T1, Sp, (qint32)aligned);
-        em.lw(T4, Sp, (qint32)(aligned + Slot4));
+        loadFromSp(T1, aligned, T5);
+        loadFromSp(T4, aligned + Slot4, T5);
         if (elemSize == 4) {
             em.slli(T1, T1, 2);
             em.add(T3, T4, T1);

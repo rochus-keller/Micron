@@ -1,0 +1,11 @@
+module ArrayCtorVars
+
+procedure take(const args: ^array of ^any) begin end take
+
+var n: int32; c: char; s: array 8 of char
+
+begin
+    n := 42; c := 'x'; s := "world"
+    take(@{@s, @n, @c})
+
+end ArrayCtorVars

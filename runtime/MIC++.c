@@ -113,7 +113,7 @@ void MIC$$printF8(double d)
 
 void MIC$$printStr(const char* s)
 {
-    my_printf(s);
+    my_printf("%s", s);
 }
 
 void MIC$$printCh(char c)

@@ -24,6 +24,7 @@
 #include <QtDebug>
 #include <QFile>
 #include <QBuffer>
+#include <QFileInfo>
 using namespace Mil;
 using namespace Vm;
 using namespace Arm;
@@ -474,11 +475,15 @@ bool Renderer::renderModule(Declaration* module)
     // symbols here, we ensure no already-emitted relocations are invalidated.
     if (d_emitDwarf) {
         delete d_dwarf;
-        d_dwarf = new DwarfEmitter(d_elf);
+        d_dwarf = new DwarfEmitter(d_elf, ElfWriter::ArchARM);
         QByteArray srcFile = module->name + ".mic";
         QByteArray srcDir;
         if (module->md && !module->md->source.isEmpty())
-            srcDir = module->md->source.toUtf8();
+        {
+            QFileInfo info(module->md->source);
+            srcDir = info.absolutePath().toUtf8();
+            srcFile = info.fileName().toUtf8();
+        }
         d_dwarf->beginCompilationUnit(srcFile, srcDir);
     }
 
@@ -771,10 +776,7 @@ bool Renderer::renderProcedure(Procedure& proc, int procIdx)
                 fix.recordExternalAddr(movwOff, d_rodataSymIdx);
                 // Word-by-word copy
                 quint32 aligned = (tmplSize + 3) & ~3;
-                for (quint32 j = 0; j < aligned; j += 4) {
-                    em.ldr_(AL, R2, MemOp(R1, j));
-                    em.str_(AL, R2, MemOp(R0, j));
-                }
+                copyWords(R0, 0, R1, 0, aligned, R2, R3);
                 // Fix vtable pointers
                 emitVtableFixups(R0, tmpl);
             }
@@ -813,14 +815,8 @@ void Renderer::emitPrologue(quint32 localsSize)
     }
     d_emitter.stmdb_(AL, SP, true, (1 << R11) | (1 << LR));
     d_emitter.mov(R11, Operand2(SP));
-    if (localsSize > 0) {
-        if (Operand2::isValidImmediate(localsSize)) {
-            d_emitter.sub(SP, SP, Operand2(localsSize));
-        } else {
-            loadImm32(R12, localsSize);
-            d_emitter.sub(SP, SP, Operand2(R12));
-        }
-    }
+    if (localsSize > 0)
+        addImm(SP, SP, -(qint32)localsSize, R12);
 }
 
 void Renderer::emitEpilogue()
@@ -840,6 +836,57 @@ void Renderer::emitEpilogue()
     } else {
         // Old convention: POP {R11, PC} (returns by loading PC from saved LR)
         d_emitter.ldmia_(AL, SP, true, (1 << R11) | (1 << PC));
+    }
+}
+
+// rd = rn + imm, for an immediate of any size
+void Renderer::addImm(Register rd, Register rn, qint32 imm, Register scratch)
+{
+    const quint32 abs = imm < 0 ? (quint32)-imm : (quint32)imm;
+    if (abs == 0) {
+        if (rd != rn)
+            d_emitter.mov(rd, Operand2(rn));
+        return;
+    }
+    if (Operand2::isValidImmediate(abs)) {
+        if (imm < 0)
+            d_emitter.sub(rd, rn, Operand2(abs));
+        else
+            d_emitter.add(rd, rn, Operand2(abs));
+        return;
+    }
+    const Register tmp = rd != rn ? rd : scratch;
+    Q_ASSERT(tmp != rn);
+    loadImm32(tmp, abs);
+    if (imm < 0)
+        d_emitter.sub(rd, rn, Operand2(tmp));
+    else
+        d_emitter.add(rd, rn, Operand2(tmp));
+}
+
+// The immediate offset of a load or store is limited to 12 bits for word and unsigned
+// byte and to 8 bits for halfword and signed byte access; a larger offset is added to
+// the base register instead, which is why the scratch register must not be in use.
+MemOp Renderer::memOff(Register base, qint32 off, Register scratch, quint32 max)
+{
+    if (off >= -(qint32)max && off <= (qint32)max)
+        return MemOp(base, off);
+    addImm(scratch, base, off, scratch);
+    return MemOp(scratch, 0);
+}
+
+MemOp Renderer::frameOff(qint32 off, Register scratch, quint32 max)
+{
+    return memOff(R11, off, scratch, max);
+}
+
+void Renderer::copyWords(Register dst, qint32 dstOff, Register src, qint32 srcOff,
+                         quint32 bytes, Register data, Register scratch)
+{
+    Q_ASSERT(scratch != dst && scratch != src && scratch != data);
+    for (quint32 i = 0; i < bytes; i += 4) {
+        d_emitter.ldr_(AL, data, memOff(src, srcOff + (qint32)i, scratch));
+        d_emitter.str_(AL, data, memOff(dst, dstOff + (qint32)i, scratch));
     }
 }
 
@@ -871,7 +918,7 @@ void Renderer::popReg(Register r)
 // GETREG/PUTREG register numbers above the general registers R0..R15 designate the status,
 // VFP and CP15 registers, the banked stack pointers, and the cache, TLB and barrier operations
 enum SysRegNum {
-    CPSR_ = 16, SPSR_ = 17, FPSCR_ = 18,
+    CPSR_ = 16, SPSR_ = 17, FPSCR_ = 18, FPEXC_ = 19,
     SP_irq = 20, SP_abt = 21, SP_und = 22, SP_fiq = 23,
     CP15First = 32, CP15Last = 79,
     DSB_ = 80, ISB_ = 81, DMB_ = 82,
@@ -927,6 +974,34 @@ static const Cp15Reg* cp15RegFromNum(quint16 num)
     return 0;
 }
 
+static void emitHypToSvc(Arm::Emitter& em)
+{
+    // if the processor is in hypervisor mode, return to the caller in supervisor mode
+    Label done;
+    em.mrs_(AL, R1, CPSR);
+    em.and_(R2, R1, Operand2((quint32)0x1F));
+    em.cmp(R2, Operand2((quint32)0x1A));
+    em.b_(NE, done);
+    em.movw_(AL, R2, 0x1D3); // supervisor mode, interrupts disabled
+    em.msr_(AL, SPSR, Operand2(R2));
+    em.emitWord(0xE12EF30E); // MSR ELR_hyp, LR
+    em.emitWord(0xE160006E); // ERET
+    em.bind(done);
+}
+
+static void emitParkCores(Arm::Emitter& em)
+{
+    // the secondary cores wait here forever
+    Label loop, done;
+    em.mrc_(AL, p15, 0, R1, 0, 0, 5); // MPIDR
+    em.and_(AL, true, R2, R1, Operand2((quint32)3));
+    em.b_(EQ, done);
+    em.bind(loop);
+    em.emitWord(0xE320F003); // WFI
+    em.b_(AL, loop);
+    em.bind(done);
+}
+
 bool Renderer::getSysReg(quint16 regNum)
 {
     switch( regNum )
@@ -939,6 +1014,9 @@ bool Renderer::getSysReg(quint16 regNum)
         return true;
     case FPSCR_:
         d_emitter.emitWord(0xEEF10A10); // VMRS R0, FPSCR
+        return true;
+    case FPEXC_:
+        d_emitter.emitWord(0xEEF80A10); // VMRS R0, FPEXC
         return true;
     }
     const Cp15Reg* r = cp15RegFromNum(regNum);
@@ -960,6 +1038,9 @@ bool Renderer::putSysReg(quint16 regNum)
         return true;
     case FPSCR_:
         d_emitter.emitWord(0xEEE10A10); // VMSR FPSCR, R0
+        return true;
+    case FPEXC_:
+        d_emitter.emitWord(0xEEE80A10); // VMSR FPEXC, R0
         return true;
     case SP_irq:
     case SP_abt:
@@ -994,32 +1075,12 @@ bool Renderer::putSysReg(quint16 regNum)
     case SEV_:
         d_emitter.emitWord(0xE320F004);
         return true;
-    case HypToSvc: {
-        // if the processor is in hypervisor mode, return to the caller in supervisor mode
-        Label done;
-        d_emitter.mrs_(AL, R1, CPSR);
-        d_emitter.and_(R2, R1, Operand2((quint32)0x1F));
-        d_emitter.cmp(R2, Operand2((quint32)0x1A));
-        d_emitter.b_(NE, done);
-        d_emitter.movw_(AL, R2, 0x1D3); // supervisor mode, interrupts disabled
-        d_emitter.msr_(AL, SPSR, Operand2(R2));
-        d_emitter.emitWord(0xE12EF30E); // MSR ELR_hyp, LR
-        d_emitter.emitWord(0xE160006E); // ERET
-        d_emitter.bind(done);
+    case HypToSvc:
+        emitHypToSvc(d_emitter);
         return true;
-        }
-    case ParkCores: {
-        // the secondary cores wait here forever
-        Label loop, done;
-        d_emitter.mrc_(AL, p15, 0, R1, 0, 0, 5); // MPIDR
-        d_emitter.and_(AL, true, R2, R1, Operand2((quint32)3));
-        d_emitter.b_(EQ, done);
-        d_emitter.bind(loop);
-        d_emitter.emitWord(0xE320F003); // WFI
-        d_emitter.b_(AL, loop);
-        d_emitter.bind(done);
+    case ParkCores:
+        emitParkCores(d_emitter);
         return true;
-        }
     case RetIrq:
         d_emitter.emitWord(0xE25EF004); // SUBS PC, LR, #4
         return true;
@@ -1087,23 +1148,7 @@ void Renderer::loadLocalAddr(Register rd, quint32 milOffset)
 {
     // Local at FP - d_localsSize + milOffset
     qint32 fpOff = -((qint32)d_localsSize) + (qint32)milOffset;
-    if (fpOff == 0) {
-        d_emitter.mov(rd, Operand2(R11));
-    } else if (fpOff > 0 && fpOff <= 255) {
-        d_emitter.add(rd, R11, Operand2((quint32)fpOff));
-    } else if (fpOff < 0 && (quint32)(-fpOff) <= 255) {
-        d_emitter.sub(rd, R11, Operand2((quint32)(-fpOff)));
-    } else if (fpOff > 0 && Operand2::isValidImmediate((quint32)fpOff)) {
-        d_emitter.add(rd, R11, Operand2((quint32)fpOff));
-    } else if (fpOff < 0 && Operand2::isValidImmediate((quint32)(-fpOff))) {
-        d_emitter.sub(rd, R11, Operand2((quint32)(-fpOff)));
-    } else {
-        loadImm32(rd, (quint32)((fpOff < 0) ? -fpOff : fpOff));
-        if (fpOff < 0)
-            d_emitter.sub(rd, R11, Operand2(rd));
-        else
-            d_emitter.add(rd, R11, Operand2(rd));
-    }
+    addImm(rd, R11, fpOff, rd);
 }
 
 // Load address of an argument into rd. milOffset is byte offset in args area.
@@ -1111,12 +1156,7 @@ void Renderer::loadArgAddr(Register rd, quint32 milOffset)
 {
     // Arg at FP + 8 + milOffset
     quint32 fpOff = FP_TO_ARGS + milOffset;
-    if (Operand2::isValidImmediate(fpOff)) {
-        d_emitter.add(rd, R11, Operand2(fpOff));
-    } else {
-        loadImm32(rd, fpOff);
-        d_emitter.add(rd, R11, Operand2(rd));
-    }
+    addImm(rd, R11, (qint32)fpOff, rd);
 }
 
 // Load address of a module variable into rd. milOffset is byte offset in module data.
@@ -1176,7 +1216,7 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
 
     Arm::Emitter& em = d_emitter;
 
-    em.sub(SP, SP, Operand2(gap));
+    addImm(SP, SP, -(qint32)gap, R1);
 
     struct ParamInfo {
         quint32 contigOff;  // offset from ESP (before expansion) in contiguous layout
@@ -1212,10 +1252,7 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
         if (srcOff == dstOff)
             continue;
         // Move this param's words
-        for (quint32 w = 0; w < pinfo[i].size; w += 4) {
-            em.ldr_(AL, R0, MemOp(SP, srcOff + w));
-            em.str_(AL, R0, MemOp(SP, dstOff + w));
-        }
+        copyWords(SP, (qint32)dstOff, SP, (qint32)srcOff, pinfo[i].size, R0, R1);
     }
     return gap;
 }
@@ -1277,42 +1314,26 @@ void Renderer::emitCallStackAdj(quint32 argsSize, quint32 returnSize)
 
     if (returnSize == 0) {
         // Void call: just pop all args
-        if (argsSize > 0) {
-            if (Operand2::isValidImmediate(argsSize))
-                d_emitter.add(SP, SP, Operand2(argsSize));
-            else {
-                loadImm32(R12, argsSize);
-                d_emitter.add(SP, SP, Operand2(R12));
-            }
-        }
+        if (argsSize > 0)
+            addImm(SP, SP, (qint32)argsSize, R12);
     } else {
         // Value-returning call: return value is at [SP+0..SP+returnSize-1].
         qint32 adj = (qint32)argsSize - (qint32)returnSize;
         if (adj > 0) {
             // Move return value up by adj bytes (copy word by word, reverse order
             for (qint32 w = (qint32)returnSize - 4; w >= 0; w -= 4) {
-                d_emitter.ldr_(AL, R0, MemOp(SP, w));
-                d_emitter.str_(AL, R0, MemOp(SP, w + adj));
+                d_emitter.ldr_(AL, R0, memOff(SP, w, R1));
+                d_emitter.str_(AL, R0, memOff(SP, w + adj, R1));
             }
-            if (Operand2::isValidImmediate(adj))
-                d_emitter.add(SP, SP, Operand2(adj));
-            else {
-                loadImm32(R12, adj);
-                d_emitter.add(SP, SP, Operand2(R12));
-            }
+            addImm(SP, SP, adj, R12);
         } else if (adj < 0) {
             // Return value is larger than args — need to grow stack
             quint32 neg = (quint32)(-adj);
-            if (Operand2::isValidImmediate(neg))
-                d_emitter.sub(SP, SP, Operand2(neg));
-            else {
-                loadImm32(R12, neg);
-                d_emitter.sub(SP, SP, Operand2(R12));
-            }
+            addImm(SP, SP, adj, R12);
             // Copy return value down
             for (quint32 w = 0; w < returnSize; w += 4) {
-                d_emitter.ldr_(AL, R0, MemOp(SP, (qint32)(w + neg)));
-                d_emitter.str_(AL, R0, MemOp(SP, (qint32)w));
+                d_emitter.ldr_(AL, R0, memOff(SP, (qint32)(w + neg), R1));
+                d_emitter.str_(AL, R0, memOff(SP, (qint32)w, R1));
             }
         }
         // else adj == 0: return value is already in the right place
@@ -1329,17 +1350,17 @@ bool Renderer::setError(const QString& msg)
 // Helper macros for common patterns
 #define LOAD_LOCAL_I4(reg, off) \
     do { qint32 _fo = -((qint32)d_localsSize) + (qint32)(off); \
-         d_emitter.ldr_(AL, reg, MemOp(R11, _fo)); } while(0)
+         d_emitter.ldr_(AL, reg, frameOff(_fo, R12)); } while(0)
 
 #define STORE_LOCAL_I4(reg, off) \
     do { qint32 _fo = -((qint32)d_localsSize) + (qint32)(off); \
-         d_emitter.str_(AL, reg, MemOp(R11, _fo)); } while(0)
+         d_emitter.str_(AL, reg, frameOff(_fo, R12)); } while(0)
 
 #define LOAD_ARG_I4(reg, off) \
-    d_emitter.ldr_(AL, reg, MemOp(R11, FP_TO_ARGS + (qint32)(off)))
+    d_emitter.ldr_(AL, reg, frameOff(FP_TO_ARGS + (qint32)(off), R12))
 
 #define STORE_ARG_I4(reg, off) \
-    d_emitter.str_(AL, reg, MemOp(R11, FP_TO_ARGS + (qint32)(off)))
+    d_emitter.str_(AL, reg, frameOff(FP_TO_ARGS + (qint32)(off), R12))
 
 static Arm::Register armRegFromNum(quint16 regNum)
 {
@@ -1534,11 +1555,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         // For small objects, copy word by word; for larger, use a memcpy-like loop
         quint32 size = obj.size();
         quint32 aligned = (size + 3) & ~3;
-        em.sub(SP, SP, Operand2(aligned));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R1, MemOp(R0, i));
-            em.str_(AL, R1, MemOp(SP, i));
-        }
+        addImm(SP, SP, -(qint32)aligned, R1);
+        copyWords(SP, 0, R0, 0, aligned, R1, R2);
         return 1;
     }
 
@@ -1558,15 +1576,15 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_ldloc_i4:
     case LL_ldloc_u4: {
         qint32 fo = -((qint32)d_localsSize) + (qint32)val;
-        em.ldr_(AL, R0, MemOp(R11, fo));
+        em.ldr_(AL, R0, frameOff(fo, R12));
         pushReg(R0);
         return 1;
     }
     case LL_ldloc_i8:
     case LL_ldloc_u8: {
         qint32 fo = -((qint32)d_localsSize) + (qint32)val;
-        em.ldr_(AL, R0, MemOp(R11, fo));
-        em.ldr_(AL, R1, MemOp(R11, fo + 4));
+        em.ldr_(AL, R0, frameOff(fo, R12));
+        em.ldr_(AL, R1, frameOff(fo + 4, R12));
         pushRegPair(R0, R1);
         return 1;
     }
@@ -1584,27 +1602,27 @@ int Renderer::emitOp(Procedure& proc, int pc)
     }
     case LL_ldloc_r4: {
         qint32 fo = -((qint32)d_localsSize) + (qint32)val;
-        em.ldr_(AL, R0, MemOp(R11, fo));
+        em.ldr_(AL, R0, frameOff(fo, R12));
         pushReg(R0);
         return 1;
     }
     case LL_ldloc_r8: {
         qint32 fo = -((qint32)d_localsSize) + (qint32)val;
-        em.ldr_(AL, R0, MemOp(R11, fo));
-        em.ldr_(AL, R1, MemOp(R11, fo + 4));
+        em.ldr_(AL, R0, frameOff(fo, R12));
+        em.ldr_(AL, R1, frameOff(fo + 4, R12));
         pushRegPair(R0, R1);
         return 1;
     }
     case LL_ldloc_p: {
         qint32 fo = -((qint32)d_localsSize) + (qint32)val;
-        em.ldr_(AL, R0, MemOp(R11, fo));
+        em.ldr_(AL, R0, frameOff(fo, R12));
         pushReg(R0);
         return 1;
     }
     case LL_ldloc_pp: {
         qint32 fo = -((qint32)d_localsSize) + (qint32)val;
-        em.ldr_(AL, R0, MemOp(R11, fo));
-        em.ldr_(AL, R1, MemOp(R11, fo + 4));
+        em.ldr_(AL, R0, frameOff(fo, R12));
+        em.ldr_(AL, R1, frameOff(fo + 4, R12));
         pushRegPair(R0, R1);
         return 1;
     }
@@ -1617,11 +1635,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         loadLocalAddr(R12, val);
-        em.sub(SP, SP, Operand2(aligned));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(R12, i));
-            em.str_(AL, R0, MemOp(SP, i));
-        }
+        addImm(SP, SP, -(qint32)aligned, R1);
+        copyWords(SP, 0, R12, 0, aligned, R0, R1);
         return 2;
     }
 
@@ -1648,15 +1663,15 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_stloc_r8: {
         popRegPair(R0, R1);
         qint32 fo = -((qint32)d_localsSize) + (qint32)val;
-        em.str_(AL, R0, MemOp(R11, fo));
-        em.str_(AL, R1, MemOp(R11, fo + 4));
+        em.str_(AL, R0, frameOff(fo, R12));
+        em.str_(AL, R1, frameOff(fo + 4, R12));
         return 1;
     }
     case LL_stloc_pp: {
         popRegPair(R0, R1);
         qint32 fo = -((qint32)d_localsSize) + (qint32)val;
-        em.str_(AL, R0, MemOp(R11, fo));
-        em.str_(AL, R1, MemOp(R11, fo + 4));
+        em.str_(AL, R0, frameOff(fo, R12));
+        em.str_(AL, R1, frameOff(fo + 4, R12));
         return 1;
     }
     case LL_stloc_vt: {
@@ -1664,11 +1679,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         loadLocalAddr(R12, val);
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(SP, i));
-            em.str_(AL, R0, MemOp(R12, i));
-        }
-        em.add(SP, SP, Operand2(aligned));
+        copyWords(R12, 0, SP, 0, aligned, R0, R1);
+        addImm(SP, SP, (qint32)aligned, R1);
         return 2;
     }
 
@@ -1695,8 +1707,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_ldarg_i8:
     case LL_ldarg_u8:
     case LL_ldarg_r8: {
-        em.ldr_(AL, R0, MemOp(R11, FP_TO_ARGS + (qint32)val));
-        em.ldr_(AL, R1, MemOp(R11, FP_TO_ARGS + (qint32)val + 4));
+        em.ldr_(AL, R0, frameOff(FP_TO_ARGS + (qint32)val, R12));
+        em.ldr_(AL, R1, frameOff(FP_TO_ARGS + (qint32)val + 4, R12));
         pushRegPair(R0, R1);
         return 1;
     }
@@ -1713,8 +1725,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         return 1;
     }
     case LL_ldarg_pp: {
-        em.ldr_(AL, R0, MemOp(R11, FP_TO_ARGS + (qint32)val));
-        em.ldr_(AL, R1, MemOp(R11, FP_TO_ARGS + (qint32)val + 4));
+        em.ldr_(AL, R0, frameOff(FP_TO_ARGS + (qint32)val, R12));
+        em.ldr_(AL, R1, frameOff(FP_TO_ARGS + (qint32)val + 4, R12));
         pushRegPair(R0, R1);
         return 1;
     }
@@ -1723,11 +1735,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         loadArgAddr(R12, val);
-        em.sub(SP, SP, Operand2(aligned));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(R12, i));
-            em.str_(AL, R0, MemOp(SP, i));
-        }
+        addImm(SP, SP, -(qint32)aligned, R1);
+        copyWords(SP, 0, R12, 0, aligned, R0, R1);
         return 2;
     }
     case LL_ldarga:
@@ -1757,14 +1766,14 @@ int Renderer::emitOp(Procedure& proc, int pc)
     case LL_starg_i8:
     case LL_starg_r8: {
         popRegPair(R0, R1);
-        em.str_(AL, R0, MemOp(R11, FP_TO_ARGS + (qint32)val));
-        em.str_(AL, R1, MemOp(R11, FP_TO_ARGS + (qint32)val + 4));
+        em.str_(AL, R0, frameOff(FP_TO_ARGS + (qint32)val, R12));
+        em.str_(AL, R1, frameOff(FP_TO_ARGS + (qint32)val + 4, R12));
         return 1;
     }
     case LL_starg_pp: {
         popRegPair(R0, R1);
-        em.str_(AL, R0, MemOp(R11, FP_TO_ARGS + (qint32)val));
-        em.str_(AL, R1, MemOp(R11, FP_TO_ARGS + (qint32)val + 4));
+        em.str_(AL, R0, frameOff(FP_TO_ARGS + (qint32)val, R12));
+        em.str_(AL, R1, frameOff(FP_TO_ARGS + (qint32)val + 4, R12));
         return 1;
     }
     case LL_starg_vt: {
@@ -1772,11 +1781,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         loadArgAddr(R12, val);
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(SP, i));
-            em.str_(AL, R0, MemOp(R12, i));
-        }
-        em.add(SP, SP, Operand2(aligned));
+        copyWords(R12, 0, SP, 0, aligned, R0, R1);
+        addImm(SP, SP, (qint32)aligned, R1);
         return 2;
     }
 
@@ -1826,11 +1832,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         loadVarAddr(R12, val);
-        em.sub(SP, SP, Operand2(aligned));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(R12, i));
-            em.str_(AL, R0, MemOp(SP, i));
-        }
+        addImm(SP, SP, -(qint32)aligned, R1);
+        copyWords(SP, 0, R12, 0, aligned, R0, R1);
         return 2;
     }
 
@@ -1864,11 +1867,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         loadVarAddr(R12, val);
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(SP, i));
-            em.str_(AL, R0, MemOp(R12, i));
-        }
-        em.add(SP, SP, Operand2(aligned));
+        copyWords(R12, 0, SP, 0, aligned, R0, R1);
+        addImm(SP, SP, (qint32)aligned, R1);
         return 2;
     }
 
@@ -2579,7 +2579,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             // Pop register args from eval stack
             if (regBytes > 0) {
                 if (Operand2::isValidImmediate(regBytes))
-                    em.add(SP, SP, Operand2(regBytes));
+                    addImm(SP, SP, (qint32)regBytes, R12);
                 else {
                     loadImm32(R12, regBytes);
                     em.add(SP, SP, Operand2(R12));
@@ -2596,7 +2596,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 if (extra > 0) {
                     paddingNeeded = ((quint32)extra + 3) & ~3;
                     if (Operand2::isValidImmediate(paddingNeeded))
-                        em.sub(SP, SP, Operand2(paddingNeeded));
+                        addImm(SP, SP, -(qint32)paddingNeeded, R12);
                     else {
                         loadImm32(R12, paddingNeeded);
                         em.sub(SP, SP, Operand2(R12));
@@ -2632,7 +2632,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 // Small/void return: callee cleaned dump. Pop overflow.
                 if (overflowBytes > 0) {
                     if (Operand2::isValidImmediate(overflowBytes))
-                        em.add(SP, SP, Operand2(overflowBytes));
+                        addImm(SP, SP, (qint32)overflowBytes, R12);
                     else {
                         loadImm32(R12, overflowBytes);
                         em.add(SP, SP, Operand2(R12));
@@ -2657,7 +2657,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                         em.str_(AL, R12, MemOp(SP, (qint32)((qint32)w + (qint32)excess)));
                     }
                     if (Operand2::isValidImmediate(excess))
-                        em.add(SP, SP, Operand2(excess));
+                        addImm(SP, SP, (qint32)excess, R12);
                     else {
                         loadImm32(R12, excess);
                         em.add(SP, SP, Operand2(R12));
@@ -2674,7 +2674,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             if (callee->returnSize > callee->argsSize)
                 padding = callee->returnSize - callee->argsSize;
             if (padding > 0) {
-                em.sub(SP, SP, Operand2(padding));
+                addImm(SP, SP, -(qint32)padding, R12);
                 for (quint32 w = 0; w < callee->argsSize; w += 4) {
                     em.ldr_(AL, R0, MemOp(SP, (qint32)(padding + w)));
                     em.str_(AL, R0, MemOp(SP, (qint32)w));
@@ -2719,14 +2719,14 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 // read the return value from [SP] after we return.
                 for (quint32 w = 0; w < retSize; w += 4) {
                     em.ldr_(AL, R0, MemOp(SP, (qint32)w));
-                    em.str_(AL, R0, MemOp(R11, (qint32)(8 + w)));
+                    em.str_(AL, R0, frameOff((qint32)(8 + w), R12));
                 }
             }
         } else {
             // Old convention: store return value at [FP+8].
             for (quint32 w = 0; w < retSize; w += 4) {
                 em.ldr_(AL, R0, MemOp(SP, (qint32)w));
-                em.str_(AL, R0, MemOp(R11, (qint32)(8 + w)));
+                em.str_(AL, R0, frameOff((qint32)(8 + w), R12));
             }
         }
         emitEpilogue();
@@ -2778,22 +2778,16 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = val;
         quint32 aligned = (size + 3) & ~3;
         popReg(R12);
-        em.sub(SP, SP, Operand2(aligned));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(R12, i));
-            em.str_(AL, R0, MemOp(SP, i));
-        }
+        addImm(SP, SP, -(qint32)aligned, R1);
+        copyWords(SP, 0, R12, 0, aligned, R0, R1);
         return 1;
     }
     case LL_ldind_str: {
         quint32 size = val;
         quint32 aligned = (size + 3) & ~3;
         popReg(R12);
-        em.sub(SP, SP, Operand2(aligned));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(R12, i));
-            em.str_(AL, R0, MemOp(SP, i));
-        }
+        addImm(SP, SP, -(qint32)aligned, R1);
+        copyWords(SP, 0, R12, 0, aligned, R0, R1);
         return 1;
     }
 
@@ -2823,49 +2817,47 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 aligned = (size + 3) & ~3;
         // Value is on top of stack (aligned bytes), address is below it
         // Load address from below the value
-        em.ldr_(AL, R12, MemOp(SP, aligned));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(SP, i));
-            em.str_(AL, R0, MemOp(R12, i));
-        }
-        em.add(SP, SP, Operand2(aligned + Slot4)); // pop value + address
+        em.ldr_(AL, R12, memOff(SP, (qint32)aligned, R0));
+        copyWords(R12, 0, SP, 0, aligned, R0, R1);
+        addImm(SP, SP, (qint32)(aligned + Slot4), R1); // pop value + address
         return 1;
     }
 
     case LL_ldfld_i1:
-        popReg(R0); em.ldrsb_(AL, R0, MemOp(R0, val)); pushReg(R0); return 1;
+        popReg(R0); em.ldrsb_(AL, R0, memOff(R0, val, R12, 255)); pushReg(R0); return 1;
     case LL_ldfld_i2:
-        popReg(R0); em.ldrsh_(AL, R0, MemOp(R0, val)); pushReg(R0); return 1;
+        popReg(R0); em.ldrsh_(AL, R0, memOff(R0, val, R12, 255)); pushReg(R0); return 1;
     case LL_ldfld_i4:
     case LL_ldfld_u4:
     case LL_ldfld_r4:
     case LL_ldfld_p:
         popReg(R12);
-        em.ldr_(AL, R0, MemOp(R12, val));
+        em.ldr_(AL, R0, memOff(R12, val, R0));
         pushReg(R0);
         return 1;
     case LL_ldfld_i8:
     case LL_ldfld_u8:
     case LL_ldfld_r8:
         popReg(R12);
-        em.ldr_(AL, R0, MemOp(R12, val));
-        em.ldr_(AL, R1, MemOp(R12, val + 4));
+        addImm(R12, R12, (qint32)val, R0);
+        em.ldr_(AL, R0, MemOp(R12, 0));
+        em.ldr_(AL, R1, MemOp(R12, 4));
         pushRegPair(R0, R1);
         return 1;
     case LL_ldfld_u1:
-        popReg(R0); em.ldrb_(AL, R0, MemOp(R0, val)); pushReg(R0); return 1;
+        popReg(R0); em.ldrb_(AL, R0, memOff(R0, val, R12)); pushReg(R0); return 1;
     case LL_ldfld_u2:
-        popReg(R0); em.ldrh_(AL, R0, MemOp(R0, val)); pushReg(R0); return 1;
+        popReg(R0); em.ldrh_(AL, R0, memOff(R0, val, R12, 255)); pushReg(R0); return 1;
     case LL_ldfld_pp:
         popReg(R12);
-        em.ldr_(AL, R0, MemOp(R12, val));
-        em.ldr_(AL, R1, MemOp(R12, val + 4));
+        addImm(R12, R12, (qint32)val, R0);
+        em.ldr_(AL, R0, MemOp(R12, 0));
+        em.ldr_(AL, R1, MemOp(R12, 4));
         pushRegPair(R0, R1);
         return 1;
     case LL_ldflda:
         popReg(R0);
-        if (val != 0)
-            em.add(R0, R0, Operand2(val));
+        addImm(R0, R0, (qint32)val, R12);
         pushReg(R0);
         return 1;
     case LL_ldfld_vt: {
@@ -2873,54 +2865,48 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         popReg(R12);
-        if (val != 0)
-            em.add(R12, R12, Operand2(val));
-        em.sub(SP, SP, Operand2(aligned));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(R12, i));
-            em.str_(AL, R0, MemOp(SP, i));
-        }
+        addImm(R12, R12, (qint32)val, R0);
+        addImm(SP, SP, -(qint32)aligned, R0);
+        copyWords(SP, 0, R12, 0, aligned, R0, R1);
         return 2;
     }
 
     case LL_stfld_i1:
         popReg(R0); popReg(R1); // R0=value, R1=obj ptr
-        em.strb_(AL, R0, MemOp(R1, val));
+        em.strb_(AL, R0, memOff(R1, val, R12));
         return 1;
     case LL_stfld_i2:
         popReg(R0); popReg(R1);
-        em.strh_(AL, R0, MemOp(R1, val));
+        em.strh_(AL, R0, memOff(R1, val, R12, 255));
         return 1;
     case LL_stfld_i4:
     case LL_stfld_r4:
     case LL_stfld_p:
         popReg(R0); popReg(R1);
-        em.str_(AL, R0, MemOp(R1, val));
+        em.str_(AL, R0, memOff(R1, val, R12));
         return 1;
     case LL_stfld_i8:
     case LL_stfld_r8:
         popRegPair(R0, R1); popReg(R2); // R0:R1=value, R2=obj
-        em.str_(AL, R0, MemOp(R2, val));
-        em.str_(AL, R1, MemOp(R2, val + 4));
+        addImm(R2, R2, (qint32)val, R12);
+        em.str_(AL, R0, MemOp(R2, 0));
+        em.str_(AL, R1, MemOp(R2, 4));
         return 1;
     case LL_stfld_pp:
         popRegPair(R0, R1); popReg(R2);
-        em.str_(AL, R0, MemOp(R2, val));
-        em.str_(AL, R1, MemOp(R2, val + 4));
+        addImm(R2, R2, (qint32)val, R12);
+        em.str_(AL, R0, MemOp(R2, 0));
+        em.str_(AL, R1, MemOp(R2, 4));
         return 1;
     case LL_stfld_vt: {
         Q_ASSERT(pc + 1 < (int)proc.ops.size());
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
         // Stack: [value (aligned bytes)] [obj ptr (4 bytes)]
-        em.ldr_(AL, R12, MemOp(SP, aligned)); // load obj ptr from below value
-        if (val != 0)
-            em.add(R12, R12, Operand2(val));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(SP, i));
-            em.str_(AL, R0, MemOp(R12, i));
-        }
-        em.add(SP, SP, Operand2(aligned + Slot4));
+        em.ldr_(AL, R12, memOff(SP, (qint32)aligned, R0)); // load obj ptr from below value
+        addImm(R12, R12, (qint32)val, R0);
+        copyWords(R12, 0, SP, 0, aligned, R0, R1);
+        addImm(SP, SP, (qint32)(aligned + Slot4), R1);
         return 2;
     }
 
@@ -3001,11 +2987,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
             em.mul_(AL, false, R1, R1, R2);
             em.add(R12, R12, Operand2(R1));
         }
-        em.sub(SP, SP, Operand2(aligned));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(R12, i));
-            em.str_(AL, R0, MemOp(SP, i));
-        }
+        addImm(SP, SP, -(qint32)aligned, R1);
+        copyWords(SP, 0, R12, 0, aligned, R0, R1);
         return 1;
     }
 
@@ -3041,8 +3024,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 elemSize = val;
         quint32 aligned = (elemSize + 3) & ~3;
         // Stack: [value (aligned)] [index (4)] [array ptr (4)]
-        em.ldr_(AL, R1, MemOp(SP, aligned));       // index
-        em.ldr_(AL, R2, MemOp(SP, aligned + Slot4)); // array ptr
+        em.ldr_(AL, R1, memOff(SP, (qint32)aligned, R3));       // index
+        em.ldr_(AL, R2, memOff(SP, (qint32)(aligned + Slot4), R3)); // array ptr
         if (elemSize == 4) {
             em.add(R12, R2, Operand2(R1, Shift(LSL, 2)));
         } else {
@@ -3050,32 +3033,21 @@ int Renderer::emitOp(Procedure& proc, int pc)
             em.mul_(AL, false, R1, R1, R3);
             em.add(R12, R2, Operand2(R1));
         }
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(SP, i));
-            em.str_(AL, R0, MemOp(R12, i));
-        }
-        em.add(SP, SP, Operand2(aligned + Slot4 + Slot4));
+        copyWords(R12, 0, SP, 0, aligned, R0, R1);
+        addImm(SP, SP, (qint32)(aligned + Slot4 + Slot4), R1);
         return 1;
     }
 
     case LL_pop: {
         quint32 aligned = (val + 3) & ~3;
-        em.add(SP, SP, Operand2(aligned));
+        addImm(SP, SP, (qint32)aligned, R1);
         return 1;
     }
     case LL_dup: {
         quint32 aligned = (val + 3) & ~3;
-        // Copy top 'aligned' bytes
-        for (int i = (int)aligned - 4; i >= 0; i -= 4) {
-            em.ldr_(AL, R0, MemOp(SP, i));
-            em.str_(AL, R0, MemOp(SP, -(int)(aligned - i), MemOp::PreIndexed));
-        }
         // allocate space then copy
-        em.sub(SP, SP, Operand2(aligned));
-        for (quint32 i = 0; i < aligned; i += 4) {
-            em.ldr_(AL, R0, MemOp(SP, aligned + i)); // source: old top
-            em.str_(AL, R0, MemOp(SP, i));            // dest: new top
-        }
+        addImm(SP, SP, -(qint32)aligned, R1);
+        copyWords(SP, 0, SP, (qint32)aligned, aligned, R0, R1);
         return 1;
     }
 
@@ -3122,10 +3094,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 fix.recordExternalAddr(movwOff, d_rodataSymIdx);
                 // Word-by-word copy
                 quint32 aligned = (tmplSize + 3) & ~3;
-                for (quint32 i = 0; i < aligned; i += 4) {
-                    em.ldr_(AL, R2, MemOp(R1, i));
-                    em.str_(AL, R2, MemOp(R0, i));
-                }
+                copyWords(R0, 0, R1, 0, aligned, R2, R3);
             }
             // Fix vtable pointer if this is an object type
             emitVtableFixups(R0, tmpl);
@@ -3198,10 +3167,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 em.bind(loopLbl);
                 em.cmp(R12, Operand2(R3));
                 em.b_(CS, doneLbl); // if dest >= end, done (unsigned >=)
-                for (quint32 i = 0; i < aligned; i += 4) {
-                    em.ldr_(AL, R2, MemOp(R1, i));
-                    em.str_(AL, R2, MemOp(R12, i));
-                }
+                copyWords(R12, 0, R1, 0, aligned, R2, LR);
                 // Fix vtable pointer for this element
                 // Save R3, R12, R1 since emitVtableFixups uses R2
                 em.str_(AL, R3, MemOp(SP, -4, MemOp::PreIndexed));
@@ -3260,10 +3226,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 fix.recordExternalAddr(movwOff, d_rodataSymIdx);
                 // Word-by-word copy: R0=dst, R1=src
                 quint32 aligned = (tmplSize + 3) & ~3;
-                for (quint32 i = 0; i < aligned; i += 4) {
-                    em.ldr_(AL, R2, MemOp(R1, i));
-                    em.str_(AL, R2, MemOp(R0, i));
-                }
+                copyWords(R0, 0, R1, 0, aligned, R2, R3);
             }
             // Fix vtable pointer if this is an object type
             emitVtableFixups(R0, tmpl);
@@ -3315,7 +3278,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             if (regBytes >= 16) em.ldr_(AL, R3, MemOp(SP, 12));
             if (regBytes > 0) {
                 if (Operand2::isValidImmediate(regBytes))
-                    em.add(SP, SP, Operand2(regBytes));
+                    addImm(SP, SP, (qint32)regBytes, R12);
                 else {
                     loadImm32(R4, regBytes);  // R4 as temp (R12 holds func ptr)
                     em.add(SP, SP, Operand2(R4));
@@ -3329,7 +3292,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 if (extra > 0) {
                     paddingNeeded = ((quint32)extra + 3) & ~3;
                     if (Operand2::isValidImmediate(paddingNeeded))
-                        em.sub(SP, SP, Operand2(paddingNeeded));
+                        addImm(SP, SP, -(qint32)paddingNeeded, R12);
                     else {
                         loadImm32(R4, paddingNeeded);
                         em.sub(SP, SP, Operand2(R4));
@@ -3347,7 +3310,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 // Small/void return: callee cleaned dump. Pop overflow.
                 if (overflowBytes > 0) {
                     if (Operand2::isValidImmediate(overflowBytes))
-                        em.add(SP, SP, Operand2(overflowBytes));
+                        addImm(SP, SP, (qint32)overflowBytes, R12);
                     else {
                         loadImm32(R12, overflowBytes);
                         em.add(SP, SP, Operand2(R12));
@@ -3367,7 +3330,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                         em.str_(AL, R12, MemOp(SP, (qint32)((qint32)w + (qint32)excess)));
                     }
                     if (Operand2::isValidImmediate(excess))
-                        em.add(SP, SP, Operand2(excess));
+                        addImm(SP, SP, (qint32)excess, R12);
                     else {
                         loadImm32(R12, excess);
                         em.add(SP, SP, Operand2(R12));
@@ -3405,7 +3368,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             if (regBytes >= 12) em.ldr_(AL, R3, MemOp(SP, 8));
             if (regBytes > 0) {
                 if (Operand2::isValidImmediate(regBytes))
-                    em.add(SP, SP, Operand2(regBytes));
+                    addImm(SP, SP, (qint32)regBytes, R12);
                 else {
                     loadImm32(R4, regBytes);
                     em.add(SP, SP, Operand2(R4));
@@ -3419,7 +3382,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 if (extra > 0) {
                     paddingNeeded = ((quint32)extra + 3) & ~3;
                     if (Operand2::isValidImmediate(paddingNeeded))
-                        em.sub(SP, SP, Operand2(paddingNeeded));
+                        addImm(SP, SP, -(qint32)paddingNeeded, R12);
                     else {
                         loadImm32(R4, paddingNeeded);
                         em.sub(SP, SP, Operand2(R4));
@@ -3437,7 +3400,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 // Small/void return: callee cleaned dump. Pop overflow.
                 if (overflowBytes > 0) {
                     if (Operand2::isValidImmediate(overflowBytes))
-                        em.add(SP, SP, Operand2(overflowBytes));
+                        addImm(SP, SP, (qint32)overflowBytes, R12);
                     else {
                         loadImm32(R12, overflowBytes);
                         em.add(SP, SP, Operand2(R12));
@@ -3457,7 +3420,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                         em.str_(AL, R12, MemOp(SP, (qint32)((qint32)w + (qint32)excess)));
                     }
                     if (Operand2::isValidImmediate(excess))
-                        em.add(SP, SP, Operand2(excess));
+                        addImm(SP, SP, (qint32)excess, R12);
                     else {
                         loadImm32(R12, excess);
                         em.add(SP, SP, Operand2(R12));
@@ -3509,7 +3472,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             if (regBytes >= 16) em.ldr_(AL, R3, MemOp(SP, 12));
             if (regBytes > 0) {
                 if (Operand2::isValidImmediate(regBytes))
-                    em.add(SP, SP, Operand2(regBytes));
+                    addImm(SP, SP, (qint32)regBytes, R12);
                 else {
                     loadImm32(R4, regBytes);
                     em.add(SP, SP, Operand2(R4));
@@ -3523,7 +3486,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 if (extra > 0) {
                     paddingNeeded = ((quint32)extra + 3) & ~3;
                     if (Operand2::isValidImmediate(paddingNeeded))
-                        em.sub(SP, SP, Operand2(paddingNeeded));
+                        addImm(SP, SP, -(qint32)paddingNeeded, R12);
                     else {
                         loadImm32(R4, paddingNeeded);
                         em.sub(SP, SP, Operand2(R4));
@@ -3541,7 +3504,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 // Small/void return: callee cleaned dump. Pop overflow.
                 if (overflowBytes > 0) {
                     if (Operand2::isValidImmediate(overflowBytes))
-                        em.add(SP, SP, Operand2(overflowBytes));
+                        addImm(SP, SP, (qint32)overflowBytes, R12);
                     else {
                         loadImm32(R12, overflowBytes);
                         em.add(SP, SP, Operand2(R12));
@@ -3561,7 +3524,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                         em.str_(AL, R12, MemOp(SP, (qint32)((qint32)w + (qint32)excess)));
                     }
                     if (Operand2::isValidImmediate(excess))
-                        em.add(SP, SP, Operand2(excess));
+                        addImm(SP, SP, (qint32)excess, R12);
                     else {
                         loadImm32(R12, excess);
                         em.add(SP, SP, Operand2(R12));

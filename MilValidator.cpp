@@ -1844,6 +1844,8 @@ bool Validator::assigCompat(Type* lhs, Type* rhs)
         Type* rhsT = deref(rhs->getType());
         if( lhsT->kind == Type::Array && rhsT->kind == Type::Array && lhsT->len == 0 && equal(deref(lhsT->getType()), deref(rhsT->getType()) ) )
             return true;
+        if( lhsT->kind == Type::Any )
+            return true;
         return assigCompat(lhsT, rhsT );
     }
 

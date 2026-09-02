@@ -20,6 +20,7 @@
 #include "MilElfWriter.h"
 #include <QFile>
 #include <QtEndian>
+#include <QVector>
 
 using namespace Mil;
 

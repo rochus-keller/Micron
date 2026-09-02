@@ -109,14 +109,16 @@ namespace Rv32
 
         void loadAddr(Rv32::Register rd, quint32 symbolIdx, qint32 addend = 0);
 
+        void loadFromSp(Rv32::Register rd, quint32 offset, Rv32::Register tmp = Rv32::T4);
+
         void copyWords(Rv32::Register dst, qint32 dstOff, Rv32::Register src, qint32 srcOff,
                        quint32 size, Rv32::Register word = Rv32::T0,
                        Rv32::Register tmpDst = Rv32::T5, Rv32::Register tmpSrc = Rv32::T6);
 
         void pushReg(Rv32::Register r);
         void popReg(Rv32::Register r);
-        bool getSysReg(quint16 regNum); 
-        bool putSysReg(quint16 regNum); 
+        bool getSysReg(quint16 regNum);  
+        bool putSysReg(quint16 regNum);  
 
         void pushRegPair(Rv32::Register rLo, Rv32::Register rHi);
         void popRegPair(Rv32::Register rLo, Rv32::Register rHi);

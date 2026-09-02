@@ -2729,8 +2729,6 @@ int Renderer::emitOp(Procedure& proc, int pc)
 
     case LL_ldelem_i1: {
         popReg(ECX); popReg(EAX); // index, array
-        em.movsx_rb(EAX, EAX, 0); // need base+index addressing
-        // x86 doesn't have base+index in movsx easily, use LEA
         em.add_rr(EAX, ECX);
         em.movsx_rb(EAX, EAX, 0);
         pushReg(EAX);

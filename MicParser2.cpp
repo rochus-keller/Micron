@@ -3076,11 +3076,14 @@ Expression* Parser2::constructor(Type* hint) {
             while(c)
             {
                 Q_ASSERT( c->kind == Expression::IndexValue || c->kind == Expression::Value);
+#if 0
+                // this makes no sense; only lhs of IndexValue is const, but already evaluated and stored in c->val when we arrive here
                 if( !c->isConst() )
                 {
                     error(res->pos, "open array constructor only supported for contant expression components");
                     return 0;
                 }
+#endif
                 const qint64 index = c->val.toLongLong();
                 if( test.contains(index) )
                     error(c->pos, "value at array index was already defined");
@@ -3677,6 +3680,8 @@ qint64 Parser2::label(Type* t) {
         else
             res.val = quint8(str[0]);
     }
+    if( res.type && res.type->kind == Type::CHAR )
+        res.val = quint8(res.val.toLongLong()); // char is unsigned, but QVariant holds a signed char
     Expression::deleteAllExpressions();
     return res.val.toLongLong();
 }

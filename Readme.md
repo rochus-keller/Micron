@@ -31,6 +31,7 @@ NOTE that this project is work-in-progress and not yet released for general use.
 - [ ] Write documentation/text book (WIP)
 - [ ] Full migration of Oberon System 3 native, running on Raspi (WIP)
 
+A [textbook about Micron](https://github.com/micron-language/textbook) is work in progress.
 
 #### Status on February 4, 2024
 

@@ -96,6 +96,14 @@ namespace Arm
 
         void loadImm32(Arm::Register rd, quint32 value);
 
+        void addImm(Arm::Register rd, Arm::Register rn, qint32 imm, Arm::Register scratch = Arm::R12);
+
+         Arm::MemOp memOff(Arm::Register base, qint32 off, Arm::Register scratch, quint32 max = 4095);
+        Arm::MemOp frameOff(qint32 off, Arm::Register scratch, quint32 max = 4095);
+
+        void copyWords(Arm::Register dst, qint32 dstOff, Arm::Register src, qint32 srcOff,
+                       quint32 bytes, Arm::Register data, Arm::Register scratch);
+
         void pushReg(Arm::Register r);
         void popReg(Arm::Register r);
 

@@ -288,7 +288,7 @@ static int emitAndRun(Mil::AstModel& model, const BuildOpts& opts, int all, int 
 
     QStringList objFiles;
     if( opts.target == "armv7" )
-        objFiles = Mil::Backend::compileArm(model, opts.outDir, opts.dbg, true, opts.cAbi, opts.hasHwDiv);
+        objFiles = Mil::Backend::compileArm(model, opts.outDir, opts.dbg, opts.cAbi, opts.cAbi, opts.hasHwDiv);
     else if( opts.target == "rv32" )
         objFiles = Mil::Backend::compileRv32(model, opts.outDir, opts.dbg, /*indirectMain*/false, opts.cAbi,
                     opts.hasFloat, opts.hasHwDiv, opts.esp32);
