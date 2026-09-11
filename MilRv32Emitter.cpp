@@ -342,7 +342,7 @@ void Emitter::fsqrt_s(FRegister rd, FRegister rs1) {
 }
 
 void Emitter::fcvtw_s(Register rd, FRegister rs1) {
-    emitR(OPC_OP_FP, 7, 0x60, rd, rs1, 0); // Float to int
+    emitR(OPC_OP_FP, 1, 0x60, rd, rs1, 0); // Float to int, rounding mode RTZ
 }
 void Emitter::fcvts_w(FRegister rd, Register rs1) {
     emitR(OPC_OP_FP, 7, 0x68, rd, rs1, 0); // Int to float

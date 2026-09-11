@@ -787,16 +787,22 @@ void Renderer::copyWords(Register dst, qint32 dstOff, Register src, qint32 srcOf
                          quint32 size, Register word, Register tmpDst, Register tmpSrc)
 {
     const quint32 aligned = (size + 3) & ~3;
-    if (aligned == 0)
+    const quint32 words = size & ~3; // the tail is copied byte-wise so nothing is written past the end
+    if (size == 0)
         return;
     const quint32 chunk = 2044; // the largest multiple of 4 which fits the 12 bit immediate
     if (dstOff + (qint32)aligned <= (qint32)chunk && srcOff + (qint32)aligned <= (qint32)chunk &&
             dstOff >= 0 && srcOff >= 0)
     {
-        for (quint32 i = 0; i < aligned; i += 4)
+        for (quint32 i = 0; i < words; i += 4)
         {
             d_emitter.lw(word, src, srcOff + (qint32)i);
             d_emitter.sw(word, dst, dstOff + (qint32)i);
+        }
+        for (quint32 i = words; i < size; i++)
+        {
+            d_emitter.lbu(word, src, srcOff + (qint32)i);
+            d_emitter.sb(word, dst, dstOff + (qint32)i);
         }
         return;
     }
@@ -820,20 +826,25 @@ void Renderer::copyWords(Register dst, qint32 dstOff, Register src, qint32 srcOf
         d_emitter.add(tmpSrc, src, tmpSrc);
     }
     quint32 off = 0;
-    while (off < aligned)
+    while (off < words)
     {
-        const quint32 n = qMin(chunk, aligned - off);
+        const quint32 n = qMin(chunk, words - off);
         for (quint32 i = 0; i < n; i += 4)
         {
             d_emitter.lw(word, tmpSrc, (qint32)i);
             d_emitter.sw(word, tmpDst, (qint32)i);
         }
         off += n;
-        if (off < aligned)
+        if (off < size)
         {
             d_emitter.addi(tmpSrc, tmpSrc, (qint32)n);
             d_emitter.addi(tmpDst, tmpDst, (qint32)n);
         }
+    }
+    for (quint32 i = 0; i < size - words; i++)
+    {
+        d_emitter.lbu(word, tmpSrc, (qint32)i);
+        d_emitter.sb(word, tmpDst, (qint32)i);
     }
 }
 
@@ -950,7 +961,7 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
         for (int i = 0; i < params.size(); i++) {
             Type* t = params[i]->getType();
             int size = t->getByteSize(ptrwidth);
-            off_p += qMax(size, (int)stackalig);
+            off_p += d_code.stackAligned(qMax(size, (int)stackalig));
         }
         alignedSize = d_code.stackAligned(off_p);
     }
@@ -992,7 +1003,7 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
             Type* t = params[i]->getType();
             int size = t->getByteSize(ptrwidth);
             pinfo[i].alignedOff = off_p;
-            off_p += qMax(size, (int)stackalig);
+            off_p += d_code.stackAligned(qMax(size, (int)stackalig));
         }
     }
 
@@ -1198,8 +1209,10 @@ void Renderer::emitExternCall(quint32 symbolIdx, quint32 argsSize, quint32 retur
         else if (returnSize >= 4)
             pushReg(A0);
     } else {
-        // The callee writes its return value to the base of the argument area
-        // so the area must be at least returnSize wide
+        // The callee writes its return value to the base of the argument area, so
+        // the area must be at least returnSize wide; otherwise the words above the
+        // arguments, which still belong to the caller, are overwritten (as in
+        // LL_call of the old convention).
         quint32 padding = 0;
         if (returnSize > argsSize)
             padding = returnSize - argsSize;
@@ -3011,7 +3024,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = val;
         quint32 aligned = (size + 3) & ~3;
         loadFromSp(T3, aligned);
-        copyWords(T3, 0, Sp, 0, aligned);
+        copyWords(T3, 0, Sp, 0, size);
         quint32 total = aligned + Slot4;
         if (total <= 2047)
             em.addi(Sp, Sp, (qint32)total);
@@ -3237,7 +3250,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 em.add(T3, T3, T4);
             }
         }
-        copyWords(T3, 0, Sp, 0, aligned);
+        copyWords(T3, 0, Sp, 0, size);
         quint32 total = aligned + Slot4;
         if (total <= 2047)
             em.addi(Sp, Sp, (qint32)total);
@@ -3389,7 +3402,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             em.mul(T1, T1, T5);
             em.add(T3, T4, T1);
         }
-        copyWords(T3, 0, Sp, 0, aligned);
+        copyWords(T3, 0, Sp, 0, elemSize);
         quint32 total = aligned + Slot4 + Slot4;
         if (total <= 2047)
             em.addi(Sp, Sp, (qint32)total);
@@ -3509,11 +3522,10 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 em.mv(T3, T0);
                 em.add(T5, T0, T5); // T5 = end
                 loadAddr(T1, d_rodataSymIdx, tmplOff);
-                quint32 aligned = (tmplSize + 3) & ~3;
                 Rv32::Label loopLbl, doneLbl;
                 em.bind(loopLbl);
                 em.bgeu(T3, T5, doneLbl);
-                copyWords(T3, 0, T1, 0, aligned, T4, T0, T2);
+                copyWords(T3, 0, T1, 0, tmplSize, T4, T0, T2);
                 // Save regs before vtable fixup
                 pushReg(T5); pushReg(T3); pushReg(T1);
                 emitVtableFixups(T3, tmpl);

@@ -181,6 +181,7 @@ quint32 Emitter::addLocal(const Quali& typeRef, QByteArray name, const RowCol & 
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 );
     Q_ASSERT( !typeRef.second.isEmpty() );
+    Q_ASSERT( !name.isEmpty() );
     d_proc.back().locals.append(ProcData::Var(typeRef,name, lineset(pos)));
     return d_proc.back().locals.size()-1;
 }
@@ -188,6 +189,7 @@ quint32 Emitter::addLocal(const Quali& typeRef, QByteArray name, const RowCol & 
 quint32 Emitter::addArgument(const Quali& typeRef, QByteArray name, const RowCol & pos)
 {
     Q_ASSERT( !d_proc.isEmpty() || d_typeKind == EmiTypes::ProcType || d_typeKind == EmiTypes::MethType );
+    Q_ASSERT( !name.isEmpty() );
     if( typeRef.second.isEmpty() )
         return 0; // error reported elsewhere
     d_proc.back().params.append(ProcData::Var(typeRef,name, lineset(pos)));

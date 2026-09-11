@@ -27,11 +27,29 @@
 
 namespace Mic
 {
-    class Highlighter : public QSyntaxHighlighter
+    class MicHighlighter : public QSyntaxHighlighter
     {
     public:
         enum { TokenProp = QTextFormat::UserProperty };
-        explicit Highlighter(QTextDocument *parent = 0);
+        explicit MicHighlighter(QObject *parent);
+        void addBuiltIn(const QByteArray& bi);
+
+    protected:
+        QTextCharFormat formatForCategory(int) const;
+
+        void highlightBlock(const QString &text);
+
+    private:
+        enum Category { C_Num, C_Str, C_Kw, C_Type, C_Ident, C_Op, C_Pp, C_Cmt, C_Section, C_Brack, C_Max };
+        QTextCharFormat d_format[C_Max];
+        QSet<QByteArray> d_builtins;
+     };
+
+    class MilHighlighter : public QSyntaxHighlighter
+    {
+    public:
+        enum { TokenProp = QTextFormat::UserProperty };
+        explicit MilHighlighter(QObject *parent);
         void addBuiltIn(const QByteArray& bi);
 
     protected:

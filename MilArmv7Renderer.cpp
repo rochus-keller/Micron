@@ -884,9 +884,14 @@ void Renderer::copyWords(Register dst, qint32 dstOff, Register src, qint32 srcOf
                          quint32 bytes, Register data, Register scratch)
 {
     Q_ASSERT(scratch != dst && scratch != src && scratch != data);
-    for (quint32 i = 0; i < bytes; i += 4) {
+    const quint32 words = bytes & ~3; // the tail is copied byte-wise so nothing is written past the end
+    for (quint32 i = 0; i < words; i += 4) {
         d_emitter.ldr_(AL, data, memOff(src, srcOff + (qint32)i, scratch));
         d_emitter.str_(AL, data, memOff(dst, dstOff + (qint32)i, scratch));
+    }
+    for (quint32 i = words; i < bytes; i++) {
+        d_emitter.ldrb_(AL, data, memOff(src, srcOff + (qint32)i, scratch));
+        d_emitter.strb_(AL, data, memOff(dst, dstOff + (qint32)i, scratch));
     }
 }
 
@@ -1205,7 +1210,7 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
         for (int i = 0; i < params.size(); i++) {
             Type* t = params[i]->getType();
             int size = t->getByteSize(ptrwidth);
-            off_p += qMax(size, (int)stackalig);
+            off_p += d_code.stackAligned(qMax(size, (int)stackalig));
         }
         alignedSize = d_code.stackAligned(off_p);
     }
@@ -1242,7 +1247,7 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
             Type* t = params[i]->getType();
             int size = t->getByteSize(ptrwidth);
             pinfo[i].alignedOff = off_p;
-            off_p += qMax(size, (int)stackalig);
+            off_p += d_code.stackAligned(qMax(size, (int)stackalig));
         }
     }
 
@@ -2818,7 +2823,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         // Value is on top of stack (aligned bytes), address is below it
         // Load address from below the value
         em.ldr_(AL, R12, memOff(SP, (qint32)aligned, R0));
-        copyWords(R12, 0, SP, 0, aligned, R0, R1);
+        copyWords(R12, 0, SP, 0, size, R0, R1);
         addImm(SP, SP, (qint32)(aligned + Slot4), R1); // pop value + address
         return 1;
     }
@@ -2905,7 +2910,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         // Stack: [value (aligned bytes)] [obj ptr (4 bytes)]
         em.ldr_(AL, R12, memOff(SP, (qint32)aligned, R0)); // load obj ptr from below value
         addImm(R12, R12, (qint32)val, R0);
-        copyWords(R12, 0, SP, 0, aligned, R0, R1);
+        copyWords(R12, 0, SP, 0, size, R0, R1);
         addImm(SP, SP, (qint32)(aligned + Slot4), R1);
         return 2;
     }
@@ -3033,7 +3038,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             em.mul_(AL, false, R1, R1, R3);
             em.add(R12, R2, Operand2(R1));
         }
-        copyWords(R12, 0, SP, 0, aligned, R0, R1);
+        copyWords(R12, 0, SP, 0, elemSize, R0, R1);
         addImm(SP, SP, (qint32)(aligned + Slot4 + Slot4), R1);
         return 1;
     }
@@ -3161,13 +3166,12 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 em.movw_(AL, R1, tmplOff & 0xFFFF);
                 em.movt_(AL, R1, (tmplOff >> 16) & 0xFFFF);
                 fix.recordExternalAddr(movwOff, d_rodataSymIdx);
-                quint32 aligned = (tmplSize + 3) & ~3;
                 // Loop: copy template to each element
                 Arm::Label loopLbl, doneLbl;
                 em.bind(loopLbl);
                 em.cmp(R12, Operand2(R3));
                 em.b_(CS, doneLbl); // if dest >= end, done (unsigned >=)
-                copyWords(R12, 0, R1, 0, aligned, R2, LR);
+                copyWords(R12, 0, R1, 0, tmplSize, R2, LR);
                 // Fix vtable pointer for this element
                 // Save R3, R12, R1 since emitVtableFixups uses R2
                 em.str_(AL, R3, MemOp(SP, -4, MemOp::PreIndexed));

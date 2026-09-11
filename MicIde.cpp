@@ -24,6 +24,7 @@
 #include "MicProject2.h"
 #include "MilCeeGen.h"
 #include "MilElfLinker.h"
+#include "MilElfReader.h"
 #include "Version.h"
 #include <QtDebug>
 #include <QDockWidget>
@@ -90,7 +91,8 @@ public:
         setCharPerTab(2);
         setTypingLatency(400);
         setPaintIndents(false);
-        d_hl = new Highlighter( document() );
+        d_micHl = new MicHighlighter( this );
+        d_milHl = new MilHighlighter( this );
         updateTabWidth();
         QSettings set;
         if( !set.contains("CodeEditor/Font") )
@@ -109,34 +111,91 @@ public:
     {
     }
 
+    bool loadFile( const QString& path )
+    {
+        if( d_path == path )
+            return true;
+        d_path = path;
+        QByteArray buf;
+
+        QFile in(d_path);
+        if( !in.open(QIODevice::ReadOnly) )
+            return false;
+        setReadOnly(false);
+        if( path.endsWith(".mob") )
+        {
+            d_milHl->setDocument(document());
+            setReadOnly(true);
+            Mil::ElfReader r;
+            if( r.loadFromFile(path) )
+                buf = r.readMicronModSection();
+        }else if( path.endsWith(".mil") )
+        {
+            d_milHl->setDocument(document());
+            buf = in.readAll();
+        }else
+        {
+            d_micHl->setDocument(document()); // d_hl3
+            buf = in.readAll();
+        }
+        setPlainText( QString::fromLatin1(buf) );
+        return true;
+    }
+
     Ide* d_ide;
-    Highlighter* d_hl;
+    MicHighlighter* d_micHl;
+    MilHighlighter* d_milHl;
     Project2* d_pro;
     int dbgRow, dbgCol;
 
     void setExt( bool on )
     {
         for( int i = Builtin::ABS; i < Builtin::Max; i++ )
-            d_hl->addBuiltIn(Builtin::name[i]);
+            d_micHl->addBuiltIn(Builtin::name[i]);
         for( int i = Type::Nil; i <= Type::MaxBasicType; i++ )
-            d_hl->addBuiltIn(Type::name[i]);
-        d_hl->addBuiltIn("BOOLEAN");
-        d_hl->addBuiltIn("BYTE");
-        d_hl->addBuiltIn("U1");
-        d_hl->addBuiltIn("I1");
-        d_hl->addBuiltIn("SHORTINT");
-        d_hl->addBuiltIn("I2");
-        d_hl->addBuiltIn("U2");
-        d_hl->addBuiltIn("INTEGER");
-        d_hl->addBuiltIn("I4");
-        d_hl->addBuiltIn("U4");
-        d_hl->addBuiltIn("LONGINT");
-        d_hl->addBuiltIn("I8");
-        d_hl->addBuiltIn("U8");
-        d_hl->addBuiltIn("REAL");
-        d_hl->addBuiltIn("R4");
-        d_hl->addBuiltIn("LONGREAL");
-        d_hl->addBuiltIn("R8");
+            d_micHl->addBuiltIn(Type::name[i]);
+        d_micHl->addBuiltIn("BOOLEAN");
+        d_micHl->addBuiltIn("BYTE");
+        d_micHl->addBuiltIn("U1");
+        d_micHl->addBuiltIn("I1");
+        d_micHl->addBuiltIn("SHORTINT");
+        d_micHl->addBuiltIn("I2");
+        d_micHl->addBuiltIn("U2");
+        d_micHl->addBuiltIn("INTEGER");
+        d_micHl->addBuiltIn("I4");
+        d_micHl->addBuiltIn("U4");
+        d_micHl->addBuiltIn("LONGINT");
+        d_micHl->addBuiltIn("I8");
+        d_micHl->addBuiltIn("U8");
+        d_micHl->addBuiltIn("REAL");
+        d_micHl->addBuiltIn("R4");
+        d_micHl->addBuiltIn("LONGREAL");
+        d_micHl->addBuiltIn("R8");
+
+        d_milHl->addBuiltIn("ANY");
+        d_milHl->addBuiltIn("BOOL");
+        d_milHl->addBuiltIn("CHAR");
+        d_milHl->addBuiltIn("INT8");
+        d_milHl->addBuiltIn("I1");
+        d_milHl->addBuiltIn("INT16");
+        d_milHl->addBuiltIn("I2");
+        d_milHl->addBuiltIn("INT32");
+        d_milHl->addBuiltIn("I4");
+        d_milHl->addBuiltIn("INT64");
+        d_milHl->addBuiltIn("I8");
+        d_milHl->addBuiltIn("UINT8");
+        d_milHl->addBuiltIn( "U1");
+        d_milHl->addBuiltIn( "UINT16");
+        d_milHl->addBuiltIn("U2");
+        d_milHl->addBuiltIn("UINT32");
+        d_milHl->addBuiltIn("U4");
+        d_milHl->addBuiltIn("UINT64");
+        d_milHl->addBuiltIn("U8");
+        d_milHl->addBuiltIn("FLOAT32");
+        d_milHl->addBuiltIn("R4");
+        d_milHl->addBuiltIn("FLOAT64");
+        d_milHl->addBuiltIn("R8");
+        d_milHl->addBuiltIn("INTPTR");
     }
 
     void clearBackHisto()
@@ -961,7 +1020,7 @@ void Ide::onNewPro()
 
     QDir::setCurrent(QFileInfo(fileName).absolutePath());
 
-    if( !fileName.endsWith(".obxpro",Qt::CaseInsensitive ) )
+    if( !fileName.endsWith(".obxpro" ) )
         fileName += ".obxpro";
 
     d_pro->createNew();
@@ -1028,7 +1087,7 @@ void Ide::onSaveAs()
 
     QDir::setCurrent(QFileInfo(fileName).absolutePath());
 
-    if( !fileName.endsWith(".obxpro",Qt::CaseInsensitive ) )
+    if( !fileName.endsWith(".obxpro" ) )
         fileName += ".obxpro";
 
     d_pro->saveTo(fileName);
@@ -1816,11 +1875,11 @@ static void fillModTree( T* parent, const QList<Project2::File*>& mods )
         QTreeWidgetItem* item = new QTreeWidgetItem(parent);
         item->setText(0, m->d_name);
         item->setToolTip(0,m->d_filePath);
-#if 0
-        if( m->d_isDef )
-            item->setIcon(0, QPixmap(":/images/definition.png") );
+        if( m->d_filePath.endsWith(".mil") )
+            item->setIcon(0, QPixmap(":/images/category.png") );
+        else if( m->d_filePath.endsWith(".mob") )
+            item->setIcon(0, QPixmap(":/images/box.png") );
         else
-#endif
             item->setIcon(0, QPixmap(":/images/module.png") );
         item->setData(0,Qt::UserRole,QVariant::fromValue(m));
     }
@@ -1898,17 +1957,7 @@ Ide::Editor* Ide::showEditor(const QString& path, int row, int col, bool setMark
         connect(edit,SIGNAL(sigUpdateLocation(int,int)),this,SLOT(onUpdateLocation(int,int)));
 
         edit->setExt(true);
-        QFile in(filePath);
-        if( in.open(QIODevice::ReadOnly) )
-        {
-            const QByteArray text = Lexer::extractText(&in);
-
-            QBuffer b;
-            b.buffer() = text;
-            b.open(QIODevice::ReadOnly);
-            edit->loadFromFile(&b, filePath);
-        }else
-            qWarning() << "cannot open file for reading" << filePath;
+        edit->loadFile(filePath);
 
         if( f && f->d_mod )
         {

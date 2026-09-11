@@ -1051,7 +1051,8 @@ bool Parser2::paramCompat(Declaration* lhs, Expression* rhs)
     Q_ASSERT(lhs->kind == Declaration::ParamDecl);
 
     // Tf is a pointer to an open array of CHAR, f is CONST, and a is string literal
-    if( lhs->visi == Node::ReadOnly && lhs->getType()->kind == Type::Pointer &&
+    // NOTE: signatures reconstructed from MIL have no const params, so we accept a string literal there as well
+    if( (lhs->visi == Node::ReadOnly || lhs->getModule()->extern_) && lhs->getType()->kind == Type::Pointer &&
             lhs->getType()->getType()->kind == Type::Array && lhs->getType()->getType()->getType()->kind == Type::CHAR &&
             lhs->getType()->getType()->len == 0 && rhs->getType()->kind == Type::StrLit )
         return true;
@@ -1069,11 +1070,13 @@ bool Parser2::matchFormals(const QList<Declaration*>& a, const QList<Declaration
 {
     if( a.size() != b.size() )
         return false;
+    const bool reconstructedFromMil = !a.isEmpty() && (a[0]->getModule()->extern_ || b[0]->getModule()->extern_);
     for( int i = 0; i < a.size(); i++ )
     {
         if( i == a.size() - 1 && a[i]->name == ".." && a[i]->name != b[i]->name )
             return false;
-        if( a[i]->visi != b[i]->visi )
+        if( !reconstructedFromMil && a[i]->visi != b[i]->visi )
+            // NOTE: this doesn't work for signatures reconstructed from MIL because latter has no const params
             return false;
         if( !equalTypes(a[i]->getType(), b[i]->getType()) )
             return false;
@@ -1088,7 +1091,7 @@ bool Parser2::matchResultType(Type* lhs, Type* rhs) const
     if( lhs == 0 )
         return rhs->kind == Type::NoType;
     if( rhs == 0 )
-        return lhs->kind != Type::NoType;
+        return lhs->kind == Type::NoType;
     return equalTypes(lhs,rhs) || (lhs->kind == Type::NoType && rhs->kind == Type::NoType);
 }
 
@@ -1327,6 +1330,8 @@ void Parser2::ConstDeclaration() {
     Value v = ev->pop();
     d->data = v.val;
     d->setType(v.type);
+    if( d->outer->kind == Declaration::Module && d->visi > Declaration::Private )
+        out->addConst(ev->toQuali(v.type), d->name, d->pos, v.val );
     Expression::deleteAllExpressions();
 }
 
@@ -2044,6 +2049,7 @@ Declaration*Parser2::addHelper(Type* t)
     decl->ownstype = true;
     decl->outer = thisMod;
     decl->pos = t->pos;
+    decl->visi = Node::ReadWrite; // exported declarations may refer to helpers
     t->decl = decl;
     t->anonymous = true;
     emitType(t);
@@ -3370,7 +3376,7 @@ void Parser2::assignmentOrProcedureCall() {
         Expression* rhs = expression(lhsT);
         if( rhs && !assigCompat( lhsT, rhs, tok.toRowCol() ) )
         {
-            // assigCompat( lhsT, rhs, tok.toRowCol() ); // TEST
+            assigCompat( lhsT, rhs, tok.toRowCol() ); // TEST
             Type* rhsT = rhs->getType();
             error(tok, QString("right side is not assignment compatible with left side (%1, %2)")
                   .arg(lhsT ? lhsT->getName() : "?").arg(rhsT ? rhsT->getName() : "?"));
@@ -4537,6 +4543,7 @@ void Parser2::module(const Import & import) {
         id.name.d_val = "begin$"; // keep $ postfix, because "begin" is a MIL keyword
         id.visi = Node::Private;
         Declaration* procDecl = addDecl(id, Declaration::Procedure);
+        procDecl->init = true;
         ev->pushCurProc(procDecl);
         mdl->openScope(procDecl);
         out->beginProc("begin$", la.toRowCol(),0, ev->langLevel == 0 ? Mil::ProcData::ModuleEntry : Mil::ProcData::ModuleInit);

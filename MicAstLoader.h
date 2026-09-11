@@ -22,6 +22,7 @@
 
 #include <QByteArray>
 #include <QHash>
+#include <QList>
 #include <QString>
 
 namespace Mil
@@ -52,9 +53,14 @@ namespace Mic
         const QHash<Mil::Declaration*, Declaration*>& declMap() const { return d_map; }
 
     private:
-        void createShell( Mil::Declaration* milDecl );
-        void buildHierarchy();
-        void attachToParent( Mil::Declaration* milDecl, Declaration* micDecl );
+        void createImport( Mil::Declaration* milImport );
+        Declaration* importedModule( const QByteArray& milModuleName );
+        Declaration* ensure( Mil::Declaration* milDecl );
+        void fillPending();
+        Type* localType( Mil::Declaration* milDecl );
+        static bool isHelper( const QByteArray& name );
+        static bool isNested( Mil::Declaration* milDecl );
+        static bool isCandidate( Mil::Declaration* milDecl );
 
         void fillType( Mil::Declaration* milDecl, Declaration* micDecl );
         void fillProc( Mil::Declaration* milDecl, Declaration* micDecl );
@@ -77,7 +83,8 @@ namespace Mic
         Mil::Declaration* d_milModule;
         Declaration* d_micModule;
         QHash<Mil::Declaration*, Declaration*> d_map; // MIL decl -> MIC decl, produced by the last loadModule call
-        QHash<QByteArray, Declaration*> d_byName; // MIL flattened name -> MIC decl
+        QList<Mil::Declaration*> d_pending; // shells created but not yet filled
+        QHash<QByteArray, Declaration*> d_imports; // MIL module name -> MIC import decl
     };
 }
 

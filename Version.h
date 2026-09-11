@@ -1,1 +1,1 @@
-#define MICRON_VERSION "0.5.6"
+#define MICRON_VERSION "0.5.7"

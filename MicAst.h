@@ -21,6 +21,8 @@
 #include <Micron/MicRowCol.h>
 #include <QVariant>
 
+class QTextStream;
+
 namespace Mic
 {
     class Declaration;
@@ -56,7 +58,7 @@ namespace Mic
     #endif
             meta(m),deferred(false),anonymous(false),typebound(false),
             ownstype(false),inline_(false),invar(false),extern_(false),generic(false),byVal(false),
-            owned(false),type(0),autoself(0),invalid(0),hasSubs(0),ffi_(0),dynamic(0),used(0){}
+            owned(false),type(0),autoself(0),invalid(0),hasSubs(0),ffi_(0),dynamic(0),used(0),init(0){}
         ~Node();
 
         enum Meta { Inval, T, D, E };
@@ -79,7 +81,7 @@ namespace Mic
         // Declaration:
         uint inline_ : 1;
         uint invar : 1;
-        uint extern_ : 1; // extern name (if present) is in val
+        uint extern_ : 1; // Proc: extern name (if present) is in val; Module: was loaded from mil or mob
         uint ffi_ : 1;   // extern "C" name
         uint generic : 1; // type and const meta param decls, generic modules if not fully instantiated
         uint autoself : 1;
@@ -87,11 +89,12 @@ namespace Mic
         uint hasSubs : 1; // class/method: has overrides; module: has clients
         uint dynamic : 1; // true virtual method
         uint used : 1; // forward decl, import: actually referenced
+        uint init : 1; // module begin$
 
         // Expression
         uint byVal : 1; // option for LocalVar, Param, ModuleVar, Select, Index
 
-        // 28
+        // 27
 
         RowCol pos; // Declaration, Expression
 
@@ -356,6 +359,7 @@ namespace Mic
 
         static Declaration* getGlobalScope() { return &globalScope; }
         static void cleanupGlobals();
+        static bool sourceDump(Declaration* module, QTextStream& );
     protected:
         Type* newType(Type::Kind form);
         Type* addType(const QByteArray& name, Type::Kind form);

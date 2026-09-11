@@ -280,6 +280,8 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::ORD:
         expectingNArgs(args,1);
+        if( args.first()->getType() == 0 )
+            break; // reported elsewhere
         switch(args.first()->getType()->kind)
         {
         case Type::CHAR:
@@ -1773,7 +1775,7 @@ int Builtins::addIncDecTmp(bool isInt64)
         decl->kind = Declaration::LocalDecl;
         decl->setType(ev->mdl->getType(isInt64 ? Type::INT64 : Type::INT32));
         decl->outer = ev->mdl->getTopScope();
-        decl->id = ev->out->addLocal(ev->toQuali(decl->getType()),decl->name);
+        decl->id = ev->out->addLocal(ev->toQuali(decl->getType()),decl->name, decl->pos);
     }
     return decl->id;
 }

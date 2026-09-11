@@ -21,5 +21,7 @@
         <file>images/alias_priv.png</file>
         <file>images/alias.png</file>
         <file>font/DejaVuSansMono.ttf</file>
+        <file>images/category.png</file>
+        <file>images/box.png</file>
     </qresource>
 </RCC>

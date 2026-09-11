@@ -274,7 +274,7 @@ Declaration*AstModel::addHelper()
     decl->link = 0;
     decl->next = helper;
     helper = decl;
-    decl->name = "_$" + QByteArray::number(++helperId);
+    decl->name = Token::getSymbol("_$" + QByteArray::number(++helperId));
     decl->outer = getTopModule();
     return decl;
 }
@@ -372,6 +372,370 @@ void AstModel::cleanupGlobals()
             types[i] = 0;
         }
     }
+}
+
+static bool typeSpec( Type* t, QTextStream& out );
+
+static Declaration* s_dumpModule = 0; // the module currently dumped by AstModel::sourceDump
+
+static Declaration* findImportOf( Declaration* module, Declaration* imported )
+{
+    if( module == 0 || imported == 0 )
+        return 0;
+    Declaration* d = module->link;
+    while( d )
+    {
+        if( d->kind == Declaration::Import && d->data.value<Import>().resolved == imported )
+            return d;
+        d = d->next;
+    }
+    return 0;
+}
+
+static bool typeName( Type* t, QTextStream& out )
+{
+    if( t == 0 )
+    {
+        out << "?";
+        return false;
+    }
+    if( t->kind < Type::MaxBasicType || t->anonymous || t->decl == 0 )
+        return typeSpec(t, out);
+
+    Declaration* mod = t->decl->getModule();
+    if( mod && s_dumpModule && mod != s_dumpModule )
+    {
+        Declaration* imp = findImportOf(s_dumpModule, mod);
+        if( imp )
+            out << imp->name << ".";
+        else
+            out << mod->name << "."; // not imported directly; TODO
+    }
+    out << t->decl->name;
+    return true;
+}
+
+static bool formalParams( const QList<Declaration*>& params, Type* ret, QTextStream& out )
+{
+    out << "(";
+    for( int i = 0; i < params.size(); i++ )
+    {
+        if( i != 0 )
+            out << "; ";
+        if( params[i]->visi == Declaration::ReadOnly )
+            out << "const ";
+        out << params[i]->name << ": ";
+        if( !typeName(params[i]->getType(), out) )
+            return false;
+    }
+    out << ")";
+    if( ret && ret->kind != Type::NoType )
+    {
+        out << ": ";
+        if( !typeName(ret, out) )
+            return false;
+    }
+    return true;
+}
+
+static bool visi(Declaration* d, QTextStream& out )
+{
+    if( d->kind != Declaration::ParamDecl )
+    {
+        switch(d->visi)
+        {
+        case Declaration::ReadWrite:
+            out << "*";
+            break;
+        case Declaration::ReadOnly:
+            out << "-";
+            break;
+        }
+    }
+    return true;
+}
+
+static bool varType( Declaration* p, QTextStream& out )
+{
+    out << p->name;
+    visi(p, out);
+    out << ": ";
+    if( !typeName(p->getType(), out) )
+        return false;
+    return true;
+}
+
+static bool constDecl(Declaration* c, QTextStream& out )
+{
+    Type* t = c->getType();
+    if( t == 0 )
+        return false;
+    if( t->kind == Type::ConstEnum )
+        return true;
+    out << "const " << c->name;
+    visi(c, out);
+    out << " = ";
+    if( t->isInt() )
+        out << c->data.toLongLong();
+    else if( t->isUInt() || t->kind == Type::UniInt )
+        out << c->data.toULongLong();
+    else if( t->isReal() )
+        out << c->data.toDouble();
+    else if( t->isBoolean() )
+        out << c->data.toBool();
+    else if( t->isSet() )
+        out << "bset(" << c->data.toUInt() << ")";
+    else if( t->kind == Type::StrLit )
+        out << c->data.toByteArray();
+    else
+        out << "TODO";
+    out << endl;
+    return true;
+}
+
+static bool importPath(const QByteArrayList& path, QTextStream& out )
+{
+    for( int i = 0; i < path.size(); i++ )
+    {
+        if( i != 0 )
+            out << ".";
+        out << path[i];
+    }
+    return true;
+}
+
+static bool importDecl(Declaration* i, QTextStream& out )
+{
+    Import imp = i->data.value<Import>();
+    if( imp.path.isEmpty() )
+    {
+        qWarning() << "invalid import" << i->name;
+        return false;
+    }
+
+    out << "import ";
+
+    if( i->name != imp.path.last() )
+        out << i->name << " := ";
+    importPath(imp.path, out);
+
+    out << endl;
+    return true;
+}
+
+static bool typeSpec( Type* t, QTextStream& out )
+{
+    switch( t->kind )
+    {
+    case Type::BOOL:
+        out << "boolean";
+        break;
+    case Type::CHAR:
+        out << "char";
+        break;
+    case Type::UINT8:
+        out << "uint8";
+        break;
+    case Type::UINT16:
+        out << "uint16";
+        break;
+    case Type::UINT32:
+        out << "uint32";
+        break;
+    case Type::UINT64:
+        out << "uint64";
+        break;
+    case Type::INT8:
+        out << "int8";
+        break;
+    case Type::INT16:
+        out << "int16";
+        break;
+    case Type::INT32:
+        out << "int32";
+        break;
+    case Type::INT64:
+        out << "int64";
+        break;
+    case Type::FLT32:
+        out << "real";
+        break;
+    case Type::FLT64:
+        out << "longreal";
+        break;
+    case Type::SET:
+        out << "set";
+        break;
+    case Type::Pointer:
+        out << "pointer to ";
+        typeName(t->getType(), out);
+        break;
+    case Type::Array:
+        out << "array ";
+        if(t->len)
+            out << t->len << " ";
+        out << "of ";
+        typeName(t->getType(), out);
+        break;
+    case Type::Record:
+        out << "record";
+        foreach( Declaration* f, t->subs )
+        {
+            // TODO: variant part
+            out << " ";
+            varType(f, out);
+        }
+        out << " end";
+        break;
+    case Type::Object:
+        out << "object";
+        if( t->getType() )
+        {
+            out << " (";
+            typeName(t->getType(), out);
+            out << ")";
+        }
+        foreach( Declaration* f, t->subs )
+        {
+            if( f->kind != Declaration::Field )
+                continue; // methods are dumped separately
+            out << " ";
+            varType(f, out);
+        }
+        out << " end";
+        break;
+    case Type::Proc:
+        out << "procedure";
+        if( t->typebound )
+            out << "^";
+        formalParams(t->subs, t->getType(), out);
+        break;
+    case Type::Interface:
+        out << "interface TODO";
+        break;
+    case Type::ConstEnum:
+        out << "(";
+        foreach( Declaration* e, t->subs )
+            out << e->name << " "; // TODO: check values not in 0..n
+        out << ")";
+        break;
+    case Type::Generic:
+        out << "generic TODO";
+        break;
+    default:
+        out << "?" << t->getName();
+        break;
+    }
+    return true;
+}
+
+static bool typeDecl(Declaration* d, QTextStream& out )
+{
+    out << "type " << d->name;
+    visi(d, out);
+    out << " = ";
+
+    Type* t = d->getType();
+
+    typeSpec(t, out);
+
+    out << endl;
+    return true;
+}
+
+static bool dumpProc( Declaration* proc, QTextStream & out)
+{
+    if( proc->init )
+        return true;
+
+    out << "procedure";
+    if( proc->kind == Declaration::ForwardDecl )
+        out << "^";
+    out << " ";
+    if( proc->typebound )
+    {
+        Declaration* self = proc->link;
+        if( self && self->kind == Declaration::ParamDecl && self->typebound && self->getType() )
+        {
+            out << "(" << self->name << ": ";
+            typeName(self->getType(), out);
+            out << ") ";
+        }
+    }
+    out << proc->name;
+    visi(proc, out);
+    if( !formalParams(proc->getParams(false), proc->getType(), out) )
+        return false;
+    out << endl;
+    return true;
+}
+
+bool AstModel::sourceDump(Declaration *module, QTextStream & out)
+{
+    if( module == 0 || module->kind != Declaration::Module )
+        return false;
+    s_dumpModule = module;
+    if( module->extern_ )
+        out << "// this module was reconstructed from mil or mob" << endl;
+    out << "module " << module->name << endl;
+
+    Declaration* cur = module->link;
+    while(cur)
+    {
+        switch( cur->kind )
+        {
+        case Declaration::TypeDecl:
+            if( cur->getType() && !cur->getType()->anonymous )
+                typeDecl(cur, out);
+            break;
+        case Declaration::ConstDecl:
+            constDecl(cur, out);
+            break;
+        case Declaration::Import:
+            importDecl(cur, out);
+            break;
+        case Declaration::VarDecl:
+            out << "var ";
+            varType(cur, out);
+            out << endl;
+            break;
+        case Declaration::Procedure:
+        case Declaration::ForwardDecl:
+            if( !dumpProc(cur, out) )
+            {
+                s_dumpModule = 0;
+                return false;
+            }
+            break;
+        default:
+            qCritical() << "AstModel::sourceDump: unexpected declaration type on module level";
+            s_dumpModule = 0;
+            return false;
+        }
+
+        cur = cur->next;
+    }
+
+    // type-bound procedures live in the subs of their receiver type, not in the module link list
+    cur = module->link;
+    while(cur)
+    {
+        if( cur->kind == Declaration::TypeDecl && cur->ownstype && cur->getType() &&
+                (cur->getType()->kind == Type::Object || cur->getType()->kind == Type::Record) )
+        {
+            foreach( Declaration* m, cur->getType()->subs )
+                if( m->kind == Declaration::Procedure && !dumpProc(m, out) )
+                {
+                    s_dumpModule = 0;
+                    return false;
+                }
+        }
+        cur = cur->next;
+    }
+
+    out << "end " << module->name << endl;
+    s_dumpModule = 0;
+    return true;
 }
 
 Type*AstModel::newType(Type::Kind form)

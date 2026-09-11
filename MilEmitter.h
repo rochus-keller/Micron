@@ -61,8 +61,8 @@ namespace Mil
 
         void addField(const QByteArray& fieldName, const RowCol&, // on top level or in struct/union
                        const Quali& typeRef, bool isPublic = true, quint8 bits = 0);
-        quint32 addLocal( const Quali& typeRef, QByteArray name = QByteArray(), const RowCol& = RowCol() );
-        quint32 addArgument(const Quali& typeRef, QByteArray name = QByteArray(), const RowCol& = RowCol() ); // SELF is explicit
+        quint32 addLocal( const Quali& typeRef, QByteArray name, const RowCol& );
+        quint32 addArgument(const Quali& typeRef, QByteArray name, const RowCol& ); // SELF is explicit
         void setReturnType(const Quali& typeRef);
 
         static QByteArray typeSymbol1(EmiTypes::Basic);

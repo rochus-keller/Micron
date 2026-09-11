@@ -338,7 +338,7 @@ void IlAsmRenderer::render(const ProcData& m)
         if( !m.params[i].type.second.isEmpty() )
             out << m.params[i].name;
         else
-            out << i;
+            out << "__param$" << i;
         out << ": "<< toString(m.params[i].type);
     }
 
@@ -393,7 +393,7 @@ void IlAsmRenderer::render(const ProcData& m)
             if( !m.locals[i].name.isEmpty() )
                 out << m.locals[i].name;
             else
-                out << i;
+                out << "__local$" << i;
             out << ": " << toString(m.locals[i].type) << "; ";
         }
         out << endl;
@@ -773,7 +773,7 @@ void IlAstRenderer::addConst(const Quali& typeRef, const QByteArray& name, const
         co->c->i = val.toLongLong();
         break;
     case QVariant::ByteArray:
-        if( co->getType()->kind == Type::ByteArrayLit )
+        if( co->getType() && co->getType()->kind == Type::ByteArrayLit )
         {
             co->c->kind = Constant::B;
             co->c->b = new ByteString(val.toByteArray());

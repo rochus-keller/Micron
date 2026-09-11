@@ -780,11 +780,18 @@ Declaration *Project2::loadModule(const Import &imp)
     if( !file->d_filePath.endsWith(".mic") )
     {
         // handle mil and mob files directly via ModuleManager
-        const ModuleManager::ProviderKind kind =
-                file->d_filePath.endsWith(".mob", Qt::CaseInsensitive) ?
-                    ModuleManager::MilObject : ModuleManager::MilSource;
-        Declaration* res = d_modMan.loadProvider(
-                    ModuleManager::Location(kind, file->d_filePath), &d_mdl, this);
+        ModuleManager::ProviderKind kind = ModuleManager::NotFound;
+        if( file->d_filePath.endsWith(".mil") )
+            kind = ModuleManager::MilSource;
+        else if( file->d_filePath.endsWith(".mob") )
+            kind = ModuleManager::MilObject;
+        if( kind == ModuleManager::NotFound )
+        {
+            errors << Error("unknown/unsupported file format", imp.importedAt, file->d_filePath);
+            return 0;
+        }
+
+        Declaration* res = d_modMan.loadProvider( ModuleManager::Location(kind, file->d_filePath), &d_mdl, this);
         if( res == 0 )
         {
             errors << Error(d_modMan.getError(), imp.importedAt, file->d_filePath);
@@ -795,6 +802,7 @@ Declaration *Project2::loadModule(const Import &imp)
         if( fixedImp.metaActuals.isEmpty() )
             file->d_mod = res;
         ms->decl = res;
+        // dump(res);
         return res;
     }
 
@@ -867,6 +875,7 @@ Declaration *Project2::loadModule(const Import &imp)
         d_subs[i.key()] += i.value();
 
     ms->decl = res;
+    // dump(res);
     d_depth--;
     return res;
 }
@@ -881,6 +890,12 @@ Declaration* Project2::resolveModule(const QByteArray& milModuleName)
     Import imp;
     imp.path = milModuleName.split('$');
     return loadModule(imp);
+}
+
+bool Project2::dump(Declaration *module)
+{
+    QTextStream out(stdout);
+    return Mic::AstModel::sourceDump(module, out);
 }
 
 QStringList Project2::findFiles(const QDir& dir, bool recursive)

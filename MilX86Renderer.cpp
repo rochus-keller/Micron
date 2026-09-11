@@ -1179,7 +1179,7 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
         for (int i = 0; i < params.size(); i++) {
             Type* t = params[i]->getType();
             int size = t->getByteSize(pw);
-            off_p += qMax(size, (int)sa);
+            off_p += d_code.stackAligned(qMax(size, (int)sa));
         }
         alignedSize = d_code.stackAligned(off_p);
     }
@@ -1225,7 +1225,7 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
             Type* t = params[i]->getType();
             int size = t->getByteSize(pw);
             pinfo[i].alignedOff = off_p;
-            off_p += qMax(size, (int)sa);
+            off_p += d_code.stackAligned(qMax(size, (int)sa));
         }
     }
 
@@ -2623,10 +2623,15 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 size = val;
         quint32 aligned = (size + 3) & ~3;
         // Stack: [value (aligned)] [addr (4)]
+        const quint32 words = size & ~3;
         em.mov_rm(ECX, ESP, aligned); // addr
-        for (quint32 i = 0; i < aligned; i += 4) {
+        for (quint32 i = 0; i < words; i += 4) {
             em.mov_rm(EAX, ESP, i);
             em.mov_mr(ECX, i, EAX);
+        }
+        for (quint32 i = words; i < size; i++) {
+            em.movzx_rb(EAX, ESP, i);
+            em.mov_mr8(ECX, i, EAX);
         }
         em.add_ri(ESP, aligned + Slot4);
         return 1;
@@ -2716,12 +2721,17 @@ int Renderer::emitOp(Procedure& proc, int pc)
         Q_ASSERT(pc + 1 < (int)proc.ops.size());
         quint32 size = proc.ops[pc + 1].val;
         quint32 aligned = (size + 3) & ~3;
+        const quint32 words = size & ~3;
         em.mov_rm(ECX, ESP, aligned); // obj ptr below value
         if (val != 0)
             em.add_ri(ECX, val);
-        for (quint32 i = 0; i < aligned; i += 4) {
+        for (quint32 i = 0; i < words; i += 4) {
             em.mov_rm(EAX, ESP, i);
             em.mov_mr(ECX, i, EAX);
+        }
+        for (quint32 i = words; i < size; i++) {
+            em.movzx_rb(EAX, ESP, i);
+            em.mov_mr8(ECX, i, EAX);
         }
         em.add_ri(ESP, aligned + Slot4);
         return 2;
@@ -2872,9 +2882,14 @@ int Renderer::emitOp(Procedure& proc, int pc)
             em.pop_r(EAX);
         }
         em.add_rr(ECX, EDX); // ECX = dest addr
-        for (quint32 i = 0; i < aligned; i += 4) {
+        const quint32 words = elemSize & ~3;
+        for (quint32 i = 0; i < words; i += 4) {
             em.mov_rm(EAX, ESP, i);
             em.mov_mr(ECX, i, EAX);
+        }
+        for (quint32 i = words; i < elemSize; i++) {
+            em.movzx_rb(EAX, ESP, i);
+            em.mov_mr8(ECX, i, EAX);
         }
         em.add_ri(ESP, aligned + Slot4 + Slot4);
         return 1;
@@ -3004,14 +3019,18 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 em.mov_ri(ESI, tmplOff);
                 quint32 immOff = em.currentPosition() - 4;
                 d_elf.addRelocation(d_sections.relText, immOff, d_rodataSymIdx, R_386_32);
-                quint32 aligned = (tmplSize + 3) & ~3;
+                const quint32 words = tmplSize & ~3;
                 Label loopLbl, doneLbl;
                 em.bind(loopLbl);
                 em.cmp_rr(EDI, ECX);
                 em.jcc(CC_AE, doneLbl);
-                for (quint32 i = 0; i < aligned; i += 4) {
+                for (quint32 i = 0; i < words; i += 4) {
                     em.mov_rm(EDX, ESI, i);
                     em.mov_mr(EDI, i, EDX);
+                }
+                for (quint32 i = words; i < tmplSize; i++) {
+                    em.movzx_rb(EDX, ESI, i);
+                    em.mov_mr8(EDI, i, EDX);
                 }
                 // Fix vtable pointer for this element
                 // Save ECX (loop end pointer) since emitVtableFixups clobbers it

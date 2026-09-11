@@ -186,6 +186,8 @@ namespace Mic
 
         QStringList getLinkObjects() const { return d_modMan.getLinkObjects(); }
 
+        static bool dump(Declaration* module);
+
     signals:
         void sigModified(bool);
         void sigRenamed();

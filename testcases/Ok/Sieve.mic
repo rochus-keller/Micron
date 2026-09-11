@@ -23,7 +23,7 @@
 
 module Sieve
 
-import Input, Out
+import Time, Out
 
 procedure sieve(flags: pointer to array of boolean; size: integer): integer
 var primeCount, i, k: integer
@@ -61,18 +61,18 @@ type Total = record total: integer end
 
 procedure run()
 var res : integer
-	start, endTime, duration : integer
+	start, endTime, duration : uint64
 	total: ^Total
 begin
 	new(total)
 	total.total := 0
-	start := Input.Time()
+	start := Time.Ticks()
 	res := benchmark()
 	print("result: ")println(res)
 	assert( res = 669 )
-	endTime := Input.Time()
+	endTime := Time.Ticks()
 	duration := endTime-start
-	total.total := total.total + duration
+	total.total := total.total + val(int32,duration)
 	Out.String("runtime: ")
     Out.Int(total.total,0)
     Out.String("us")
