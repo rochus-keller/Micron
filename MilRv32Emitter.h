@@ -72,9 +72,16 @@ namespace Rv32
         Emitter();
         virtual ~Emitter() {}
 
+        class Hook {
+        public:
+            virtual ~Hook() {}
+            virtual void beforeEmit(quint32 inst) = 0;
+        };
+
         const QByteArray& machineCode() const { return d_buffer; }
         int currentPosition() const { return d_buffer.size(); }
         void bind(Label& label);
+        void setHook(Hook* h) { d_hook = h; }
         
         void addi(Register rd, Register rs1, qint32 imm12);
         void slti(Register rd, Register rs1, qint32 imm12);
@@ -200,6 +207,7 @@ namespace Rv32
 
     protected:
         void emit32(quint32 inst);
+        void preEmit(quint32 inst);
         void patchBranch(int offset, int targetPosition);
 
         void emitR(quint8 opcode, quint8 funct3, quint8 funct7, quint8 rd, quint8 rs1, quint8 rs2);
@@ -211,6 +219,7 @@ namespace Rv32
 
     private:
         QByteArray d_buffer;
+        Hook* d_hook;
     };
 
 

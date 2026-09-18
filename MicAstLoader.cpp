@@ -180,7 +180,12 @@ Declaration* AstLoader::loadModule(Mil::Declaration* milModule)
     foreach( const QByteArray& seg, milModule->name.split('$') )
         md.path += sym(seg);
     if( milModule->md )
-        md.source = milModule->md->source;
+    {
+        if( !milModule->md->source.isEmpty() )
+            md.source = milModule->md->source;
+        else
+            md.source = milModule->md->path;
+    }
     d_micModule->data = QVariant::fromValue(md);
 
     Mil::Declaration* sub = milModule->subs;
@@ -256,6 +261,7 @@ void AstLoader::createImport(Mil::Declaration* milImport)
     micImp->name = imp.path.last();
     micImp->visi = Node::Private;
     micImp->outer = d_micModule;
+    micImp->pos = milImport->pos;
     micImp->anonymous = true; // no alias
     if( imp.resolved )
     {
@@ -311,6 +317,7 @@ Declaration* AstLoader::ensure(Mil::Declaration* milDecl)
     micDecl = new Declaration();
     micDecl->kind = micKind;
     micDecl->name = sym(real->name);
+    micDecl->pos = real->pos;
     micDecl->visi = real->public_ ? Node::ReadWrite : Node::Private;
     micDecl->outer = d_micModule;
     d_map.insert(real, micDecl); // insert before resolving anything to break cycles
@@ -497,6 +504,7 @@ Declaration* AstLoader::makeField(Mil::Declaration* milField)
     Declaration* f = new Declaration();
     f->kind = Declaration::Field;
     f->name = sym(milField->name);
+    f->pos = milField->pos;
     f->visi = milField->public_ ? Node::ReadWrite : Node::Private;
     f->setType(mapType(milField->getType()));
     if( milField->kind == Mil::Declaration::Field )
@@ -509,6 +517,7 @@ Declaration* AstLoader::makeParam(Mil::Declaration* milParam, int index)
     Declaration* p = new Declaration();
     p->kind = Declaration::ParamDecl;
     p->name = sym(milParam->name);
+    p->pos = milParam->pos;
     p->visi = Node::Private;
     p->id = index;
     p->typebound = milParam->typebound; // receiver

@@ -38,8 +38,16 @@ const quint8 OPC_JALR     = 0x67;
 const quint8 OPC_JAL      = 0x6F;
 const quint8 OPC_SYSTEM   = 0x73;
 
-Emitter::Emitter() {
+Emitter::Emitter() : d_hook(0) {
     d_buffer.reserve(4096);
+}
+
+void Emitter::preEmit(quint32 inst) {
+    // The hook may emit code of its own, which must go before the instruction
+    // announced here; it is therefore called before any position dependent part
+    // of that instruction (i.e. a branch displacement) is calculated.
+    if (d_hook)
+        d_hook->beforeEmit(inst);
 }
 
 void Emitter::emit32(quint32 inst) {
@@ -51,11 +59,13 @@ void Emitter::emit32(quint32 inst) {
 }
 
 void Emitter::emitR(quint8 opcode, quint8 funct3, quint8 funct7, quint8 rd, quint8 rs1, quint8 rs2) {
+    preEmit((funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode);
     quint32 inst = (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode;
     emit32(inst);
 }
 
 void Emitter::emitI(quint8 opcode, quint8 funct3, quint8 rd, quint8 rs1, qint32 imm12) {
+    preEmit((rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode);
     Q_ASSERT(imm12 >= -2048 && imm12 <= 2047);
     quint32 uimm = static_cast<quint32>(imm12) & 0xFFF;
     quint32 inst = (uimm << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode;
@@ -63,6 +73,7 @@ void Emitter::emitI(quint8 opcode, quint8 funct3, quint8 rd, quint8 rs1, qint32 
 }
 
 void Emitter::emitS(quint8 opcode, quint8 funct3, quint8 rs1, quint8 rs2, qint32 imm12) {
+    preEmit((rs2 << 20) | (rs1 << 15) | (funct3 << 12) | opcode);
     Q_ASSERT(imm12 >= -2048 && imm12 <= 2047);
     quint32 uimm = static_cast<quint32>(imm12) & 0xFFF;
     quint32 imm11_5 = (uimm >> 5) & 0x7F;
@@ -72,6 +83,7 @@ void Emitter::emitS(quint8 opcode, quint8 funct3, quint8 rs1, quint8 rs2, qint32
 }
 
 void Emitter::emitB(quint8 opcode, quint8 funct3, quint8 rs1, quint8 rs2, Label& label) {
+    preEmit((rs2 << 20) | (rs1 << 15) | (funct3 << 12) | opcode);
     quint32 inst = (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | opcode;
     if (label.isBound()) {
         qint32 offset = label.position() - currentPosition();
@@ -95,12 +107,14 @@ void Emitter::emitB(quint8 opcode, quint8 funct3, quint8 rs1, quint8 rs2, Label&
 }
 
 void Emitter::emitU(quint8 opcode, quint8 rd, qint32 imm20) {
+    preEmit((rd << 7) | opcode);
     quint32 uimm = static_cast<quint32>(imm20) & 0xFFFFF;
     quint32 inst = (uimm << 12) | (rd << 7) | opcode;
     emit32(inst);
 }
 
 void Emitter::emitJ(quint8 opcode, quint8 rd, Label& label) {
+    preEmit((rd << 7) | opcode);
     quint32 inst = (rd << 7) | opcode;
     if (label.isBound()) {
         qint32 offset = label.position() - currentPosition();
@@ -426,6 +440,7 @@ void Emitter::csrrci(Register rd, CSR csr, quint8 zimm) {
 }
 
 void Emitter::emitWord(quint32 word) {
+    preEmit(word);
     emit32(word);
 }
 

@@ -1689,6 +1689,13 @@ void Parser2::module() {
             expect(Tok_Semi, false, "module");
         }
     }
+    QString path = scanner->sourcePath();
+    if( !path.isEmpty() )
+    {
+        if( curMod->md == 0 )
+            curMod->md = new ModuleData();
+        curMod->md->path = path;
+    }
     while( FIRST_ImportList(la.d_type) || FIRST_ImportList(la.d_code) || la.d_type == Tok_IMPORTER || la.d_code == Tok_IMPORTER ||
            FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) ) {
         if( FIRST_ImportList(la.d_type) || FIRST_ImportList(la.d_code) ) {

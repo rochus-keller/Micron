@@ -171,7 +171,7 @@ namespace Mil
 
     struct ModuleData
     {
-        QString source;
+        QString source, path;
         ToDelete* toDelete;
         Mic::RowCol end;
         QByteArrayList metaParamNames;

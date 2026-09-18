@@ -54,8 +54,10 @@ Renderer::Renderer(AstModel* mdl)
     : d_mdl(mdl), d_code(mdl, 4, 4), d_hasFloat(true), d_emitDwarf(false), d_useRvAbi(false), d_hasHwDiv(true),
       d_dwarf(0), d_localsSize(0), d_argsSize(0), d_returnSize(0),
       d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0), d_globalsSymIdx(0),
-      d_elf(ElfWriter::ArchRISCV), d_currentModule(0)
+      d_elf(ElfWriter::ArchRISCV), d_currentModule(0), d_materializing(false),
+      d_deferProc(true), d_parkIntUsed(0), d_parkFloatUsed(0)
 {
+    d_emitter.setHook(this);
     d_code.setReverseArguments(true);
     memset(&d_sections, 0, sizeof(d_sections));
     d_code.registerExternals();
@@ -211,6 +213,7 @@ void Renderer::emitVtableFixupAt(Register destReg, quint32 offset, Type* t,
             if (vtIdx >= 0) {
                 quint32 vtOff = getOrEmitVtable(vtIdx);
                 // Load vtable address into T4 via LUI+ADDI with relocation
+                parkPending();
                 quint32 luiOff = em.currentPosition();
                 em.lui(T4, 0);
                 em.addi(T4, T4, 0);
@@ -343,12 +346,14 @@ void Renderer::emitRuntimeVtableInit(Type* t, quint32 baseOff)
         if (vtIdx >= 0) {
             quint32 vtOff = getOrEmitVtable(vtIdx);
             // Load address of global var at baseOff in MIC$GLOBALS
+            parkPending();
             quint32 luiOff0 = em.currentPosition();
             em.lui(T0, 0);
             em.addi(T0, T0, 0);
             fix.recordAbsAddr(luiOff0, d_globalsSymIdx, baseOff);
 
             // Load address of vtable in .data
+            parkPending();
             quint32 luiOff1 = em.currentPosition();
             em.lui(T1, 0);
             em.addi(T1, T1, 0);
@@ -581,6 +586,7 @@ bool Renderer::renderModule(Declaration* module)
         bool isModuleInit = (allProcs[i].decl->kind == Declaration::Module);
         if (isModuleInit) {
             // Load guard address via LUI+ADDI with relocation
+            materializePending();
             quint32 luiOff = d_emitter.currentPosition();
             d_emitter.lui(T0, 0);
             d_emitter.addi(T0, T0, 0);
@@ -709,6 +715,7 @@ QByteArray Renderer::toByteArray()
 void Renderer::emitPrologue(quint32 localsSize)
 {
     Emitter& em = d_emitter;
+    d_pending.clear(); d_parkIntUsed = 0; d_parkFloatUsed = 0;
 
     if (d_useRvAbi) {
         // RISC-V ABI mode: dump a0-a7 (32 bytes) so args are at FP+8.
@@ -742,6 +749,8 @@ void Renderer::emitPrologue(quint32 localsSize)
 void Renderer::emitEpilogue()
 {
     Emitter& em = d_emitter;
+    materializePending();
+    Q_ASSERT(pendingEmpty());
     // SP = FP (discard locals and eval stack)
     em.mv(Sp, Fp);
     // Restore FP and RA
@@ -764,6 +773,7 @@ void Renderer::loadImm32(Register rd, quint32 value)
 
 void Renderer::loadAddr(Register rd, quint32 symbolIdx, qint32 addend)
 {
+    parkPending();
     quint32 luiOff = d_emitter.currentPosition();
     d_emitter.lui(rd, 0);
     d_emitter.addi(rd, rd, 0);
@@ -848,20 +858,297 @@ void Renderer::copyWords(Register dst, qint32 dstOff, Register src, qint32 srcOf
     }
 }
 
+bool Renderer::s_deferStack = true;
+
+// The registers a deferred abstract stack slot is parked in
+// the renderer never uses these otherwise 
+static const Register s_parkInt[] = { S11, S10, S9, S8, S7, S6, S5, S4 };
+static const int s_parkIntCount = sizeof(s_parkInt)/sizeof(s_parkInt[0]);
+static const FRegister s_parkFloat[] = { Fs11, Fs10, Fs9, Fs8 };
+static const int s_parkFloatCount = sizeof(s_parkFloat)/sizeof(s_parkFloat[0]);
+
+void Renderer::beforeEmit(quint32 inst)
+{
+    // The abstract stack slots in d_pending are not in memory yet
+    if( d_pending.isEmpty() || d_materializing )
+        return;
+
+    const quint8 opcode = inst & 0x7F;
+    const quint8 rd = (inst >> 7) & 0x1F;
+    const quint8 rs1 = (inst >> 15) & 0x1F;
+    const quint8 rs2 = (inst >> 20) & 0x1F;
+    const quint8 funct7 = (inst >> 25) & 0x7F;
+
+    bool writesInt = false, writesFloat = false, readsSp = false;
+    switch( opcode ) // NOTE: the RV32IMAF encodings, see MilRv32Emitter.cpp
+    {
+    case 0x13: // OP-IMM
+    case 0x03: // LOAD
+        writesInt = true;
+        readsSp = rs1 == (quint8)Sp;
+        break;
+    case 0x33: // OP (incl. M extension)
+        writesInt = true;
+        readsSp = rs1 == (quint8)Sp || rs2 == (quint8)Sp;
+        break;
+    case 0x37: // LUI
+    case 0x17: // AUIPC
+        writesInt = true;
+        break;
+    case 0x23: // STORE
+        readsSp = rs1 == (quint8)Sp;
+        break;
+    case 0x07: // LOAD-FP (flw)
+        writesFloat = true;
+        readsSp = rs1 == (quint8)Sp;
+        break;
+    case 0x27: // STORE-FP (fsw)
+        readsSp = rs1 == (quint8)Sp;
+        break;
+    case 0x53: // OP-FP
+        // fcvt.w[u].s, fmv.x.w, fclass.s and the comparisons write an integer
+        // register, everything else a float register
+        if( funct7 == 0x60 || funct7 == 0x70 || funct7 == 0x50 )
+            writesInt = true;
+        else
+            writesFloat = true;
+        break;
+    default:
+        // branches, jumps, calls, system instructions, fences, atomics: the code
+        // after this point can also be reached with a different stack state, and a
+        // callee or handler sees the stack as it is in memory
+        materializePending();
+        return;
+    }
+
+    if( readsSp || ( writesInt && rd == (quint8)Sp ) )
+    {
+        materializePending();
+        return;
+    }
+
+    // The park registers belong to the deferred slots as long as there are any; no
+    // other code of this procedure may write them (see scanBranchTargets).
+    for( int i = 0; i < d_pending.size(); i++ )
+    {
+        const Pending& p = d_pending[i];
+        if( !p.parked )
+            continue;
+        if( p.kind == Pending::Float )
+            Q_ASSERT( !writesFloat || rd != (quint8)s_parkFloat[p.slot] );
+        else
+        {
+            Q_ASSERT( !writesInt || rd != (quint8)s_parkInt[p.slot] );
+            Q_ASSERT( !writesInt || p.kind != Pending::Pair || rd != (quint8)s_parkInt[p.slot+1] );
+        }
+    }
+
+    if( writesInt || writesFloat )
+        parkPending(rd, writesInt);
+}
+
+void Renderer::parkPending(int rd, bool intReg)
+{
+    // Copy each slot which is still in the scratch register it was pushed from into
+    // the register reserved for its stack position. One move per slot, once.
+    if( d_pending.isEmpty() || d_materializing )
+        return;
+
+    d_materializing = true; // the moves themselves must not be intercepted
+    for( int i = 0; i < d_pending.size(); i++ )
+    {
+        Pending& p = d_pending[i];
+        if( p.parked )
+            continue;
+        if( rd >= 0 )
+        {
+            // only the slot whose register is about to be overwritten
+            if( p.kind == Pending::Float )
+            {
+                if( intReg || rd != (int)p.f )
+                    continue;
+            }else if( intReg )
+            {
+                if( rd != (int)p.lo && ( p.kind != Pending::Pair || rd != (int)p.hi ) )
+                    continue;
+            }else
+                continue;
+        }
+        switch( p.kind )
+        {
+        case Pending::Reg:
+            if( p.lo != Zero )
+            {
+                const Register park = s_parkInt[p.slot];
+                d_emitter.mv(park, p.lo);
+                p.lo = park;
+            }
+            break;
+        case Pending::Pair:
+            {
+                const Register parkLo = s_parkInt[p.slot];
+                const Register parkHi = s_parkInt[p.slot+1];
+                d_emitter.mv(parkLo, p.lo);
+                d_emitter.mv(parkHi, p.hi);
+                p.lo = parkLo;
+                p.hi = parkHi;
+            }
+            break;
+        case Pending::Float:
+            {
+                const FRegister park = s_parkFloat[p.slot];
+                d_emitter.fmv_s(park, p.f);
+                p.f = park;
+            }
+            break;
+        default:
+            Q_ASSERT(false);
+            break;
+        }
+        p.parked = true;
+    }
+    d_materializing = false;
+}
+
+bool Renderer::allocPending(Pending& p)
+{
+    // A slot is only deferred if it has a register of its own to be parked in.
+    if( p.kind == Pending::Float )
+    {
+        if( d_parkFloatUsed >= s_parkFloatCount )
+            return false;
+        p.slot = d_parkFloatUsed++;
+        return true;
+    }
+    const int need = p.kind == Pending::Pair ? 2 : 1;
+    if( d_parkIntUsed + need > s_parkIntCount )
+        return false;
+    p.slot = d_parkIntUsed;
+    d_parkIntUsed += need;
+    return true;
+}
+
+void Renderer::freePending(const Pending& p)
+{
+    if( p.kind == Pending::Float )
+    {
+        Q_ASSERT(d_parkFloatUsed == p.slot + 1);
+        d_parkFloatUsed = p.slot;
+    }else
+    {
+        Q_ASSERT(d_parkIntUsed == p.slot + (p.kind == Pending::Pair ? 2 : 1));
+        d_parkIntUsed = p.slot;
+    }
+}
+
+void Renderer::materializePending()
+{
+    if( d_pending.isEmpty() )
+        return;
+    const QList<Pending> pending = d_pending;
+    d_pending.clear();
+    d_parkIntUsed = 0;
+    d_parkFloatUsed = 0;
+    // sp still is where it was before the first of these pushes, so the slots are
+    // simply pushed now, in the order in which they were pushed abstractly
+    d_materializing = true;
+    for( int i = 0; i < pending.size(); i++ )
+    {
+        const Pending& p = pending[i];
+        switch( p.kind )
+        {
+        case Pending::Reg:
+            d_emitter.addi(Sp, Sp, -Slot4);
+            d_emitter.sw(p.lo, Sp, 0);
+            break;
+        case Pending::Pair:
+            d_emitter.addi(Sp, Sp, -Slot8);
+            d_emitter.sw(p.lo, Sp, 0);
+            d_emitter.sw(p.hi, Sp, 4);
+            break;
+        case Pending::Float:
+            d_emitter.addi(Sp, Sp, -Slot4);
+            d_emitter.fsw(p.f, Sp, 0);
+            break;
+        default:
+            Q_ASSERT(false);
+            break;
+        }
+    }
+    d_materializing = false;
+}
+
+bool Renderer::takePending(Pending::Kind kind, Pending& out)
+{
+    if( d_pending.isEmpty() )
+        return false;
+    if( d_pending.last().kind != kind )
+    {
+        // the slot is consumed in another shape than it was produced, which the
+        // deferred form cannot express; the memory form always can
+        materializePending();
+        return false;
+    }
+    out = d_pending.takeLast();
+    freePending(out);
+    return true;
+}
+
 void Renderer::pushReg(Register r)
 {
+    if( s_deferStack && d_deferProc )
+    {
+        Pending p;
+        p.kind = Pending::Reg;
+        p.lo = r;
+        if( allocPending(p) )
+        {
+            d_pending.append(p);
+            return;
+        }
+    }
+    materializePending();
     d_emitter.addi(Sp, Sp, -Slot4);
     d_emitter.sw(r, Sp, 0);
 }
 
 void Renderer::popReg(Register r)
 {
+    if( !d_pending.isEmpty() && d_pending.last().kind == Pending::Float )
+    {
+        // a single precision slot read as a word, i.e. its bits
+        const Pending p = d_pending.takeLast();
+        freePending(p);
+        d_emitter.fmvx_w(r, p.f);
+        return;
+    }
+    Pending p;
+    if( takePending(Pending::Reg, p) )
+    {
+        // the slot never reached memory, the value is still in its register
+        if( r != p.lo )
+            d_emitter.mv(r, p.lo);
+        return;
+    }
     d_emitter.lw(r, Sp, 0);
     d_emitter.addi(Sp, Sp, Slot4);
 }
 
 void Renderer::pushRegPair(Register rLo, Register rHi)
 {
+    if( s_deferStack && d_deferProc && rLo != rHi )
+    {
+        Pending p;
+        p.kind = Pending::Pair;
+        p.lo = rLo;
+        p.hi = rHi;
+        if( allocPending(p) )
+        {
+            d_pending.append(p);
+            return;
+        }
+    }
+    materializePending();
     d_emitter.addi(Sp, Sp, -Slot8);
     d_emitter.sw(rLo, Sp, 0);
     d_emitter.sw(rHi, Sp, 4);
@@ -869,6 +1156,27 @@ void Renderer::pushRegPair(Register rLo, Register rHi)
 
 void Renderer::popRegPair(Register rLo, Register rHi)
 {
+    if( !d_pending.isEmpty() && d_pending.last().kind == Pending::Pair &&
+        rLo == d_pending.last().hi && rHi == d_pending.last().lo )
+        materializePending(); // a swap would need a scratch register
+
+    Pending p;
+    if( takePending(Pending::Pair, p) )
+    {
+        // the moves must not overwrite a source before it is read
+        if( rLo == p.hi )
+        {
+            d_emitter.mv(rHi, p.hi);
+            d_emitter.mv(rLo, p.lo);
+        }else
+        {
+            if( rLo != p.lo )
+                d_emitter.mv(rLo, p.lo);
+            if( rHi != p.hi )
+                d_emitter.mv(rHi, p.hi);
+        }
+        return;
+    }
     d_emitter.lw(rLo, Sp, 0);
     d_emitter.lw(rHi, Sp, 4);
     d_emitter.addi(Sp, Sp, Slot8);
@@ -876,12 +1184,40 @@ void Renderer::popRegPair(Register rLo, Register rHi)
 
 void Renderer::pushFloat(FRegister f)
 {
+    if( s_deferStack && d_deferProc )
+    {
+        Pending p;
+        p.kind = Pending::Float;
+        p.f = f;
+        if( allocPending(p) )
+        {
+            d_pending.append(p);
+            return;
+        }
+    }
+    materializePending();
     d_emitter.addi(Sp, Sp, -Slot4);
     d_emitter.fsw(f, Sp, 0);
 }
 
 void Renderer::popFloat(FRegister f)
 {
+    if( !d_pending.isEmpty() && d_pending.last().kind == Pending::Reg &&
+        d_pending.last().lo != Zero )
+    {
+        // a word slot read as single precision, i.e. its bits
+        const Pending p = d_pending.takeLast();
+        freePending(p);
+        d_emitter.fmvw_x(f, p.lo);
+        return;
+    }
+    Pending p;
+    if( takePending(Pending::Float, p) )
+    {
+        if( f != p.f )
+            d_emitter.fmv_s(f, p.f);
+        return;
+    }
     d_emitter.flw(f, Sp, 0);
     d_emitter.addi(Sp, Sp, Slot4);
 }
@@ -926,6 +1262,7 @@ void Renderer::loadArgAddr(Register rd, quint32 milOffset)
 void Renderer::loadVarAddr(Register rd, quint32 milOffset)
 {
     // Load address of module variable via LUI+ADDI with relocation against MIC$GLOBALS
+    parkPending(); 
     quint32 luiOff = d_emitter.currentPosition();
     d_emitter.lui(rd, 0);
     d_emitter.addi(rd, rd, 0);
@@ -1035,11 +1372,17 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
 
 void Renderer::scanBranchTargets(Procedure& proc)
 {
+    d_deferProc = s_deferStack;
     for (int pc = 0; pc < (int)proc.ops.size(); pc++) {
         LL_op op = (LL_op)proc.ops[pc].op;
         if (op == LL_br || op == LL_brfalse_i4) {
             int target = pc + 1 + (proc.ops[pc].minus ? -1 : 1) * (int)proc.ops[pc].val;
             getLabel(target);
+        }
+        if (op == LL_getreg || op == LL_putreg) {
+            // this procedure reads and writes machine registers by number, so no
+            // register may be used behind its back to hold a deferred stack slot
+            d_deferProc = false;
         }
     }
 }
@@ -1057,6 +1400,10 @@ Label& Renderer::getLabel(int milPc)
 void Renderer::bindLabelIfNeeded(int milPc)
 {
     if (d_branchLabels.contains(milPc)) {
+        // a branch target may be reached with a different physical stack state,
+        // so nothing may be assumed to still live in a register across it
+        materializePending();
+        Q_ASSERT(pendingEmpty());
         d_emitter.bind(*d_branchLabels[milPc]);
     }
 }
@@ -1150,6 +1497,7 @@ bool Renderer::setError(const QString& msg)
 void Renderer::emitCall(quint32 symbolIdx)
 {
     // Emit AUIPC+JALR pair (8 bytes) with R_RISCV_CALL relocation
+    materializePending(); // the callee sees the stack as it is in memory
     quint32 callOff = d_emitter.currentPosition();
     d_emitter.auipc(T3, 0); // T3 = PC + hi20
     d_emitter.jalr(Ra, T3, 0);  // call T3 + lo12
@@ -1497,6 +1845,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         }
         if (d_hasFloat) {
             // Load via LUI+FLW
+            parkPending(); 
             quint32 luiOff = em.currentPosition();
             em.lui(T3, 0);
             em.flw(Ft0, T3, 0);
@@ -1504,6 +1853,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             pushFloat(Ft0);
         } else {
             // No F extension: load as integer bits
+            parkPending();
             quint32 luiOff = em.currentPosition();
             em.lui(T3, 0);
             em.lw(T0, T3, 0);
@@ -1529,6 +1879,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             d_doubleOffsets[val] = rodataOff;
         }
         // Doubles are always soft-float on RV32IMAF: load as two words
+        parkPending();
         quint32 luiOff = em.currentPosition();
         em.lui(T3, 0);
         em.addi(T3, T3, 0);

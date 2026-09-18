@@ -65,7 +65,7 @@ namespace Rv32
     //   ft0-ft1 (f0-f1):    FP scratch registers
     //   fa0-fa7 (f10-f17):  FP argument/return (RISC-V F calling convention)
 
-    class Renderer
+    class Renderer : public Rv32::Emitter::Hook
     {
     public:
         Renderer(AstModel* mdl);
@@ -79,6 +79,13 @@ namespace Rv32
         bool useRvAbi() const { return d_useRvAbi; }
         void setHardwareDivide(bool v) { d_hasHwDiv = v; }
         bool hardwareDivide() const { return d_hasHwDiv; }
+
+        // Deferred stack materialization: a push only remembers that the abstract
+        // stack slot lives in a register, so the pop consuming it is a register move
+        // or nothing at all. The slot is written to memory as soon as anything else
+        // could observe it. Enabled by default; --no-defer switches it off.
+        static void setDeferStack(bool v) { s_deferStack = v; }
+        static bool deferStack() { return s_deferStack; }
 
         // Render a complete module to an ELF relocatable object.
         bool renderModule(Declaration* module);
@@ -117,6 +124,45 @@ namespace Rv32
 
         void pushReg(Rv32::Register r);
         void popReg(Rv32::Register r);
+
+        // An abstract stack slot whose value is still in a register and not yet
+        // written to the physical stack.
+        struct Pending
+        {
+            enum Kind { None, Reg, Pair, Float };
+            Kind kind;
+            Rv32::Register lo, hi;
+            Rv32::FRegister f;
+            int slot;      // index into the reserved park registers
+            bool parked;   // false while the value is still in the register it was pushed from
+            Pending():kind(None),lo(Rv32::InvalidReg),hi(Rv32::InvalidReg),f(Rv32::InvalidFReg),
+                slot(0),parked(false) {}
+        };
+
+        // Consume the topmost deferred slot, if there is one of the requested kind.
+        bool takePending(Pending::Kind, Pending& out);
+
+        // Write all deferred slots to the physical stack, deepest first, so that the
+        // machine stack again holds what the abstract stack says it holds.
+        void materializePending();
+
+        // Copy the deferred slots which are still in the scratch register they were
+        // pushed from into the register reserved for their stack position; with rd >= 0
+        // only the slot whose register rd is about to overwrite.
+        void parkPending(int rd = -1, bool intReg = true);
+
+        // Reserve, respectively release, the park register(s) of a slot; false if none is
+        // free, in which case the slot is not deferred.
+        bool allocPending(Pending& p);
+        void freePending(const Pending& p);
+
+        bool pendingEmpty() const { return d_pending.isEmpty(); }
+
+        // Called by the emitter before each instruction: anything which could observe
+        // the physical stack materializes the deferred slots first, everything else
+        // parks them in their own registers.
+        void beforeEmit(quint32 inst);
+
         bool getSysReg(quint16 regNum);  
         bool putSysReg(quint16 regNum);  
 
@@ -176,6 +222,17 @@ namespace Rv32
         quint32 d_localsSize;
         quint32 d_argsSize;
         quint32 d_returnSize;
+
+        // The abstract stack slots which still live in registers, in push order; only
+        // the topmost one can be consumed without memory access. While this list is
+        // not empty, sp is unchanged since the first of these pushes, since any use of
+        // sp materializes them first.
+        QList<Pending> d_pending;
+        bool d_materializing;
+        bool d_deferProc; // false in a procedure which names registers itself (GETREG/PUTREG)
+        int d_parkIntUsed;
+        int d_parkFloatUsed;
+        static bool s_deferStack;
 
         QString d_error;
         ElfWriter::StandardSections d_sections;

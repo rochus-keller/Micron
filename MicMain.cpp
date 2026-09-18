@@ -29,6 +29,7 @@
 #include "MilEmitter.h"
 #include "MilAstSerializer.h"
 #include "MilBackend.h"
+#include "MilRv32Renderer.h"
 #include "MilCeeGen.h"
 #include "Version.h"
 #ifdef _MIC_HAVE_SCREEN_QT_
@@ -455,6 +456,8 @@ int main(int argc, char *argv[])
     cp.addOption(noHwDiv);
     QCommandLineOption baseOpt("base", "the load address of the executable, hex (default 8048000)", "addr");
     cp.addOption(baseOpt);
+    QCommandLineOption noDefer("no-defer", "materialize each stack push immediately instead of keeping it in a register");
+    cp.addOption(noDefer);
 
     QStringList allArgs = a.arguments();
 
@@ -486,6 +489,11 @@ int main(int argc, char *argv[])
 
     s_verbose = cp.isSet(verbose);
     s_quiet = cp.isSet(quiet);
+
+    if( cp.isSet(noDefer) )
+    {
+        Mil::Rv32::Renderer::setDeferStack(false);
+    }
 
     BuildOpts o;
     o.dbg = cp.isSet(dbg);
