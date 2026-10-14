@@ -65,11 +65,20 @@ MemOp::MemOp(Register rn, Register rm, const Shift& shift, AddrMode mode)
     : d_rn(rn), d_rm(rm), d_offset(0), d_isRegOffset(true), d_mode(mode), d_shift(shift) {
 }
 
-Emitter::Emitter() {
+Emitter::Emitter() : d_hook(0), d_announced(false) {
     d_buffer.reserve(4096);
 }
 
+void Emitter::announce(quint32 inst) {
+    if (d_hook)
+        d_hook->beforeEmit(inst);
+    d_announced = true;
+}
+
 void Emitter::emit32(quint32 inst) {
+    if (!d_announced && d_hook)
+        d_hook->beforeEmit(inst);
+    d_announced = false;
     // ARM instructions are 32-bit Little Endian
     d_buffer.append(static_cast<char>(inst & 0xFF));
     d_buffer.append(static_cast<char>((inst >> 8) & 0xFF));
@@ -221,6 +230,7 @@ void Emitter::emitBranch(Condition cond, bool link, Label& label) {
     quint32 inst = (cond << 28) | (0xA << 24); // 1010 opcode for B
     if (link) inst |= (1 << 24); // 1011 opcode for BL
 
+    announce(inst);
     if (label.isBound()) {
         qint32 pc = currentPosition() + 8;
         qint32 relOffset = label.position() - pc;

@@ -45,8 +45,10 @@ static const int FP_TO_ARGS = 8;
 
 Renderer::Renderer(AstModel* mdl)
     : d_mdl(mdl), d_code(mdl, 4, 4), d_hasHwDiv(true), d_emitDwarf(false), d_useAapcs(false),
-      d_dwarf(0), d_localsSize(0), d_argsSize(0), d_returnSize(0), d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0), d_globalsSymIdx(0), d_elf(ElfWriter::ArchARM), d_currentModule(0)
+      d_dwarf(0), d_localsSize(0), d_argsSize(0), d_returnSize(0), d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0), d_globalsSymIdx(0), d_elf(ElfWriter::ArchARM), d_currentModule(0),
+      d_materializing(false), d_deferProc(false), d_parkUsed(0)
 {
+    d_emitter.setHook(this);
     d_code.setReverseArguments(true);
     memset(&d_sections, 0, sizeof(d_sections));
 
@@ -190,6 +192,8 @@ void Renderer::emitVtableFixupAt(Register destReg, quint32 offset, Type* t,
 
     Emitter& em = d_emitter;
     FixupTracker& fix = d_fixups;
+
+    parkPending(); // the recorded positions must be the MOVW themselves
 
     if (t->kind == Type::Object && offset + 4 <= memSize) {
         // Extract vtable pointer from template mem at this offset.
@@ -342,6 +346,7 @@ void Renderer::emitRuntimeVtableInit(Type* t, quint32 baseOff)
         if (vtIdx >= 0) {
             quint32 vtOff = getOrEmitVtable(vtIdx);
             // MOVW R0, #lo(baseOff); MOVT R0, #hi(baseOff)  -> addr in MIC$GLOBALS
+            parkPending(); // the recorded positions must be the MOVW themselves
             quint32 movwOff0 = d_emitter.currentPosition();
             d_emitter.movw_(AL, R0, baseOff & 0xFFFF);
             d_emitter.movt_(AL, R0, (baseOff >> 16) & 0xFFFF);
@@ -770,6 +775,7 @@ bool Renderer::renderProcedure(Procedure& proc, int procIdx)
                 // R0 = local address
                 loadLocalAddr(R0, localOff);
                 // R1 = template source
+                parkPending();
                 quint32 movwOff = em.currentPosition();
                 em.movw_(AL, R1, tmplOff & 0xFFFF);
                 em.movt_(AL, R1, (tmplOff >> 16) & 0xFFFF);
@@ -821,6 +827,8 @@ void Renderer::emitPrologue(quint32 localsSize)
 
 void Renderer::emitEpilogue()
 {
+    materializePending();
+    Q_ASSERT(pendingEmpty());
     d_emitter.mov(SP, Operand2(R11));
     if (d_useAapcs) {
         // AAPCS mode: restore R11 and LR, return via BX LR.
@@ -910,13 +918,312 @@ void Renderer::loadImm32(Register rd, quint32 value)
     }
 }
 
+bool Renderer::s_deferStack = true;
+
+// The registers a deferred abstract stack slot is parked in
+static const Register s_park[] = { R10, R9, R8, R7, R6, R5 };
+static const int s_parkCount = sizeof(s_park)/sizeof(s_park[0]);
+
+void Renderer::beforeEmit(quint32 inst)
+{
+    // The abstract stack slots in d_pending are not in memory yet
+    if( d_pending.isEmpty() || d_materializing )
+        return;
+
+    if( (inst >> 28) == 0xF )
+    {
+        // the unconditional space: memory barriers, PLD, BLX immediate, CPS
+        materializePending();
+        return;
+    }
+
+    const quint32 op1 = (inst >> 25) & 0x7;
+    const int rn = (inst >> 16) & 0xF;
+    const int rd = (inst >> 12) & 0xF;
+    const int rm = inst & 0xF;
+    const int rs = (inst >> 8) & 0xF;
+    const bool load = (inst >> 20) & 1;
+
+    int w1 = -1, w2 = -1; // the integer registers this instruction writes
+    bool readsSp = false;
+
+    switch( op1 ) // NOTE: the ARMv7-A encodings, see MilArmv7Emitter.cpp
+    {
+    case 0: // data processing register, miscellaneous, multiply, extra load/store
+        if( ((inst >> 4) & 0xF) == 0x9 )
+        {
+            if( ((inst >> 24) & 1) )
+            {
+                materializePending(); // synchronization primitives (LDREX/STREX/SWP)
+                return;
+            }
+            // multiply and multiply long
+            w1 = rn; // Rd is in 19..16 here
+            if( (inst >> 23) & 1 )
+                w2 = rd; // the long forms also write RdLo in 15..12
+            readsSp = rm == SP || rs == SP;
+        }else if( ((inst >> 7) & 1) && ((inst >> 4) & 1) )
+        {
+            // extra load/store: LDRH/STRH/LDRSB/LDRSH/LDRD/STRD
+            if( load || ((inst >> 5) & 3) == 2 ) // the latter is LDRD
+            {
+                w1 = rd;
+                w2 = rd + 1;
+            }
+            readsSp = rn == SP || ( ((inst >> 22) & 1) == 0 && rm == SP );
+        }else if( ((inst >> 23) & 3) == 2 && !load )
+        {
+            // miscellaneous: BX, BLX register, MRS, MSR, CLZ, BKPT
+            materializePending();
+            return;
+        }else
+        {
+            const quint32 opc = (inst >> 21) & 0xF;
+            if( opc < 8 || opc > 11 ) // TST/TEQ/CMP/CMN write no register
+                w1 = rd;
+            readsSp = rn == SP || rm == SP || ( ((inst >> 4) & 1) && rs == SP );
+        }
+        break;
+    case 1: // data processing immediate, MOVW/MOVT, MSR immediate and hints
+        {
+            const quint32 opc = (inst >> 21) & 0xF;
+            if( opc >= 8 && opc <= 11 && !load )
+            {
+                if( opc == 8 || opc == 10 )
+                {
+                    w1 = rd; // MOVW, MOVT; bits 19..16 are part of the immediate, not a register
+                    break;
+                }
+                materializePending(); // MSR immediate, NOP and the other hints
+                return;
+            }else if( opc < 8 || opc > 11 )
+                w1 = rd;
+            readsSp = rn == SP;
+        }
+        break;
+    case 2: // load/store immediate offset
+    case 3: // load/store register offset, media instructions
+        if( op1 == 3 && ((inst >> 4) & 1) )
+        {
+            const quint32 op = (inst >> 20) & 0x1F;
+            if( op == 0x11 || op == 0x13 ) // SDIV, UDIV
+            {
+                w1 = rn; // Rd is in 19..16 here
+                readsSp = rm == SP || rs == SP;
+            }else if( op == 0x0A || op == 0x0B || op == 0x0E || op == 0x0F ) // SXTB/SXTH/UXTB/UXTH
+            {
+                w1 = rd;
+                readsSp = rm == SP || rn == SP;
+            }else
+            {
+                materializePending(); // the other media instructions
+                return;
+            }
+        }else
+        {
+            if( load )
+                w1 = rd;
+            readsSp = rn == SP || ( op1 == 3 && rm == SP );
+        }
+        break;
+    case 4: // load/store multiple
+    case 5: // branch and branch with link
+        // the code after this point can also be reached with a different stack state,
+        // and a callee sees the stack as it is in memory
+        materializePending();
+        return;
+    case 6: // coprocessor load/store, VLDR/VSTR, MCRR/MRRC
+        if( ((inst >> 21) & 0x7F) == 0x62 )
+        {
+            // MCRR/MRRC, i.e. the transfer between a D register and two integer registers
+            if( load )
+            {
+                w1 = rd;
+                w2 = rn;
+            }
+        }else
+        {
+            if( (inst >> 21) & 1 )
+            {
+                materializePending(); // writeback forms, i.e. VPUSH/VPOP
+                return;
+            }
+            readsSp = rn == SP;
+        }
+        break;
+    default: // 7: coprocessor data processing, MCR/MRC, VFP, SVC
+        if( (inst >> 24) & 1 )
+        {
+            materializePending(); // SVC
+            return;
+        }
+        if( ((inst >> 4) & 1) && load )
+            w1 = rd; // MRC, VMRS: transfer to an integer register
+        // otherwise a VFP or coprocessor data operation, which touches no integer register
+        break;
+    }
+
+    if( readsSp || w1 == SP || w2 == SP )
+    {
+        materializePending();
+        return;
+    }
+
+    // The park registers belong to the deferred slots as long as there are any; no
+    // other code of this procedure may write them (see scanBranchTargets).
+    for( int i = 0; i < d_pending.size(); i++ )
+    {
+        const Pending& p = d_pending[i];
+        if( !p.parked )
+            continue;
+        Q_ASSERT( w1 != (int)s_park[p.slot] && w2 != (int)s_park[p.slot] );
+        Q_ASSERT( p.kind != Pending::Pair ||
+                  ( w1 != (int)s_park[p.slot+1] && w2 != (int)s_park[p.slot+1] ) );
+    }
+
+    if( w1 >= 0 )
+        parkPending(w1);
+    if( w2 >= 0 )
+        parkPending(w2);
+}
+
+void Renderer::parkPending(int rd)
+{
+    // Copy each slot which is still in the scratch register it was pushed from into
+    // the register reserved for its stack position. One move per slot, once.
+    if( d_pending.isEmpty() || d_materializing )
+        return;
+
+    d_materializing = true; // the moves themselves must not be intercepted
+    for( int i = 0; i < d_pending.size(); i++ )
+    {
+        Pending& p = d_pending[i];
+        if( p.parked )
+            continue;
+        if( rd >= 0 && rd != (int)p.lo && ( p.kind != Pending::Pair || rd != (int)p.hi ) )
+            continue; // only the slot whose register is about to be overwritten
+        switch( p.kind )
+        {
+        case Pending::Reg:
+            {
+                const Register park = s_park[p.slot];
+                d_emitter.mov(park, Operand2(p.lo));
+                p.lo = park;
+            }
+            break;
+        case Pending::Pair:
+            {
+                const Register parkLo = s_park[p.slot];
+                const Register parkHi = s_park[p.slot+1];
+                d_emitter.mov(parkLo, Operand2(p.lo));
+                d_emitter.mov(parkHi, Operand2(p.hi));
+                p.lo = parkLo;
+                p.hi = parkHi;
+            }
+            break;
+        default:
+            Q_ASSERT(false);
+            break;
+        }
+        p.parked = true;
+    }
+    d_materializing = false;
+}
+
+bool Renderer::allocPending(Pending& p)
+{
+    // A slot is only deferred if it has a register of its own to be parked in.
+    const int need = p.kind == Pending::Pair ? 2 : 1;
+    if( d_parkUsed + need > s_parkCount )
+        return false;
+    p.slot = d_parkUsed;
+    d_parkUsed += need;
+    return true;
+}
+
+void Renderer::freePending(const Pending& p)
+{
+    Q_ASSERT(d_parkUsed == p.slot + (p.kind == Pending::Pair ? 2 : 1));
+    d_parkUsed = p.slot;
+}
+
+void Renderer::materializePending()
+{
+    if( d_pending.isEmpty() )
+        return;
+    const QList<Pending> pending = d_pending;
+    d_pending.clear();
+    d_parkUsed = 0;
+    // sp still is where it was before the first of these pushes, so the slots are
+    // simply pushed now, in the order in which they were pushed abstractly
+    d_materializing = true;
+    for( int i = 0; i < pending.size(); i++ )
+    {
+        const Pending& p = pending[i];
+        switch( p.kind )
+        {
+        case Pending::Reg:
+            d_emitter.str_(AL, p.lo, MemOp(SP, -Slot4, MemOp::PreIndexed));
+            break;
+        case Pending::Pair:
+            d_emitter.sub(SP, SP, Operand2(Slot8));
+            d_emitter.str_(AL, p.lo, MemOp(SP, 0));
+            d_emitter.str_(AL, p.hi, MemOp(SP, 4));
+            break;
+        default:
+            Q_ASSERT(false);
+            break;
+        }
+    }
+    d_materializing = false;
+}
+
+bool Renderer::takePending(Pending::Kind kind, Pending& out)
+{
+    if( d_pending.isEmpty() )
+        return false;
+    if( d_pending.last().kind != kind )
+    {
+        // the slot is consumed in another shape than it was produced, which the
+        // deferred form cannot express; the memory form always can
+        materializePending();
+        return false;
+    }
+    out = d_pending.takeLast();
+    freePending(out);
+    return true;
+}
+
 void Renderer::pushReg(Register r)
 {
+    if( s_deferStack && d_deferProc )
+    {
+        Pending p;
+        p.kind = Pending::Reg;
+        p.lo = r;
+        if( allocPending(p) )
+        {
+            d_pending.append(p);
+            return;
+        }
+    }
+    materializePending();
     d_emitter.str_(AL, r, MemOp(SP, -Slot4, MemOp::PreIndexed));
 }
 
 void Renderer::popReg(Register r)
 {
+    Pending p;
+    if( takePending(Pending::Reg, p) )
+    {
+        if( p.lo != r )
+        {
+            d_materializing = true; // the move must not disturb the remaining slots
+            d_emitter.mov(r, Operand2(p.lo));
+            d_materializing = false;
+        }
+        return;
+    }
     d_emitter.ldr_(AL, r, MemOp(SP, Slot4, MemOp::PostIndexed));
 }
 
@@ -1108,6 +1415,19 @@ bool Renderer::putSysReg(quint16 regNum)
 
 void Renderer::pushRegPair(Register rLo, Register rHi)
 {
+    if( s_deferStack && d_deferProc )
+    {
+        Pending p;
+        p.kind = Pending::Pair;
+        p.lo = rLo;
+        p.hi = rHi;
+        if( allocPending(p) )
+        {
+            d_pending.append(p);
+            return;
+        }
+    }
+    materializePending();
     // Push high word first (higher address), then low word
     d_emitter.sub(SP, SP, Operand2(Slot8));
     d_emitter.str_(AL, rLo, MemOp(SP, 0));
@@ -1116,6 +1436,21 @@ void Renderer::pushRegPair(Register rLo, Register rHi)
 
 void Renderer::popRegPair(Register rLo, Register rHi)
 {
+    if( !d_pending.isEmpty() && d_pending.last().kind == Pending::Pair &&
+        rLo == d_pending.last().hi && rHi == d_pending.last().lo )
+        materializePending(); // a swap would need a scratch register
+
+    Pending p;
+    if( takePending(Pending::Pair, p) )
+    {
+        d_materializing = true; // the moves must not disturb the remaining slots
+        if( p.lo != rLo )
+            d_emitter.mov(rLo, Operand2(p.lo));
+        if( p.hi != rHi )
+            d_emitter.mov(rHi, Operand2(p.hi));
+        d_materializing = false;
+        return;
+    }
     d_emitter.ldr_(AL, rLo, MemOp(SP, 0));
     d_emitter.ldr_(AL, rHi, MemOp(SP, 4));
     d_emitter.add(SP, SP, Operand2(Slot8));
@@ -1130,6 +1465,15 @@ void Renderer::pushFloat(SRegister s)
 
 void Renderer::popFloat(SRegister s)
 {
+    Pending p;
+    if( takePending(Pending::Reg, p) )
+    {
+        // the value is still in an integer register, so it goes to the S register directly
+        d_materializing = true;
+        d_emitter.vmov_s_r(AL, s, p.lo);
+        d_materializing = false;
+        return;
+    }
     popReg(R0);
     d_emitter.vmov_s_r(AL, s, R0);
 }
@@ -1143,6 +1487,14 @@ void Renderer::pushDouble(DRegister d)
 
 void Renderer::popDouble(DRegister d)
 {
+    Pending p;
+    if( takePending(Pending::Pair, p) )
+    {
+        d_materializing = true;
+        d_emitter.vmov_d_rr(AL, d, p.lo, p.hi);
+        d_materializing = false;
+        return;
+    }
     popRegPair(R0, R1);
     d_emitter.vmov_d_rr(AL, d, R0, R1);
 }
@@ -1167,6 +1519,7 @@ void Renderer::loadArgAddr(Register rd, quint32 milOffset)
 // Load address of a module variable into rd. milOffset is byte offset in module data.
 void Renderer::loadVarAddr(Register rd, quint32 milOffset)
 {
+    parkPending();
     quint32 movwOff = d_emitter.currentPosition();
     d_emitter.movw_(AL, rd, milOffset & 0xFFFF);
     quint32 movtOff = d_emitter.currentPosition();
@@ -1265,11 +1618,18 @@ quint32 Renderer::emitArgAlignment(Declaration* decl)
 // Pre-scan a procedure's ops to identify branch target PCs.
 void Renderer::scanBranchTargets(Procedure& proc)
 {
+    d_deferProc = s_deferStack;
+
     for (int pc = 0; pc < (int)proc.ops.size(); pc++) {
         LL_op op = (LL_op)proc.ops[pc].op;
         if (op == LL_br || op == LL_brfalse_i4) {
             int target = pc + 1 + (proc.ops[pc].minus ? -1 : 1) * (int)proc.ops[pc].val;
             getLabel(target); // create if not exists
+        }
+        if (op == LL_getreg || op == LL_putreg) {
+            // this procedure reads and writes machine registers by number, so no
+            // register may be used behind its back to hold a deferred stack slot
+            d_deferProc = false;
         }
     }
 }
@@ -1289,6 +1649,10 @@ Label& Renderer::getLabel(int milPc)
 void Renderer::bindLabelIfNeeded(int milPc)
 {
     if (d_branchLabels.contains(milPc)) {
+        // a branch target may be reached with a different physical stack state,
+        // so nothing may be assumed to still live in a register across it
+        materializePending();
+        Q_ASSERT(pendingEmpty());
         d_emitter.bind(*d_branchLabels[milPc]);
     }
 }
@@ -1474,6 +1838,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             d_floatOffsets[val] = rodataOff;
         }
         // Load address of float constant via MOVW/MOVT + relocation
+        parkPending();
         quint32 movwPos = em.currentPosition();
         em.movw_(AL, R12, rodataOff & 0xFFFF);
         em.movt_(AL, R12, (rodataOff >> 16) & 0xFFFF);
@@ -1501,6 +1866,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             d_doubleOffsets[val] = rodataOff;
         }
 
+        parkPending();
         quint32 movwPos = em.currentPosition();
         em.movw_(AL, R12, rodataOff & 0xFFFF);
         em.movt_(AL, R12, (rodataOff >> 16) & 0xFFFF);
@@ -1533,6 +1899,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             d_stringOffsets[val] = rodataOff;
         }
         // Load address of string via MOVW/MOVT + relocation
+        parkPending();
         quint32 movwPos = em.currentPosition();
         em.movw_(AL, R0, rodataOff & 0xFFFF);
         em.movt_(AL, R0, (rodataOff >> 16) & 0xFFFF);
@@ -1553,6 +1920,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 rodataOff = d_elf.sectionSize(d_sections.rodata);
         d_elf.appendToSection(d_sections.rodata, obj.data(), obj.size());
         // Load address, then copy to stack
+        parkPending();
         quint32 movwPos = em.currentPosition();
         em.movw_(AL, R0, rodataOff & 0xFFFF);
         em.movt_(AL, R0, (rodataOff >> 16) & 0xFFFF);
@@ -1900,6 +2268,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             // NOTE that this assumes C implemented intrinsics and doesn't consider d_useAapcs!
             // R0 = dividend, R1 = divisor; BL __mic$div_i4; result in R0
             quint32 sym = d_elf.addSymbol("__mic$div_i4", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+            materializePending();
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, sym);
@@ -1914,6 +2283,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             // NOTE that this assumes C implemented intrinsics and doesn't consider d_useAapcs!
             // R0 = dividend, R1 = divisor; BL __mic$div_un_i4; result in R0
             quint32 sym = d_elf.addSymbol("__mic$div_un_i4", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+            materializePending();
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, sym);
@@ -1931,6 +2301,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             // NOTE that this assumes C implemented intrinsics and doesn't consider d_useAapcs!
             // R0 = dividend, R1 = divisor; BL __mic$rem_i4; result in R0
             quint32 sym = d_elf.addSymbol("__mic$rem_i4", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+            materializePending();
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, sym);
@@ -1947,6 +2318,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             // NOTE that this assumes C implemented intrinsics and doesn't consider d_useAapcs!
             // R0 = dividend, R1 = divisor; BL __mic$rem_un_i4; result in R0
             quint32 sym = d_elf.addSymbol("__mic$rem_un_i4", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+            materializePending();
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, sym);
@@ -2004,6 +2376,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         default:           funcName = "__mic$rem_un_i8"; break;
         }
         quint32 sym = d_elf.addSymbol(funcName, 0, 0, 0, STB_GLOBAL, STT_FUNC);
+        materializePending();
         quint32 blOffset = em.currentPosition();
         em.emitWord(0xEBFFFFFE);
         fix.recordExternalCall(blOffset, sym);
@@ -2622,6 +2995,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 loadImm32(R12, (quint32)fs.address);
                 em.blx_(AL, R12);
             } else {
+                materializePending();
                 quint32 blOffset = em.currentPosition();
                 em.emitWord(0xEBFFFFFE);
                 // A foreign proc with an explicit name is always an external reference.
@@ -2692,6 +3066,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 loadImm32(R12, (quint32)fs.address);
                 em.blx_(AL, R12);
             } else {
+                materializePending();
                 quint32 blOffset = em.currentPosition();
                 em.emitWord(0xEBFFFFFE);
                 // A foreign proc with an explicit name is always an external reference.
@@ -3071,6 +3446,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         if (d_useAapcs) {
             // AAPCS mode: R0 = size, BL MIC$$alloc, result in R0
             loadImm32(R0, allocSize);
+            materializePending();
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, allocSym);
@@ -3079,6 +3455,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             em.sub(SP, SP, Operand2((quint32)4));
             loadImm32(R0, allocSize);
             em.str_(AL, R0, MemOp(SP, 0));
+            materializePending();
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, allocSym);
@@ -3093,6 +3470,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             if (tmplSize > 0) {
                 quint32 tmplOff = getOrEmitTemplate(val);
                 // R0 = dest. Load template source address into R1
+                parkPending();
                 quint32 movwOff = em.currentPosition();
                 em.movw_(AL, R1, tmplOff & 0xFFFF);
                 em.movt_(AL, R1, (tmplOff >> 16) & 0xFFFF);
@@ -3129,6 +3507,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             em.str_(AL, R0, MemOp(SP, -4, MemOp::PreIndexed)); // push totalSize
             // MIC$$alloc(size=totalSize): R0=totalSize
             em.ldr_(AL, R0, MemOp(SP, 0)); // R0 = totalSize
+            materializePending();
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, allocSym);
@@ -3140,6 +3519,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             // Old convention: push size on stack, call MIC$$alloc
             em.str_(AL, R0, MemOp(SP, -4, MemOp::PreIndexed)); // push totalSize
             em.str_(AL, R0, MemOp(SP, -4, MemOp::PreIndexed)); // push size arg
+            materializePending();
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, allocSym);
@@ -3162,6 +3542,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 em.mov(R12, Operand2(R0));    // R12 = current dest
                 em.add(R3, R0, Operand2(R3)); // R3 = end = base + totalSize
                 // Load template source address into R1
+                parkPending();
                 quint32 movwOff = em.currentPosition();
                 em.movw_(AL, R1, tmplOff & 0xFFFF);
                 em.movt_(AL, R1, (tmplOff >> 16) & 0xFFFF);
@@ -3197,6 +3578,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         if (d_useAapcs) {
             // AAPCS mode: R0 = ptr, BL MIC$$free
             quint32 freeSym = d_elf.addSymbol("MIC$$free", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+            materializePending();
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, freeSym);
@@ -3204,6 +3586,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             // Old convention: push arg on stack, call MIC$$free
             em.str_(AL, R0, MemOp(SP, -4, MemOp::PreIndexed));
             quint32 freeSym = d_elf.addSymbol("MIC$$free", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+            materializePending();
             quint32 blOffset = em.currentPosition();
             em.emitWord(0xEBFFFFFE);
             fix.recordExternalCall(blOffset, freeSym);
@@ -3224,6 +3607,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             if (tmplSize > 0) {
                 quint32 tmplOff = getOrEmitTemplate(val);
                 // Load template source address
+                parkPending();
                 quint32 movwOff = em.currentPosition();
                 em.movw_(AL, R1, tmplOff & 0xFFFF);
                 em.movt_(AL, R1, (tmplOff >> 16) & 0xFFFF);
@@ -3545,6 +3929,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
 
     case LL_ldproc: {
         // Load the address of procedure 'val' onto the eval stack (4 bytes).
+        parkPending();
         quint32 movwOffset = em.currentPosition();
         em.movw_(AL, R0, 0);
         em.movt_(AL, R0, 0);
@@ -3563,6 +3948,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         popReg(R1); // R1 = obj pointer
 
         // Load procedure address into R0
+        parkPending();
         quint32 movwOffset = em.currentPosition();
         em.movw_(AL, R0, 0);
         em.movt_(AL, R0, 0);
@@ -3610,6 +3996,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 vtableOff = getOrEmitVtable(val);
 
         // Load vtable address with relocation against .data
+        parkPending();
         quint32 movwOff = em.currentPosition();
         em.movw_(AL, R0, vtableOff & 0xFFFF);
         em.movt_(AL, R0, (vtableOff >> 16) & 0xFFFF);
@@ -3655,6 +4042,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         // R2 = target vtable's canonical global symbol
         getOrEmitVtable(val); // ensure vtable is emitted
         quint32 vtSym = getOrCreateVtableSymbol(val);
+        parkPending();
         quint32 movwOff = em.currentPosition();
         em.movw_(AL, R2, 0);
         em.movt_(AL, R2, 0);

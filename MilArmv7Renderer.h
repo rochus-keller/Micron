@@ -56,11 +56,14 @@ namespace Arm
 
     // NOTE: this renderer is not yet suited for Micron level 0!
 
-    class Renderer
+    class Renderer : public Arm::Emitter::Hook
     {
     public:
         Renderer(AstModel* mdl);
         ~Renderer();
+
+        static void setDeferStack(bool v) { s_deferStack = v; }
+        static bool deferStack() { return s_deferStack; }
 
         void setHardwareDivide(bool v) { d_hasHwDiv = v; }
         bool hardwareDivide() const { return d_hasHwDiv; }
@@ -106,6 +109,29 @@ namespace Arm
 
         void pushReg(Arm::Register r);
         void popReg(Arm::Register r);
+
+        struct Pending
+        {
+            enum Kind { None, Reg, Pair };
+            Kind kind;
+            Arm::Register lo, hi;
+            int slot; // index into the reserved park registers
+            bool parked; // false while the value is still in the register it was pushed from
+            Pending():kind(None),lo(Arm::InvalidReg),hi(Arm::InvalidReg),slot(0),parked(false) {}
+        };
+
+        bool takePending(Pending::Kind, Pending& out);
+
+        void materializePending();
+
+        void parkPending(int rd = -1);
+
+        bool allocPending(Pending& p);
+        void freePending(const Pending& p);
+
+        bool pendingEmpty() const { return d_pending.isEmpty(); }
+
+        void beforeEmit(quint32 inst);
 
         bool getSysReg(quint16 regNum);  
         bool putSysReg(quint16 regNum); 
@@ -193,6 +219,12 @@ namespace Arm
         void emitGlobalVarVtableInits(Declaration* module);
 
         quint32 getOrEmitTemplate(quint32 templateIdx);
+
+        QList<Pending> d_pending;
+        bool d_materializing;
+        bool d_deferProc; // false in a procedure which names registers itself (GETREG/PUTREG)
+        int d_parkUsed;
+        static bool s_deferStack;
 
         QMap<int,Arm::Label*> d_branchLabels; // target MIL PC -> Label
         QList<Arm::Label*> d_allLabels;  // for cleanup

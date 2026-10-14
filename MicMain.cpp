@@ -30,6 +30,7 @@
 #include "MilAstSerializer.h"
 #include "MilBackend.h"
 #include "MilRv32Renderer.h"
+#include "MilArmv7Renderer.h"
 #include "MilCeeGen.h"
 #include "Version.h"
 #ifdef _MIC_HAVE_SCREEN_QT_
@@ -493,6 +494,7 @@ int main(int argc, char *argv[])
     if( cp.isSet(noDefer) )
     {
         Mil::Rv32::Renderer::setDeferStack(false);
+        Mil::Arm::Renderer::setDeferStack(false);
     }
 
     BuildOpts o;

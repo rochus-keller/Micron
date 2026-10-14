@@ -167,9 +167,16 @@ namespace Arm
         Emitter();
         virtual ~Emitter() {}
 
+        class Hook {
+        public:
+            virtual ~Hook() {}
+            virtual void beforeEmit(quint32 inst) = 0;
+        };
+
         const QByteArray& machineCode() const { return d_buffer; }
         int currentPosition() const { return d_buffer.size(); }
         void bind(Label& label);
+        void setHook(Hook* h) { d_hook = h; }
 
         void patchWord(int offset, quint32 word);
 
@@ -328,6 +335,7 @@ namespace Arm
 
     protected:
         void emit32(quint32 inst);
+        void announce(quint32 inst);
         void patchBranch(int offset, int targetPosition);
 
         void emitDataProcessing(Condition cond, int op, bool s, Register rn, Register rd, const Operand2& op2);
@@ -339,6 +347,8 @@ namespace Arm
 
     private:
         QByteArray d_buffer;
+        Hook* d_hook;
+        bool d_announced;
     };
 
 }

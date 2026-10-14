@@ -1497,7 +1497,7 @@ bool Renderer::setError(const QString& msg)
 void Renderer::emitCall(quint32 symbolIdx)
 {
     // Emit AUIPC+JALR pair (8 bytes) with R_RISCV_CALL relocation
-    materializePending(); // the callee sees the stack as it is in memory
+    materializePending(); 
     quint32 callOff = d_emitter.currentPosition();
     d_emitter.auipc(T3, 0); // T3 = PC + hi20
     d_emitter.jalr(Ra, T3, 0);  // call T3 + lo12
