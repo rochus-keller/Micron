@@ -332,6 +332,10 @@ protected:
         QList< QList<int> > loopStack;
         QList<Where> gotos, labels;
         Procedure* curProc;
+        bool hasFinally;
+        quint32 returnOffset;
+
+        Context():curProc(0),hasFinally(false),returnOffset(0){}
 
         int findLabel(const char* name) const
         {
@@ -343,6 +347,9 @@ protected:
             return -1;
         }
     };
+    bool patchGotos(Procedure& proc, Context& ctx);
+    void emitLocalLoad(Procedure& proc, Type* type, quint32 off);
+    void emitLocalStore(Procedure& proc, Type* type, quint32 off);
     QList<Context> ctxStack; // because translateProc is called recursively
     QMap<const char*,QMap<const char*, int> > externals;
 };

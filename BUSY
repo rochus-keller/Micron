@@ -19,6 +19,10 @@ submod qtmini = ../LeanQt (HAVE_FILEIO, HAVE_COREAPP, HAVE_CMDLINE)
 let config : Config {
     .configs += [ qtmini.core_client_config ]
     .include_dirs += ..
+    if (target_toolchain == `gcc) || (target_toolchain == `clang) {
+        .cflags_c += "-std=gnu99"
+        .cflags_cc += "-std=gnu++11"
+    }
     if build_mode == `debug {
         .defines += "_DEBUG"
     }
@@ -31,7 +35,7 @@ let utils : SourceSet {
         ./MicAtom.cpp
         ./MilOps.cpp
         ./MicRowCol.h
-        ./MicAtoms.h
+        ./MicAtom.h
         ./MilOps.h
     ]
 }
@@ -147,4 +151,4 @@ let micc ! : Executable {
     .configs += config
 }
 
-# TODO: this file is no longer up-to-date!
+# TODO: support IDE build

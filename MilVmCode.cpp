@@ -213,6 +213,15 @@ bool Code::translateProcSlot(Procedure& proc)
         proc.argsSize = stackAligned(params.last()->off + params.last()->getType()->getByteSize(pointerWidth));
     if( proc.decl->getType() )
         proc.returnSize = stackAligned(proc.decl->getType()->getByteSize(pointerWidth));
+    Type* returnType = proc.decl->getType();
+    const bool hasFinally = proc.decl->pd && proc.decl->pd->finally;
+    quint32 returnOffset = 0;
+    if( hasFinally && returnType )
+    {
+        returnType = deref(returnType);
+        returnOffset = proc.localsSize + AstModel::padding(proc.localsSize, returnType->getAlignment(pointerWidth));
+        proc.localsSize = returnOffset + returnType->getByteSize(pointerWidth);
+    }
     if( proc.decl->extern_ || proc.decl->foreign_ )
     {
         if(proc.decl->typebound)
@@ -239,25 +248,161 @@ bool Code::translateProcSlot(Procedure& proc)
         ctxStack.push_back(Context());
         Context& ctx = ctxStack.back();
         ctx.curProc = &proc;
+        ctx.hasFinally = hasFinally;
+        ctx.returnOffset = returnOffset;
         const bool res = translateStatSeq(proc, s);
 
-        foreach( const Where& pos, ctx.gotos )
+        if( ctx.hasFinally )
         {
-            const int label = ctx.findLabel(pos.name);
-            if( label == -1 )
-            {
-                qCritical() << "cannot find label" << pos.name;
+            ctx.labels << Where("$finally", proc.ops.size());
+            if( !patchGotos(proc, ctx) )
                 return false;
-            }
-            if( ctx.labels[label].pc < pos.pc)
+            ctx.gotos.clear();
+            ctx.labels.clear();
+
+            Statement* finally = proc.decl->pd->finally;
+            const bool finallyRes = translateStatSeq(proc, finally);
+            if( !patchGotos(proc, ctx) )
+                return false;
+            if( returnType )
             {
-                proc.ops[pos.pc].minus = true;
-                proc.ops[pos.pc].val = pos.pc + 1 - ctx.labels[label].pc;
+                emitLocalLoad(proc, returnType, ctx.returnOffset);
+                emitOp(proc, LL_ret, returnType->getByteSize(pointerWidth));
             }else
-                proc.ops[pos.pc].val = ctx.labels[label].pc - pos.pc - 1;
+                emitOp(proc, LL_ret_void);
+            ctxStack.pop_back();
+            return res && finallyRes;
         }
+        if( !patchGotos(proc, ctx) )
+            return false;
         ctxStack.pop_back();
         return res;
+    }
+}
+
+bool Code::patchGotos(Procedure& proc, Context& ctx)
+{
+    foreach( const Where& pos, ctx.gotos )
+    {
+        const int label = ctx.findLabel(pos.name);
+        if( label == -1 )
+        {
+            qCritical() << "cannot find label" << pos.name;
+            return false;
+        }
+        if( ctx.labels[label].pc < pos.pc)
+        {
+            proc.ops[pos.pc].minus = true;
+            proc.ops[pos.pc].val = pos.pc + 1 - ctx.labels[label].pc;
+        }else
+            proc.ops[pos.pc].val = ctx.labels[label].pc - pos.pc - 1;
+    }
+    return true;
+}
+
+void Code::emitLocalLoad(Procedure& proc, Type* type, quint32 off)
+{
+    Type* t = deref(type);
+    switch(t->kind)
+    {
+    case Type::INT8:
+        emitOp(proc, LL_ldloc_i1, off);
+        break;
+    case Type::INT16:
+        emitOp(proc, LL_ldloc_i2, off);
+        break;
+    case Type::INT32:
+        emitOp(proc, LL_ldloc_i4, off);
+        break;
+    case Type::INT64:
+        emitOp(proc, LL_ldloc_i8, off);
+        break;
+    case Type::UINT8:
+    case Type::BOOL:
+    case Type::CHAR:
+        emitOp(proc, LL_ldloc_u1, off);
+        break;
+    case Type::UINT16:
+        emitOp(proc, LL_ldloc_u2, off);
+        break;
+    case Type::UINT32:
+        emitOp(proc, LL_ldloc_u4, off);
+        break;
+    case Type::UINT64:
+        emitOp(proc, LL_ldloc_u8, off);
+        break;
+    case Type::FLOAT32:
+        emitOp(proc, LL_ldloc_r4, off);
+        break;
+    case Type::FLOAT64:
+        emitOp(proc, LL_ldloc_r8, off);
+        break;
+    case Type::Pointer:
+    case Type::Proc:
+        emitOp(proc, t->typebound ? LL_ldloc_pp : LL_ldloc_p, off);
+        break;
+    case Type::Interface:
+        emitOp(proc, LL_ldloc_pp, off);
+        break;
+    case Type::Struct:
+    case Type::Union:
+    case Type::Object:
+    case Type::Array:
+        emitOp(proc, LL_ldloc_vt, off);
+        emitOp(proc, LL_vt_size, t->getByteSize(pointerWidth));
+        break;
+    default:
+        Q_ASSERT(false);
+        break;
+    }
+}
+
+void Code::emitLocalStore(Procedure& proc, Type* type, quint32 off)
+{
+    Type* t = deref(type);
+    switch(t->kind)
+    {
+    case Type::INT8:
+    case Type::UINT8:
+    case Type::BOOL:
+    case Type::CHAR:
+        emitOp(proc, LL_stloc_i1, off);
+        break;
+    case Type::INT16:
+    case Type::UINT16:
+        emitOp(proc, LL_stloc_i2, off);
+        break;
+    case Type::INT32:
+    case Type::UINT32:
+        emitOp(proc, LL_stloc_i4, off);
+        break;
+    case Type::UINT64:
+    case Type::INT64:
+        emitOp(proc, LL_stloc_i8, off);
+        break;
+    case Type::FLOAT32:
+        emitOp(proc, LL_stloc_r4, off);
+        break;
+    case Type::FLOAT64:
+        emitOp(proc, LL_stloc_r8, off);
+        break;
+    case Type::Pointer:
+    case Type::Proc:
+        emitOp(proc, t->typebound ? LL_stloc_pp : LL_stloc_p, off);
+        break;
+    case Type::Interface:
+        emitOp(proc, LL_stloc_pp, off);
+        break;
+    case Type::Struct:
+    case Type::Union:
+    case Type::Object:
+    case Type::Array:
+        emitOp(proc, LL_stloc_vt, off);
+        emitOp(proc, LL_vt_size, t->getByteSize(pointerWidth));
+        break;
+    default:
+        Q_ASSERT(false);
+        break;
     }
 }
 
@@ -334,54 +479,7 @@ bool Code::translateStat(Procedure &proc, Statement *& s)
             Q_ASSERT(ctxStack.back().curProc);
             DeclList locals = ctxStack.back().curProc->decl->getLocals();
             Q_ASSERT(s->id < locals.size());
-            Type* t = deref(locals[s->id]->getType());
-            switch(t->kind)
-            {
-            case Type::INT8:
-            case Type::UINT8:
-            case Type::BOOL:
-            case Type::CHAR:
-                emitOp(proc, LL_stloc_i1,locals[s->id]->off);
-                break;
-            case Type::INT16:
-            case Type::UINT16:
-                emitOp(proc, LL_stloc_i2,locals[s->id]->off);
-                break;
-            case Type::INT32:
-            case Type::UINT32:
-                emitOp(proc, LL_stloc_i4,locals[s->id]->off);
-                break;
-            case Type::UINT64:
-            case Type::INT64:
-                emitOp(proc, LL_stloc_i8,locals[s->id]->off);
-                break;
-            case Type::FLOAT32:
-                emitOp(proc, LL_stloc_r4,locals[s->id]->off);
-                break;
-            case Type::FLOAT64:
-                emitOp(proc, LL_stloc_r8,locals[s->id]->off);
-                break;
-            case Type::Pointer:
-            case Type::Proc:
-                if(t->typebound)
-                    emitOp(proc, LL_stloc_pp,locals[s->id]->off);
-                else
-                    emitOp(proc, LL_stloc_p,locals[s->id]->off);
-                break;
-            case Type::Interface:
-                emitOp(proc, LL_stloc_pp,locals[s->id]->off);
-                break;
-            case Type::Struct:
-            case Type::Union:
-            case Type::Object:
-            case Type::Array:
-                emitOp(proc, LL_stloc_vt,locals[s->id]->off);
-                emitOp(proc, LL_vt_size, t->getByteSize(pointerWidth));
-                break;
-            default:
-                Q_ASSERT(false);
-                break;
-            }
+            emitLocalStore(proc, locals[s->id]->getType(), locals[s->id]->off);
         }
         break;
     case IL_stind:
@@ -602,8 +700,18 @@ bool Code::translateStat(Procedure &proc, Statement *& s)
         emitOp(proc, LL_strcpy, deref(s->args->lhs->getType()->getType())->len);
         break;
     case IL_ret:
-        emitOp(proc, LL_ret, s->args ? s->args->getType()->getByteSize(pointerWidth) : 0 );
+        if( ctxStack.back().hasFinally )
+        {
+            if( s->args )
+                emitLocalStore(proc, s->args->getType(), ctxStack.back().returnOffset);
+            const int pc = emitOp(proc, LL_br);
+            ctxStack.back().gotos << Where("$finally", pc);
+        }else
+            emitOp(proc, LL_ret, s->args ? s->args->getType()->getByteSize(pointerWidth) : 0 );
         break;
+    case IL_raise:
+        qCritical() << "pcall/raise not yet implemented";
+        return false;
     case IL_free:
         emitOp(proc, LL_free );
         break;
@@ -1605,6 +1713,9 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
             else
                 emitOp(proc, LL_callvirt, id);
         } break;
+    case IL_pcall:
+        qCritical() << "pcall/raise not yet implemented";
+        return false;
     case IL_calli: {
         // Compute argsSize and returnSize from the function pointer type.
         // e->lhs is the function pointer expression; its type is the proc type.

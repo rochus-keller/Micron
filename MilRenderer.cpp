@@ -402,9 +402,28 @@ void IlAsmRenderer::render(const ProcData& m)
     out << ws() << "begin" << endl;
 
     level++;
-    for( int i = 0; i < m.body.size(); i++ )
+    renderOps(m.body);
+    level--;
+    if( !m.finally.isEmpty() )
     {
-        const ProcData::Op& op = m.body[i];
+        out << ws() << "finally" << endl;
+        level++;
+        renderOps(m.finally);
+        level--;
+    }
+    out << ws() << "end ";
+    curLine = m.endLine;
+    lineout();
+    out << m.name << endl;
+
+    state = old;
+}
+
+void IlAsmRenderer::renderOps(const QList<ProcData::Op>& ops)
+{
+    for( int i = 0; i < ops.size(); i++ )
+    {
+        const ProcData::Op& op = ops[i];
         switch( op.op )
         {
         case IL_invalid:
@@ -514,13 +533,6 @@ void IlAsmRenderer::render(const ProcData& m)
             break;
         }
     }
-    level--;
-    out << ws() << "end ";
-    curLine = m.endLine;
-    lineout();
-    out << m.name << endl;
-
-    state = old;
 }
 
 QByteArray IlAsmRenderer::toString(const Quali& q)
@@ -977,6 +989,11 @@ void IlAstRenderer::addProcedure(const ProcData& proc)
 
         quint32 pc = 0;
         decl->body = translateStat(proc.body, pc);
+        if( !proc.finally.isEmpty() )
+        {
+            pc = 0;
+            decl->getPd()->finally = translateStat(proc.finally, pc);
+        }
         if( proc.endLine && !decl->forward )
             decl->getPd()->end = Mic::RowCol(proc.endLine);
         curProc = 0;
@@ -1353,6 +1370,7 @@ Statement* IlAstRenderer::translateStat(const QList<ProcData::Op>& ops, quint32&
         case IL_sti:
         case IL_cli:
             break;
+        case IL_raise:
         case IL_ret:
             break;
         case IL_putreg:
@@ -1444,6 +1462,7 @@ Expression* IlAstRenderer::translateExpr(const QList<ProcData::Op>& ops, quint32
           break;
         case IL_call:
         case IL_calli:
+        case IL_pcall:
         case IL_castptr:
         case IL_isinst:
         case IL_ldelema:

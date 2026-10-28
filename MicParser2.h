@@ -132,7 +132,7 @@ namespace Mic {
         };
         NameAndType Receiver();
         NameAndType Receiver2();
-        void block();
+        void block(bool moduleBody = false);
 		void DeclarationSequence();
 		void ReturnStatement();
         Type* FormalParameters();

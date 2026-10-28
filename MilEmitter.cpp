@@ -339,6 +339,13 @@ void Emitter::calli_(const Quali& methodRef, int argCount, bool hasRet)
     delta(-argCount + (hasRet?1:0) );
 }
 
+void Emitter::pcall_(const Quali& procType, int argCount)
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_pcall,QVariant::fromValue(procType)) );
+    delta(-argCount + 1);
+}
+
 void Emitter::callmi_(const Quali& methodRef, int argCount, bool hasRet)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
@@ -1060,6 +1067,13 @@ void Emitter::ret_(bool pop)
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
     ops->append(ProcData::Op(IL_ret));
     delta( pop ? -1 : 0);
+}
+
+void Emitter::raise_()
+{
+    Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
+    ops->append(ProcData::Op(IL_raise));
+    delta(-1);
 }
 
 void Emitter::shl_()

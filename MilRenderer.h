@@ -162,6 +162,7 @@ namespace Mil
     protected:
         inline QByteArray ws() { return QByteArray(level*2,' '); }
         void render(const ProcData&);
+        void renderOps(const QList<ProcData::Op>&);
         QByteArray toString(const Quali& q);
         void lineout();
 

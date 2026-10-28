@@ -70,6 +70,7 @@ namespace Mil {
 			case Tok_ENTRY: return "ENTRY";
 			case Tok_EXIT: return "EXIT";
 			case Tok_EXTERN: return "EXTERN";
+			case Tok_FINALLY: return "FINALLY";
 			case Tok_FOREIGN: return "FOREIGN";
 			case Tok_FORWARD: return "FORWARD";
 			case Tok_FREE: return "FREE";
@@ -173,12 +174,14 @@ namespace Mil {
 			case Tok_OBJECT: return "OBJECT";
 			case Tok_OF: return "OF";
 			case Tok_OR: return "OR";
+			case Tok_PCALL: return "PCALL";
 			case Tok_POINTER: return "POINTER";
 			case Tok_POP: return "POP";
 			case Tok_PROC: return "PROC";
 			case Tok_PROCEDURE: return "PROCEDURE";
 			case Tok_PTROFF: return "PTROFF";
 			case Tok_PUTREG: return "PUTREG";
+			case Tok_RAISE: return "RAISE";
 			case Tok_REM: return "REM";
 			case Tok_REM_UN: return "REM_UN";
 			case Tok_REPEAT: return "REPEAT";
@@ -307,6 +310,7 @@ namespace Mil {
 			case Tok_ENTRY: return "Tok_ENTRY";
 			case Tok_EXIT: return "Tok_EXIT";
 			case Tok_EXTERN: return "Tok_EXTERN";
+			case Tok_FINALLY: return "Tok_FINALLY";
 			case Tok_FOREIGN: return "Tok_FOREIGN";
 			case Tok_FORWARD: return "Tok_FORWARD";
 			case Tok_FREE: return "Tok_FREE";
@@ -410,12 +414,14 @@ namespace Mil {
 			case Tok_OBJECT: return "Tok_OBJECT";
 			case Tok_OF: return "Tok_OF";
 			case Tok_OR: return "Tok_OR";
+			case Tok_PCALL: return "Tok_PCALL";
 			case Tok_POINTER: return "Tok_POINTER";
 			case Tok_POP: return "Tok_POP";
 			case Tok_PROC: return "Tok_PROC";
 			case Tok_PROCEDURE: return "Tok_PROCEDURE";
 			case Tok_PTROFF: return "Tok_PTROFF";
 			case Tok_PUTREG: return "Tok_PUTREG";
+			case Tok_RAISE: return "Tok_RAISE";
 			case Tok_REM: return "Tok_REM";
 			case Tok_REM_UN: return "Tok_REM_UN";
 			case Tok_REPEAT: return "Tok_REPEAT";
@@ -852,6 +858,19 @@ namespace Mil {
 			break;
 		case 'F':
 			switch( at(str,len,i+1) ){
+			case 'I':
+				if( at(str,len,i+2) == 'N' ){
+					if( at(str,len,i+3) == 'A' ){
+						if( at(str,len,i+4) == 'L' ){
+							if( at(str,len,i+5) == 'L' ){
+								if( at(str,len,i+6) == 'Y' ){
+									res = Tok_FINALLY; i += 7;
+								}
+							}
+						}
+					}
+				}
+				break;
 			case 'O':
 				if( at(str,len,i+2) == 'R' ){
 					switch( at(str,len,i+3) ){
@@ -1500,6 +1519,15 @@ namespace Mil {
 			break;
 		case 'P':
 			switch( at(str,len,i+1) ){
+			case 'C':
+				if( at(str,len,i+2) == 'A' ){
+					if( at(str,len,i+3) == 'L' ){
+						if( at(str,len,i+4) == 'L' ){
+							res = Tok_PCALL; i += 5;
+						}
+					}
+				}
+				break;
 			case 'O':
 				switch( at(str,len,i+2) ){
 				case 'I':
@@ -1562,7 +1590,17 @@ namespace Mil {
 			}
 			break;
 		case 'R':
-			if( at(str,len,i+1) == 'E' ){
+			switch( at(str,len,i+1) ){
+			case 'A':
+				if( at(str,len,i+2) == 'I' ){
+					if( at(str,len,i+3) == 'S' ){
+						if( at(str,len,i+4) == 'E' ){
+							res = Tok_RAISE; i += 5;
+						}
+					}
+				}
+				break;
+			case 'E':
 				switch( at(str,len,i+2) ){
 				case 'M':
 					if( at(str,len,i+3) == '_' ){
@@ -1588,6 +1626,7 @@ namespace Mil {
 					res = Tok_RET; i += 3;
 					break;
 				}
+				break;
 			}
 			break;
 		case 'S':

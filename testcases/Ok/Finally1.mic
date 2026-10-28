@@ -1,0 +1,32 @@
+module Finally1 [level=2]
+
+procedure ProcedureWithFinally()
+begin
+    println("procedure body")
+    return
+finally
+    println("procedure finally")
+end ProcedureWithFinally
+
+procedure FunctionWithFinally(): integer
+begin
+    println("function body")
+    return 17
+finally
+    println("function finally")
+end FunctionWithFinally
+
+begin
+    ProcedureWithFinally()
+    println(FunctionWithFinally())
+end Finally1
+
+(* output:
+
+procedure body
+procedure finally
+function body
+function finally
+17
+
+*)

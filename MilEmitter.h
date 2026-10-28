@@ -78,6 +78,7 @@ namespace Mil
         void and_();
         void call_( const Quali& methodRef, int argCount = 0, bool hasRet = false);
         void calli_( const Quali& methodRef, int argCount, bool hasRet = false );
+        void pcall_( const Quali& procType, int argCount );
         void callmi_(const Quali& methodRef, int argCount, bool hasRet = false );
         void callmi_(const Trident& methodRef, int argCount, bool hasRet = false );
         void callinst_( const Trident& methodRef, int argCount, bool hasRet = false );
@@ -143,6 +144,7 @@ namespace Mil
         void pop_();
         void ptroff_(const Quali& typeRef);
         void putreg_(quint16 reg, EmiTypes::Basic);
+        void raise_();
         void rem_(bool withUnsigned = false);
         void repeat_();
         void ret_(bool pop);

@@ -369,12 +369,15 @@ bool ElfLinker::link(const QString& outPath) {
     if (d_isEsp32) {
         // ESP32 Harvard: Headers -> .rodata_desc -> .rodata (DROM) -> .text (IROM) -> .data (SRAM VMA / Flash LMA)
         rodataDescFileOffset = headerSize;
-        rodataDescAddr = d_dromAddress + headerSize;
         rodataFileOffset = rodataDescFileOffset + espAppDesc.size();
-        d_rodataAddr = rodataDescAddr + espAppDesc.size();
 
         textFileOffset = alignTo(rodataFileOffset + d_rodata.size(), 4);
         d_textAddr = d_iromAddress;
+
+        // Place DROM after .text in its own 64KB flash page to avoid overlap with .text's tail
+        d_dromAddress = alignTo(d_iromAddress + d_text.size(), 0x10000);
+        rodataDescAddr = d_dromAddress + headerSize;
+        d_rodataAddr = rodataDescAddr + espAppDesc.size();
 
         dataFileOffset = alignTo(textFileOffset + d_text.size(), 0x1000);
         dataLmaAddr = d_dromAddress + dataFileOffset;

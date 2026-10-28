@@ -41,6 +41,7 @@ namespace Mic {
 		void BaseType();
 		void inline_();
 		void VariantPart();
+		void Variant();
 		void FixedPart();
 		void FieldList();
 		void IdentList();

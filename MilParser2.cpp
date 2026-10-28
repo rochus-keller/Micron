@@ -172,6 +172,7 @@ static inline bool FIRST_Expression(int tt) {
     case Tok_AND:
     case Tok_CALL:
     case Tok_CALLI:
+    case Tok_PCALL:
     case Tok_CALLINST:
     case Tok_CALLMI:
     case Tok_CALLVIRT:
@@ -306,6 +307,7 @@ static inline bool FIRST_ExpInstr(int tt) {
     case Tok_AND:
     case Tok_CALL:
     case Tok_CALLI:
+    case Tok_PCALL:
     case Tok_CALLINST:
     case Tok_CALLMI:
     case Tok_CALLVIRT:
@@ -443,6 +445,7 @@ static inline bool FIRST_StatementSequence(int tt) {
     case Tok_AND:
     case Tok_CALL:
     case Tok_CALLI:
+    case Tok_PCALL:
     case Tok_CALLINST:
     case Tok_CALLMI:
     case Tok_CALLVIRT:
@@ -566,6 +569,7 @@ static inline bool FIRST_StatementSequence(int tt) {
     case Tok_POP:
     case Tok_PTROFF:
     case Tok_PUTREG:
+    case Tok_RAISE:
     case Tok_REM:
     case Tok_REM_UN:
     case Tok_REPEAT:
@@ -624,6 +628,7 @@ static inline bool FIRST_Statement(int tt) {
     case Tok_LOOP:
     case Tok_POP:
     case Tok_PUTREG:
+    case Tok_RAISE:
     case Tok_REPEAT:
     case Tok_RET:
     case Tok_STARG:
@@ -1584,6 +1589,10 @@ void Parser2::ProcedureBody(Declaration* proc) {
 	}
     expect(Tok_BEGIN, false, "ProcedureBody");
     proc->body = StatementSequence();
+    if( la.d_code == Tok_FINALLY ) {
+        expect(Tok_FINALLY, true, "ProcedureBody");
+        proc->getPd()->finally = StatementSequence();
+    }
 	expect(Tok_END, false, "ProcedureBody");
     if( nextIsLine() ) {
         Line();
@@ -1909,6 +1918,18 @@ Expression* Parser2::ExpInstr() {
             Type* t = res->d->getType();
             if( t->kind != Type::Proc || t->typebound )
                 error(cur, "expecting an unbound procedure type");
+        }
+    } else if( la.d_code == Tok_PCALL ) {
+        expect(Tok_PCALL, true, "ExpInstr");
+        res->kind = IL_pcall;
+        res->d = qualident();
+        if( res->d && res->d->getType() )
+        {
+            Type* t = res->d->getType();
+            if( t->kind != Type::Proc || t->typebound )
+                error(cur, "expecting an unbound procedure type");
+            else if( t->getType() )
+                error(cur, "pcall requires a procedure type without return type");
         }
     } else if( la.d_code == Tok_CALLMI ) {
         expect(Tok_CALLMI, true, "ExpInstr");
@@ -2569,6 +2590,9 @@ Statement* Parser2::Statement_()
     } else if( la.d_code == Tok_RET ) {
         expect(Tok_RET, true, "Statement");
         res->kind = IL_ret;
+    } else if( la.d_code == Tok_RAISE ) {
+        expect(Tok_RAISE, true, "Statement");
+        res->kind = IL_raise;
     } else if( la.d_code == Tok_STARG ) {
         expect(Tok_STARG, true, "Statement");
         res->kind = IL_starg;

@@ -1,0 +1,163 @@
+module Finally2 [level=2]
+
+type
+    Pair = record
+        x, y: integer
+    end
+
+var
+    rec: Pair
+
+procedure FallThrough()
+begin
+    println("fall body")
+finally
+    println("fall finally")
+end FallThrough
+
+procedure ReturnFromLoop()
+var
+    i: integer
+begin
+    i := 0
+    loop
+        i := i + 1
+        if i = 2 then
+            return
+        end
+    end
+    println("unreachable loop")
+finally
+    println("loop finally")
+end ReturnFromLoop
+
+procedure ReturnFromIf()
+begin
+    if 1 = 1 then
+        return
+    end
+    println("unreachable if")
+finally
+    println("if finally")
+end ReturnFromIf
+
+procedure SavedResult(): integer
+var
+    value: integer
+begin
+    value := 41
+    return value
+finally
+    value := 99
+    println(value)
+end SavedResult
+
+procedure ChainC()
+begin
+    println("C body")
+finally
+    println("C finally")
+end ChainC
+
+procedure ChainB()
+begin
+    println("B body")
+    ChainC()
+finally
+    println("B finally")
+end ChainB
+
+procedure ChainA()
+begin
+    println("A body")
+    ChainB()
+finally
+    println("A finally")
+end ChainA
+
+procedure Recurse(n: integer)
+begin
+    println(n)
+    if n > 0 then
+        Recurse(n - 1)
+    end
+finally
+    println(n + 10)
+end Recurse
+
+procedure LocalGoto()
+begin
+    goto same
+same:
+    println("body label")
+finally
+    goto same
+    println("skipped final label")
+same:
+    println("finally label")
+end LocalGoto
+
+procedure InlineFinal() inline
+begin
+    println("inline body")
+finally
+    println("inline finally")
+end InlineFinal
+
+procedure MakePair(): Pair
+var
+    p: Pair
+begin
+    p.x := 3
+    p.y := 5
+    return p
+finally
+    p.x := 77
+    println("record finally")
+end MakePair
+
+begin
+    FallThrough()
+    ReturnFromLoop()
+    ReturnFromIf()
+    println(SavedResult())
+    ChainA()
+    Recurse(3)
+    LocalGoto()
+    InlineFinal()
+    rec := MakePair()
+    println(rec.x)
+    println(rec.y)
+end Finally2
+
+(* output:
+
+fall body
+fall finally
+loop finally
+if finally
+99
+41
+A body
+B body
+C body
+C finally
+B finally
+A finally
+3
+2
+1
+0
+10
+11
+12
+13
+body label
+finally label
+inline body
+inline finally
+record finally
+3
+5
+
+*)

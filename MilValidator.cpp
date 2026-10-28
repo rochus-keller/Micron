@@ -26,7 +26,7 @@ using namespace Mil;
 
 // NOTE: removed all INTPTR from the checks. There should never be an actual INTPTR type on stack since there is no conv_ip
 
-Validator::Validator(AstModel* m):mdl(m),curMod(0),curProc(0),needsPointerInit(true),entryPointFound(false)
+Validator::Validator(AstModel* m):mdl(m),curMod(0),curProc(0),needsPointerInit(true),entryPointFound(false),inFinally(false)
 {
 
 }
@@ -202,6 +202,30 @@ void Validator::visitProcedure(Declaration* proc)
         // TODO: assure nobody is jumping into nested compound statements
     }
 
+    if( proc->pd && proc->pd->finally )
+    {
+        if( proc->entryPoint )
+            error(proc, "INIT or ENTRY procedures cannot have a FINALLY section");
+
+        stack.clear();
+        gotos.clear();
+        labels.clear();
+        inFinally = true;
+        visitStatSeq(proc->pd->finally);
+        inFinally = false;
+        if( !stack.isEmpty() )
+            error(proc, "stack not empty at the end of the FINALLY section");
+
+        foreach( const NamePos& np, gotos )
+        {
+            const int label = findLabel(np.name->name);
+            if( label == -1 )
+                error(proc, QString("cannot find label: '%1'").arg(np.name->name));
+            else if( !np.pos.contains( labels[label].pos.last() ) )
+                error(proc, QString("cannot cannot jump to this label: '%1'").arg(np.name->name));
+        }
+    }
+
     // If the procedure type is not null, it's expected to return a value.
     if( !proc->nobody && proc->getType() != 0 && fallsThrough(proc->body) )
         error(proc, "not all control paths return a value");
@@ -352,7 +376,14 @@ void Validator::visitStatSeq(Statement* stat)
             expectN(0, stat);
             visitRepeat(stat);
             break;
+        case IL_raise:
+            if( expectN(1, stat) && !deref(stat->args->getType())->isPointer() )
+                error(stat, "raise expects a pointer");
+            reachable = false;
+            break;
         case IL_ret:
+            if( inFinally )
+                error(stat, "ret not allowed in a FINALLY section");
             if( curProc && curProc->getType() )
             {
                 if( expectN(1, stat) && !assigCompat(deref(curProc->getType()), stat->args) )
@@ -1310,6 +1341,30 @@ Expression* Validator::visitExpr(Expression* e)
             break;
         case IL_nop:
             break;
+        case IL_pcall:
+            if( expectN(1,e) )
+            {
+                e->lhs = stackAt(-1);
+                stack.pop_back();
+                Type* proc = deref(e->lhs->getType());
+                if( proc->kind != Type::Proc || proc->typebound )
+                {
+                    error(e, "expecting an unbound procedure type");
+                    break;
+                }
+                if( proc->getType() )
+                {
+                    error(e, "pcall requires a procedure type without return type");
+                    break;
+                }
+                const int numOfParams = proc->subs.size();
+                if( !expectN(numOfParams, e) )
+                    break;
+                e->rhs = eatStack(numOfParams);
+                e->setType(mdl->getBasicType(Type::INTPTR));
+                stack.push_back(e);
+            }
+            break;
         case IL_calli:
         case IL_callmi:
             if( expectN(1,e) )
@@ -1988,6 +2043,7 @@ bool Validator::fallsThrough(Statement* stat)
             switch( stat->kind )
             {
             case IL_ret:
+            case IL_raise:
             case IL_goto:
                 reachable = false;
                 break;

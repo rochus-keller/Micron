@@ -1239,6 +1239,8 @@ ModuleData::~ModuleData()
 
 ProcedureData::~ProcedureData()
 {
+    if( finally )
+        delete finally;
     if( externalId )
         delete externalId;
 }

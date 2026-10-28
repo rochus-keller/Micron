@@ -4199,12 +4199,14 @@ Parser2::NameAndType Parser2::Receiver2()
     return res;
 }
 
-void Parser2::block() {
+void Parser2::block(bool moduleBody) {
 	expect(Tok_BEGIN, true, "block");
     beginFinallyEnd(false, cur.toRowCol());
     if( la.d_type == Tok_FINALLY ) {
         expect(Tok_FINALLY, false, "block");
-        if( ev->langLevel < 2 )
+        if( moduleBody )
+            error(cur,"FINALLY not supported in the module body");
+        else if( ev->langLevel < 2 )
             error(cur,"FINALLY sections are only supported on language level 2 and above");
         beginFinallyEnd(true, cur.toRowCol());
     }
@@ -4548,7 +4550,7 @@ void Parser2::module(const Import & import) {
         mdl->openScope(procDecl);
         out->beginProc("begin$", la.toRowCol(),0, ev->langLevel == 0 ? Mil::ProcData::ModuleEntry : Mil::ProcData::ModuleInit);
         resolveDeferreds();
-        block();
+        block(true);
         out->endProc(RowCol());
         mdl->closeScope();
         ev->popCurProc();

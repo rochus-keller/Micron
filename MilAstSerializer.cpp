@@ -185,6 +185,7 @@ static void renderExprs(ProcData& proc, Expression* e, quint32& line, AstSeriali
         {
         case IL_call:
         case IL_calli:
+        case IL_pcall:
         case IL_castptr:
         case IL_isinst:
         case IL_ldelema:
@@ -391,6 +392,8 @@ static void renderStats(ProcData& proc, Statement* s, quint32& line, AstSerializ
                     }else
                         qCritical() << "AstSerializer ERROR:" << proc.name << proc.body.size() << s_opName[s->kind] << ": invalid declaration";
                 } break;
+            case IL_ret:
+            case IL_raise:
             default:
                 proc.body << ProcData::Op(s->kind);
                 break;
@@ -486,6 +489,12 @@ static void renderProc(const Declaration* proc, AbstractRenderer* r, AstSerializ
     {
         quint32 line = 0;
         renderStats(pdata, proc->body, line, dbi);
+        if( proc->pd && proc->pd->finally )
+        {
+            ProcData tmp;
+            renderStats(tmp, proc->pd->finally, line, dbi);
+            pdata.finally = tmp.body;
+        }
     }
 
     r->addProcedure(pdata);

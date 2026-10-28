@@ -88,6 +88,7 @@ namespace Mil
 
         bool needsPointerInit;
         bool entryPointFound;
+        bool inFinally;
     };
 }
 

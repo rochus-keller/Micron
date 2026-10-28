@@ -284,6 +284,7 @@ static inline bool FIRST_Expression(int tt) {
 	case Tok_NOP:
 	case Tok_NOT:
 	case Tok_OR:
+	case Tok_PCALL:
 	case Tok_PTROFF:
 	case Tok_REM:
 	case Tok_REM_UN:
@@ -417,6 +418,7 @@ static inline bool FIRST_ExpInstr(int tt) {
 	case Tok_NOP:
 	case Tok_NOT:
 	case Tok_OR:
+	case Tok_PCALL:
 	case Tok_PTROFF:
 	case Tok_REM:
 	case Tok_REM_UN:
@@ -562,9 +564,11 @@ static inline bool FIRST_StatementSequence(int tt) {
 	case Tok_NOP:
 	case Tok_NOT:
 	case Tok_OR:
+	case Tok_PCALL:
 	case Tok_POP:
 	case Tok_PTROFF:
 	case Tok_PUTREG:
+	case Tok_RAISE:
 	case Tok_REM:
 	case Tok_REM_UN:
 	case Tok_REPEAT:
@@ -623,6 +627,7 @@ static inline bool FIRST_Statement(int tt) {
 	case Tok_LOOP:
 	case Tok_POP:
 	case Tok_PUTREG:
+	case Tok_RAISE:
 	case Tok_REPEAT:
 	case Tok_RET:
 	case Tok_STARG:
@@ -1130,6 +1135,10 @@ void Parser::ProcedureBody() {
 	}
 	expect(Tok_BEGIN, true, "ProcedureBody");
 	StatementSequence();
+	if( la.d_code == Tok_FINALLY ) {
+		expect(Tok_FINALLY, true, "ProcedureBody");
+		StatementSequence();
+	}
 	expect(Tok_END, true, "ProcedureBody");
 	if( FIRST_Line(la.d_type) || FIRST_Line(la.d_code) ) {
 		Line();
@@ -1205,7 +1214,7 @@ void Parser::module() {
 			ImportList();
 		} else if( FIRST_ImporterList(la.d_type) || FIRST_ImporterList(la.d_code) ) {
 			ImporterList();
-		} else if( FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) || la.d_code == Tok_IMPORT || la.d_code == Tok_TYPE || la.d_code == Tok_VAR || la.d_code == Tok_PROC || la.d_code == Tok_END || la.d_code == Tok_PROCEDURE || la.d_code == Tok_CONST || la.d_code == Tok_IMPORTER ) {
+		} else if( FIRST_DeclarationSequence(la.d_type) || FIRST_DeclarationSequence(la.d_code) || la.d_code == Tok_TYPE || la.d_code == Tok_END || la.d_code == Tok_PROCEDURE || la.d_code == Tok_IMPORT || la.d_code == Tok_PROC || la.d_code == Tok_IMPORTER || la.d_code == Tok_CONST || la.d_code == Tok_VAR ) {
 			DeclarationSequence();
 		} else
 			invalid("module");
@@ -1638,6 +1647,9 @@ void Parser::ExpInstr() {
 		qualident();
 	} else if( la.d_code == Tok_NOP ) {
 		expect(Tok_NOP, true, "ExpInstr");
+	} else if( la.d_code == Tok_PCALL ) {
+		expect(Tok_PCALL, true, "ExpInstr");
+		qualident();
 	} else if( FIRST_CondOp(la.d_type) || FIRST_CondOp(la.d_code) ) {
 		CondOp();
 	} else if( la.d_code == Tok_GETREG ) {
@@ -1782,6 +1794,8 @@ void Parser::Statement() {
 	} else if( la.d_code == Tok_PUTREG ) {
 		expect(Tok_PUTREG, true, "Statement");
 		regwidth();
+	} else if( la.d_code == Tok_RAISE ) {
+		expect(Tok_RAISE, true, "Statement");
 	} else
 		invalid("Statement");
 }
@@ -1860,7 +1874,7 @@ void Parser::MetaParams() {
 		Line();
 	}
 	expect(Tok_ident, false, "MetaParams");
-	while( ( ( peek(1).d_type == Tok_Comma && peek(2).d_code == Tok_LINE ) || ( peek(1).d_type == Tok_Comma && peek(2).d_type == Tok_ident ) || ( peek(1).d_code == Tok_LINE && peek(2).d_type == Tok_unsigned ) || peek(1).d_type == Tok_ident || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Comma ) || ( peek(1).d_type == Tok_ident && peek(2).d_code == Tok_LINE ) || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_ident ) )  ) {
+	while( ( ( peek(1).d_type == Tok_Comma && peek(2).d_type == Tok_ident ) || peek(1).d_type == Tok_ident || ( peek(1).d_type == Tok_Comma && peek(2).d_code == Tok_LINE ) || ( peek(1).d_code == Tok_LINE && peek(2).d_type == Tok_unsigned ) || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_Comma ) || ( peek(1).d_type == Tok_ident && peek(2).d_code == Tok_LINE ) || ( peek(1).d_type == Tok_ident && peek(2).d_type == Tok_ident ) )  ) {
 		if( la.d_type == Tok_Comma ) {
 			expect(Tok_Comma, false, "MetaParams");
 		}
