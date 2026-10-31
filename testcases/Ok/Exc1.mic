@@ -1,0 +1,32 @@
+module Exc1 [level=3, exceptions]
+
+var
+    ex1, ex2: integer
+
+procedure Print(const str: ^array of char)
+begin
+    println(str^)
+    raise(@ex1)
+    println("this is not printed")
+end Print
+
+var
+    res: pointer to any
+
+begin
+    pcall(res, Print, "Hello World")
+    if res = @ex1 then
+        println("got ex1")
+    elsif res = nil then
+        println("no exception")
+    else
+        println("unknown exception")
+    end
+end Exc1
+
+(* output:
+
+Hello World
+got ex1
+
+*)

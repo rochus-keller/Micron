@@ -448,6 +448,34 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
     case Builtin::PCALL:
         if( ev->langLevel < 3 )
             throw "operation not supported on selected language level";
+        if( args.size() < 2 )
+            throw "expecting at least 2 arguments";
+        if( !args[0]->isAssignable() || !args[0]->getType() ||
+                args[0]->getType()->kind != Type::Pointer || !args[0]->getType()->getType() ||
+                args[0]->getType()->getType()->kind != Type::Any )
+            throw "the first argument of PCALL must be a variable of type POINTER TO ANY";
+        if( args[1]->kind == Expression::ProcDecl )
+        {
+            Declaration* proc = args[1]->decl;
+            if( proc->kind == Declaration::ForwardDecl )
+                proc = proc->deforward();
+            if( proc->kind != Declaration::Procedure || proc->getModule() == 0 || proc->inline_ ||
+                    proc->typebound || proc->extern_ || proc->ffi_ )
+                throw "PCALL requires a proper procedure";
+            if( proc->getType() && proc->getType()->kind != Type::NoType )
+                throw "PCALL requires a proper procedure";
+            if( args.size() - 2 != proc->getParams().size() )
+                throw "number of actual and formal arguments don't fit";
+        }else
+        {
+            Type* proc = args[1]->getType();
+            if( !args[1]->isLvalue() || !proc || proc->kind != Type::Proc || proc->typebound )
+                throw "PCALL requires a proper procedure";
+            if( proc->getType() && proc->getType()->kind != Type::NoType )
+                throw "PCALL requires a proper procedure";
+            if( args.size() - 2 != proc->subs.size() )
+                throw "number of actual and formal arguments don't fit";
+        }
         break;
     case Builtin::PRINT:
     case Builtin::PRINTLN: {
@@ -458,9 +486,16 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
                 args.first()->setByVal();
         } break;
     case Builtin::RAISE:
-        expectingNArgs(args,1);
         if( ev->langLevel < 3 )
             throw "operation not supported on selected language level";
+        expectingNMArgs(args,0,1);
+        if( !args.isEmpty() )
+        {
+            if( args.first()->kind == Expression::Literal && args.first()->getType()->kind == Type::Nil )
+                throw "RAISE with literal NIL is not allowed";
+            if( args.first()->getType()->kind != Type::Pointer )
+                throw "RAISE expects a pointer";
+        }
         break;
     case Builtin::SETENV:
         expectingNArgs(args,2);

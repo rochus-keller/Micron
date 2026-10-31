@@ -1,0 +1,138 @@
+module Exc4 [level=3, exceptions]
+
+var
+    ex1, ex2: integer
+    res: pointer to any
+
+procedure RaiseFirst()
+begin
+    raise(@ex1)
+end RaiseFirst
+
+procedure RaiseSecond()
+begin
+    raise(@ex2)
+end RaiseSecond
+
+procedure FinalizerValue(): integer
+var
+    value: integer
+begin
+    value := 7
+    return value
+finally
+    value := 99
+    println("function finalizer")
+end FinalizerValue
+
+procedure RecursiveRaise(n: integer)
+var
+    discarded: integer
+begin
+    if n = 0 then
+        RaiseFirst()
+    else
+        RecursiveRaise(n - 1)
+    end
+finally
+    discarded := FinalizerValue()
+    println("recursive finally")
+end RecursiveRaise
+
+procedure RaiseThroughFunction(): integer
+begin
+    RecursiveRaise(2)
+    return 42
+finally
+    println("raise function finally")
+end RaiseThroughFunction
+
+procedure DeepRaise()
+var
+    discarded: integer
+begin
+    discarded := RaiseThroughFunction()
+finally
+    println("deep finally")
+end DeepRaise
+
+procedure PcallTwice(argument: integer)
+var
+    caught: pointer to any
+    value, saved: integer
+begin
+    value := argument + 7
+    saved := value * 3
+    pcall(caught, RaiseFirst)
+    if (caught = @ex1) and (argument = 13) and (value = 20) and (saved = 60) then
+        println("first catch preserved frame")
+    end
+    pcall(caught, RaiseSecond)
+    if (caught = @ex2) and (argument = 13) and (value = 20) and (saved = 60) then
+        println("second pcall reused record")
+    end
+finally
+    println("pcall procedure finally")
+end PcallTwice
+
+procedure NestedPcall()
+var
+    first, second: pointer to any
+begin
+    pcall(first, RaiseFirst)
+    if first = @ex1 then
+        pcall(second, RaiseSecond)
+        if second = @ex2 then
+            println("nested handler caught")
+        end
+    end
+end NestedPcall
+
+procedure ReplaceInFinally()
+begin
+    raise(@ex1)
+finally
+    println("finally callee raises")
+    RaiseSecond()
+end ReplaceInFinally
+
+procedure CatchReplacement()
+var
+    caught: pointer to any
+begin
+    pcall(caught, ReplaceInFinally)
+    if caught = @ex2 then
+        println("finalizer exception caught")
+    end
+end CatchReplacement
+
+begin
+    pcall(res, DeepRaise)
+    if res = @ex1 then
+        println("deep exception caught")
+    end
+
+    PcallTwice(13)
+    NestedPcall()
+    CatchReplacement()
+end Exc4
+
+(* output:
+
+function finalizer
+recursive finally
+function finalizer
+recursive finally
+function finalizer
+recursive finally
+raise function finally
+deep finally
+deep exception caught
+first catch preserved frame
+second pcall reused record
+pcall procedure finally
+nested handler caught
+finally callee raises
+finalizer exception caught
+
+*)

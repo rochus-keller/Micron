@@ -21,7 +21,7 @@
 
 #include "MilParser2.h"
 #include <QtDebug>
-#include <limits>
+#include <limits> 
 using namespace Mil;
 
 static inline bool FIRST_Mil(int tt) {
@@ -1923,13 +1923,21 @@ Expression* Parser2::ExpInstr() {
         expect(Tok_PCALL, true, "ExpInstr");
         res->kind = IL_pcall;
         res->d = qualident();
-        if( res->d && res->d->getType() )
+        if( res->d )
         {
-            Type* t = res->d->getType();
-            if( t->kind != Type::Proc || t->typebound )
-                error(cur, "expecting an unbound procedure type");
-            else if( t->getType() )
-                error(cur, "pcall requires a procedure type without return type");
+            if( res->d->kind == Declaration::TypeDecl )
+            {
+                Type* t = res->d->getType();
+                if( !t || t->kind != Type::Proc || t->typebound )
+                    error(cur, "expecting an unbound procedure type");
+                else if( t->getType() )
+                    error(cur, "pcall requires a procedure type without return type");
+            }else if( res->d->kind == Declaration::Procedure && !res->d->typebound )
+            {
+                if( res->d->getType() )
+                    error(cur, "pcall requires a proper procedure");
+            }else
+                error(cur, "expecting an unbound procedure type or procedure");
         }
     } else if( la.d_code == Tok_CALLMI ) {
         expect(Tok_CALLMI, true, "ExpInstr");

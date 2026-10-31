@@ -225,6 +225,7 @@ namespace Mic {
         bool inFinally;
         quint8 defaultVisi;
         bool haveExceptions;
+        bool hasExceptionsAttribute;
 
         struct Label {
             Depth depth;

@@ -1,0 +1,24 @@
+module Exc3 [level=3, exceptions]
+
+var
+    ex1: integer
+
+procedure Unhandled()
+begin
+    raise(@ex1)
+finally
+    println("finally before abort")
+end Unhandled
+
+begin
+    Unhandled()
+end Exc3
+
+(* output:
+
+finally before abort
+
+unhandled exception
+error running module "Exc3"
+
+*)

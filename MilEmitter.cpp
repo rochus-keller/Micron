@@ -79,7 +79,7 @@ void Emitter::beginProc(const QByteArray& procName, const RowCol & pos, bool isP
     Q_ASSERT(!procName.isEmpty());
     Q_ASSERT(binding.isEmpty() || kind == ProcData::Abstract || kind == ProcData::Normal || kind == ProcData::Forward || kind == ProcData::Inline || kind == ProcData::Foreign);
 
-    firstLine = lineset(pos);
+    firstLines.append(lineset(pos));
     d_proc.append(ProcData());
     d_proc.back().name = procName;
     d_proc.back().isPublic = isPublic;
@@ -104,10 +104,11 @@ void Emitter::endProc(const RowCol & pos)
 {
     Q_ASSERT( !d_proc.isEmpty() && d_typeKind == 0 && ops != 0 );
     d_proc.back().endLine = lineset(pos); // mark the end of proc in the bytecode
-    if( firstLine )
-        d_out->line(firstLine); // mark the begin of proc
+    if( firstLines.back() )
+        d_out->line(firstLines.back()); // mark the begin of proc
     d_out->addProcedure(d_proc.back());
     d_proc.pop_back();
+    firstLines.pop_back();
     ops = 0;
 }
 
@@ -117,10 +118,10 @@ void Emitter::discardProc()
     // empty stack so callers can invoke it unconditionally in a catch handler.
     while( !d_proc.isEmpty() )
         d_proc.pop_back();
+    firstLines.clear();
     ops = 0;
     d_stackDepth = 0;
     d_maxStackDepth = 0;
-    firstLine = 0;
     lastLine = 0;
 }
 
@@ -136,7 +137,7 @@ void Emitter::beginType(const QByteArray& name, const RowCol & pos, bool isPubli
         d_out->beginType(name, isPublic, typeKind, super);
     }else
     {
-        firstLine = lineset(pos);
+        firstLines.append(lineset(pos));
         Q_ASSERT(typeKind == EmiTypes::ProcType || d_typeKind == EmiTypes::MethType);
         d_proc.append(ProcData());
         d_proc.back().name = name;
@@ -153,10 +154,11 @@ void Emitter::endType()
         d_out->endType();
     else
     {
-        if( firstLine )
-            d_out->line(firstLine);
+        if( firstLines.back() )
+            d_out->line(firstLines.back());
         d_out->addProcedure(d_proc.back());
         d_proc.pop_back();
+        firstLines.pop_back();
     }
     d_typeKind = 0;
 }
@@ -1302,6 +1304,14 @@ void Emitter::lineout(const RowCol & pos)
 {
     if( !pos.isValid() )
         return;
+    if( !d_proc.isEmpty() )
+    {
+        if( dbgInfo == None )
+            return;
+        const quint32 cur = (dbgInfo == RowsOnly ? pos.d_row : pos.packed());
+        d_out->line(cur);
+        return;
+    }
     const quint32 cur = lineset(pos);
     if( cur )
         d_out->line(cur);

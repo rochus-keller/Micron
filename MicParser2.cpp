@@ -638,7 +638,7 @@ static bool isPtrToOpenCharArray(Type* t)
 
 Parser2::Parser2(AstModel* m, Scanner2* s, Mil::Emitter* out, Importer* i, bool xref):
     mdl(m),scanner(s),out(out),imp(i),thisMod(0),thisDecl(0),inFinally(false),
-    defaultVisi(Node::Private),haveExceptions(false),first(0),last(0)
+    defaultVisi(Node::Private),haveExceptions(false),hasExceptionsAttribute(false),first(0),last(0)
 {
     ev = new Evaluator(m,out);
     self = Token::getSymbol("self");
@@ -2547,12 +2547,28 @@ Expression* Parser2::designator(bool needsLvalue) {
             {
                 Builtins bi(ev);
                 const quint8 id = proc->val.toInt();
-                if( ((ev->langLevel < 3 || !haveExceptions) && (id == Builtin::PCALL || id == Builtin::RAISE)) )
-                    error(lpar, QString("operation not supported on language level %1").arg(ev->langLevel));
+                if( id == Builtin::PCALL || id == Builtin::RAISE )
+                {
+                    if(ev->langLevel < 3)
+                        error(lpar, QString("operation not supported on language level %1").arg(ev->langLevel));
+                    else if( !haveExceptions )
+                        error(lpar, QString("operation requires the 'exceptions' module attribute to be set"));
+                }
 
                 const QString err = bi.checkArgs(id, args, &retType, mdl);
                 if( !err.isEmpty() )
                     error(lpar,err);
+                if( id == Builtin::PCALL && args.size() >= 2 )
+                {
+                    const DeclList formals = args[1]->getFormals();
+                    if( args.size() - 2 == formals.size() )
+                    {
+                        for( int i = 0; i < formals.size(); ++i )
+                            if( !paramCompat(formals[i], args[i + 2]) )
+                                error(args[i + 2]->pos, "actual argument not compatible with formal parameter");
+                    }else if( args.size() > 2 )
+                        error(args[1]->pos, "number of actual and formal arguments don't fit");
+                }
             }else if( proc->getType() )
                 retType = proc->getType()->getType();
 
@@ -4934,6 +4950,8 @@ void Parser2::ModuleAttributes()
         test << name;
     }
     expect(Tok_Rbrack, false, "ModuleAttributes");
+    if( hasExceptionsAttribute && ev->langLevel < 3 )
+        error(cur, "the Exceptions attribute requires language level 3 or higher");
     Expression::deleteAllExpressions();
 }
 
@@ -4963,6 +4981,15 @@ QByteArray Parser2::Attribute()
             return name;
         }else
             ev->langLevel = v.val.toInt();
+    } else if( name == "exceptions" )
+    {
+        hasExceptionsAttribute = true;
+        if( v.type == 0 )
+            haveExceptions = true;
+        else if( !v.type->isBoolean() )
+            error(t, "expecting a boolean value");
+        else
+            haveExceptions = v.val.toBool();
     } else if( name == "visibility" )
     {
         if( v.type == 0 || v.type->kind != Type::StrLit )

@@ -1,0 +1,48 @@
+module Exc5 [exceptions]
+
+type
+    Pair = record
+        x, y: integer
+    end
+
+procedure PrintPair(p: Pair)
+begin
+    println(p.x)
+    println(p.y)
+end PrintPair
+
+procedure PrintBody()
+begin
+    println("body")
+end PrintBody
+
+procedure PrintFinally()
+begin
+    println("finally")
+end PrintFinally
+
+procedure Exercise()
+var
+    p: Pair
+    res: pointer to any
+begin
+    p.x := 2
+    p.y := 3
+    pcall(res, PrintBody)
+    pcall(res, PrintPair, p)
+finally
+    pcall(res, PrintFinally)
+end Exercise
+
+begin
+    Exercise()
+end Exc5
+
+(* output:
+
+body
+2
+3
+finally
+
+*)

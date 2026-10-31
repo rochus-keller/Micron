@@ -537,6 +537,10 @@ void Ide::loadFile(const QString& path)
     if( info.isDir() && info.suffix() != ".obxpro" )
     {
         d_pro->initializeFromDir( path );
+    }else if( info.suffix() == "mic" )
+    {
+        d_pro->createNew();
+        d_pro->addFile(info.absoluteFilePath());
     }else
     {
         d_pro->loadFrom(path);

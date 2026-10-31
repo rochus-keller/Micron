@@ -151,5 +151,7 @@ OPDEF(sizeof,NoOpArgs),
 OPDEF(newvla, NoOpArgs),
 // plus low-level ops: GETREG, PUTREG, CLI, STI, NOP
 
+OPDEF(pcall, NoOpArgs),
+OPDEF(raise, NoOpArgs),
 
 

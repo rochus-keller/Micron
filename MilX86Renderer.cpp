@@ -3344,6 +3344,10 @@ int Renderer::emitOp(Procedure& proc, int pc)
         em.nop();
         return 1;
 
+    case LL_pcall:
+    case LL_raise:
+        return setError("pcall/raise not yet supported on this target") ? -1 : -1;
+
     default:
         return setError(QString("Unknown LL_op: %1").arg(opcode)) ? -1 : -1;
     }

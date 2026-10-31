@@ -1,0 +1,215 @@
+module Exc2 [level=3, exceptions]
+
+type
+    Proc0 = procedure()
+
+var
+    ex1, ex2: integer
+    res: pointer to any
+    procVar: Proc0
+
+procedure Normal()
+begin
+    println("normal body")
+end Normal
+
+procedure ChainC()
+begin
+    println("chain C")
+    raise(@ex1)
+finally
+    println("finally C")
+end ChainC
+
+procedure ChainB()
+begin
+    ChainC()
+finally
+    println("finally B")
+end ChainB
+
+procedure ChainA()
+begin
+    ChainB()
+finally
+    println("finally A")
+end ChainA
+
+procedure FunctionRaises(): integer
+begin
+    raise(@ex1)
+finally
+    println("function finally")
+end FunctionRaises
+
+procedure CallFunction()
+var
+    value: integer
+begin
+    value := FunctionRaises()
+end CallFunction
+
+procedure ReplaceException()
+begin
+    raise(@ex1)
+finally
+    println("replacement finally")
+    raise(@ex2)
+end ReplaceException
+
+procedure RaiseEx2()
+begin
+    raise(@ex2)
+end RaiseEx2
+
+procedure CatchInFinally()
+var
+    localResult: pointer to any
+begin
+    raise(@ex1)
+finally
+    pcall(localResult, RaiseEx2)
+    if localResult = @ex2 then
+        println("finally caught its exception")
+    end
+end CatchInFinally
+
+procedure InnerRaise()
+begin
+    raise(@ex1)
+end InnerRaise
+
+procedure InnerCatcher()
+var
+    localResult: pointer to any
+begin
+    pcall(localResult, InnerRaise)
+    if localResult = @ex1 then
+        println("inner PCALL caught")
+    end
+end InnerCatcher
+
+procedure VariableProcedure()
+begin
+    println("procedure variable body")
+end VariableProcedure
+
+procedure NestedDesignator()
+var
+    localResult: pointer to any
+    procedure NestedRaise()
+    begin
+        raise(@ex1)
+    end NestedRaise
+begin
+    pcall(localResult, NestedRaise)
+    if localResult = @ex1 then
+        println("nested procedure caught")
+    end
+end NestedDesignator
+
+procedure RaiseNoArg()
+begin
+    raise()
+end RaiseNoArg
+
+procedure RaiseNilVariable()
+var
+    p: pointer to any
+begin
+    p := nil
+    raise(p)
+end RaiseNilVariable
+
+procedure ReraiseFromHandler()
+var
+    localResult: pointer to any
+begin
+    pcall(localResult, InnerRaise)
+    if localResult # nil then
+        println("handler re-raise")
+        raise(localResult)
+    end
+end ReraiseFromHandler
+
+begin
+    pcall(res, Normal)
+    if res = nil then
+        println("normal PCALL returned NIL")
+    end
+
+    pcall(res, ChainA)
+    if res = @ex1 then
+        println("chain caught ex1")
+    end
+
+    pcall(res, CallFunction)
+    if res = @ex1 then
+        println("function raise caught")
+    end
+
+    pcall(res, ReplaceException)
+    if res = @ex2 then
+        println("replacement caught ex2")
+    end
+
+    pcall(res, CatchInFinally)
+    if res = @ex1 then
+        println("original exception continued")
+    end
+
+    pcall(res, InnerCatcher)
+    if res = nil then
+        println("outer PCALL returned NIL")
+    end
+
+    procVar := VariableProcedure
+    pcall(res, procVar)
+    if res = nil then
+        println("variable PCALL returned NIL")
+    end
+
+    pcall(res, NestedDesignator)
+
+    pcall(res, RaiseNoArg)
+    if (res # nil) and (res # @ex1) then
+        println("raise() produced a distinct pointer")
+    end
+
+    pcall(res, RaiseNilVariable)
+    if (res # nil) and (res # @ex1) then
+        println("RAISE(nil variable) produced a distinct pointer")
+    end
+
+    pcall(res, ReraiseFromHandler)
+    if res = @ex1 then
+        println("outer PCALL caught re-raise")
+    end
+end Exc2
+
+(* output:
+
+normal body
+normal PCALL returned NIL
+chain C
+finally C
+finally B
+finally A
+chain caught ex1
+function finally
+function raise caught
+replacement finally
+replacement caught ex2
+finally caught its exception
+original exception continued
+inner PCALL caught
+outer PCALL returned NIL
+procedure variable body
+variable PCALL returned NIL
+nested procedure caught
+raise() produced a distinct pointer
+RAISE(nil variable) produced a distinct pointer
+handler re-raise
+outer PCALL caught re-raise
+
+*)

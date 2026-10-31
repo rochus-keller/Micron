@@ -175,9 +175,10 @@ namespace Mil
         quint16 d_stackDepth;
         quint16 d_maxStackDepth;
         QList<ProcData> d_proc; // proc stack
+        QList<quint32> firstLines;
         QList<ProcData::Op>* ops;
         AbstractRenderer* d_out;
-        quint32 lastLine, firstLine;
+        quint32 lastLine;
         DbgInfo dbgInfo;
     };
 }

@@ -2322,6 +2322,63 @@ bool Evaluator::recursiveRun(Expression* e)
         break;
     case Expression::Call:
         {
+            const int bi = e->lhs->kind == Expression::Builtin ? e->lhs->val.toInt() : 0;
+            if( bi == Builtin::PCALL || bi == Builtin::RAISE )
+            {
+                const int depth = stack.size();
+                ExpList args = e->val.value<ExpList>();
+                if( bi == Builtin::PCALL )
+                {
+                    if( !recursiveRun(args[0]) )
+                        return false;
+                    DeclList formals = args[1]->getFormals();
+                    for( int i = 0; i < formals.size(); ++i )
+                    {
+                        bindUniInt(args[i + 2], formals[i]->getType()->isInt());
+                        if( !recursiveRun(args[i + 2]) ||
+                                !prepareRhs(formals[i]->getType(), false, args[i + 2]->pos) )
+                            return false;
+                    }
+
+                    Declaration* procDecl = args[1]->kind == Expression::ProcDecl ? args[1]->decl : 0;
+                    if( procDecl )
+                    {
+                        if( procDecl->kind == Declaration::ForwardDecl )
+                            procDecl = procDecl->deforward();
+                        out->line_(args[1]->pos);
+                        out->ldproc_(toQuali(procDecl));
+                        out->pcall_(toQuali(procDecl), formals.size());
+                    }else
+                    {
+                        if( !recursiveRun(args[1]) ||
+                                !assureTopOnMilStack(false, args[1]->pos) )
+                            return false;
+                        out->pcall_(toQuali(args[1]->getType()), formals.size());
+                    }
+                    out->stind_(Mil::EmiTypes::IntPtr);
+                }else
+                {
+                    if( args.isEmpty() )
+                    {
+                        out->line_(e->pos);
+                        out->ldnull_(false);
+                    }else
+                    {
+                        if( !recursiveRun(args.first()) ||
+                                !assureTopOnMilStack(false, args.first()->pos) )
+                            return false;
+                    }
+                    out->raise_();
+                }
+                while( stack.size() > depth )
+                    stack.pop_back();
+                Value result;
+                result.mode = Value::Val;
+                result.type = mdl->getType(Type::NoType);
+                stack.push_back(result);
+                break;
+            }
+
             bool invar = false;
             if( e->lhs->lhs && (e->lhs->kind == Expression::MethSelect || e->lhs->kind == Expression::Super) &&
                     e->lhs->lhs->getType()->kind != Type::Interface )
@@ -2343,8 +2400,6 @@ bool Evaluator::recursiveRun(Expression* e)
             const DeclList formals = e->lhs->kind == Expression::Super && e->lhs->lhs
                     ? e->lhs->lhs->getFormals()
                     : e->lhs->getFormals(); // no receiver here because args doesn't include it
-            const int bi = e->lhs->kind == Expression::Builtin ? e->lhs->val.toInt() : 0;
-
             if( bi == 0 && args.size() != formals.size() )
                 return error("number of actual and formal arguments don't fit", e->pos);
 

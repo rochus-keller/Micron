@@ -31,6 +31,13 @@ extern "C" {
 using namespace Mil;
 using namespace Vm;
 
+struct MicException
+{
+    void* ptr;
+};
+
+static quint8 dummyException;
+
 #define _USE_JUMP_TABLE // instead of a big switch
 
 enum { PreAllocSize = 1024 };
@@ -413,6 +420,7 @@ struct Interpreter::Imp
 
     bool run(quint32 proc);
     bool execute(Frame*);
+    bool executeLoop(Frame*, int&);
     bool call(Frame* frame, int pc, Procedure* proc, void* local, void* stack);
 };
 
@@ -614,6 +622,10 @@ bool Interpreter::run(Declaration* proc)
     {
         qCritical() << err.toUtf8().constData();
         return false;
+    }catch( const MicException& )
+    {
+        qCritical() << "unhandled exception";
+        return false;
     }catch(...)
     {
         qCritical() << "memory error";
@@ -674,6 +686,26 @@ bool Interpreter::Imp::run(quint32 proc)
 
 bool Interpreter::Imp::execute(Frame* frame)
 {
+    int pc = 0;
+    for(;;)
+    {
+        try
+        {
+            return executeLoop(frame, pc);
+        }catch( const MicException& ex )
+        {
+            if( frame->proc->finallyPc < 0 || pc >= frame->proc->finallyPc )
+                throw;
+            *(qint32*)(frame->locals.data() + frame->proc->unwindOffset) = 1;
+            *(void**)(frame->locals.data() + frame->proc->exceptionOffset) = ex.ptr;
+            frame->sp = 0;
+            pc = frame->proc->finallyPc;
+        }
+    }
+}
+
+bool Interpreter::Imp::executeLoop(Frame* frame, int& pc)
+{
 #ifdef _USE_JUMP_TABLE
 #define vmdispatch(x)     goto *disptab[x];
 #define vmcase(l)     L_LL_##l:
@@ -702,7 +734,6 @@ bool Interpreter::Imp::execute(Frame* frame)
         qDebug() << "exec" << frame->proc->decl->toPath();
 #endif
 
-    int pc = 0;
     while( pc < frame->proc->ops.size() )
     {
         vmdispatch(frame->proc->ops[pc].op)
@@ -1701,6 +1732,22 @@ bool Interpreter::Imp::execute(Frame* frame)
                     return false;
                 pc++;
             } vmbreak;
+        vmcase(pcall) {
+                Procedure* proc = (Procedure*)frame->popP();
+                const int argsSize = frame->proc->ops[pc].val & 0x7ff;
+                const int argsBase = frame->sp - argsSize;
+                try
+                {
+                    if( !call(frame, pc, proc, locals, stack ) )
+                        return false;
+                    frame->pushP(0);
+                }catch( const MicException& ex )
+                {
+                    frame->sp = argsBase;
+                    frame->pushP(ex.ptr);
+                }
+                pc++;
+            } vmbreak;
         vmcase(callvirt) {
                 // dispatch using the self pointer on stack; but we can only access the
                 // self pointer after we have the size of the parameters
@@ -1901,6 +1948,14 @@ bool Interpreter::Imp::execute(Frame* frame)
                 }
                 pc++;
             } vmbreak;
+        vmcase(raise) {
+                void* ptr = frame->popP();
+                if( ptr == 0 )
+                    ptr = &dummyException;
+                MicException ex;
+                ex.ptr = ptr;
+                throw ex;
+            }
         vmcase(newvla)
         vmcase(line)
             qWarning() << "TODO not implemented" << Code::op_names[frame->proc->ops[pc].op];

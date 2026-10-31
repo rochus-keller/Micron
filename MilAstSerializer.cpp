@@ -413,7 +413,7 @@ static void renderProc(const Declaration* proc, AbstractRenderer* r, AstSerializ
     if( proc->typebound )
         pdata.binding = proc->outer->toQuali().second;
 
-    if(proc->pd )
+    if( !proc->forward && proc->pd )
         pdata.endLine = lineout(proc->pd->end, dbi);
 
     if( proc->entryPoint )
@@ -489,7 +489,7 @@ static void renderProc(const Declaration* proc, AbstractRenderer* r, AstSerializ
     {
         quint32 line = 0;
         renderStats(pdata, proc->body, line, dbi);
-        if( proc->pd && proc->pd->finally )
+        if( !proc->forward && proc->pd && proc->pd->finally )
         {
             ProcData tmp;
             renderStats(tmp, proc->pd->finally, line, dbi);

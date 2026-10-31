@@ -202,7 +202,7 @@ void Validator::visitProcedure(Declaration* proc)
         // TODO: assure nobody is jumping into nested compound statements
     }
 
-    if( proc->pd && proc->pd->finally )
+    if( !proc->forward && proc->pd && proc->pd->finally )
     {
         if( proc->entryPoint )
             error(proc, "INIT or ENTRY procedures cannot have a FINALLY section");
@@ -1346,20 +1346,52 @@ Expression* Validator::visitExpr(Expression* e)
             {
                 e->lhs = stackAt(-1);
                 stack.pop_back();
-                Type* proc = deref(e->lhs->getType());
-                if( proc->kind != Type::Proc || proc->typebound )
+                Type* proc = 0;
+                DeclList params;
+                if( e->d && e->d->kind == Declaration::TypeDecl )
+                {
+                    proc = deref(e->d->getType());
+                    if( proc->kind != Type::Proc || proc->typebound )
+                    {
+                        error(e, "expecting an unbound procedure type");
+                        break;
+                    }
+                    if( proc->getType() )
+                    {
+                        error(e, "pcall requires a proper procedure");
+                        break;
+                    }
+                    params = proc->subs;
+                }else if( e->d && e->d->kind == Declaration::Procedure && !e->d->typebound )
+                {
+                    if( e->d->getType() )
+                    {
+                        error(e, "pcall requires a proper procedure");
+                        break;
+                    }
+                    params = e->d->getParams();
+                }else
+                {
+                    error(e, "expecting an unbound procedure type or procedure");
+                    break;
+                }
+                Type* ftn = deref(e->lhs->getType());
+                if( ftn->kind != Type::Proc || ftn->typebound )
                 {
                     error(e, "expecting an unbound procedure type");
                     break;
                 }
-                if( proc->getType() )
+                if( ftn->getType() )
                 {
-                    error(e, "pcall requires a procedure type without return type");
+                    error(e, "pcall requires a proper procedure");
                     break;
                 }
-                const int numOfParams = proc->subs.size();
+                const int numOfParams = params.size();
                 if( !expectN(numOfParams, e) )
                     break;
+                for( int i = 0; i < numOfParams; ++i )
+                    if( !assigCompat(deref(params[i]->getType()), stackAt(-numOfParams + i)) )
+                        error(e, "actual argument not compatible with formal parameter");
                 e->rhs = eatStack(numOfParams);
                 e->setType(mdl->getBasicType(Type::INTPTR));
                 stack.push_back(e);
@@ -1902,6 +1934,12 @@ bool Validator::assigCompat(Type* lhs, Type* rhs)
         if( lhsT->kind == Type::Any )
             return true;
         return assigCompat(lhsT, rhsT );
+    }
+    if( lhs->kind == Type::Pointer && rhs->kind == Type::StringLit )
+    {
+        Type* lhsT = deref(lhs->getType());
+        return lhsT->kind == Type::Array && lhsT->len == 0 &&
+                deref(lhsT->getType())->kind == Type::CHAR;
     }
 
     return false;

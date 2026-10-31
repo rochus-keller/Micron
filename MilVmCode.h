@@ -78,9 +78,13 @@ struct Procedure
     uint id: 30;
     quint32 localsSize;
     quint32 argsSize, returnSize;
+    int finallyPc;
+    quint32 unwindOffset, exceptionOffset;
+    int finallyRecordOffset, pcallRecordOffset;
     std::vector<std::pair<int,Template> > locals;
     Procedure():decl(0),beginGuard(0), external(0), id(0),
-        localsSize(0),argsSize(0),returnSize(0),ops(0){}
+        localsSize(0),argsSize(0),returnSize(0),finallyPc(-1),unwindOffset(0),exceptionOffset(0),
+        finallyRecordOffset(-1),pcallRecordOffset(-1),ops(0){}
 };
 
 struct Vtable
@@ -334,8 +338,9 @@ protected:
         Procedure* curProc;
         bool hasFinally;
         quint32 returnOffset;
+        quint32 unwindOffset, exceptionOffset;
 
-        Context():curProc(0),hasFinally(false),returnOffset(0){}
+        Context():curProc(0),hasFinally(false),returnOffset(0),unwindOffset(0),exceptionOffset(0){}
 
         int findLabel(const char* name) const
         {

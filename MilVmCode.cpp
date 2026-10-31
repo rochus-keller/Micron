@@ -214,13 +214,28 @@ bool Code::translateProcSlot(Procedure& proc)
     if( proc.decl->getType() )
         proc.returnSize = stackAligned(proc.decl->getType()->getByteSize(pointerWidth));
     Type* returnType = proc.decl->getType();
-    const bool hasFinally = proc.decl->pd && proc.decl->pd->finally;
+    const bool hasFinally = !proc.decl->forward && proc.decl->pd && proc.decl->pd->finally;
     quint32 returnOffset = 0;
     if( hasFinally && returnType )
     {
         returnType = deref(returnType);
         returnOffset = proc.localsSize + AstModel::padding(proc.localsSize, returnType->getAlignment(pointerWidth));
         proc.localsSize = returnOffset + returnType->getByteSize(pointerWidth);
+    }
+    quint32 unwindOffset = 0;
+    quint32 exceptionOffset = 0;
+    if( hasFinally )
+    {
+        const quint32 intAlign = mdl->getBasicType(Type::INT32)->getAlignment(pointerWidth);
+        unwindOffset = proc.localsSize + AstModel::padding(proc.localsSize, intAlign);
+        proc.localsSize = unwindOffset + 4;
+        exceptionOffset = proc.localsSize + AstModel::padding(proc.localsSize, pointerWidth);
+        proc.localsSize = exceptionOffset + pointerWidth;
+        proc.finallyRecordOffset = proc.localsSize + AstModel::padding(proc.localsSize, pointerWidth);
+        proc.localsSize = proc.finallyRecordOffset + 4 * pointerWidth;
+        proc.finallyPc = -1;
+        proc.unwindOffset = unwindOffset;
+        proc.exceptionOffset = exceptionOffset;
     }
     if( proc.decl->extern_ || proc.decl->foreign_ )
     {
@@ -250,11 +265,21 @@ bool Code::translateProcSlot(Procedure& proc)
         ctx.curProc = &proc;
         ctx.hasFinally = hasFinally;
         ctx.returnOffset = returnOffset;
+        ctx.unwindOffset = unwindOffset;
+        ctx.exceptionOffset = exceptionOffset;
+        if( hasFinally )
+        {
+            emitOp(proc, LL_ldc_i4_0);
+            emitOp(proc, LL_stloc_i4, unwindOffset);
+            emitOp(proc, LL_ldnull);
+            emitOp(proc, LL_stloc_p, exceptionOffset);
+        }
         const bool res = translateStatSeq(proc, s);
 
         if( ctx.hasFinally )
         {
-            ctx.labels << Where("$finally", proc.ops.size());
+            proc.finallyPc = proc.ops.size();
+            ctx.labels << Where("$finally", proc.finallyPc);
             if( !patchGotos(proc, ctx) )
                 return false;
             ctx.gotos.clear();
@@ -264,6 +289,11 @@ bool Code::translateProcSlot(Procedure& proc)
             const bool finallyRes = translateStatSeq(proc, finally);
             if( !patchGotos(proc, ctx) )
                 return false;
+            emitOp(proc, LL_ldloc_i4, ctx.unwindOffset);
+            const int skipRaise = emitOp(proc, LL_brfalse_i4);
+            emitOp(proc, LL_ldloc_p, ctx.exceptionOffset);
+            emitOp(proc, LL_raise);
+            branch_here(proc, skipRaise);
             if( returnType )
             {
                 emitLocalLoad(proc, returnType, ctx.returnOffset);
@@ -710,8 +740,8 @@ bool Code::translateStat(Procedure &proc, Statement *& s)
             emitOp(proc, LL_ret, s->args ? s->args->getType()->getByteSize(pointerWidth) : 0 );
         break;
     case IL_raise:
-        qCritical() << "pcall/raise not yet implemented";
-        return false;
+        emitOp(proc, LL_raise);
+        break;
     case IL_free:
         emitOp(proc, LL_free );
         break;
@@ -1714,8 +1744,33 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
                 emitOp(proc, LL_callvirt, id);
         } break;
     case IL_pcall:
-        qCritical() << "pcall/raise not yet implemented";
-        return false;
+        {
+            if( proc.pcallRecordOffset < 0 )
+            {
+                proc.pcallRecordOffset = proc.localsSize + AstModel::padding(proc.localsSize, pointerWidth);
+                proc.localsSize = proc.pcallRecordOffset + 4 * pointerWidth;
+            }
+            quint32 argsSize = 0;
+            DeclList params;
+            if( e->d && e->d->kind == Declaration::TypeDecl )
+                params = deref(e->d->getType())->subs;
+            else if( e->d && e->d->kind == Declaration::Procedure )
+                params = e->d->getParams();
+            else
+            {
+                qCritical() << "pcall requires a procedure type or declaration";
+                return false;
+            }
+            foreach(Declaration* p, params)
+            {
+                Type* t = deref(p->getType());
+                argsSize += qMax(t->getByteSize(pointerWidth), (quint32)stackAlignment);
+            }
+            if( argsSize > 0 )
+                argsSize = stackAligned(argsSize);
+            emitOp(proc, LL_pcall, argsSize & 0x7ff);
+        }
+        break;
     case IL_calli: {
         // Compute argsSize and returnSize from the function pointer type.
         // e->lhs is the function pointer expression; its type is the proc type.

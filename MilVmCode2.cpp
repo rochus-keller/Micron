@@ -50,6 +50,7 @@ bool Code2::translateStatSeq(Procedure &proc, Statement *s)
         case IL_stvar:
         case IL_putreg:
         case IL_ret:
+        case IL_raise:
         case IL_free:
             expression(proc, s->args);
             if( !translateStat(proc, s) )
@@ -416,6 +417,15 @@ bool Code2::expression(Procedure &proc, Expression* e)
         }
         break;
 
+    case IL_pcall:
+        {
+            QList<Expression*> args;
+            collectArgs(e->rhs, args);
+            pushArgs(proc, args);
+            expression(proc, e->lhs );
+            translateExpr(proc, e);
+        }
+        break;
 
     case IL_newobj:
     case IL_newobj0:

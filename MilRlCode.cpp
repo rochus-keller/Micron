@@ -978,6 +978,11 @@ bool Rl::Code::compileProc(int procIdx)
             break;
         }
 
+        case LL_pcall:
+        case LL_raise:
+            qCritical() << "pcall/raise not yet supported on this target";
+            return false;
+
         default:
         {
             qCritical() << "MRL: unknown LL op" << op.op << "at PC" << pc;
