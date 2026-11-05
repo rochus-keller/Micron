@@ -29,6 +29,7 @@ class Emitter;
 
 namespace Mic {
     class Evaluator;
+    class Interpreter;
 
     class Scanner2 {
 	public:
@@ -45,7 +46,8 @@ namespace Mic {
         void RunParser( const Import& import = Import());
         Declaration* takeModule(); // get module declaration and take ownership (otherwise deleted by parser)
         const Declaration* getModule() const { return thisMod; }
-		struct Error {
+        void setInterpreter(Interpreter* runner);
+        struct Error {
 		    QString msg;
 		    int row, col;
 		    QString path;
@@ -195,7 +197,7 @@ namespace Mic {
         bool checkUnaryOp(Expression*);
         bool checkRelOp(Expression*);
         void beginFinallyEnd(bool finally, const RowCol &pos);
-        Declaration* ProcedureHeader(bool inForward, QByteArray *);
+        Declaration* ProcedureHeader(bool inForward, QByteArray *, Declaration** forwardDecl = 0);
         Mil::Emitter& line(const RowCol&);
         Mil::Emitter& line(const Token&);
         Symbol *markDecl(Declaration* d);

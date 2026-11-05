@@ -31,6 +31,40 @@ Validator::Validator(AstModel* m):mdl(m),curMod(0),curProc(0),needsPointerInit(t
 
 }
 
+bool Validator::validateProc(Declaration* module, Declaration* proc)
+{
+    if( module == 0 || proc == 0 || module->kind != Declaration::Module ||
+            proc->kind != Declaration::Procedure )
+        return false;
+
+    curMod = module;
+    curProc = 0;
+    errors.clear();
+    stack.clear();
+    newExprs.clear();
+    loopStack.clear();
+    blockStack.clear();
+    gotos.clear();
+    labels.clear();
+    needsPointerInit = true;
+    entryPointFound = false;
+    inFinally = false;
+
+    visitProcedure(proc);
+
+    foreach( Expression* e, newExprs )
+    {
+        if( module->md == 0 )
+            module->md = new ModuleData();
+        if( module->md->toDelete == 0 )
+            module->md->toDelete = new ToDelete(e);
+        else
+            module->md->toDelete->append(new ToDelete(e));
+    }
+    newExprs.clear();
+    return errors.isEmpty();
+}
+
 bool Validator::validate(Declaration* module)
 {
     curMod = module;

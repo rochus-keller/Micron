@@ -20,6 +20,7 @@
 #include "MilAst.h"
 #include "MicAtom.h"
 #include <QtDebug>
+#include <QSet>
 #include <algorithm>
 using namespace Mil;
 
@@ -235,6 +236,91 @@ void AstModel::calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment, qui
         // walkImports(m, done, pointerWidth, stackAlignment, firstParamOffset);
         calcMemoryLayoutOf(m, done, pointerWidth, stackAlignment, firstParamOffset);
     }
+}
+
+static bool isComptimeTypeSupported(Type* type, quint8 pointerWidth, QString* error, QSet<Type*>& active, bool stringPointer)
+{
+    if( type == 0 )
+    {
+        if( error )
+            *error = "unsupported local type in compile-time evaluation";
+        return false;
+    }
+    if( type->kind == Type::NameRef )
+    {
+        if( active.contains(type) )
+        {
+            if( error )
+                *error = "unsupported local type in compile-time evaluation";
+            return false;
+        }
+        active.insert(type);
+        Type* target = type->getType();
+        const bool ok = target && isComptimeTypeSupported(target, pointerWidth, error, active,
+                                                          stringPointer);
+        active.remove(type);
+        if( !ok && error && error->isEmpty() )
+            *error = "unsupported local type in compile-time evaluation";
+        return ok;
+    }
+    if( type->kind < Type::MaxBasicType )
+    {
+        if( type->getByteSize(pointerWidth) == 0 )
+        {
+            if( error )
+                *error = "unsupported local type in compile-time evaluation";
+            return false;
+        }
+        return true;
+    }
+    if( type->kind == Type::Pointer )
+    {
+        if( stringPointer && type->getType() && type->isPtrToOpenCharArray() )
+            return true;
+        if( error )
+            *error = "unsupported local type in compile-time evaluation";
+        return false;
+    }
+    if( type->kind != Type::Array || type->len == 0 || active.contains(type) )
+    {
+        if( error )
+            *error = "unsupported local type in compile-time evaluation";
+        return false;
+    }
+
+    active.insert(type);
+    const bool ok = type->getType() &&
+            isComptimeTypeSupported(type->getType(), pointerWidth, error, active, false);
+    active.remove(type);
+    if( !ok && error && error->isEmpty() )
+        *error = "unsupported local type in compile-time evaluation";
+    return ok;
+}
+
+void AstModel::calcProcLayout(Declaration* proc, quint8 pointerWidth, quint8 stackAlignment,
+                              QString* error)
+{
+    if( error )
+        error->clear();
+    if( proc == 0 || proc->kind != Declaration::Procedure )
+    {
+        if( error )
+            *error = "unsupported local type in compile-time evaluation";
+        return;
+    }
+    QSet<Type*> active;
+    for( Declaration* sub = proc->subs; sub; sub = sub->next )
+    {
+        Type* type = 0;
+        if( sub->kind == Declaration::TypeDecl ||
+                sub->kind == Declaration::LocalDecl ||
+                sub->kind == Declaration::ParamDecl )
+            type = sub->getType();
+        if( type && !isComptimeTypeSupported(type, pointerWidth, error, active,
+                                             sub->kind == Declaration::ParamDecl) )
+            return;
+    }
+    calcParamsLocalsLayout(proc, pointerWidth, stackAlignment, 0);
 }
 
 AstModel::BitFieldUnit AstModel::collectBitFields(const DeclList& fields, int start, quint8 pointerWidth)

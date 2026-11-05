@@ -832,6 +832,7 @@ Declaration *Project2::loadModule(const Import &imp)
 
     Mil::Emitter e(&imr, d_dbg ? Mil::Emitter::RowsOnly : Mil::Emitter::None);
     Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
+    p.setInterpreter(d_modMan.getInterpreter());
     p.RunParser(fixedImp);
     if( p.getModule() )
         qDebug() << "*** parsing" << p.getModule()->name << "depth" << d_depth << (p.getModule()->generic?"generic":""); // TEST
@@ -1049,6 +1050,7 @@ void Project2::parseLib(const QString & name)
     lex.lex.setStream(path);
     Mil::Emitter e(&imr, Mil::Emitter::RowsAndCols);
     Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
+    p.setInterpreter(d_modMan.getInterpreter());
     p.RunParser();
     ModuleSlot ms;
     ms.decl = p.takeModule();

@@ -18,6 +18,7 @@
 */
 
 #include "MicModuleManager.h"
+#include "MicComptime.h"
 #include "MicPpLexer.h"
 #include "MicParser2.h"
 #include "MilEmitter.h"
@@ -53,6 +54,7 @@ ModuleManager::ModuleLocator::~ModuleLocator() {}
 ModuleManager::ModuleManager(ModuleLocator* loc, bool d):locator(loc),d_milImporter(0),dbg(d)
 {
     // the runtime is loaded on demand, see loadRuntime and clearModel
+    d_interp = new Comptime(&mdl);
 }
 
 static QString s_runtimePath;
@@ -70,11 +72,19 @@ void ModuleManager::loadRuntime()
 
 void ModuleManager::clearModel(bool reloadRuntime)
 {
+    delete d_interp;
+    d_interp = 0;
     mdl.clear();
+    d_interp = new Comptime(&mdl);
     linkObjects.clear();
     invarProcs.clear();
     if( reloadRuntime )
         loadRuntime();
+}
+
+Interpreter* ModuleManager::getInterpreter() const
+{
+    return d_interp;
 }
 
 Mil::Declaration* ModuleManager::loadMil(const QString& file)
@@ -131,6 +141,7 @@ Mil::Declaration* ModuleManager::loadMil(QIODevice* in, const QString& path)
 
 ModuleManager::~ModuleManager()
 {
+    delete d_interp;
     foreach( Entry* e, cache )
     {
         delete e->mic;
@@ -237,6 +248,7 @@ Declaration* ModuleManager::loadMicSource(const Import& imp, const QString& file
     // new per parse; the module declaration is taken out and kept in the cache
     Mic::AstModel local;
     Mic::Parser2 p(&local, &lex, &em, this);
+    p.setInterpreter(d_interp);
     p.RunParser(imp);
 
     if( !p.errors.isEmpty() )

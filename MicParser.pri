@@ -6,6 +6,7 @@ SOURCES += \
     MicTokenType.cpp \
     MicParser2.cpp \
     MicAst.cpp \
+    MicComptime.cpp \
     MicEvaluator.cpp \
     MicBuiltins.cpp \
     MicAstLoader.cpp \
@@ -18,8 +19,8 @@ HEADERS += \
     MicTokenType.h \
     MicParser2.h \
     MicAst.h \
+    MicComptime.h \
     MicEvaluator.h \
     MicBuiltins.h \
     MicAstLoader.h \
     MicModuleManager.h
-

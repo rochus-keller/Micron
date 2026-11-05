@@ -89,7 +89,7 @@ Type*Evaluator::smallestIntType(const QVariant& v) const
 
 bool Evaluator::bindUniInt(Expression * e, bool isSigned) const
 {
-    if( e && e->hasConstValue() && e->getType()->kind == Type::UniInt )
+    if( e && e->hasConstValue() && e->getType() && e->getType()->kind == Type::UniInt )
     {
         const QVariant v = e->getConstValue(); // val holds a Declaration* if e is a ConstDecl
         e->setType(isSigned ? smallestIntType(v) : smallestUIntType(v));
@@ -309,6 +309,10 @@ bool Evaluator::assign(Expression* lhs, Expression* rhs, const RowCol& pos)
 {
     if( rhs == 0 )
         return true; // reported elswhere
+
+    Declaration* cp = getCurProc();
+    if( lhs->kind == Expression::ModuleVar && cp && cp->invar )
+        return error("INVAR procedures cannot access module variables", lhs->pos);
 
     if( lhs->getType() && lhs->getType()->isCharArray() && lhs->getType()->len != 0  &&
             ( (rhs->getType() && rhs->getType()->isCharArray() && rhs->getType()->len == 0) ||
@@ -662,21 +666,19 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
         {
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
+            if( !checkInlineCall(proc, pos) )
+                return false;
             ret = proc->getType();
-            if( proc->invar )
-            {
-                // TODO: run at compile time
-            }else
-            {
-                out->line_(pos);
-                out->call_(toQuali(proc),nArgs, ret != 0);
-            }
+            out->line_(pos);
+            out->call_(toQuali(proc),nArgs, ret != 0);
         }
         break;
     case Value::Super:
         {
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
+            if( !checkInlineCall(proc, pos) )
+                return false;
             ret = proc->getType();
             out->line_(pos);
             const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
@@ -688,6 +690,8 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
         {
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
+            if( !checkInlineCall(proc, pos) )
+                return false;
             ret = proc->getType();
             const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
             out->line_(pos);
@@ -702,6 +706,8 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
         {
             Declaration* proc = callee.val.value<Declaration*>();
             Q_ASSERT(proc);
+            if( !checkInlineCall(proc, pos) )
+                return false;
             ret = proc->getType();
             const Mil::Trident trident = qMakePair(toQuali(proc->outer),proc->name);
             out->line_(pos);
@@ -742,6 +748,58 @@ bool Evaluator::call(int nArgs, const RowCol& pos)
     stack.push_back(tmp);
 
     return err.isEmpty();
+}
+
+bool Evaluator::checkInlineCall(Declaration* proc, const RowCol& pos)
+{
+    if( !proc )
+        return true;
+
+    Declaration* target = proc->deforward();
+    if( isInlineProcedure(target) && isParsingProc(target) )
+        return error("INLINE procedures cannot be recursive", pos);
+
+    Declaration* caller = getCurProc();
+    if( isInlineProcedure(caller) )
+        inlineCalls[caller].append(proc);
+
+    return true;
+}
+
+bool Evaluator::inlineCallReaches(Declaration* proc, Declaration* target, QSet<Declaration*>& visited) const
+{
+    if( proc )
+        proc = proc->deforward();
+    if( proc == 0 )
+        return false;
+    if( proc == target )
+        return true;
+    if( visited.contains(proc) )
+        return false;
+    visited.insert(proc);
+
+    const QList<Declaration*> callees = inlineCalls.value(proc);
+    foreach( Declaration* callee, callees )
+    {
+        if( inlineCallReaches(callee, target, visited) )
+            return true;
+    }
+    return false;
+}
+
+bool Evaluator::checkInlineRecursion(Declaration* proc)
+{
+    if( !isInlineProcedure(proc) )
+        return true;
+
+    QSet<Declaration*> visited;
+    const QList<Declaration*> callees = inlineCalls.value(proc);
+    foreach( Declaration* callee, callees )
+    {
+        if( inlineCallReaches(callee, proc, visited) )
+            return error("INLINE procedures cannot be recursive", proc->pos);
+    }
+    return true;
 }
 
 bool Evaluator::castPtr(Type* to, const RowCol& pos)
@@ -2273,8 +2331,13 @@ bool Evaluator::recursiveRun(Expression* e)
         desigVar(e->byVal, e->pos);
         break;
     case Expression::ModuleVar:
-        stack.push_back(Value(e->getType(),e->val,Value::VarDecl));
-        desigVar(e->byVal, e->pos);
+        {
+            Declaration* cp = getCurProc();
+            if( cp && cp->invar )
+                return error("INVAR procedures cannot access module variables", e->pos);
+            stack.push_back(Value(e->getType(),e->val,Value::VarDecl));
+            desigVar(e->byVal, e->pos);
+        }
         break;
     case Expression::ProcDecl:
         stack.push_back(Value(e->getType(),e->val,Value::Procedure));
@@ -2323,6 +2386,127 @@ bool Evaluator::recursiveRun(Expression* e)
     case Expression::Call:
         {
             const int bi = e->lhs->kind == Expression::Builtin ? e->lhs->val.toInt() : 0;
+            Declaration* cp = getCurProc();
+            ExpList args = e->val.value<ExpList>();
+            if( e->lhs->kind == Expression::ProcDecl )
+            {
+                Declaration* proc = e->lhs->val.value<Declaration*>();
+                if( proc && proc->kind == Declaration::ForwardDecl )
+                    proc = proc->deforward();
+                const Type* returnType = proc ? proc->getType() : 0;
+                const bool invarFunction = proc && proc->invar && returnType &&
+                        returnType->kind != Type::NoType;
+                if( invarFunction && e->isConst() )
+                {
+                    if( proc->kind == Declaration::ForwardDecl || isParsingProc(proc) )
+                        return error(QString("the body of INVAR procedure %1 is not yet declared")
+                                     .arg(QString::fromUtf8(proc->name)), e->pos);
+
+                    for( int i = 0; i < args.size(); ++i )
+                    {
+                        Type* type = args[i]->getType();
+                        const bool basic = type &&
+                                ((type->kind >= Type::BOOL && type->kind <= Type::SET) ||
+                                 type->kind == Type::UniInt || type->kind == Type::ConstEnum);
+                        const bool stringLiteral = type && type->kind == Type::StrLit &&
+                                args[i]->kind == Expression::Literal;
+                        if( !basic && !stringLiteral )
+                            return error("compile-time call requires basic, enumeration or string literal arguments", e->pos);
+                    }
+                    if( invarRunner == 0 )
+                        return error("compile-time evaluation is not available", e->pos);
+
+                    const DeclList formals = proc->getParams();
+                    if( formals.size() != args.size() )
+                        return error("number of actual and formal arguments don't fit", e->pos);
+
+                    const int stackBase = stack.size();
+                    QList<Value> values;
+                    for( int i = 0; i < args.size(); ++i )
+                    {
+                        Type* formalType = formals[i]->getType();
+                        bindUniInt(args[i], formalType && formalType->isInt());
+                        if( !recursiveRun(args[i]) )
+                        {
+                            while( stack.size() > stackBase )
+                                stack.pop_back();
+                            return false;
+                        }
+                        if( stack.size() != stackBase + 1 || !stack.back().isConst() )
+                        {
+                            while( stack.size() > stackBase )
+                                stack.pop_back();
+                            return error("compile-time call requires basic, enumeration or string literal arguments", e->pos);
+                        }
+                        Value value = stack.takeLast();
+                        value.type = formalType;
+                        if( args[i]->getType() && args[i]->getType()->kind == Type::StrLit )
+                            value.val = Evaluator::dequote(value.val.toByteArray());
+                        values << value;
+                    }
+
+                    Value result;
+                    QString evaluationError;
+                    if( !invarRunner->run(proc, values, result, evaluationError) )
+                        return error(QString("compile-time evaluation of %1 failed: %2")
+                                     .arg(QString::fromUtf8(proc->name)).arg(evaluationError), e->pos);
+                    result.mode = Value::Const;
+                    result.type = e->getType();
+                    stack.push_back(result);
+                    return true;
+                }
+            }
+            if( cp && cp->invar )
+            {
+                if( e->lhs->kind != Expression::ProcDecl && e->lhs->kind != Expression::Builtin )
+                    return error("INVAR procedures cannot call procedure variables or type-bound procedures", e->pos);
+                if( e->lhs->kind == Expression::ProcDecl )
+                {
+                    Declaration* proc = e->lhs->val.value<Declaration*>();
+                    if( proc->kind == Declaration::ForwardDecl )
+                        proc = proc->deforward();
+                    if( !proc->invar )
+                        return error("INVAR procedures can only call INVAR procedures", e->pos);
+                }else
+                {
+                    const char* name = Builtin::name[bi];
+                    switch( bi )
+                    {
+                    case Builtin::PTROFF:
+                    case Builtin::CLI:
+                    case Builtin::GETREG:
+                    case Builtin::NOP:
+                    case Builtin::PUTREG:
+                    case Builtin::STI:
+                    case Builtin::NEW:
+                    case Builtin::NEWINIT:
+                    case Builtin::DISPOSE:
+                    case Builtin::NEWGC:
+                    case Builtin::PCALL:
+                    case Builtin::RAISE:
+                    case Builtin::PRINT:
+                    case Builtin::PRINTLN:
+                        return error(QString("%1 cannot be used in an INVAR procedure").arg(name), e->pos);
+                    default:
+                        break;
+                    }
+
+                    auto isPointerOrProc = [](Type* t) {
+                        return t && (t->kind == Type::Pointer || t->kind == Type::Proc);
+                    };
+                    if( bi == Builtin::SIZE && !args.isEmpty() && args[0]->getType() &&
+                            args[0]->getType()->kind >= Type::MaxBasicType )
+                        return error("target-dependent operations are not allowed in INVAR procedures", e->pos);
+                    if( bi == Builtin::ORD && !args.isEmpty() && isPointerOrProc(args[0]->getType()) )
+                        return error("target-dependent operations are not allowed in INVAR procedures", e->pos);
+                    if( bi == Builtin::CAST && args.size() == 2 &&
+                            (isPointerOrProc(args[0]->getType()) || isPointerOrProc(args[1]->getType())) )
+                        return error("target-dependent operations are not allowed in INVAR procedures", e->pos);
+                    if( (bi == Builtin::DEC || bi == Builtin::INC) && !args.isEmpty() &&
+                            args[0]->getType() && args[0]->getType()->kind == Type::Pointer )
+                        return error("target-dependent operations are not allowed in INVAR procedures", e->pos);
+                }
+            }
             if( bi == Builtin::PCALL || bi == Builtin::RAISE )
             {
                 const int depth = stack.size();
@@ -2379,7 +2563,6 @@ bool Evaluator::recursiveRun(Expression* e)
                 break;
             }
 
-            bool invar = false;
             if( e->lhs->lhs && (e->lhs->kind == Expression::MethSelect || e->lhs->kind == Expression::Super) &&
                     e->lhs->lhs->getType()->kind != Type::Interface )
             {
@@ -2390,13 +2573,8 @@ bool Evaluator::recursiveRun(Expression* e)
                 if( !recursiveRun(proc->lhs) ) // fetch self
                     return false;
                 proc->lhs = 0; // to avoid yet another evaluation
-            }else if( e->lhs && e->lhs->kind == Expression::ProcDecl )
-            {
-                Declaration* proc = e->lhs->val.value<Declaration*>();
-                invar = proc->invar;
             }
 
-            ExpList args = e->val.value<ExpList>();
             const DeclList formals = e->lhs->kind == Expression::Super && e->lhs->lhs
                     ? e->lhs->lhs->getFormals()
                     : e->lhs->getFormals(); // no receiver here because args doesn't include it
@@ -2412,9 +2590,6 @@ bool Evaluator::recursiveRun(Expression* e)
                     break;
                 }
             }
-
-            if( invar && !allConst )
-                return error("can only call INVAR procedure with constant arguments", e->pos);
 
             for(int i = 0; i < args.size(); i++ )
             {
@@ -2435,10 +2610,7 @@ bool Evaluator::recursiveRun(Expression* e)
                         return false;
                 }
 
-                if( invar )
-                {
-                    ; // NOP
-                }else if( i < formals.size() )
+                if( i < formals.size() )
                 {
                     Q_ASSERT( bi == Builtin::Invalid );
                     prepareRhs(ft, false, args[i]->pos);

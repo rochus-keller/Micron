@@ -31,6 +31,8 @@ class QIODevice;
 namespace Mic
 {
     class AstLoader;
+    class Comptime;
+    class Interpreter;
 
     class ModuleManager : public Importer, public Mil::Importer, public ModuleResolver
     {
@@ -84,6 +86,7 @@ namespace Mic
 
         Mic::AstModel& getMics() { return mics; }
         Mil::AstModel& getModel() { return mdl; }
+        Interpreter* getInterpreter() const;
 
         Mil::Declaration* milModuleFor( const Import& imp ) const;
         int moduleCount() const { return cache.size(); }
@@ -116,6 +119,7 @@ namespace Mic
         Mil::Importer* d_milImporter;
         Mic::AstModel mics;
         Mil::AstModel mdl;
+        Comptime* d_interp;
         QList<Entry*> cache; // one entry per import incl. meta actuals, i.e. per generic instantiation
         QHash<Declaration*, Mil::Declaration*> invarProcs;
         QStringList linkObjects;     // .mob paths to add to the linker input

@@ -18,6 +18,8 @@
 */
 
 #include <Micron/MicAst.h>
+#include <QHash>
+#include <QSet>
 
 namespace Mil {
 class Emitter;
@@ -26,14 +28,24 @@ namespace Mic
 {
 typedef QPair<QByteArray,QByteArray> Qualident;
 
+class Interpreter
+{
+public:
+    virtual ~Interpreter() {}
+    virtual bool run(Declaration* proc, const QList<Value>& args, Value& result, QString& err) = 0;
+};
+
 class Evaluator
 {
 public:
-    Evaluator(AstModel* m, Mil::Emitter* out):mdl(m),out(out),langLevel(3) {}
+    Evaluator(AstModel* m, Mil::Emitter* out):mdl(m),out(out),invarRunner(0),langLevel(3) {}
 
     void pushCurProc(Declaration*d) { curProcs.push_back(d); }
     void popCurProc() { curProcs.pop_back(); }
     Declaration* getCurProc() const { return curProcs.isEmpty() ? 0 : curProcs.back(); }
+    bool isParsingProc(Declaration* d) const { return curProcs.contains(d); }
+    void setInterpreter(Interpreter* runner) { invarRunner = runner; }
+    bool checkInlineRecursion(Declaration* proc);
 
     bool isStackEmpty() const { return stack.empty(); }
 
@@ -147,13 +159,19 @@ protected:
 
     bool error(const QString& msg, const RowCol& pos );
 private:
+    bool isInlineProcedure(Declaration* proc) const { return proc && (proc->inline_ || langLevel == 0); }
+    bool checkInlineCall(Declaration* proc, const RowCol& pos);
+    bool inlineCallReaches(Declaration* proc, Declaration* target, QSet<Declaration*>& visited) const;
+
     AstModel* mdl;
     Mil::Emitter* out;
+    Interpreter* invarRunner;
     QString err;
     RowCol errPos;
     QList<Value> stack;
     friend class Builtins;
     QList<Declaration*> curProcs;
+    QHash<Declaration*, QList<Declaration*> > inlineCalls;
 };
 }
 

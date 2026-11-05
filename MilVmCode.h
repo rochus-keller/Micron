@@ -21,6 +21,7 @@
 */
 
 #include <Micron/MilAst.h>
+#include <QSet>
 
 class QTextStream;
 
@@ -131,6 +132,7 @@ public:
 
     bool compile(Declaration* procOrModule);
     bool compileProc(Declaration* proc);
+    bool isModuleTranslated(Declaration* module) const { return translatedModules.contains(module); }
 
 
     qint64 getInt(quint32 n) const { return ints[n]; }
@@ -325,6 +327,8 @@ protected:
     std::vector<Vtable*> vtables;
     std::vector<Template> templates;
     std::vector<Interface> interfaces;
+    QSet<Declaration*> translatedProcs;
+    QSet<Declaration*> translatedModules;
 
     // the following are only used during compilation:
     struct Where {

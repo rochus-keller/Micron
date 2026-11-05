@@ -1092,10 +1092,9 @@ bool Expression::isConst() const
         if( lhs->kind == ProcDecl )
         {
             Declaration* d = lhs->val.value<Declaration*>();
-            if( !d->invar )
+            if( !d->invar || d->getType() == 0 || d->getType()->kind == Type::NoType )
                 return false;
-            else
-                return allConst(args);
+            return allConst(args);
         }else if( lhs->kind == Builtin )
         {
             // TODO

@@ -655,6 +655,11 @@ Parser2::~Parser2()
         Symbol::deleteAll(first);
 }
 
+void Parser2::setInterpreter(Interpreter* runner)
+{
+    ev->setInterpreter(runner);
+}
+
 void Parser2::RunParser(const Import &import) {
 	errors.clear();
     deferred.clear();
@@ -1136,6 +1141,11 @@ void Parser2::ForwardDeclaration()
     Declaration* procDecl = ProcedureHeader(true, 0);
     if( procDecl == 0 )
         return;
+    if( la.d_type == Tok_INVAR )
+    {
+        expect(Tok_INVAR, true, "ForwardDeclaration");
+        procDecl->invar = true;
+    }
     procDecl->kind = Declaration::ForwardDecl;
     mdl->closeScope();
     forwards << procDecl;
@@ -1325,12 +1335,20 @@ void Parser2::ConstDeclaration() {
     Expression* e = ConstExpression(0);
     if( e && !ev->evaluate(e) )
         errorEv();
-    if( e && e->getType() && !e->getType()->isSimple() && e->getType()->kind != Type::StrLit )
+    if( e && e->getType() && !e->getType()->isSimple() &&
+            e->getType()->kind != Type::StrLit && e->getType()->kind != Type::ConstEnum )
         error(e->pos, "constant declarations only support basic types and string literals");
-    Value v = ev->pop();
+    Value v;
+    if( e )
+        v = ev->pop();
+    if( v.type == 0 && e )
+        v.type = e->getType();
+    if( v.type == 0 )
+        v.type = mdl->getType(Type::NoType);
     d->data = v.val;
     d->setType(v.type);
-    if( d->outer->kind == Declaration::Module && d->visi > Declaration::Private )
+    if( d->outer->kind == Declaration::Module && d->visi > Declaration::Private &&
+            v.type->kind != Type::NoType )
         out->addConst(ev->toQuali(v.type), d->name, d->pos, v.val );
     Expression::deleteAllExpressions();
 }
@@ -1340,8 +1358,10 @@ Expression* Parser2::ConstExpression(Type* hint) {
     Expression* res = expression(hint);
     if( res == 0 )
         return 0;
-    if( !res->isConst() )
+    if( !res->isConst() ) {
         error(tok, QString("expression is not constant"));
+        return 0;
+    }
     return res;
 }
 
@@ -1536,6 +1556,10 @@ void Parser2::length(quint32& len) {
 	if( FIRST_ConstExpression(la.d_type) ) {
         const Token tok = la;
         Expression* lenExpr = ConstExpression(0);
+        if( lenExpr == 0 ) {
+            len = 1;
+            return;
+        }
         ev->bindUniInt(lenExpr, false);
         if( !ev->evaluate(lenExpr) )
             errorEv();
@@ -1832,15 +1856,17 @@ DeclList Parser2::constEnum() {
 
 	if( la.d_type == Tok_Eq ) {
 		expect(Tok_Eq, false, "constEnum");
-        const Token tok = la;
-        Expression* e = ConstExpression(0);
-        if( !ev->evaluate(e) )
-            errorEv();
-        Value v = ev->pop();
-        if( !v.type->isInteger() )
-            error(tok,"expecting an integer");
-        else
-            index = v.val.toLongLong();
+		const Token tok = la;
+		Expression* e = ConstExpression(0);
+		if( e ) {
+		    if( !ev->evaluate(e) )
+		        errorEv();
+		    Value v = ev->pop();
+		    if( !v.type->isInteger() )
+		        error(tok,"expecting an integer");
+		    else
+		        index = v.val.toLongLong();
+		}
 	}
 
     d->data = index;
@@ -3646,12 +3672,24 @@ void Parser2::LabelRange(Type* t, CaseLabels& l) {
 
 void Parser2::TypeCase(Expression* e)
 {
-    if( !ev->evaluate(e, true) )
+    const bool subjectOnStack = ev->evaluate(e, true);
+    if( !subjectOnStack )
         errorEv();
 
     Expression* tyname = ConstExpression(0);
     if( tyname == 0 )
+    {
+        if( subjectOnStack )
+        {
+            line(e->pos).pop_();
+            ev->pop();
+        }
+        line(e->pos).ldc_i4(0);
+        expect(Tok_Colon, false, "Case");
+        line(e->pos).then_();
+        StatementSequence();
         return;
+    }
     if( !ev->evaluate(tyname) )
         errorEv();
     if( tyname->getType()->kind == Type::Nil )
@@ -3689,7 +3727,11 @@ void Parser2::TypeCase(Expression* e)
 qint64 Parser2::label(Type* t) {
     Token tok = la;
     Expression* e = ConstExpression(0);
-    if( e && !ev->evaluate(e) )
+    if( e == 0 ) {
+        Expression::deleteAllExpressions();
+        return 0;
+    }
+    if( !ev->evaluate(e) )
         errorEv();
     Value res = ev->pop();
     if( !assigCompat(t, e, e->pos) )
@@ -3794,16 +3836,18 @@ void Parser2::ForStatement() {
 		expect(Tok_BY, true, "ForStatement");
         tok = la;
         Expression* e = ConstExpression(0);
-        ev->bindUniInt(e, idxvar->getType()->isInt());
-        if( !ev->evaluate(e) )
-            errorEv();
-        Value v = ev->pop();
-        if( idxvar && !assigCompat(idxvar->getType(), e, e->pos) )
-            error(tok,"constant expression is not compatible with control variable");
-        else
-            by = v.val.toInt();
-        if( by == 0 )
-            error(tok,"BY expression cannot be zero");
+        if( e ) {
+            ev->bindUniInt(e, idxvar->getType()->isInt());
+            if( !ev->evaluate(e) )
+                errorEv();
+            Value v = ev->pop();
+            if( idxvar && !assigCompat(idxvar->getType(), e, e->pos) )
+                error(tok,"constant expression is not compatible with control variable");
+            else
+                by = v.val.toInt();
+            if( by == 0 )
+                error(tok,"BY expression cannot be zero");
+        }
         Expression::deleteAllExpressions();
     }
 	expect(Tok_DO, true, "ForStatement");
@@ -3910,7 +3954,9 @@ Type* Parser2::ProcedureType() {
     return p;
 }
 
-Declaration* Parser2::ProcedureHeader(bool inForward, QByteArray* rt) {
+Declaration* Parser2::ProcedureHeader(bool inForward, QByteArray* rt, Declaration** forwardDecl) {
+    if( forwardDecl )
+        *forwardDecl = 0;
     NameAndType receiver;
     bool autoself = false;
     if( FIRST_Receiver(la.d_type) ) {
@@ -4008,6 +4054,8 @@ Declaration* Parser2::ProcedureHeader(bool inForward, QByteArray* rt) {
 
     if( forward )
         forward->data = QVariant::fromValue(procDecl);
+    if( forwardDecl )
+        *forwardDecl = forward;
 
     return procDecl;
 }
@@ -4031,10 +4079,12 @@ void Parser2::ProcedureDeclaration() {
         procedure();
 
         QByteArray receiverType;
-        Declaration* procDecl = ProcedureHeader(false, &receiverType);
+        Declaration* forward = 0;
+        Declaration* procDecl = ProcedureHeader(false, &receiverType, &forward);
         if( procDecl == 0 )
             return;
 
+        Declaration* enclosing = ev->getCurProc();
         ev->pushCurProc(procDecl);
         deferred.push_back(DeferredLevel());
 
@@ -4047,6 +4097,8 @@ void Parser2::ProcedureDeclaration() {
             if( ev->langLevel < 1 )
                 error(cur, "EXTERN not allowed in language level 0");
             procDecl->extern_ = true;
+            if( enclosing && enclosing->invar )
+                error(procDecl->pos, "nested procedures of an INVAR procedure must be INVAR");
             if( la.d_type == Tok_ident ) {
                 expect(Tok_ident, true, "ProcedureDeclaration");
                 if( cur.d_val == "C" || cur.d_val == "c" )
@@ -4088,15 +4140,26 @@ void Parser2::ProcedureDeclaration() {
 					expect(Tok_INLINE, true, "ProcedureDeclaration");
                     procDecl->inline_ = true;
                     kind = Mil::ProcData::Inline;
-				} else if( la.d_type == Tok_INVAR ) {
-					expect(Tok_INVAR, true, "ProcedureDeclaration");
+                } else if( la.d_type == Tok_INVAR ) {
+                    expect(Tok_INVAR, true, "ProcedureDeclaration");
                     procDecl->invar = true;
-                    kind = Mil::ProcData::Invar;
-				} else
-					invalid("ProcedureDeclaration");
+                    if( ev->langLevel == 0 )
+                    {
+                        procDecl->inline_ = true;
+                        kind = Mil::ProcData::Inline;
+                    }else
+                        kind = Mil::ProcData::Invar;
+                } else
+                    invalid("ProcedureDeclaration");
                 if( procDecl->typebound )
                     error(cur, "INLINE and INVAR not supported for type-bound procedures");
-			}
+            }
+            if( enclosing && enclosing->invar && !procDecl->invar )
+                error(procDecl->pos, "nested procedures of an INVAR procedure must be INVAR");
+            if( procDecl->invar && procDecl->getType() && procDecl->getType()->kind != Type::NoType &&
+                    procDecl->getType()->kind >= Type::MaxBasicType &&
+                    procDecl->getType()->kind != Type::ConstEnum )
+                error(procDecl->pos, "the result type of an INVAR procedure must be a basic or enumeration type");
 			if( la.d_type == Tok_Semi ) {
 				expect(Tok_Semi, false, "ProcedureDeclaration");
 			}
@@ -4136,6 +4199,8 @@ void Parser2::ProcedureDeclaration() {
             resolveDeferreds();
             block();
             expect(Tok_END, true, "ProcedureBody");
+            if( !ev->checkInlineRecursion(procDecl) )
+                errorEv();
             out->endProc(la.toRowCol());
 
             if( la.d_type == Tok_ident && peek(2).d_type == Tok_Dot )
@@ -4153,7 +4218,9 @@ void Parser2::ProcedureDeclaration() {
             else
                 markRef(procDecl, cur.toRowCol(), Symbol::End);
         }else
-			invalid("ProcedureDeclaration");
+            invalid("ProcedureDeclaration");
+        if( forward && forward->invar != procDecl->invar )
+            error(procDecl->pos, "INVAR attribute of forward declaration and procedure declaration must agree");
         mdl->closeScope();
         ev->popCurProc();
         deferred.pop_back();
@@ -4282,7 +4349,11 @@ void Parser2::ReturnStatement() {
         Expression* e = expression(retType);
         ev->bindUniInt(e, retType->isInt());
         if( e && !ev->evaluate(e) )
-            errorEv(); // value is pushed on stack by prepareRhs
+        {
+            errorEv();
+            Expression::deleteAllExpressions();
+            return;
+        }
         if( e && !assigCompat( retType, e, e->pos ) )
         {
             error(tok,QString("expression is not compatible with the return type (%1, %2)")
@@ -4655,18 +4726,25 @@ void Parser2::import() {
         //resolveDeferreds();
         expect(Tok_Lpar, false, "MetaActuals");
         Expression* e = ConstExpression(0);
-        if( e && !ev->evaluate(e) )
-            errorEv();
-        Value v = ev->pop();
+        Value v;
+        if( e ) {
+            if( !ev->evaluate(e) )
+                errorEv();
+            v = ev->pop();
+        }
         import.metaActuals << v;
         Expression::deleteAllExpressions();
         while( la.d_type == Tok_Comma || FIRST_ConstExpression(la.d_type) ) {
             if( la.d_type == Tok_Comma ) {
                 expect(Tok_Comma, false, "MetaActuals");
             }
-            if( !ev->evaluate(ConstExpression(0)) )
-                errorEv();
-            v = ev->pop();
+            Expression* e = ConstExpression(0);
+            if( e ) {
+                if( !ev->evaluate(e) )
+                    errorEv();
+                v = ev->pop();
+            } else
+                v = Value();
             import.metaActuals << v;
             Expression::deleteAllExpressions();
         }
@@ -4965,8 +5043,10 @@ QByteArray Parser2::Attribute()
         expect(Tok_Eq, false, "Attribute");
         const Token t = la;
         Expression* e = ConstExpression(0);
+        if( e == 0 )
+            return name;
         ev->bindUniInt(e, true);
-        if( e && !ev->evaluate(e) )
+        if( !ev->evaluate(e) )
         {
             errorEv();
             return name;
@@ -5015,3 +5095,4 @@ QByteArray Parser2::Attribute()
         error(t, "unknown attribute");
     return name;
 }
+

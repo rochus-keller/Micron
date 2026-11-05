@@ -19,6 +19,7 @@
 
 #include "MilInterpreter.h"
 #include "MicAtom.h"
+#include "MilValidator.h"
 #include "MilVmCode.h"
 extern "C" {
 #include "runtime/MIC+.h"
@@ -370,6 +371,11 @@ static bool MIC_exit(void* args, void* ret)
     return true;
 }
 
+static bool MIC_exit_comptime(void* args, void*)
+{
+    throw QString("HALT(%1)").arg(Interpreter::toI4(args, 0));
+}
+
 #define REGISTER_MICPROC(name) \
     ffiProcs.push_back(MIC_##name); code.addExternal(MIC$, Mic::Atom::getAtom(#name), ffiProcs.size()-1);
 
@@ -380,8 +386,14 @@ struct Interpreter::Imp
 
     std::vector<char> moduleData;
     std::vector<FfiProc> ffiProcs;
+    QSet<Declaration*> comptimePreparedProcs;
+    bool comptimeMode;
+    quint64 comptimeSteps;
+    int callDepth;
+    bool comptimeExitRegistered;
 
-    Imp(AstModel* mdl):mdl(mdl), code(mdl, sizeof(void*), StackAlig)
+    Imp(AstModel* mdl):code(mdl, sizeof(void*), StackAlig),mdl(mdl),
+        comptimeMode(false),comptimeSteps(0),callDepth(0),comptimeExitRegistered(false)
     {
 #if 0
         QTextStream out(stdout);
@@ -422,6 +434,15 @@ struct Interpreter::Imp
     bool execute(Frame*);
     bool executeLoop(Frame*, int&);
     bool call(Frame* frame, int pc, Procedure* proc, void* local, void* stack);
+    void consumeComptimeStep()
+    {
+        if( comptimeMode )
+        {
+            if( comptimeSteps == 0 )
+                throw QString("compile-time evaluation exceeded the step limit");
+            --comptimeSteps;
+        }
+    }
 };
 
 Interpreter::Interpreter(AstModel* mdl)
@@ -530,6 +551,275 @@ bool Interpreter::compile()
     return true;
 }
 
+static void collectComptimeExprCalls(Expression* e, QSet<Expression*>& seen, QList<Declaration*>& calls)
+{
+    for( ; e; e = e->next )
+    {
+        if( seen.contains(e) )
+            continue;
+        seen.insert(e);
+        if( (e->kind == IL_call || e->kind == IL_callvirt || e->kind == IL_callinst) && e->d )
+            calls << e->d;
+        collectComptimeExprCalls(e->lhs, seen, calls);
+        collectComptimeExprCalls(e->rhs, seen, calls);
+        if( e->hasE() )
+            collectComptimeExprCalls(e->e, seen, calls);
+    }
+}
+
+static void collectComptimeStatCalls(Statement* s, QSet<Statement*>& seen,
+                                     QSet<Expression*>& seenExprs, QList<Declaration*>& calls)
+{
+    for( ; s; s = s->next )
+    {
+        if( seen.contains(s) )
+            continue;
+        seen.insert(s);
+        if( s->hasE() )
+            collectComptimeExprCalls(s->e, seenExprs, calls);
+        collectComptimeExprCalls(s->args, seenExprs, calls);
+        collectComptimeStatCalls(s->body, seen, seenExprs, calls);
+    }
+}
+
+static bool prepareComptimeProc(AstModel* mdl, Validator& validator, Declaration* proc,
+                                QSet<Declaration*>& visited,
+                                QSet<Declaration*>& prepared, QString& err)
+{
+    if( proc == 0 )
+    {
+        err = "procedure body is not available";
+        return false;
+    }
+    if( proc->kind == Declaration::Placeholder ||
+            (proc->kind == Declaration::Procedure && proc->forward) )
+        proc = proc->forwardTo;
+    if( proc == 0 || proc->kind != Declaration::Procedure )
+    {
+        err = "procedure body is not available";
+        return false;
+    }
+    if( visited.contains(proc) )
+        return true;
+    visited.insert(proc);
+    if( prepared.contains(proc) )
+        return true;
+
+    Declaration* module = proc->getModule();
+    if( module == 0 )
+    {
+        err = "procedure module is not available";
+        return false;
+    }
+    if( !module->validated && !validator.validateProc(module, proc) )
+    {
+        err = validator.errors.isEmpty() ? "procedure validation failed" : validator.errors.first().msg;
+        return false;
+    }
+    QString layoutError;
+    mdl->calcProcLayout(proc, sizeof(void*), Interpreter::StackAlign, &layoutError);
+    if( !layoutError.isEmpty() )
+    {
+        err = layoutError;
+        return false;
+    }
+
+    QSet<Statement*> seen;
+    QSet<Expression*> seenExprs;
+    QList<Declaration*> calls;
+    collectComptimeStatCalls(proc->body, seen, seenExprs, calls);
+    foreach( Declaration* callee, calls )
+        if( !prepareComptimeProc(mdl, validator, callee, visited, prepared, err) )
+            return false;
+    prepared.insert(proc);
+    return true;
+}
+
+static bool pushComptimeArgument(Frame& frame, Type* type, const QVariant& value,
+                                 QList<QByteArray>& strings, QString& err)
+{
+    if( type == 0 )
+    {
+        err = "unsupported compile-time argument type";
+        return false;
+    }
+    type = type->deref();
+    if( value.userType() == QMetaType::QByteArray || value.userType() == QMetaType::QString )
+    {
+        if( type->kind != Type::Pointer && !(type->kind == Type::Array && type->len == 0) )
+        {
+            err = "compile-time string argument does not match its parameter";
+            return false;
+        }
+        strings.append(value.toByteArray());
+        strings.last().append('\0');
+        frame.pushP(strings.last().data());
+        return true;
+    }
+
+    const int size = type->getByteSize(sizeof(void*));
+    switch( type->kind )
+    {
+    case Type::BOOL:
+        {
+            const qint32 v = value.toBool() ? 1 : 0;
+            frame.push(&v, size);
+        }
+        return true;
+    case Type::CHAR:
+    case Type::UINT8:
+    case Type::UINT16:
+    case Type::UINT32:
+    case Type::UINT64:
+        {
+            const quint64 v = value.toULongLong();
+            frame.push(&v, size);
+        }
+        return true;
+    case Type::INT8:
+    case Type::INT16:
+    case Type::INT32:
+    case Type::INT64:
+        {
+            const qint64 v = value.toLongLong();
+            frame.push(&v, size);
+        }
+        return true;
+    case Type::FLOAT32:
+        {
+            const float v = value.toFloat();
+            frame.push(&v, sizeof(v));
+        }
+        return true;
+    case Type::FLOAT64:
+        {
+            const double v = value.toDouble();
+            frame.push(&v, sizeof(v));
+        }
+        return true;
+    default:
+        err = "unsupported compile-time argument type";
+        return false;
+    }
+}
+
+static QVariant readComptimeResult(const char* data, Type* type)
+{
+    if( type == 0 )
+        return QVariant();
+    type = type->deref();
+    switch( type->kind )
+    {
+    case Type::BOOL:
+        return QVariant(*(const quint8*)data != 0);
+    case Type::CHAR:
+    case Type::UINT8:
+        return QVariant((quint32)*(const quint8*)data);
+    case Type::UINT16:
+        return QVariant((quint32)*(const quint16*)data);
+    case Type::UINT32:
+        return QVariant(*(const quint32*)data);
+    case Type::UINT64:
+        return QVariant::fromValue(*(const quint64*)data);
+    case Type::INT8:
+        return QVariant((qint32)*(const qint8*)data);
+    case Type::INT16:
+        return QVariant((qint32)*(const qint16*)data);
+    case Type::INT32:
+        return QVariant(*(const qint32*)data);
+    case Type::INT64:
+        return QVariant::fromValue(*(const qint64*)data);
+    case Type::FLOAT32:
+        return QVariant(*(const float*)data);
+    case Type::FLOAT64:
+        return QVariant(*(const double*)data);
+    default:
+        return QVariant();
+    }
+}
+
+bool Interpreter::evalComptime(Declaration* proc, const QList<QVariant>& args, QVariant& result, QString& err)
+{
+    err.clear();
+    result.clear();
+    if( proc == 0 )
+    {
+        err = "procedure body is not available";
+        return false;
+    }
+    if( proc->kind == Declaration::Procedure && proc->forward )
+        proc = proc->forwardTo;
+
+    const bool oldMode = imp->comptimeMode;
+    struct ModeGuard {
+        Imp* imp;
+        bool oldMode;
+        ~ModeGuard() { imp->comptimeMode = oldMode; }
+    } modeGuard = { imp, oldMode };
+    imp->comptimeMode = true;
+    imp->comptimeSteps = 10000000;
+    imp->callDepth = 0;
+
+    try
+    {
+        if( !imp->comptimeExitRegistered )
+        {
+            registerProc("MIC$", "exit", MIC_exit_comptime);
+            imp->comptimeExitRegistered = true;
+        }
+
+        Validator validator(imp->mdl);
+        QSet<Declaration*> visited;
+        if( !prepareComptimeProc(imp->mdl, validator, proc, visited,
+                                 imp->comptimePreparedProcs, err) )
+            return false;
+        if( !imp->code.compileProc(proc) )
+        {
+            err = "unable to compile procedure";
+            return false;
+        }
+
+        const int procIndex = imp->code.findProc(proc);
+        if( procIndex < 0 )
+        {
+            err = "unable to compile procedure";
+            return false;
+        }
+        Procedure* vmProc = imp->code.getProc(procIndex);
+        const DeclList params = proc->getParams();
+        if( params.size() != args.size() )
+        {
+            err = "compile-time argument count does not match the procedure";
+            return false;
+        }
+
+        Frame outer;
+        quint8 outerMemory[PreAllocSize] = {};
+        quint8 localMemory[PreAllocSize] = {};
+        quint8 stackMemory[PreAllocSize] = {};
+        outer.stack.init(outerMemory, PreAllocSize);
+        QList<QByteArray> strings;
+        strings.reserve(args.size());
+        for( int i = 0; i < args.size(); ++i )
+            if( !pushComptimeArgument(outer, params[i]->getType(), args[i], strings, err) )
+                return false;
+
+        if( !imp->call(&outer, -1, vmProc, localMemory, stackMemory) )
+        {
+            err = "compile-time procedure execution failed";
+            return false;
+        }
+        if( vmProc->returnSize > 0 )
+            result = readComptimeResult(outer.stack.data() + outer.sp - vmProc->returnSize,
+                                        proc->getType());
+        return true;
+    }catch( const QString& ex )
+    {
+        err = ex;
+        return false;
+    }
+}
+
 bool Interpreter::run()
 {
     // allocate and init module variables
@@ -539,7 +829,7 @@ bool Interpreter::run()
     {
         if( module->generic )
             continue;
-        if( !module->translated )
+        if( !imp->code.isModuleTranslated(module) )
         {
             qCritical() << "error module not compiled" << module->name;
             return false;
@@ -684,6 +974,8 @@ bool Interpreter::Imp::run(quint32 proc)
 #define VM_STIND(totype, fromtype) { totype v = (totype)frame->pop##fromtype(); \
     totype* p = (totype*)frame->popP(); *p = v; pc++; }
 
+#define VM_DIV_BY_ZERO(T) if( comptimeMode && *(T*)frame->slot(-1) == 0 ) throw QString("division by zero");
+
 bool Interpreter::Imp::execute(Frame* frame)
 {
     int pc = 0;
@@ -778,9 +1070,11 @@ bool Interpreter::Imp::executeLoop(Frame* frame, int& pc)
                 VM_BINARY_OP(double,*)
             vmbreak;
         vmcase(div_i4)
+                VM_DIV_BY_ZERO(qint32);
                 VM_BINARY_OP(qint32,/)
             vmbreak;
         vmcase(div_i8)
+                VM_DIV_BY_ZERO(qint64);
                 VM_BINARY_OP(qint64,/)
             vmbreak;
         vmcase(div_r4)
@@ -790,21 +1084,27 @@ bool Interpreter::Imp::executeLoop(Frame* frame, int& pc)
                 VM_BINARY_OP(double,/)
             vmbreak;
         vmcase(div_un_i4)
+                VM_DIV_BY_ZERO(quint32);
                 VM_BINARY_OP(quint32,/)
             vmbreak;
         vmcase(div_un_i8)
+                VM_DIV_BY_ZERO(quint64);
                 VM_BINARY_OP(quint64,/)
             vmbreak;
         vmcase(rem_i4)
+                VM_DIV_BY_ZERO(qint32);
                 VM_BINARY_OP(qint32,%)
             vmbreak;
         vmcase(rem_i8)
+                VM_DIV_BY_ZERO(qint64);
                 VM_BINARY_OP(qint64,%)
             vmbreak;
         vmcase(rem_un_i4)
+                VM_DIV_BY_ZERO(quint32);
                 VM_BINARY_OP(quint32,%)
             vmbreak;
         vmcase(rem_un_i8)
+                VM_DIV_BY_ZERO(quint64);
                 VM_BINARY_OP(quint64,%)
             vmbreak;
         vmcase(abs_i4)
@@ -1659,11 +1959,15 @@ bool Interpreter::Imp::executeLoop(Frame* frame, int& pc)
                 pc++;
             } vmbreak;
         vmcase(br)
+                consumeComptimeStep();
                 pc = pc + 1 + (frame->proc->ops[pc].minus ? -1 : 1 ) * frame->proc->ops[pc].val;
             vmbreak;
         vmcase(brfalse_i4)
                 if( !frame->popI4() )
+                {
+                    consumeComptimeStep();
                     pc = pc + 1 + (frame->proc->ops[pc].minus ? -1 : 1 ) * frame->proc->ops[pc].val;
+                }
                 else
                     pc++;
              vmbreak;
@@ -1968,6 +2272,20 @@ bool Interpreter::Imp::executeLoop(Frame* frame, int& pc)
 
 bool Interpreter::Imp::call(Frame* frame, int pc, Procedure* proc, void* local, void* stack)
 {
+    struct DepthGuard {
+        Imp* imp;
+        ~DepthGuard() { if( imp ) --imp->callDepth; }
+    } depthGuard = { 0 };
+    if( comptimeMode )
+    {
+        consumeComptimeStep();
+        if( ++callDepth > 1000 )
+        {
+            --callDepth;
+            throw QString("compile-time evaluation exceeded the recursion limit");
+        }
+        depthGuard.imp = this;
+    }
     Frame newframe;
     newframe.proc = proc;
     newframe.outer = frame;

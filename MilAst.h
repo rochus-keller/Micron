@@ -400,6 +400,8 @@ namespace Mil
         }
         void calcMemoryLayouts(quint8 pointerWidth, quint8 stackAlignment,
                                quint8 firstParamOffset = 0);
+        void calcProcLayout(Declaration* proc, quint8 pointerWidth, quint8 stackAlignment,
+                            QString* error = 0);
         quint32 getVarMemSize() const { return varOff; }
 
         struct BitFieldUnit

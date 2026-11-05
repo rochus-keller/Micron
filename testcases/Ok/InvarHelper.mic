@@ -1,0 +1,8 @@
+module InvarHelper [level=3]
+
+procedure Twice*(n: int32): int32 invar
+begin
+    return n * 2
+end Twice
+
+end InvarHelper

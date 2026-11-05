@@ -89,10 +89,10 @@ bool Code::translateModule(Declaration* module)
 {
     Q_ASSERT(module && module->kind == Declaration::Module);
 
-    if( module->translated )
+    if( translatedModules.contains(module) )
         return true; // the module was already translated
 
-    module->translated = true; // re/misuse this flag to indicate that we already translated
+    translatedModules.insert(module);
 
     Declaration* sub = module->subs;
     while(sub)
@@ -142,9 +142,9 @@ bool Code::translateProcDecl(Declaration* proc)
 {
     if( proc == 0 )
         return false;
-    if( proc->validated )
+    if( translatedProcs.contains(proc) )
         return true; // the proc was already translated
-    proc->validated = true;
+    translatedProcs.insert(proc);
     if( proc->forward )
         return translateProcDecl(proc->forwardTo);
 

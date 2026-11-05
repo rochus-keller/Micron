@@ -30,6 +30,7 @@ namespace Mil
         Validator(AstModel* m);
 
         bool validate(Declaration* module);
+        bool validateProc(Declaration* module, Declaration* proc);
 
         struct Error {
             QString msg;

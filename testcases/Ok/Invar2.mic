@@ -1,0 +1,105 @@
+module Invar2 [level=3]
+
+import InvarHelper
+
+type Shade = (Red, Green, Blue)
+
+procedure Sq(n: uint32): uint32 invar
+begin
+    return n * n
+end Sq
+
+procedure Fac(n: int32): int32 invar
+begin
+    if n <= 1 then
+        return 1
+    else
+        return n * Fac(n - 1)
+    end
+end Fac
+
+procedure IsEven(n: int32): boolean invar
+begin
+    return n MOD 2 = 0
+end IsEven
+
+procedure First(const s: ^array of char): char invar
+begin
+    return s[0]
+end First
+
+procedure TwiceReal(n: real): real invar
+begin
+    return n * 2.0
+end TwiceReal
+
+procedure NextShade(s: Shade): Shade invar
+begin
+    inc(s)
+    return s
+end NextShade
+
+procedure Count(const s: ^array of char): int32 invar
+var i: int32
+begin
+    i := 0
+    while s[i] # 0x do
+        inc(i)
+    end
+    return i
+end Count
+
+const cSq = Sq(7)
+    cNested = Sq(Sq(2))
+    cFac = Fac(10)
+    cEven = IsEven(8)
+    cChar = First("mic")
+    cReal = TwiceReal(1.25)
+    cShade = NextShade(Green)
+    cCount = Count("micron")
+    cImported = InvarHelper.Twice(21)
+
+type Table = array Sq(3) of int32
+
+var items: Table
+    runtime: uint32
+
+begin
+    assert(cSq = 49)
+    println(cSq)
+    assert(cNested = 16)
+    println(cNested)
+    assert(cFac = 3628800)
+    println("factorial ok")
+    assert(cEven)
+    println("boolean ok")
+    println(cChar)
+    assert(ORD(cChar) = 109)
+    assert(cReal = 2.5)
+    println("real ok")
+    assert(cShade = Blue)
+    println("enum ok")
+    assert(cCount = 6)
+    println("string count ok")
+    assert(cImported = 42)
+    assert(len(items) = 9)
+    println(len(items))
+    runtime := 6
+    runtime := Sq(runtime)
+    println(runtime)
+end Invar2
+
+(* output:
+
+49
+16
+factorial ok
+boolean ok
+m
+real ok
+enum ok
+string count ok
+9
+36
+
+*)

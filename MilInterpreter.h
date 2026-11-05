@@ -21,6 +21,8 @@
 */
 
 #include <Micron/MilAst.h>
+#include <QList>
+#include <QVariant>
 
 class QTextStream;
 
@@ -56,6 +58,7 @@ namespace Mil
 
         bool compile();
         bool run();
+        bool evalComptime(Declaration* proc, const QList<QVariant>& args, QVariant& result, QString& err);
 
         bool dumpProc(QTextStream& out, Declaration* proc);
         bool dumpModule(QTextStream& out, Declaration* module);

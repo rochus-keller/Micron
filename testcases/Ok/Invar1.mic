@@ -1,0 +1,58 @@
+module Invar1 [level=3]
+
+import InvarHelper
+
+var x: int32
+
+procedure Sq(n: int32): int32 invar
+begin
+    return n * n
+end Sq
+
+procedure Fact(n: int32): int32 invar
+begin
+    if n <= 1 then
+        return 1
+    else
+        return n * Fact(n - 1)
+    end
+end Fact
+
+procedure Use(n: int32): int32 invar
+const k = 3
+var y: int32
+
+procedure Nested(v: int32): int32 invar
+begin
+    return Sq(v)
+end Nested
+
+begin
+    y := n
+    assert(k = 3)
+    inc(y)
+    return InvarHelper.Twice(Nested(y))
+end Use
+
+begin
+    x := 4
+    assert(Sq(x) = 16)
+    println("16")
+    x := Sq(7)
+    assert(x = 49)
+    println("49")
+    assert(Fact(5) = 120)
+    println("120")
+    assert(Use(3) = 32)
+    assert(InvarHelper.Twice(16) = 32)
+    println("32")
+end Invar1
+
+(* output:
+
+16
+49
+120
+32
+
+*)
