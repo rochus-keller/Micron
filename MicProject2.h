@@ -220,6 +220,7 @@ namespace Mic
         QString d_filePath; // path where the project file was loaded from or saved to
         QStringList d_suffixes;
         QByteArrayList d_options;
+        QHash<QByteArray,QByteArray> d_config;
         QByteArray d_args;
         QString d_workingDir, d_buildDir;
         ModProc d_main;

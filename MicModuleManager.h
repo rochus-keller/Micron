@@ -75,6 +75,8 @@ namespace Mic
         Mil::Declaration* loadMil( QIODevice*, const QString& path );
 
         void setMilImporter( Mil::Importer* i ) { d_milImporter = i; }
+        void setConfig(const QHash<QByteArray,QByteArray>& config) { d_config = config; }
+        const QHash<QByteArray,QByteArray>& getConfig() const { return d_config; }
 
         Declaration* loadProvider( const Location& loc, AstModel* into,
                                    ModuleResolver* resolver,
@@ -119,6 +121,7 @@ namespace Mic
         Mil::Importer* d_milImporter;
         Mic::AstModel mics;
         Mil::AstModel mdl;
+        QHash<QByteArray,QByteArray> d_config;
         Comptime* d_interp;
         QList<Entry*> cache; // one entry per import incl. meta actuals, i.e. per generic instantiation
         QHash<Declaration*, Mil::Declaration*> invarProcs;

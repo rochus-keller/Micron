@@ -1,78 +1,288 @@
-This project implements a compiler for the [Micron programming language](https://github.com/micron-language/specification).
+![Logo](images/logo200.png)
 
-Micron is a systems programming language with a syntax similar to Oberon+ and the flexibility of C. The name "Micron" is an abbreviation of "MicroOberon". 
+## Welcome to the Micron Programming Language
 
-Representative code examples and real, working systems and applications can be found [here](https://github.com/rochus-keller/Micron/tree/master/examples) 
-and [here](https://github.com/rochus-keller/Are-we-fast-yet/tree/main/Micron).
+This project implements a compiler, interpreter and IDE for the Micron programming language
+[as specified here](https://github.com/micron-language/specification/blob/master/The_Micron_Programming_Language_Specification.adoc);
+see also the code examples below.
 
-The project is the result of the author's many years of work with the Oberon programming language and the analysis and migration of several versions of the Oberon system. It turned out that Oberon as such is in fact not particularly suitable for low-level and system-oriented programming, and that the systems mentioned could only be developed by direct memory manipulation and pointer arithmetic via SYSTEM module and other (partly undocumented) backdoors of the language, for large parts without the support of a type checker. 
+Micron is a systems programming language with a syntax similar to [Oberon+](https://github.com/rochus-keller/Oberon) and the reach of C. The name "Micron" is an abbreviation of "Micro Oberon".
 
-The language of choice for such tasks is usually C, with which the author has been able to gain experience over many years and various projects and architectures down to different microcontrollers. A major advantage of C is its flexibility. The compiler provides fairly good support, but does not get in the way. However, C also has considerable disadvantages, such as the lack of modularization, the complications caused by the preprocessor, or the syntax that is by no means intuitive, just to name but a few. 
+Micron is intended as a practical alternative to C for systems programming. It combines the modularization, strictness and simplicity of Oberon with the flexibility of C: the same language serves for boot code, drivers, an operating system kernel and ordinary applications, and it calls C without wrappers. The preprocessor is replaced by language concepts that can largely substitute its features, supplemented by explicit support for generic programming, inlining and procedures that run at compile time. Thereby the focus is always on simplicity and the greatest effect with a practicable effort.
 
-This project attempts to create a programming language and toolchain that combines the modularization, strictness and simplicity of Oberon with the power and flexibility of C. The language is aimed at experienced developers who know how to deal with the risks of direct memory and pointer manipulation. The preprocessor is replaced by language concepts that can largely substitute its features, supplemented by explicit support for generic programming, inlining and procedures that run at compile time. Thereby the focus is always on simplicity and the greatest effect with a practicable effort.
- 
-NOTE that this project is work-in-progress and not yet released for general use.
+Micron supports _language levels_: a module declares the level it needs, from level 0 (inlined code for hardware initialization, no stack) over level 1 (stack frames, recursion, `extern` C procedures), level 3 (heap, pointers, exceptions) and level 4 (type extension and dynamic dispatch) up to level 5 (garbage collection). A module can only import modules of the same or a lower level, so a kernel written at level 1 cannot depend on the heap by accident. Without the attribute, level 3 is assumed.
 
-#### Planned features
+NOTE that this project is still work-in-progress.
+
+### Documentation
+
+In addition to the specification, a free textbook is available which shows how each feature of Micron is used and why it is designed the way it is. Part III walks through the Micron System, a port of Wirth and Gutknecht's Project Oberon operating system, which is compiled, linked and booted on an emulated RISC-V machine with a single command.
+
+- [PDF version](http://software.rochus-keller.ch/micron-textbook.pdf) of the book,
+- [Source and examples](https://github.com/micron-language/textbook) of the book; all examples compile and run with `micc`.
+
+### Code examples
+
+Micron is case sensitive, but each reserved word and predeclared identifier exists in a fully lower-case and a fully upper-case form with identical meaning; the last example is written in the Oberon style, all others in the lower-case style used in the book. Statement separators are optional.
+
+##### Abstraction without objects
+
+```text
+module Shapes [level = 2]
+
+type
+    Shape = interface                   // a contract, satisfied structurally
+                proc area(): integer
+                proc print()
+            end
+
+    Rect   = record w, h: integer end
+    Circle = record radius: integer end
+
+procedure Rect.area(): integer          // type-bound procedure, bound statically
+begin
+    return self.w * self.h
+end Rect.area
+
+procedure Rect.print()
+begin
+    print("rect "); print(self.w); print("x"); print(self.h)
+end Rect.print
+
+procedure Circle.area(): integer
+begin
+    return 3 * self.radius * self.radius    // coarse
+end Circle.area
+
+procedure Circle.print()
+begin
+    print("circle r="); print(self.radius)
+end Circle.print
+
+procedure describe(s: Shape)            // accepts any type with area and print
+begin
+    s.print(); print(" area="); println(s.area())
+end describe
+
+var
+    r: Rect
+    c: Circle
+
+begin
+    r.w := 4; r.h := 3
+    c.radius := 5
+    describe(@r)                        // rect 4x3 area=12
+    describe(@c)                        // circle r=5 area=75
+end Shapes
+```
+
+##### Generic programming
+
+```text
+module Stack(T; const CAP: uint32)
+var
+    a: array CAP of T
+    n*: integer
+
+procedure push*(x: T)
+begin
+    a[n] := x; inc(n)
+end push
+
+procedure pop*(): T
+begin
+    dec(n)
+    return a[n]
+end pop
+
+begin
+    n := 0
+end Stack
+```
+
+```text
+module UseStack
+import si := Stack(integer, 10)
+    cs := Stack(char, 4)
+begin
+    si.push(3); si.push(4)
+    cs.push('x')
+    println(si.pop() + si.pop())    // 7
+    println(cs.pop())               // x
+end UseStack
+```
+
+##### Compile-time programming
+
+```text
+module Comptime
+
+const
+    KB      = 1024
+    BUFSIZE = getenv(uint32, "BUFSIZE", 16 * KB)   // micc -D BUFSIZE=...
+    WORDS   = BUFSIZE div size(integer)
+    DEBUG   = getenv(boolean, "DEBUG")             // false unless -D DEBUG
+
+procedure width(n: uint32): uint32 invar   // callable at compile time
+begin
+    if n < 2 then return 1 else return 1 + width(n div 2) end
+end width
+
+const
+    INDEXBITS = width(WORDS - 1)           // 12, computed by the compiler
+
+var
+    buf: array WORDS of integer
+    index: array INDEXBITS of boolean
+
+begin
+    println(len(buf))       // 4096
+    println(len(index))     // 12
+    <* if DEBUG then *>
+    println("checked build")
+    <* else *>
+    println("fast build")
+    <* end *>
+end Comptime
+```
+
+##### Low-level programming and C interoperability
+
+```text
+module Bits [level = 1]
+
+var
+    a: array 4 of int32
+    p: ^int32
+    u, u1: uint32
+
+begin
+    println(band(0F0FH, 00FFH))    // 15
+    println(bor(1, 4))             // 5
+    println(bxor(5, 1))            // 4
+    println(shl(1, 5))             // 32
+    println(shr(0FFH, 4))          // 15, logical
+    println(asr(-16, 2))           // -4, arithmetic
+
+    u1 := 0FFFFFFFFH
+    println(cast(int32, u1))       // -1, same bits
+    u := usig(-1)
+    println(u)                     // 4294967295, same bits
+
+    a[0] := 10; a[1] := 20
+    p := @a[0]
+    p := ptroff(p, 1)              // advance by one int32
+    println(p^)                    // 20
+end Bits
+```
+
+```text
+module Clib [level = 1]
+
+procedure abs(x: int32): int32; extern C
+procedure toupper(c: int32): int32; extern C
+procedure write(fd: int32; const buf: ^[]char; n: uint32): int32
+    extern C "write"
+
+var s: array 3 of char
+
+begin
+    s := "ok"
+    if write(1, @s, 2) # 2 then return end
+    println(abs(-5))
+    println(toupper(sigl(ord('a'))))    // 65
+end Clib
+```
+##### Oberon style
+
+```text
+MODULE Sorter   (* upper-case reserved words and predeclared identifiers *)
+
+PROCEDURE Sort*(a: ^[]INTEGER; n: UINT32)
+    VAR i, j, t: INTEGER
+BEGIN
+    FOR i := 1 TO n-1 DO
+        t := a[i]; j := i-1
+        WHILE (j >= 0) & (a[j] > t) DO
+            a[j+1] := a[j]; DEC(j)
+        END
+        a[j+1] := t
+    END
+END Sort
+
+END Sorter
+```
+
+```text
+MODULE Main
+    IMPORT Sorter
+    VAR a: ARRAY 8 OF INTEGER; i: INTEGER
+BEGIN
+    a := { 5, 3, 8, 1, 9, 2, 7, 4 }
+    Sorter.Sort(@a, LEN(a))     (* no VAR parameters; @ takes the address *)
+    FOR i := 0 TO LEN(a)-1 DO PRINT(a[i]); PRINT(" ") END
+    PRINTLN("")
+END Main
+```
+
+### Example applications and systems
+
+The [examples subdirectory](https://github.com/rochus-keller/Micron/tree/master/examples) contains working applications and systems of significant size written in Micron: a Smalltalk-80 implementation, the original 1976 P4 Pascal compiler, the Scheme 9 virtual machine, the Project Oberon System in Oberon style, and the Micron System, the migrated Project Oberon System natively running on RISC-V described in the book. 
+
+More examples in procedural, hybrid, interface-based and object-oriented style are in the [Are-we-fast-yet repository](https://github.com/rochus-keller/Are-we-fast-yet/tree/main/Micron).
+
+A [migration of the Oberon System 3 to Micron](https://github.com/rochus-keller/micronsystem3/) 
+which currently runs on the emulated RISC-V machine and later on the Raspberry Pi Zero 2 is work in progress.
+
+### Planned features
 
 - [x] Implement lexer with directive support
 - [x] Implement parser and IR generator
 - [x] Evaluate an existing compiler backend
-- [x] Implement the analyzer/validator 
+- [x] Implement the analyzer/validator
 - [x] Implement a C99 generator
 - [x] Implement an IDE with source navigation and debugger
 - [x] Complete language and add explicit language levels
 - [x] Implement a MIL interpreter for the full language scope
 - [x] Implement a native backend
 - [x] Migrate some notable C and Oberon projects to Micron as a proof-of-concept and to optimize the language
-- [ ] Improve project format (incorporate binary modules, separate compilation)
+- [x] Add MIL and MOB modules to projects, separate compilation
+- [x] Write a [Micron text book](https://github.com/micron-language/textbook)
+- [ ] Full migration of Oberon System 3 native, running on rv32vm and Raspi (WIP)
+- [ ] Improve project file format
 - [ ] Integrate cross-compilation features with IDE
-- [ ] Integrate RV32 emulator with debugging/DAP support
-- [ ] Write documentation/text book (WIP)
-- [ ] Full migration of Oberon System 3 native, running on Raspi (WIP)
+- [ ] Integrate RV32 emulator with debugging/DAP support in IDE
 
-A [textbook about Micron](https://github.com/micron-language/textbook) is work in progress.
+### Precompiled versions
 
-#### Status on February 4, 2024
+The following precompiled versions are available at this time:
 
-Generated a parser using [the grammar](https://github.com/micron-language/specification/blob/master/Micron_Programming_Language.ebnf) and adopted the lexer from [the Oberon project](https://github.com/rochus-keller/Oberon) and the conditional compilation machinery from the Oberon and the [FreePascal](https://github.com/rochus-keller/FreePascal/) project. The parser is able to successfully read initial test files.
+- [micc for Linux x86_64](http://software.rochus-keller.ch/micc_linux_x64.tar.gz)
 
-#### Status on February 20, 2024
+Just download, unpack and run. The command line options are described in the [micc manual](docs/micc_manual.md).
 
-Meanwhile I prepared a manual Micron parser and designed an intermediate language (see [the grammar](https://github.com/micron-language/specification/blob/master/Micron_Intermediate_Language.ebnf) and [the specification](https://htmlpreview.github.io/?https://github.com/micron-language/specification/blob/master/The_Micron_Intermediate_Language_Specification.html)) which the Micron frontend will generate. There is also an automatically generated parser for the intermediate language which successfully works with initial test files.
+### How to build
 
-#### Status on May 15, 2024
+Follow these steps if you want to build the Micron compiler yourself. The build is using LeanQt and the BUSY build system. Note that compiling on
+Linux requires the build essentials. On Mac and Windows there are no additional requirements than a toolchain.
 
-The programming and intermediate language have matured in parallel with the parser and code generator implementation. The IR code generator is integrated with the parser and operates in the same pass. Though not all parts of the language are yet supported by the IR generator (e.g. imports, VLAs and generics). Instead I was on a long quest for a suitable compiler backend that I could re-use for Micron (and other of my projects). The journey brought me to all sorts of toolkits and re-targetable compilers and I spent a lot of time studying and experimenting. There would be enough material for a treatise of its own. I also invested a lot of time in TCC, trying to modularize the code (that spaghetti lovers would be delighted with) and work out a minimal backend interface; I even started to add another frontend and had to grit my teeth over the TCC functionality, which - despite the introduction of modularization - turned out to be still almost incomprehensible. During this phase, [user tarkonian drew my attention to the Eigen Compiler Suite](https://github.com/rochus-keller/Oberon/discussions/55), which looked very promising. After a thorough review of the large code base and excellent documentation, and an extensive exchange with the author, I came to the conclusion that Eigen is probably the best option currently available. It supports many more architectures than TCC (or e.g. QBE, Firm, , and the linker is also integrated (as with TCC), so you don't need any other dependencies, and the generated code [is significantly faster than that of TCC](https://software.openbrace.org/projects/ecs/activity?from=2024-03-28). I also managed to make the relevant parts [build with GCC 4.8 and MSVC 2015](https://github.com/rochus-keller/EiGen). The current focus is on implementing an Eigen IR generator for Micron; this will likely require more supporting activities (like e.g. an EBNF for the IR and translation examples with Oberon and C).
+1. Create a new directory; we call it the root directory here
+1. Download https://github.com/rochus-keller/micron/archive/refs/heads/master.zip and unpack it to the root directory; rename the resulting directory to "Micron".
+1. Download https://github.com/rochus-keller/LeanQt/archive/refs/heads/master.zip and unpack it to the root directory; rename the resulting directory to "LeanQt".
+1. Download https://github.com/rochus-keller/BUSY/archive/refs/heads/master.zip and unpack it to the root directory; rename the resulting directory to "build".
+1. Open a command line in the "build" directory and type `cc *.c -O2 -lm -o lua` or `cl /O2 /MD /Fe:lua.exe *.c` depending on whether you are on a Unix or Windows machine; wait a few seconds until the Lua executable is built.
+1. Now type `./lua build.lua ../Micron` (or `lua build.lua ../Micron` on Windows); wait until the micc executable is built; you find it in the output subdirectory.
 
-#### Status on December 18, 2025
+Instead of the command line you can run the build using [LeanCreator](https://github.com/rochus-keller/LeanCreator) which uses multiple cores and thus builds faster.
 
-The second year of the project is coming to an end, and a lot has happened. The language has matured in every aspect. We now have matured language levels, which optimize language 
-features for different use cases, from low-level kernel and driver development up to high-level programming with support of a garbage collector, and which can be set per module. Significant expansions went into the type system and object-oriented capabilities (with IS operator and type case), interface types (similar to Go) and bound procedures for both records and objects, comprehensive support for generic programming through WHERE clauses and improved type constraints. There are now also bit fields (including packed variants), finally sections for resource cleanup (as a simple alternative for C++ destructors). Constructors became more flexible, allowing non-const and index components, and the @ operator now works with constructors. External interoperability improved with extern C declarations. Several features were removed for simplification: varargs support, symbol enums, and proc aliases.
-Several large-scale refactorings improved code organization. And IDE was added, adopted from Oberon and Luon projects, integrating comprehensive cross-reference support covering all symbol uses. A MIL interpreter was integrated into the IDE with redirected output to IDE log and export capabilities for low-level bytecode. Most MIC/MIL features from the specification are implemented. The MIL interpreter underwent dramatic performance optimizations, so that it now achieves about 60% of Lua 5.4 (which of course is still too slow). Four distinct code generation backends for the MIL intermediate language have been implemented. The CeeGen (C generator) was fully completed and works with all testcases and AWFY. Experimental work began on EiGen, LLVM 4 IR, and CIL, though these remained work-in-progress.
-A lot of time has been invested in the analysis of the Oberon System 3 and AOS/Bluebottle native implementations to assure that this code can be represented in Micron without the SYSTEM module tricks, loss of type checking, or inline assembler.
+It is still possible to build the compiler using Qt 5 with qmake; use MicMain.pro for this purpose and proceed as usual when building with Qt.
 
-#### Status on August 29, 2026
+The IDE can be built using MicIde.pro with qmake. BUSY IDE support is pending.
 
-A lot has happened in the third project year. I migrated many applications and systems of significant size to Micron to evaluate how the language performs and to make improvements. 
-[S9, Scheme 9 from Empty Space](./examples/S9) is a large and very well documented VM with a lot of example code; it proved that Micron can represent complex system code written in C, 
-but it required many fixes and quite a few language clarifications/extensions. After more than a year without activity (and pending show-stopper fixes), 
-I started to look for alternatives to Eigen. Extensive research and literature/code studies brought me back to the Oberon OP2 compiler which I had already refactored and re-targeted.
-The initial idea, which manifested to a certain extent, was to translate from MIL to OPIR in its C-transpiled incarnation. But the object format baked into the backend just didn't fit. 
-I came to the conclusion, that the ELF format was unavoidable, particularly for C integration. Implementing my own ELF reader/writer and even a binary x86 emitter turned out 
-to be a feasible alternative. The MLL already implemented for the interpreter was on the right level also for code generation; I essentially refactored an interpreter copy
-the OP2 backend so its load/store IR fit the MLL instructions; the generated code and calling convention thus became very similar (initially) to OP2. The same approach/architecture
-could also be applied to the ARMv7 OP2 backend, which had made progress in 2025. And I could even afford a DWARF generator and a DAP adapter which let me use GDB
-as a debugger for my IDE. Google AI Studio (Gemini 3) was very helpful, particularly for the boiler-plate stuff and to identify bugs, just by looking at the source files. An intensive
-debugging effort with the Are-we-fast-yet, S9 and the migrated Pascal P4 compiler helped to make the backends and generated code sufficiently stable over several months. 
-Adopting the ELF format turned out to be a benefit in many respects, e.g. to reuse GDB and GNU ld, and later the C standard library. Deriving the RV32 generator from the ARM's was
-straight forward, and stabilizing and initial tests with the ESP32-P4 took another three months full time work, which included migrating the Project Oberon System and an RV32
-based machine similar to Wirth's. A lot of work is still ahead, but the language/implementation have stabilized well, which has given me confidence that I'm on the right track.
+### Support
 
-#### Precompiled versions
+If you need support or would like to post issues or feature requests please use the Github issue list at https://github.com/rochus-keller/micron/issues or send an email to the author.
 
-Not available at this time.
+### License
 
-#### How to build
-
-Qt Creator is currently used for development. There are *.pro files which are compatible with qmake and Qt5.
+Micron is available under GPL 2 or 3. The runtime and oakwood libraries in the corresponding subfolders, in addition, are available under MPL or LGPL.

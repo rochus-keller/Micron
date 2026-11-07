@@ -241,6 +241,7 @@ Declaration* ModuleManager::loadMicSource(const Import& imp, const QString& file
 
     Scanner lex;
     lex.sourcePath = file;
+    lex.lex.setConfig(d_config);
     lex.lex.setStream(file);
 
     Mil::Emitter em(&imr, dbg ? Mil::Emitter::RowsOnly : Mil::Emitter::None);
@@ -249,6 +250,7 @@ Declaration* ModuleManager::loadMicSource(const Import& imp, const QString& file
     Mic::AstModel local;
     Mic::Parser2 p(&local, &lex, &em, this);
     p.setInterpreter(d_interp);
+    p.setConfig(&d_config);
     p.RunParser(imp);
 
     if( !p.errors.isEmpty() )

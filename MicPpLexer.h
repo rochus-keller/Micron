@@ -38,6 +38,8 @@ public:
     bool reset(const QByteArrayList& options);
     void setStream( QIODevice*, const QString& sourcePath, const QDateTime& ts = QDateTime() );
     bool setStream(const QString& sourcePath);
+    static bool parseConfig(const QByteArrayList& entries, QHash<QByteArray,QByteArray>& out, QString& err);
+    void setConfig(const QHash<QByteArray,QByteArray>& config) { d_config = config; }
 
     Token nextToken();
     Token peekToken(quint8 lookAhead = 1);
@@ -93,7 +95,7 @@ private:
     Token d_err;
     quint32 d_sloc; // number of lines of code without empty or comment lines
     QList<ppstatus> d_conditionStack;
-    QHash<const char*,bool> d_options;
+    QHash<QByteArray,QByteArray> d_config;
     QHash<QString,Ranges> d_mutes;
     RowCol d_startMute;
 };

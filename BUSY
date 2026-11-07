@@ -2,6 +2,8 @@
 # License: GPL
 # See https://github.com/rochus-keller/LeanQt and https://github.com/rochus-keller/BUSY/blob/main/README.md on how to use this file
 
+param HAVE_SCREEN = true
+
 if busy_version < "2023-01-15" {
     error("this version of BUSY is not compatible with this build")
 }
@@ -25,6 +27,9 @@ let config : Config {
     }
     if build_mode == `debug {
         .defines += "_DEBUG"
+    }
+    if HAVE_SCREEN {
+        .defines += "_MIC_HAVE_SCREEN_"
     }
 }
 
@@ -61,6 +66,7 @@ let mic : SourceSet {
         ./MicBuiltins.h
         ./MicAstLoader.cpp
         ./MicModuleManager.cpp
+        ./MicComptime.cpp
     ]
 }
 
@@ -103,6 +109,32 @@ let mil : SourceSet {
         ./MilVmOakwood.cpp
         ./MilEmitter.cpp
         ./MilRenderer.cpp
+    ]
+    if HAVE_SCREEN {
+        if target_os == `linux {
+            .sources += ./oakwood/ScreenXcb.c
+        } else {
+            .sources += ./oakwood/ScreenSdl.c
+        }
+    }
+}
+
+let xcb : SourceSet {
+    .configs += config;
+    .include_dirs += ./thirdparty/xcb
+    .defines += "HAVE_CONFIG_H"
+    .sources += [
+        ./thirdparty/xcb/xcb_auth.c
+        ./thirdparty/xcb/xcb_conn.c
+        ./thirdparty/xcb/xcb_ext.c
+        ./thirdparty/xcb/xcb_in.c
+        ./thirdparty/xcb/xcb_list.c
+        ./thirdparty/xcb/xcb_out.c
+        ./thirdparty/xcb/xcb_util.c
+        ./thirdparty/xcb/xcb_xid.c
+        ./thirdparty/xcb/xproto.c
+        ./thirdparty/xcb/bigreq.c
+        ./thirdparty/xcb/xc_misc.c
     ]
 }
 
@@ -148,6 +180,15 @@ let micc ! : Executable {
         ./MicProject2.cpp
     ]
     .deps += [ utils mic mil rcc qtmini.core_sources ]
+
+    if HAVE_SCREEN {
+        if target_os == `linux {
+            .deps += xcb
+        } else {
+            .lib_names += "SDL2"
+        }
+    }
+
     .configs += config
 }
 

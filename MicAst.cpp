@@ -30,7 +30,7 @@ const char* Builtin::name[] = {
     "MIN", "ODD", "ORD", "SIZE", "STRLEN", "VAL", "SIGC", "USIG", "PTROFF",
     "OBDIV", "OBMOD", "SIGL",
     "ASSERT", "DEC", "DISPOSE", "EXCL", "HALT", "INC",
-    "INCL", "NEW", "PCALL", "PRINT", "PRINTLN", "RAISE", "SETENV",
+    "INCL", "NEW", "PCALL", "PRINT", "PRINTLN", "RAISE",
     "CLI", "GETREG", "NEWGC", "NEWINIT", "NOP", "PUTREG", "STI",
     "COPY",
 };
@@ -176,7 +176,6 @@ AstModel::AstModel():helper(0),helperId(0)
         addBuiltin(Builtin::PRINT);
         addBuiltin(Builtin::PRINTLN);
         addBuiltin(Builtin::RAISE);
-        addBuiltin(Builtin::SETENV);
         addBuiltin(Builtin::CLI);
         addBuiltin(Builtin::GETREG);
         addBuiltin(Builtin::NEWGC);
@@ -1101,13 +1100,26 @@ bool Expression::isConst() const
             switch( lhs->val.toInt() )
             {
             case Builtin::LEN:
-                return true;
+                if( args.size() != 1 || args.first()->getType() == 0 )
+                    return false;
+		else
+                {
+                    Type* type = args.first()->getType();
+                    if( type->kind == Type::Pointer )
+                        type = type->getType();
+                    return type && type->kind == Type::Array && type->len > 0;
+                }
             case Builtin::MIN:
             case Builtin::MAX:
                 return args.size() == 1 || allConst(args);
             case Builtin::GETENV:
-            case Builtin::DEFAULT:
                 return true;
+            case Builtin::DEFAULT:
+                if( args.size() != 1 || args.first()->getType() == 0 )
+                    return false;
+                return (args.first()->getType()->kind >= Type::BOOL &&
+                        args.first()->getType()->kind < Type::MaxBasicType) ||
+                       args.first()->getType()->kind == Type::ConstEnum;
             case Builtin::SIZE:
                 {
                     // the size of a structured type is only known to the linker
@@ -1118,7 +1130,13 @@ bool Expression::isConst() const
                                 args.first()->getType()->kind < Type::MaxBasicType;
                 }
             case Builtin::CAST:
-                return args.size() == 2 && args[1]->isConst();
+                return args.size() == 2 && args[0]->getType() && args[1]->getType() &&
+                       args[0]->getType()->kind != Type::Pointer &&
+                       args[1]->getType()->kind != Type::Pointer && args[1]->isConst();
+            case Builtin::ORD:
+                return args.size() == 1 && args.first()->getType() &&
+                       args.first()->getType()->kind != Type::Pointer &&
+                       args.first()->getType()->kind != Type::Proc && allConst(args);
             default:
                 return allConst(args);
             }

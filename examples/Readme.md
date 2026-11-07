@@ -12,13 +12,9 @@ More relevant examples can be found in the [Are-we-fast-yet repository](https://
 - the procedural implementation was directly migrated from C and demonstrates a plain procedural programming style
 - the hybrid implementation uses a programming style with type-bound procedures and delegates, still on level 3
 - the interface implementation, based on hybrid, demonstrates the use of Micron interfaces on level 3
+- the object implementation was directly migrated from the C++ version and demonstrates the use of the Micron OO features on level 4
 
-The MicronSystem is a 
-[faithful migration of the Project Oberon System to Micron natively running on RISC-V](https://github.com/rochus-keller/OberonSystem/tree/micron-rv32),
-copied here for convenience. We call it Micron System because, in contrast to the OberonSystem example, the code follows the Micron 
-instead of the Oberon style and makes use of many Micron language features. The MicronSystem is also discussed in the forthcoming Micron book. 
-It runs on the 
-[virtual machine of the Oberon 90 version of the Project Oberon System](https://github.com/rochus-keller/OberonSystem/tree/op2-rv32/vm), 
-which is a reconstruction of the machine Wirth described in his 
-[Project Oberon Book](http://www.inf.ethz.ch/personal/wirth/ProjectOberon/PO.Computer.pdf),
-but based on RISC-V (instead of Wirth's RISC5 processor). 
+Meanwhile there is also a Micron migration of the Oberon System 3 which runs on an extended version
+of the rv32vm with color support. It can be found in the [MicronSystem3 repository](https://github.com/rochus-keller/micronsystem3/).
+See in the rv32 subdirectory for the build.sh and run.sh scripts. Again micc is assumed in the bin directory,
+and the rootfs directory has to be populated and vm has to be built before the system can be built and run.

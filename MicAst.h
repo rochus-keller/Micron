@@ -38,7 +38,7 @@ namespace Mic
             OBDIV, OBMOD, SIGL,
             // procedures
             ASSERT, DEC, DISPOSE, EXCL, HALT, INC,
-            INCL, NEW, PCALL, PRINT, PRINTLN, RAISE, SETENV,
+            INCL, NEW, PCALL, PRINT, PRINTLN, RAISE,
             CLI, GETREG, NEWGC, NEWINIT, NOP, PUTREG, STI,
             COPY,
             // end

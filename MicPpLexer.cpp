@@ -38,9 +38,39 @@ bool PpLexer::reset(const QByteArrayList& options)
 {
     d_buffer.clear();
     d_sloc = 0;
-    d_options.clear();
-    foreach( const QByteArray& o, options )
-        d_options[ Token::getSymbol(o).constData() ] = true;
+    QHash<QByteArray,QByteArray> config;
+    QString err;
+    if( !parseConfig(options, config, err) )
+        return false;
+    setConfig(config);
+    return true;
+}
+
+bool PpLexer::parseConfig(const QByteArrayList& entries, QHash<QByteArray,QByteArray>& out, QString& err)
+{
+    out.clear();
+    err.clear();
+    foreach( const QByteArray& entry, entries )
+    {
+        const int eq = entry.indexOf('=');
+        const QByteArray name = eq < 0 ? entry : entry.left(eq);
+        if( name.isEmpty() ||
+                !( (name[0] >= 'A' && name[0] <= 'Z') ||
+                   (name[0] >= 'a' && name[0] <= 'z') || name[0] == '_' ) )
+        {
+            err = "invalid configuration name";
+            return false;
+        }
+        for( int i = 1; i < name.size(); ++i )
+            if( !( (name[i] >= 'A' && name[i] <= 'Z') ||
+                   (name[i] >= 'a' && name[i] <= 'z') ||
+                   (name[i] >= '0' && name[i] <= '9') || name[i] == '_' ) )
+            {
+                err = "invalid configuration name";
+                return false;
+            }
+        out.insert(name, eq < 0 ? QByteArray("TRUE") : entry.mid(eq+1));
+    }
     return true;
 }
 
@@ -92,12 +122,11 @@ void PpLexer::ppcmd()
             switch( t.d_type )
             {
             case Tok_Plus:
-                d_options[name.d_val.constData()] = true;
-                t = d_lex.nextToken();
-                break;
             case Tok_Minus:
-                d_options[name.d_val.constData()] = false;
-                t = d_lex.nextToken();
+                error(name, "configuration variables can only be set by compiler options");
+                while( t.d_type != Tok_StarGt && t.d_type != Tok_Eof )
+                    t = d_lex.nextToken();
+                throw "";
                 break;
             default:
                 raise(name, "expecting '+' or '-' after identifier" );
@@ -200,7 +229,18 @@ bool PpLexer::ppfactor()
     switch( t.d_type )
     {
     case Tok_ident:
-        return d_options.value(t.d_val.constData());
+        if( !d_config.contains(t.d_val) )
+            return false;
+	else
+        {
+            const QByteArray value = d_config.value(t.d_val);
+            if( value.compare("TRUE", Qt::CaseInsensitive) == 0 || value == "1" )
+                return true;
+            if( value.compare("FALSE", Qt::CaseInsensitive) == 0 || value == "0" )
+                return false;
+            error(t, QByteArray("configuration variable ") + t.d_val + " is not boolean");
+            return false;
+        }
     case Tok_Lpar:
         {
             const bool res = ppexpr();
@@ -217,6 +257,8 @@ bool PpLexer::ppfactor()
 
 Token PpLexer::nextTokenImp()
 {
+    d_err.d_type = Tok_Eof;
+    d_err.d_val.clear();
     Token t = d_lex.peekToken();
     while( t.d_type == Tok_LtStar )
     {
@@ -229,6 +271,8 @@ Token PpLexer::nextTokenImp()
                 try{ ppcmd(); }
                 catch(...){ return d_err; }
             }
+            if( d_err.d_type == Tok_Invalid )
+                return d_err;
 
             if( t.d_type == Tok_Eof )
                 return error( start, "non-terminated source code directive" );

@@ -1,0 +1,5 @@
+module ConfigHelper
+
+const Shared* = GETENV(int32, "SIZE")
+
+end ConfigHelper

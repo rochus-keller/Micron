@@ -1,8 +1,8 @@
+// run with -D B
 module CompCon1
 
 begin
   println("start CompCon1")
-  <* B+ *>
   
   <* if A then *>
   println("A")

@@ -495,6 +495,13 @@ quint32 Project2::getSloc() const
 bool Project2::parse()
 {
     clear(false);
+    QString configError;
+    if( !PpLexer::parseConfig(d_options, d_config, configError) )
+    {
+        errors << Error(configError, RowCol(), d_filePath);
+        return false;
+    }
+    d_modMan.setConfig(d_config);
 
     if( useBuiltInOakwood() )
     {
@@ -821,6 +828,7 @@ Declaration *Project2::loadModule(const Import &imp)
     d_depth++;
     Lex2 lex;
     lex.sourcePath = file->d_filePath; // to keep file name if invalid
+    lex.lex.setConfig(d_config);
     QBuffer buf; // keep buffer here so it remains valid for the parse if needed
     if( !file->d_cache.isEmpty() )
     {
@@ -833,6 +841,7 @@ Declaration *Project2::loadModule(const Import &imp)
     Mil::Emitter e(&imr, d_dbg ? Mil::Emitter::RowsOnly : Mil::Emitter::None);
     Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
     p.setInterpreter(d_modMan.getInterpreter());
+    p.setConfig(&d_config);
     p.RunParser(fixedImp);
     if( p.getModule() )
         qDebug() << "*** parsing" << p.getModule()->name << "depth" << d_depth << (p.getModule()->generic?"generic":""); // TEST
@@ -1047,10 +1056,12 @@ void Project2::parseLib(const QString & name)
     Lex2 lex;
     QString path = QString(":/oakwood/%1.mic").arg(name);
     lex.sourcePath = path; // to keep file name if invalid
+    lex.lex.setConfig(d_config);
     lex.lex.setStream(path);
     Mil::Emitter e(&imr, Mil::Emitter::RowsAndCols);
     Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
     p.setInterpreter(d_modMan.getInterpreter());
+    p.setConfig(&d_config);
     p.RunParser();
     ModuleSlot ms;
     ms.decl = p.takeModule();
@@ -1161,7 +1172,8 @@ bool Project2::loadFrom(const QString& filePath)
     d_main.second = in.value("MainProc").toByteArray();
     d_workingDir = in.value("WorkingDir").toString();
     d_buildDir = in.value("BuildDir").toString();
-    d_options = in.value("Options").toByteArray().split(' ');
+    const QByteArray options = in.value("Options").toByteArray();
+    d_options = options.isEmpty() ? QByteArrayList() : options.split(' ');
     d_args = in.value("Arguments").toByteArray();
 
     int count = in.beginReadArray("Modules");

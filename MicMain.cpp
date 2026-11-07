@@ -137,6 +137,8 @@ struct BuildOpts
     QStringList libDirs;
     QStringList linkLibs;
     QStringList linkObjs;
+    QByteArrayList configEntries;
+    QHash<QByteArray,QByteArray> config;
     BuildOpts():mode(Link),dbg(false),dumpMil(false),dumpMll(false),dumpMrl(false),
         cAbi(false),esp32(false),hasFloat(true),hasHwDiv(true),base(-1){}
 };
@@ -324,6 +326,7 @@ static int buildSingle(const QFileInfo& info, const QStringList& searchPaths, Bu
         locator.searchPath.append(QDir(searchPaths[i]));
 
     Mic::ModuleManager mm(&locator, opts.dbg);
+    mm.setConfig(opts.config);
     mm.loadRuntime();
 
     Mic::Import imp;
@@ -364,6 +367,12 @@ static int buildProject(const QString& projFile, const QStringList& searchPaths,
     {
         qCritical() << "cannot load project file" << projFile;
         return UsageError;
+    }
+    if( !opts.configEntries.isEmpty() )
+    {
+        QByteArrayList options = prj.getOptions();
+        options += opts.configEntries;
+        prj.setOptions(options);
     }
 
     prj.parse();
@@ -439,6 +448,8 @@ int main(int argc, char *argv[])
     // input
     QCommandLineOption sp("I", "add a path where to look for modules (.mic, .mil, .mob)", "path");
     cp.addOption(sp);
+    QCommandLineOption configOpt("D", "set configuration variable name (to TRUE) or to value", "name[=value]");
+    cp.addOption(configOpt);
     QCommandLineOption rtOpt("runtime", "MIL file implementing MIC$, for freestanding targets", "file");
     cp.addOption(rtOpt);
     QCommandLineOption libs("L", "add a search directory for archives given by -l", "path");
@@ -499,6 +510,14 @@ int main(int argc, char *argv[])
 
     BuildOpts o;
     o.dbg = cp.isSet(dbg);
+    foreach( const QString& entry, cp.values(configOpt) )
+        o.configEntries.append(entry.toUtf8());
+    QString configError;
+    if( !Mic::PpLexer::parseConfig(o.configEntries, o.config, configError) )
+    {
+        qCritical().noquote() << configError;
+        return UsageError;
+    }
 
     // exactly one mode
     const int modes = (cp.isSet(compileOnly)?1:0) + (cp.isSet(checkOnly)?1:0) + (cp.isSet(run)?1:0);

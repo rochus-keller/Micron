@@ -47,6 +47,7 @@ namespace Mic {
         Declaration* takeModule(); // get module declaration and take ownership (otherwise deleted by parser)
         const Declaration* getModule() const { return thisMod; }
         void setInterpreter(Interpreter* runner);
+        void setConfig(const QHash<QByteArray,QByteArray>* config);
         struct Error {
 		    QString msg;
 		    int row, col;

@@ -52,6 +52,7 @@ protected:
     void doCast(const RowCol& pos);
     void doVal(const RowCol& pos);
     void doDefault();
+    void doGetenv(int nArgs, const RowCol& pos);
     void doAbs();
     void doFlt();
     void doFloor();

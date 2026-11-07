@@ -38,13 +38,14 @@ public:
 class Evaluator
 {
 public:
-    Evaluator(AstModel* m, Mil::Emitter* out):mdl(m),out(out),invarRunner(0),langLevel(3) {}
+    Evaluator(AstModel* m, Mil::Emitter* out):mdl(m),out(out),invarRunner(0),config(0),langLevel(3) {}
 
     void pushCurProc(Declaration*d) { curProcs.push_back(d); }
     void popCurProc() { curProcs.pop_back(); }
     Declaration* getCurProc() const { return curProcs.isEmpty() ? 0 : curProcs.back(); }
     bool isParsingProc(Declaration* d) const { return curProcs.contains(d); }
     void setInterpreter(Interpreter* runner) { invarRunner = runner; }
+    void setConfig(const QHash<QByteArray,QByteArray>* values) { config = values; }
     bool checkInlineRecursion(Declaration* proc);
 
     bool isStackEmpty() const { return stack.empty(); }
@@ -166,6 +167,7 @@ private:
     AstModel* mdl;
     Mil::Emitter* out;
     Interpreter* invarRunner;
+    const QHash<QByteArray,QByteArray>* config;
     QString err;
     RowCol errPos;
     QList<Value> stack;

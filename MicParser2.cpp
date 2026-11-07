@@ -21,6 +21,30 @@
 #include <QtDebug>
 using namespace Mic;
 
+static bool isInvarValueType(const Type* type)
+{
+    if( !type )
+        return false;
+    if( type->kind == Type::Array )
+        return type->len > 0 && isInvarValueType(type->getType());
+    return type->kind == Type::BOOL || type->kind == Type::CHAR ||
+            (type->kind >= Type::UINT8 && type->kind <= Type::INT64) ||
+            type->kind == Type::FLT32 || type->kind == Type::FLT64 ||
+            type->kind == Type::SET || type->kind == Type::ConstEnum;
+}
+
+static bool isInvarParameterType(const Declaration* param)
+{
+    Type* type = param ? param->getType() : 0;
+    if( isInvarValueType(type) )
+        return true;
+    if( !param || param->visi != Node::ReadOnly || !type || type->kind != Type::Pointer )
+        return false;
+    type = type->getType();
+    return type && type->kind == Type::Array && type->len == 0 &&
+            type->getType() && type->getType()->kind == Type::CHAR;
+}
+
 static inline void dummy() {}
 
 static inline bool FIRST_Micron(int tt) {
@@ -660,6 +684,11 @@ void Parser2::setInterpreter(Interpreter* runner)
     ev->setInterpreter(runner);
 }
 
+void Parser2::setConfig(const QHash<QByteArray,QByteArray>* config)
+{
+    ev->setConfig(config);
+}
+
 void Parser2::RunParser(const Import &import) {
 	errors.clear();
     deferred.clear();
@@ -1145,6 +1174,9 @@ void Parser2::ForwardDeclaration()
     {
         expect(Tok_INVAR, true, "ForwardDeclaration");
         procDecl->invar = true;
+        foreach( Declaration* param, procDecl->getParams(true) )
+            if( !isInvarParameterType(param) )
+                error(param->pos, "type not allowed in INVAR procedures");
     }
     procDecl->kind = Declaration::ForwardDecl;
     mdl->closeScope();
@@ -1332,14 +1364,19 @@ void Parser2::ConstDeclaration() {
 	expect(Tok_Eq, false, "ConstDeclaration");
     Declaration* d = addDecl(id, Declaration::ConstDecl);
     Token t = la;
+    const int errorsBefore = errors.size();
     Expression* e = ConstExpression(0);
-    if( e && !ev->evaluate(e) )
-        errorEv();
-    if( e && e->getType() && !e->getType()->isSimple() &&
+    const bool evaluated = e && errors.size() == errorsBefore && ev->evaluate(e);
+    if( e && !evaluated )
+    {
+        if( errors.size() == errorsBefore )
+            errorEv();
+    }
+    if( evaluated && e->getType() && !e->getType()->isSimple() &&
             e->getType()->kind != Type::StrLit && e->getType()->kind != Type::ConstEnum )
         error(e->pos, "constant declarations only support basic types and string literals");
     Value v;
-    if( e )
+    if( evaluated )
         v = ev->pop();
     if( v.type == 0 && e )
         v.type = e->getType();
@@ -1904,6 +1941,9 @@ void Parser2::VariableDeclaration() {
             continue;
         d->outer = outer;
         d->setType(t);
+        if( d->kind == Declaration::LocalDecl && outer->kind == Declaration::Procedure &&
+                outer->invar && !isInvarValueType(t) )
+            error(d->pos, "type not allowed in INVAR procedures");
         if( d->kind == Declaration::VarDecl )
             out->addVariable(ev->toQuali(d->getType()),d->name, d->pos);
         else
@@ -3343,6 +3383,10 @@ Expression* Parser2::factor(Type* hint, bool lvalue) {
         if( tmp == 0 )
             return 0; // reported elsewhere
 
+        Declaration* proc = ev->getCurProc();
+        if( proc && proc->invar )
+            error(tok, "@ cannot be used in INVAR procedures");
+
         if( tmp->kind == Expression::Constructor )
             tmp->anonymous = true; // this also represents an anonymous local variable
             // TODO: who allocates and initializes the local? Here we would just deref a desig to it
@@ -4156,6 +4200,10 @@ void Parser2::ProcedureDeclaration() {
             }
             if( enclosing && enclosing->invar && !procDecl->invar )
                 error(procDecl->pos, "nested procedures of an INVAR procedure must be INVAR");
+            if( procDecl->invar && !(forward && forward->invar) )
+                foreach( Declaration* param, procDecl->getParams(true) )
+                    if( !isInvarParameterType(param) )
+                        error(param->pos, "type not allowed in INVAR procedures");
             if( procDecl->invar && procDecl->getType() && procDecl->getType()->kind != Type::NoType &&
                     procDecl->getType()->kind >= Type::MaxBasicType &&
                     procDecl->getType()->kind != Type::ConstEnum )

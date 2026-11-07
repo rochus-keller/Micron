@@ -17,6 +17,8 @@
 #include "MicBuiltins.h"
 #include "MicEvaluator.h"
 #include "MilEmitter.h"
+#include <limits>
+#include <cmath>
 #include "MicToken.h"
 #include <QtDebug>
 using namespace Mic;
@@ -64,6 +66,160 @@ static void checkBitArith(quint8 builtin, ExpList& args, Type** ret, AstModel* m
         args[0] = Evaluator::createAutoConv(args[0], *ret);
     if( *ret != rhs )
         args[1] = Evaluator::createAutoConv(args[1], *ret);
+}
+
+static bool isGetenvType(Type* type)
+{
+    return type && (type->isInteger() || type->isReal() || type->kind == Type::BOOL ||
+                    type->kind == Type::CHAR || type->kind == Type::ConstEnum ||
+                    (type->kind == Type::Array && type->len > 0 &&
+                     type->getType() && type->getType()->kind == Type::CHAR));
+}
+
+static bool isGetenvDefaultCompatible(Type* type, Type* valueType)
+{
+    if( !type || !valueType )
+        return false;
+    if( type->isInteger() )
+        return valueType->isInteger();
+    if( type->isReal() && valueType->isNumber() )
+        return true;
+    if( type->kind == Type::ConstEnum )
+        return type == valueType;
+    if( type->kind == Type::BOOL || type->kind == Type::CHAR )
+        return type == valueType;
+    if( type->kind == Type::Array && type->len > 0 && type->getType() &&
+            type->getType()->kind == Type::CHAR && valueType->kind == Type::StrLit )
+        return true;
+    return type == valueType;
+}
+
+static bool parseConfigInteger(const QByteArray& input, Type* type, QVariant& result)
+{
+    QByteArray text = input;
+    bool negative = false;
+    if( text.startsWith('-') || text.startsWith('+') )
+    {
+        negative = text[0] == '-';
+        text.remove(0,1);
+    }
+    if( text.isEmpty() || (negative && type->isUInt()) )
+        return false;
+
+    int base = 10;
+    if( text.startsWith("0x") || text.startsWith("0X") )
+    {
+        base = 16;
+        text.remove(0,2);
+    }else if( text.endsWith('h') || text.endsWith('H') )
+    {
+        base = 16;
+        text.chop(1);
+    }
+    if( text.isEmpty() )
+        return false;
+    for( int i = 0; i < text.size(); ++i )
+        if( !((text[i] >= '0' && text[i] <= '9') ||
+              (base == 16 && ((text[i] >= 'a' && text[i] <= 'f') ||
+                              (text[i] >= 'A' && text[i] <= 'F')))) )
+            return false;
+
+    bool ok = false;
+    const QString digits = QString::fromLatin1((negative ? "-" : "") + text);
+    if( type->isUInt() )
+    {
+        const quint64 value = QString::fromLatin1(text).toULongLong(&ok, base);
+        if( !ok )
+            return false;
+        quint64 max = std::numeric_limits<quint64>::max();
+        if( type->kind == Type::UINT8 ) max = std::numeric_limits<quint8>::max();
+        else if( type->kind == Type::UINT16 ) max = std::numeric_limits<quint16>::max();
+        else if( type->kind == Type::UINT32 ) max = std::numeric_limits<quint32>::max();
+        if( value > max )
+            return false;
+        result = QVariant::fromValue(value);
+    }else
+    {
+        const qint64 value = digits.toLongLong(&ok, base);
+        if( !ok )
+            return false;
+        qint64 min = std::numeric_limits<qint64>::min();
+        qint64 max = std::numeric_limits<qint64>::max();
+        if( type->kind == Type::INT8 ) { min = std::numeric_limits<qint8>::min(); max = std::numeric_limits<qint8>::max(); }
+        else if( type->kind == Type::INT16 ) { min = std::numeric_limits<qint16>::min(); max = std::numeric_limits<qint16>::max(); }
+        else if( type->kind == Type::INT32 ) { min = std::numeric_limits<qint32>::min(); max = std::numeric_limits<qint32>::max(); }
+        if( value < min || value > max )
+            return false;
+        result = QVariant::fromValue(value);
+    }
+    return true;
+}
+
+static bool convertGetenvDefault(const Value& value, Type* type, Value& result)
+{
+    result = value;
+    result.mode = Value::Const;
+    if( type->isInteger() )
+    {
+        bool ok = false;
+        if( type->isUInt() )
+        {
+            const quint64 n = value.val.toULongLong(&ok);
+            if( !ok )
+                return false;
+            quint64 max = std::numeric_limits<quint64>::max();
+            if( type->kind == Type::UINT8 ) max = std::numeric_limits<quint8>::max();
+            else if( type->kind == Type::UINT16 ) max = std::numeric_limits<quint16>::max();
+            else if( type->kind == Type::UINT32 ) max = std::numeric_limits<quint32>::max();
+            if( n > max )
+                return false;
+            result.val = QVariant::fromValue(n);
+        }else
+        {
+            const qint64 n = value.val.toLongLong(&ok);
+            if( !ok )
+                return false;
+            qint64 min = std::numeric_limits<qint64>::min();
+            qint64 max = std::numeric_limits<qint64>::max();
+            if( type->kind == Type::INT8 ) { min = std::numeric_limits<qint8>::min(); max = std::numeric_limits<qint8>::max(); }
+            else if( type->kind == Type::INT16 ) { min = std::numeric_limits<qint16>::min(); max = std::numeric_limits<qint16>::max(); }
+            else if( type->kind == Type::INT32 ) { min = std::numeric_limits<qint32>::min(); max = std::numeric_limits<qint32>::max(); }
+            if( n < min || n > max )
+                return false;
+            result.val = QVariant::fromValue(n);
+        }
+    }else if( type->isReal() )
+    {
+        bool ok = false;
+        double n = value.val.toDouble(&ok);
+        if( !ok )
+            return false;
+        if( type->kind == Type::FLT32 )
+        {
+            if( std::fabs(n) > std::numeric_limits<float>::max() )
+                return false;
+            n = static_cast<float>(n);
+        }
+        result.val = n;
+    }else if( type->kind == Type::ConstEnum )
+    {
+        if( value.type != type )
+            return false;
+    }else if( type->kind == Type::BOOL || type->kind == Type::CHAR )
+    {
+        if( value.type != type )
+            return false;
+    }else if( type->kind == Type::Array && type->len > 0 &&
+              type->getType() && type->getType()->kind == Type::CHAR )
+    {
+        if( value.type->kind != Type::StrLit ||
+                value.val.toByteArray().size() + 1 > static_cast<int>(type->len) )
+            return false;
+        result.type = value.type;
+        return true;
+    }
+    result.type = type;
+    return true;
 }
 
 static void checkBitShift(quint8 builtin, ExpList& args, Type** ret, AstModel* mdl, Evaluator* ev)
@@ -234,8 +390,22 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
             *ret = ev->mdl->getType(Type::FLT32);
         break;
     case Builtin::GETENV:
-        expectingNArgs(args,2);
-        // TODO
+        expectingNMArgs(args,2,3);
+        if( args[0]->kind != Expression::TypeDecl || !args[0]->getType() )
+            throw "expecting a type as the first argument";
+        if( !isGetenvType(args[0]->getType()) )
+            throw "GETENV not supported for this type";
+        if( args[1]->getType() == 0 || args[1]->getType()->kind != Type::StrLit ||
+                !args[1]->isConst() )
+            throw "expecting a constant string as the second argument";
+        if( args.size() == 3 &&
+                (!args[2]->isConst() ||
+                 !isGetenvDefaultCompatible(args[0]->getType(),args[2]->getType())) )
+            throw "GETENV default must be a constant assignment-compatible value";
+        *ret = args[0]->getType();
+        if( (*ret)->kind == Type::Array && (*ret)->len > 0 &&
+                (*ret)->getType() && (*ret)->getType()->kind == Type::CHAR )
+            *ret = mdl->getType(Type::StrLit);
         break;
     case Builtin::LEN:
         expectingNArgs(args,1);
@@ -497,9 +667,6 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
                 throw "RAISE expects a pointer";
         }
         break;
-    case Builtin::SETENV:
-        expectingNArgs(args,2);
-        break;
     case Builtin::CLI:
         expectingNArgs(args,0);
         if( ev->langLevel > 1 )
@@ -683,6 +850,116 @@ void Builtins::doDefault()
         Q_ASSERT(false);
 
     ev->stack.push_back(v);
+}
+
+void Builtins::doGetenv(int nArgs, const RowCol& pos)
+{
+    Value defaultValue;
+    if( nArgs == 3 )
+        defaultValue = ev->stack.takeLast();
+    Value nameValue = ev->stack.takeLast();
+    Value typeValue = ev->stack.takeLast();
+    Type* type = typeValue.type;
+    QByteArray name = nameValue.val.toByteArray();
+    if( name.endsWith('\0') )
+        name.chop(1);
+    const bool found = ev->config && ev->config->contains(name);
+    const QByteArray text = found ? ev->config->value(name) : QByteArray();
+    Value convertedDefault;
+    if( nArgs == 3 && !convertGetenvDefault(defaultValue,type,convertedDefault) )
+    {
+        ev->error("GETENV default must be a constant assignment-compatible value",pos);
+        return;
+    }
+
+    if( !found )
+    {
+        if( nArgs == 3 )
+        {
+            ev->stack.push_back(convertedDefault);
+        }else
+        {
+            ev->stack.push_back(typeValue);
+            doDefault();
+            if( type->kind == Type::Array && type->len > 0 &&
+                    type->getType() && type->getType()->kind == Type::CHAR )
+            {
+                Value result = ev->stack.takeLast();
+                result.type = ev->mdl->getType(Type::StrLit);
+                result.val = QByteArray();
+                ev->stack.push_back(result);
+            }
+        }
+        return;
+    }
+
+    Value result;
+    result.mode = Value::Const;
+    result.type = type;
+    QVariant parsed;
+    bool valid = true;
+    if( type->isInteger() )
+        valid = parseConfigInteger(text,type,parsed);
+    else if( type->isReal() )
+    {
+        bool ok = false;
+        const double number = text.toDouble(&ok);
+        valid = ok && std::isfinite(number);
+        if( type->kind == Type::FLT32 )
+        {
+            valid = valid && std::fabs(number) <= std::numeric_limits<float>::max();
+            parsed = static_cast<float>(number);
+        }else
+            parsed = number;
+    }else if( type->kind == Type::BOOL )
+    {
+        if( text.compare("TRUE",Qt::CaseInsensitive) == 0 || text == "1" )
+            parsed = true;
+        else if( text.compare("FALSE",Qt::CaseInsensitive) == 0 || text == "0" )
+            parsed = false;
+        else
+            valid = false;
+    }else if( type->kind == Type::CHAR )
+    {
+        valid = text.size() == 1;
+        if( valid )
+            parsed = static_cast<quint8>(text[0]);
+    }else if( type->kind == Type::ConstEnum )
+    {
+        valid = false;
+        foreach( Declaration* member, type->subs )
+            if( member && member->name == text )
+            {
+                parsed = member->data;
+                valid = true;
+                break;
+            }
+    }else if( type->kind == Type::Array && type->len > 0 && type->getType() && type->getType()->kind == Type::CHAR )
+    {
+        valid = text.size() + 1 <= static_cast<int>(type->len);
+        if( valid )
+        {
+            result.type = ev->mdl->getType(Type::StrLit);
+            parsed = text;
+        }
+    }else
+    {
+        ev->error("GETENV not supported for this type",pos);
+        return;
+    }
+
+    if( !valid )
+    {
+        const QString typeName = type->kind >= Type::MaxBasicType && type->decl ?
+                    QString::fromUtf8(type->decl->name) :
+                    QString::fromLatin1(type->getName());
+        ev->error(QString("configuration value '%1' (\"%2\") is not a valid %3")
+                  .arg(QString::fromUtf8(name),QString::fromUtf8(text),
+                       typeName),pos);
+        return;
+    }
+    result.val = parsed;
+    ev->stack.push_back(result);
 }
 
 void Builtins::doCast(const RowCol &pos)
@@ -1697,6 +1974,11 @@ void Builtins::callBuiltin(quint8 builtin, int nArgs, const RowCol &pos)
     case Builtin::DEFAULT:
         checkNumOfActuals(nArgs, 1);
         doDefault();
+        handleStack = false;
+        break;
+    case Builtin::GETENV:
+        checkNumOfActuals(nArgs, 2, 3);
+        doGetenv(nArgs,pos);
         handleStack = false;
         break;
     case Builtin::VAL:

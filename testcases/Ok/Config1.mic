@@ -1,0 +1,103 @@
+module Config1 [level=3]
+
+import ConfigHelper
+
+type
+  Shade = (Red, Green, Blue)
+  Name = array 16 of char
+  Sized = array GETENV(uint8, "SIZE") of char
+
+const
+  SizeValue = GETENV(int32, "SIZE")
+  Negative = GETENV(int32, "NEG")
+  HexValue = GETENV(int32, "HEX")
+  HexSuffix = GETENV(uint16, "HEX2")
+  RealValue = GETENV(flt32, "F")
+  LongRealValue = GETENV(flt64, "LONG")
+  FlagValue = GETENV(boolean, "FLAG")
+  OffValue = GETENV(boolean, "OFF")
+  Character = GETENV(char, "CH")
+  Color = GETENV(Shade, "SHADE")
+  NameValue = GETENV(Name, "NAME")
+  MissingWithDefault = GETENV(int32, "MISSING", 23)
+  MissingWithoutDefault = GETENV(int32, "MISSING")
+
+procedure Configured(): int32 INVAR
+begin
+  return GETENV(int32, "SIZE")
+end Configured
+
+const
+  InvarValue = Configured()
+
+var
+  name: Name
+  sized: Sized
+
+begin
+  assert(SizeValue = 16)
+  assert(Negative = -5)
+  assert(HexValue = 31)
+  assert(HexSuffix = 255)
+  assert(RealValue = 2.5)
+  assert(LongRealValue = 1.25)
+  assert(FlagValue)
+  assert(~OffValue)
+  assert(ORD(Character) = ORD('x'))
+  assert(Color = Blue)
+  assert(MissingWithDefault = 23)
+  assert(MissingWithoutDefault = 0)
+  assert(InvarValue = SizeValue)
+  assert(ConfigHelper.Shared = SizeValue)
+  name := GETENV(Name, "NAME")
+  sized := GETENV(Sized, "NAME")
+  println(SizeValue)
+  println(Negative)
+  println(HexValue)
+  println(HexSuffix)
+  println(RealValue)
+  println(LongRealValue)
+  println(FlagValue)
+  println(OffValue)
+  println(Character)
+  println(NameValue)
+  println(LEN(sized))
+  println(MissingWithDefault)
+  println(MissingWithoutDefault)
+  println(InvarValue)
+  println(Configured())
+  println(ConfigHelper.Shared)
+  <* IF FLAG THEN *>
+  println("FLAG")
+  <* ELSE *>
+  println("NO FLAG")
+  <* END *>
+  <* IF OFF THEN *>
+  println("OFF")
+  <* ELSE *>
+  println("NO OFF")
+  <* END *>
+end Config1
+
+(* output:
+
+16
+-5
+31
+255
+2.500000
+1.250000
+true
+false
+x
+hello
+16
+23
+0
+16
+16
+16
+FLAG
+NO OFF
+
+*)
