@@ -1,0 +1,16 @@
+MODULE Sorter;
+
+PROCEDURE Sort*(a: ^[]INTEGER; n: UINT32);
+    VAR i, j, t: INTEGER;
+BEGIN
+    FOR i := 1 TO n-1 DO
+        t := a[i]; j := i-1;
+        WHILE (j >= 0) & (a[j] > t) DO
+            a[j+1] := a[j]; DEC(j)
+        END;
+        a[j+1] := t
+    END
+END Sort;
+
+END Sorter.
+

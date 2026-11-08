@@ -164,7 +164,7 @@ var
 
 
 // Read one line from prd into prdBuf
-proc prdReadLine()
+procedure prdReadLine()
   var idx: integer
       byt: byte
       ok: boolean
@@ -205,7 +205,7 @@ begin
 end prdReadLine
 
 // Read next character from prd
-proc prdRead(chp: ^char)
+procedure prdRead(chp: ^char)
 begin
   if prdPos < prdLen then
     chp^ := prdBuf[prdPos]
@@ -218,19 +218,19 @@ begin
 end prdRead
 
 // Check if at end of line
-proc prdIsEoln(): boolean
+procedure prdIsEoln(): boolean
 begin
   return prdPos >= prdLen
 end prdIsEoln
 
 // Read to end of line and advance to next line
-proc prdReadLn()
+procedure prdReadLn()
 begin
   prdReadLine()
 end prdReadLn
 
 // Skip spaces and read an integer from prd
-proc prdReadInt(valp: ^integer)
+procedure prdReadInt(valp: ^integer)
   var neg: boolean
       ch: char
       val: integer
@@ -260,7 +260,7 @@ begin
 end prdReadInt
 
 // Read a real number from prd
-proc prdReadReal(valp: ^real)
+procedure prdReadReal(valp: ^real)
   var intpart: integer
       fracpart: real
       divisor: real
@@ -336,7 +336,7 @@ begin
 end prdReadReal
 
 // Read a single char from prd
-proc prdReadChar(chp: ^char)
+procedure prdReadChar(chp: ^char)
 begin
   if prdPos < prdLen then
     chp^ := prdBuf[prdPos]
@@ -350,7 +350,7 @@ end prdReadChar
 
 // Stdin reading helpers - for Pascal's input file (read/readln from stdin)
 
-proc stdinAdvance()
+procedure stdinAdvance()
   // Read one character from stdin into stdinCh
   var byt: byte
 begin
@@ -372,14 +372,14 @@ begin
   end
 end stdinAdvance
 
-proc stdinReadLn()
+procedure stdinReadLn()
   // Skip to end of current line on stdin
 begin
   while not stdinEoln and not stdinEof do stdinAdvance() end
   if not stdinEof then stdinAdvance() end  // consume the newline, read next char
 end stdinReadLn
 
-proc stdinReadInt(valp: ^integer)
+procedure stdinReadInt(valp: ^integer)
   // Read a text-format integer from stdin (Pascal's read(input, i))
   var neg: boolean
       n: integer
@@ -403,7 +403,7 @@ begin
   valp^ := n
 end stdinReadInt
 
-proc stdinReadReal(valp: ^real)
+procedure stdinReadReal(valp: ^real)
   // Read a text-format real from stdin (Pascal's read(input, r))
   var neg: boolean
       n: real
@@ -456,7 +456,7 @@ begin
   valp^ := n
 end stdinReadReal
 
-proc stdinReadChar(chp: ^char)
+procedure stdinReadChar(chp: ^char)
   // Read a single character from stdin (Pascal's read(input, c))
 begin
   chp^ := stdinCh
@@ -466,20 +466,20 @@ end stdinReadChar
 
 // Output helpers
 
-proc printChar(code: integer)
+procedure printChar(code: integer)
 begin
   O.Char(chr(code))
 end printChar
 
 // Write to prr file helpers
-proc prrWriteChar(c: char)
+procedure prrWriteChar(c: char)
 begin
   if prr <> nil then
     F.Write(prr, ord(c))
   end
 end prrWriteChar
 
-proc prrWriteStr(s: ^array of char)
+procedure prrWriteStr(s: ^array of char)
   var k: integer
 begin
   k := 0
@@ -488,7 +488,7 @@ begin
   end
 end prrWriteStr
 
-proc prrWriteInt(val: integer; width: integer)
+procedure prrWriteInt(val: integer; width: integer)
   var buf: array 20 of char
       l: integer
       neg: boolean
@@ -514,21 +514,21 @@ begin
   while k >= 0 do prrWriteChar(buf[k]); dec(k) end
 end prrWriteInt
 
-proc prrWriteLn()
+procedure prrWriteLn()
 begin
   prrWriteChar(0AX)
 end prrWriteLn
 
 
 // Set operations for settype (set of 0..58)
-proc setEmpty(): SetType
+procedure setEmpty(): SetType
   var r: SetType
 begin
   r.lo := 0; r.hi := 0
   return r
 end setEmpty
 
-proc setOf(elem: integer): SetType
+procedure setOf(elem: integer): SetType
   var r: SetType
 begin
   r.lo := 0; r.hi := 0
@@ -539,7 +539,7 @@ begin
   return r
 end setOf
 
-proc setAdd(s: SetType; elem: integer): SetType
+procedure setAdd(s: SetType; elem: integer): SetType
   var b: SetType
 begin
   b := setOf(elem)
@@ -547,28 +547,28 @@ begin
   return s
 end setAdd
 
-proc setUnion(a: SetType; b: SetType): SetType
+procedure setUnion(a: SetType; b: SetType): SetType
   var r: SetType
 begin
   r.lo := bor(a.lo, b.lo); r.hi := bor(a.hi, b.hi)
   return r
 end setUnion
 
-proc setInter(a: SetType; b: SetType): SetType
+procedure setInter(a: SetType; b: SetType): SetType
   var r: SetType
 begin
   r.lo := band(a.lo, b.lo); r.hi := band(a.hi, b.hi)
   return r
 end setInter
 
-proc setDiff(a: SetType; b: SetType): SetType
+procedure setDiff(a: SetType; b: SetType): SetType
   var r: SetType
 begin
   r.lo := band(a.lo, bnot(b.lo)); r.hi := band(a.hi, bnot(b.hi))
   return r
 end setDiff
 
-proc setIn(elem: integer; s: SetType): boolean
+procedure setIn(elem: integer; s: SetType): boolean
 begin
   if (elem >= 0) and (elem <= 58) then
     if elem < 32 then return band(s.lo, shl(1, val(uint32, elem))) <> 0
@@ -577,14 +577,14 @@ begin
   return false
 end setIn
 
-proc setEq(a: SetType; b: SetType): boolean
+procedure setEq(a: SetType; b: SetType): boolean
 begin return (a.lo = b.lo) and (a.hi = b.hi) end setEq
 
-proc setLeq(a: SetType; b: SetType): boolean
+procedure setLeq(a: SetType; b: SetType): boolean
 // a <= b means a is subset of b: (a AND b) = a
 begin return (band(a.lo, b.lo) = a.lo) and (band(a.hi, b.hi) = a.hi) end setLeq
 
-proc setGeq(a: SetType; b: SetType): boolean
+procedure setGeq(a: SetType; b: SetType): boolean
 // a >= b means a is superset of b: (a AND b) = b
 begin return (band(a.lo, b.lo) = b.lo) and (band(a.hi, b.hi) = b.hi) end setGeq
 
@@ -594,13 +594,13 @@ var
   setlo: array 18001 of uint32  // parallel array for set lo words
   sethi: array 18001 of uint32  // parallel array for set hi words
 
-proc storeSetPut(idx: integer; s: SetType)
+procedure storeSetPut(idx: integer; s: SetType)
 begin
   setlo[idx] := s.lo
   sethi[idx] := s.hi
 end storeSetPut
 
-proc storeSetGet(idx: integer): SetType
+procedure storeSetGet(idx: integer): SetType
   var r: SetType
 begin
   r.lo := setlo[idx]
@@ -609,19 +609,19 @@ begin
 end storeSetGet
 
 // Store a real value
-proc storeRealPut(idx: integer; r: real)
+procedure storeRealPut(idx: integer; r: real)
 begin
   realstore[idx] := r
 end storeRealPut
 
-proc storeRealGet(idx: integer): real
+procedure storeRealGet(idx: integer): real
 begin
   return realstore[idx]
 end storeRealGet
 
 
 // pint.pas lines 167-171: errorl - error in loading
-proc errorl(const msg: array 40 of char)
+procedure errorl(const msg: array 40 of char)
 begin
   O.String(""); O.Ln
   O.String(@msg); O.Ln
@@ -629,7 +629,7 @@ begin
 end errorl
 
 // pint.pas lines 438-465: pmd and errori
-proc pmd()
+procedure pmd()
   var s: integer
   var cnt: integer
 begin
@@ -660,7 +660,7 @@ begin
   end
 end pmd
 
-proc errori(const msg: array 40 of char)
+procedure errori(const msg: array 40 of char)
 begin
   O.String(""); O.Ln
   O.String(@msg); O.Ln
@@ -669,7 +669,7 @@ begin
 end errori
 
 // pint.pas lines 467-474: base function
-proc base(ld: integer): integer
+procedure base(ld: integer): integer
   var ad: integer
 begin
   ad := mp
@@ -681,7 +681,7 @@ begin
 end base
 
 // pint.pas lines 476-485: compare
-proc doCompare()
+procedure doCompare()
 begin
   i1 := store[sp].vi      // va = vi (address)
   i2 := store[sp + 1].vi
@@ -693,7 +693,7 @@ begin
 end doCompare
 
 // pint.pas lines 173-198: update
-proc update(x: integer)
+procedure update(x: integer)
   var curr: integer
       succ: integer
       endlist: boolean
@@ -722,7 +722,7 @@ begin
 end update
 
 // pint.pas lines 228-235: lookup
-proc lookup(x: integer)
+procedure lookup(x: integer)
 begin
   if labeltab[x].st = entered then
     q := labeltab[x].val
@@ -733,7 +733,7 @@ begin
 end lookup
 
 // pint.pas lines 237-241: labelsearch
-proc labelsearch()
+procedure labelsearch()
   var x: integer
 begin
   while (ch <> "l") and not prdIsEoln() do prdReadChar(@ch) end
@@ -742,7 +742,7 @@ begin
 end labelsearch
 
 // pint.pas lines 243-248: getname
-proc getname(name: ^Alfa)
+procedure getname(name: ^Alfa)
   var k: integer
 begin
   word[0] := ch
@@ -755,7 +755,7 @@ begin
 end getname
 
 // pint.pas lines 250-264: typesymbol
-proc typesymbol()
+procedure typesymbol()
   var ti: integer
 begin
   if ch <> "i" then
@@ -770,7 +770,7 @@ begin
 end typesymbol
 
 // pint.pas lines 223-427: assemble
-proc assemble()
+procedure assemble()
   var name: Alfa
       ab: boolean
       r: real
@@ -974,7 +974,7 @@ begin
 end assemble
 
 // pint.pas lines 202-221: generate
-proc generate()
+procedure generate()
   var x: integer
       again: boolean
 begin
@@ -1003,7 +1003,7 @@ begin
 end generate
 
 // pint.pas lines 103-165: init
-proc init()
+procedure init()
   var ii: integer
 begin
   instr[ 0] := "lod       "; instr[ 0][10] := 0X
@@ -1114,7 +1114,7 @@ end init
 
 
 // pint.pas lines 90-434: load procedure
-proc load()
+procedure load()
 begin
   init()
   // Open prd file
@@ -1135,7 +1135,7 @@ end load
 
 
 // pint.pas lines 487-662: callsp
-proc callsp()
+procedure callsp()
   var line: boolean
       adptr: integer
       adelnt: integer
@@ -1147,7 +1147,7 @@ proc callsp()
       tmpCh: char
 
   // pint.pas lines 517-527: writestr
-  proc doWriteStr(toOutput: boolean)
+  procedure doWriteStr(toOutput: boolean)
     var wi: integer
         wj: integer
         wk: integer
@@ -1349,7 +1349,7 @@ begin // callsp
 end callsp
 
 // pint.pas lines 664-1017: main interpreter loop
-proc interpret()
+procedure interpret()
   var s1: SetType
       s2: SetType
 begin

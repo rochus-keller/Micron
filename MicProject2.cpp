@@ -163,6 +163,7 @@ void Project2::clear(bool all, bool reloadMic)
     foreach(File* f, d_libs)
         delete f;
     d_libs.clear();
+    d_sloc = 0;
     if( all )
     {
         d_groups.clear();
@@ -489,7 +490,7 @@ static inline QByteArray escapeDot(QByteArray name)
 
 quint32 Project2::getSloc() const
 {
-    return 0; // TODO d_mdl->getSloc();
+    return d_sloc;
 }
 
 bool Project2::parse()
@@ -843,8 +844,10 @@ Declaration *Project2::loadModule(const Import &imp)
     p.setInterpreter(d_modMan.getInterpreter());
     p.setConfig(&d_config);
     p.RunParser(fixedImp);
+    d_sloc += lex.lex.getSloc();
     if( p.getModule() )
-        qDebug() << "*** parsing" << p.getModule()->name << "depth" << d_depth << (p.getModule()->generic?"generic":""); // TEST
+        qDebug() << "*** parsing" << p.getModule()->name << "depth" << d_depth << (p.getModule()->generic?"generic":"")
+                 << "sloc" << lex.lex.getSloc(); // TEST
     else
         qDebug() << "*** parse" << file->d_name; // TEST
     Mic::Declaration* res = 0;

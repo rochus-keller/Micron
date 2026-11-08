@@ -1,0 +1,27 @@
+module Bits [level = 1]
+
+var
+    a: array 4 of int32
+    p: ^int32
+    u, u1: uint32
+
+begin
+    println(band(0F0FH, 00FFH))    // 15
+    println(bor(1, 4))             // 5
+    println(bxor(5, 1))            // 4
+    println(shl(1, 5))             // 32
+    println(shr(0FFH, 4))          // 15, logical
+    println(asr(-16, 2))           // -4, arithmetic
+
+    u1 := 0FFFFFFFFH
+    println(cast(int32, u1))       // -1, same bits
+    u := usig(-1)
+    println(u)                     // 4294967295, same bits
+
+    a[0] := 10; a[1] := 20; a[2] := 30
+    p := @a[0]
+    p := ptroff(p, 1)              // advance by one int32
+    println(p^)                    // 20
+    inc(p)
+    println(p^)                    // 30
+end Bits

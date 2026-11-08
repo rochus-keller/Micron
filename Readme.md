@@ -6,13 +6,12 @@ This project implements a compiler, interpreter and IDE for the Micron programmi
 [as specified here](https://github.com/micron-language/specification/blob/master/The_Micron_Programming_Language_Specification.adoc);
 see also the code examples below.
 
-Micron is a systems programming language with a syntax similar to [Oberon+](https://github.com/rochus-keller/Oberon) and the reach of C. The name "Micron" is an abbreviation of "Micro Oberon".
+Micron is a systems programming language with a syntax similar to [Oberon+](https://github.com/rochus-keller/Oberon) and the reach of C.
+The name "Micron" is an abbreviation of "MicroOberon".
 
 Micron is intended as a practical alternative to C for systems programming. It combines the modularization, strictness and simplicity of Oberon with the flexibility of C: the same language serves for boot code, drivers, an operating system kernel and ordinary applications, and it calls C without wrappers. The preprocessor is replaced by language concepts that can largely substitute its features, supplemented by explicit support for generic programming, inlining and procedures that run at compile time. Thereby the focus is always on simplicity and the greatest effect with a practicable effort.
 
 Micron supports _language levels_: a module declares the level it needs, from level 0 (inlined code for hardware initialization, no stack) over level 1 (stack frames, recursion, `extern` C procedures), level 3 (heap, pointers, exceptions) and level 4 (type extension and dynamic dispatch) up to level 5 (garbage collection). A module can only import modules of the same or a lower level, so a kernel written at level 1 cannot depend on the heap by accident. Without the attribute, level 3 is assumed.
-
-NOTE that this project is still work-in-progress.
 
 ### Documentation
 
@@ -21,9 +20,92 @@ In addition to the specification, a free textbook is available which shows how e
 - [PDF version](http://software.rochus-keller.ch/micron-textbook.pdf) of the book,
 - [Source and examples](https://github.com/micron-language/textbook) of the book; all examples compile and run with `micc`.
 
+### Example applications and systems
+
+Since the start of the project in January 2024, numerous benchmarks, virtual machines and operating systems of significant size have been migrated to Micron.
+The following references comprise about 130 kSLOC of working Micron code.
+
+The [examples subdirectory](https://github.com/rochus-keller/Micron/tree/master/examples) contains: 
+
+- a Smalltalk-80 implementation, 
+- the original 1976 P4 Pascal compiler, 
+- the Scheme 9 virtual machine, 
+- the Project Oberon System running on the host,
+- and the Micron System described in the textbook, the migrated Project Oberon System natively running on RISC-V. 
+
+The [Are-we-fast-yet repository](https://github.com/rochus-keller/Are-we-fast-yet/tree/main/Micron) includes
+the same benchmark suite in four different implementations for comparison: procedural, hybrid, interface-based and object-oriented.
+
+The [migration of the Oberon System 3 to Micron](https://github.com/rochus-keller/micronsystem3/) 
+currently runs on the emulated RISC-V machine; support for the Raspberry Pi Zero 2 is work in progress.
+
+### Try it
+
+The following precompiled versions are available at this time:
+
+- [micc for Linux x86_64](http://software.rochus-keller.ch/micc_linux_x64.tar.gz)
+
+Just download, unpack and run. The command line options are described in the [micc manual](docs/micc_manual.md).
+
+Here is a [precompiled version of the Micron System discussed in the book](http://software.rochus-keller.ch/micronsystem_prebuilt_linux_x64.tar.gz)
+which you can run on Linux x86_64 by just typing `./rv32vm --elf --ram 4 --disk disk.img system.bin` (requires SDL2). 
+More information is in the Readme.md.
+
+
 ### Code examples
 
 Micron is case sensitive, but each reserved word and predeclared identifier exists in a fully lower-case and a fully upper-case form with identical meaning; the last example is written in the Oberon style, all others in the lower-case style used in the book. Statement separators are optional.
+
+##### Low-level programming and C interoperability
+
+```text
+module Bits [level = 1]
+
+var
+    a: array 4 of int32
+    p: ^int32
+    u, u1: uint32
+
+begin
+    println(band(0F0FH, 00FFH))    // 15
+    println(bor(1, 4))             // 5
+    println(bxor(5, 1))            // 4
+    println(shl(1, 5))             // 32
+    println(shr(0FFH, 4))          // 15, logical
+    println(asr(-16, 2))           // -4, arithmetic
+
+    u1 := 0FFFFFFFFH
+    println(cast(int32, u1))       // -1, same bits
+    u := usig(-1)
+    println(u)                     // 4294967295, same bits
+
+    a[0] := 10; a[1] := 20; a[2] := 30
+    p := @a[0]
+    p := ptroff(p, 1)              // advance by one int32
+    println(p^)                    // 20
+    inc(p)
+    println(p^)                    // 30
+end Bits
+```
+The [file is in the examples subdirectory](examples/Bits.mic) and compiles/runs with `./micc Bits.mic --run`.
+
+```text
+module Clib [level = 1]
+
+procedure abs(x: int32): int32; extern C
+procedure toupper(c: int32): int32; extern C
+procedure write(fd: int32; const buf: ^[]char; n: uint32): int32
+    extern C "write"
+
+var s: array 3 of char
+
+begin
+    s := "ok"
+    if write(1, @s, 2) # 2 then return end
+    println(abs(-5))
+    println(toupper(sigl(ord('a'))))    // 65
+end Clib
+```
 
 ##### Abstraction without objects
 
@@ -98,9 +180,7 @@ end pop
 begin
     n := 0
 end Stack
-```
 
-```text
 module UseStack
 import si := Stack(integer, 10)
     cs := Stack(char, 4)
@@ -139,102 +219,46 @@ begin
     println(len(buf))       // 4096
     println(len(index))     // 12
     <* if DEBUG then *>
-    println("checked build")
+    println("debug build")
     <* else *>
-    println("fast build")
+    println("release build")
     <* end *>
 end Comptime
 ```
 
-##### Low-level programming and C interoperability
-
-```text
-module Bits [level = 1]
-
-var
-    a: array 4 of int32
-    p: ^int32
-    u, u1: uint32
-
-begin
-    println(band(0F0FH, 00FFH))    // 15
-    println(bor(1, 4))             // 5
-    println(bxor(5, 1))            // 4
-    println(shl(1, 5))             // 32
-    println(shr(0FFH, 4))          // 15, logical
-    println(asr(-16, 2))           // -4, arithmetic
-
-    u1 := 0FFFFFFFFH
-    println(cast(int32, u1))       // -1, same bits
-    u := usig(-1)
-    println(u)                     // 4294967295, same bits
-
-    a[0] := 10; a[1] := 20
-    p := @a[0]
-    p := ptroff(p, 1)              // advance by one int32
-    println(p^)                    // 20
-end Bits
-```
-
-```text
-module Clib [level = 1]
-
-procedure abs(x: int32): int32; extern C
-procedure toupper(c: int32): int32; extern C
-procedure write(fd: int32; const buf: ^[]char; n: uint32): int32
-    extern C "write"
-
-var s: array 3 of char
-
-begin
-    s := "ok"
-    if write(1, @s, 2) # 2 then return end
-    println(abs(-5))
-    println(toupper(sigl(ord('a'))))    // 65
-end Clib
-```
 ##### Oberon style
 
 ```text
-MODULE Sorter   (* upper-case reserved words and predeclared identifiers *)
+MODULE Sorter;
 
-PROCEDURE Sort*(a: ^[]INTEGER; n: UINT32)
-    VAR i, j, t: INTEGER
+PROCEDURE Sort*(a: ^[]INTEGER; n: UINT32);
+    VAR i, j, t: INTEGER;
 BEGIN
     FOR i := 1 TO n-1 DO
-        t := a[i]; j := i-1
+        t := a[i]; j := i-1;
         WHILE (j >= 0) & (a[j] > t) DO
             a[j+1] := a[j]; DEC(j)
-        END
+        END;
         a[j+1] := t
     END
-END Sort
+END Sort;
 
-END Sorter
-```
+END Sorter.
 
-```text
-MODULE Main
-    IMPORT Sorter
-    VAR a: ARRAY 8 OF INTEGER; i: INTEGER
+MODULE Main;
+    IMPORT Sorter;
+    VAR a: ARRAY 8 OF INTEGER; i: INTEGER;
 BEGIN
-    a := { 5, 3, 8, 1, 9, 2, 7, 4 }
-    Sorter.Sort(@a, LEN(a))     (* no VAR parameters; @ takes the address *)
-    FOR i := 0 TO LEN(a)-1 DO PRINT(a[i]); PRINT(" ") END
+    a := { 5, 3, 8, 1, 9, 2, 7, 4 };
+    Sorter.Sort(@a, LEN(a));
+    FOR i := 0 TO LEN(a)-1 DO PRINT(a[i]); PRINT(" ") END;
     PRINTLN("")
-END Main
+END Main.
 ```
 
-### Example applications and systems
+To make the transition from Pascal easier, Micron supports Pascal operators like `<>`, `and` or `not` (see e.g. [the P4 compiler](examples/P4/Pcom.mic)).
 
-The [examples subdirectory](https://github.com/rochus-keller/Micron/tree/master/examples) contains working applications and systems of significant size written in Micron: a Smalltalk-80 implementation, the original 1976 P4 Pascal compiler, the Scheme 9 virtual machine, the Project Oberon System in Oberon style, and the Micron System, the migrated Project Oberon System natively running on RISC-V described in the book. 
-
-More examples in procedural, hybrid, interface-based and object-oriented style are in the [Are-we-fast-yet repository](https://github.com/rochus-keller/Are-we-fast-yet/tree/main/Micron).
-
-A [migration of the Oberon System 3 to Micron](https://github.com/rochus-keller/micronsystem3/) 
-which currently runs on the emulated RISC-V machine and later on the Raspberry Pi Zero 2 is work in progress.
-
-### Planned features
+### Implementation status
 
 - [x] Implement lexer with directive support
 - [x] Implement parser and IR generator
@@ -253,13 +277,14 @@ which currently runs on the emulated RISC-V machine and later on the Raspberry P
 - [ ] Integrate cross-compilation features with IDE
 - [ ] Integrate RV32 emulator with debugging/DAP support in IDE
 
-### Precompiled versions
+The compiler and interpreter are implemented and up-to-date with the specification.
+Development continues on native backends and the C transpiler (pending pcall, raise, finally),
+IDE integration, tooling and additional system ports.
+Also note that the current backends are mostly stack based for simplicity (and expect that there are still bugs).
+Register based implementations were considered but postponed to keep the first version of the backends simple and easy to verify.
+The textbook explains why neither Wirth's compilers nor mine so far include any global optimization infrastructure.
 
-The following precompiled versions are available at this time:
-
-- [micc for Linux x86_64](http://software.rochus-keller.ch/micc_linux_x64.tar.gz)
-
-Just download, unpack and run. The command line options are described in the [micc manual](docs/micc_manual.md).
+![Micron IDE](http://software.rochus-keller.ch/micron_ide_with_running_smalltalk.png)
 
 ### How to build
 

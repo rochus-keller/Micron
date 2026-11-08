@@ -1,0 +1,15 @@
+module Clib [level = 1]
+
+procedure abs(x: int32): int32; extern C
+procedure toupper(c: int32): int32; extern C
+procedure write(fd: int32; const buf: ^[]char; n: uint32): int32
+    extern C "write"
+
+var s: array 3 of char
+
+begin
+    s := "ok"
+    if write(1, @s, 2) # 2 then return end
+    println(abs(-5))
+    println(toupper(sigl(ord('a'))))    // 65
+end Clib

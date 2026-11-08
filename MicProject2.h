@@ -225,6 +225,7 @@ namespace Mic
         QString d_workingDir, d_buildDir;
         ModProc d_main;
         qint16 d_depth;
+        quint32 d_sloc;
         bool d_dirty;
         bool d_useBuiltInOakwood;
         bool d_useOakwoodScreen;

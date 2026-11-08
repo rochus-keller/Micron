@@ -1,0 +1,46 @@
+module Shapes [level = 2]
+
+type
+    Shape = interface                   // a contract, satisfied structurally
+                proc area(): integer
+                proc print()
+            end
+
+    Rect   = record w, h: integer end
+    Circle = record radius: integer end
+
+procedure Rect.area(): integer          // type-bound procedure, bound statically
+begin
+    return self.w * self.h
+end Rect.area
+
+procedure Rect.print()
+begin
+    print("rect "); print(self.w); print("x"); print(self.h)
+end Rect.print
+
+procedure Circle.area(): integer
+begin
+    return 3 * self.radius * self.radius    // coarse
+end Circle.area
+
+procedure Circle.print()
+begin
+    print("circle r="); print(self.radius)
+end Circle.print
+
+procedure describe(s: Shape)            // accepts any type with area and print
+begin
+    s.print(); print(" area="); println(s.area())
+end describe
+
+var
+    r: Rect
+    c: Circle
+
+begin
+    r.w := 4; r.h := 3
+    c.radius := 5
+    describe(@r)                        // rect 4x3 area=12
+    describe(@c)                        // circle r=5 area=75
+end Shapes

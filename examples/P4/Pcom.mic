@@ -138,16 +138,16 @@ var
   test: boolean
 
 // pcom.pas lines 300-301: mark/release stubs
-proc mark()
+procedure mark()
 begin
 end mark
 
-proc release()
+procedure release()
 begin
 end release
 
 // File I/O helper procedures
-proc fWriteString(f: F.File; const s: pointer to array of char)
+procedure fWriteString(f: F.File; const s: pointer to array of char)
   var i: integer; dummy: boolean
 begin
   i := 0
@@ -158,19 +158,19 @@ end fWriteString
 
 // The Files module API differs from Pascal's; these helpers bridge the gap.
 
-proc fWriteChar(f: F.File; c: char)
+procedure fWriteChar(f: F.File; c: char)
   var dummy: boolean
 begin
   dummy := F.Write(f, ord(c))
 end fWriteChar
 
-proc fWriteLn(f: F.File)
+procedure fWriteLn(f: F.File)
   var dummy: boolean
 begin
   dummy := F.Write(f, 0AH)
 end fWriteLn
 
-proc fWriteInt(f: F.File; v: integer; w: integer)
+procedure fWriteInt(f: F.File; v: integer; w: integer)
   // Write integer v right-justified in field of width w
   var buf: array 20 of char; i, n, neg: integer; d: integer
 begin
@@ -190,7 +190,7 @@ begin
   while i > 0 do dec(i); fWriteChar(f, buf[i]) end
 end fWriteInt
 
-proc fWriteArr4(f: F.File; const a: array 5 of char)
+procedure fWriteArr4(f: F.File; const a: array 5 of char)
   var i: integer
 begin
   for i := 0 to 3 do
@@ -198,7 +198,7 @@ begin
   end
 end fWriteArr4
 
-proc printAlpha(const a: T.Alpha)
+procedure printAlpha(const a: T.Alpha)
   var i: integer
 begin
   for i := 0 to T.alfalength - 1 do
@@ -208,7 +208,7 @@ end printAlpha
 
 // MIC interpreter had issue on direct array comparison (a = b, a < b).
 (* obsolete
-proc alphaEq(x, y: ^T.Alpha): boolean
+procedure alphaEq(x, y: ^T.Alpha): boolean
   var i: integer
 begin
   i := 0
@@ -219,7 +219,7 @@ begin
   return true
 end alphaEq 
 
-proc alphaLt(x, y: ^T.Alpha): boolean
+procedure alphaLt(x, y: ^T.Alpha): boolean
   var i: integer
 begin
   i := 0
@@ -230,7 +230,7 @@ end alphaLt *)
 
 
 // pcom.pas lines 303-336: endofline
-proc endofline()
+procedure endofline()
   var lastpos, freepos, currpos, currnmr, f, k: integer
 begin
   if errinx > 0 then
@@ -262,7 +262,7 @@ begin
 end endofline
 
 // pcom.pas lines 338-347: error
-proc error(ferrnr: integer)
+procedure error(ferrnr: integer)
 begin
   if errinx >= 9 then
     errlist[9].nmr := 255; errinx := 10
@@ -281,7 +281,7 @@ procedure^ block(fsys: T.SetOfSys; fsy: T.Symbol; fprocp_: T.Ctp)
 
 
 // pcom.pas lines 358-371: nextch - read next character from input
-proc nextch()
+procedure nextch()
   var b: byte
 begin
   if eol then
@@ -311,7 +311,7 @@ begin
 end nextch
 
 // peekNextCh - peek at next char without consuming it
-proc peekNextCh(): char
+procedure peekNextCh(): char
   var b: byte
 begin
   if hasLookAhead then return lookAheadCh end
@@ -326,7 +326,7 @@ begin
 end peekNextCh
 
 // pcom.pas lines 373-394: options
-proc options()
+procedure options()
 begin
   loop
     nextch()
@@ -348,7 +348,7 @@ begin
 end options
 
 // pcom.pas lines 396-549: insymbol main body
-proc insymbol()
+procedure insymbol()
   var i, k: integer
       digit: array T.strglgth of char
       string_: array T.strglgth of char
@@ -552,7 +552,7 @@ end insymbol
 
 
 // pcom.pas lines 551-573: enterid - enter identifier into name table
-proc enterid(fcp: T.Ctp)
+procedure enterid(fcp: T.Ctp)
   var nam: T.Alpha; lcp, lcp1: T.Ctp; lleft: boolean
 begin
   nam := fcp.name
@@ -579,7 +579,7 @@ begin
 end enterid
 
 // pcom.pas lines 575-586: searchsection
-proc searchsection(fcp: T.Ctp; fcp1: ^T.Ctp)
+procedure searchsection(fcp: T.Ctp; fcp1: ^T.Ctp)
 begin
   while fcp <> nil do
     if fcp.name = id then fcp1^ := fcp; return end // alphaEq(@fcp.name, @id)
@@ -590,7 +590,7 @@ begin
 end searchsection
 
 // pcom.pas lines 588-626: searchid
-proc searchid(fidcls: T.SetOfIds; fcp: ^T.Ctp)
+procedure searchid(fidcls: T.SetOfIds; fcp: ^T.Ctp)
   var lcp: T.Ctp
 begin
   disx := top
@@ -620,7 +620,7 @@ begin
 end searchid
 
 // pcom.pas lines 628-644: getbounds
-proc getbounds(fsp: T.Stp; fmin, fmax: ^integer)
+procedure getbounds(fsp: T.Stp; fmin, fmax: ^integer)
 begin
   fmin^ := 0; fmax^ := 0
   if fsp <> nil then
@@ -637,7 +637,7 @@ begin
 end getbounds
 
 // pcom.pas lines 646-666: alignquot
-proc alignquot(fsp: T.Stp): integer
+procedure alignquot(fsp: T.Stp): integer
 begin
   if fsp = nil then return 1 end
   if fsp.form = T.scalar then
@@ -658,7 +658,7 @@ begin
 end alignquot
 
 // pcom.pas lines 668-674: align
-proc align(fsp: T.Stp; flc: ^integer)
+procedure align(fsp: T.Stp; flc: ^integer)
   var k, l: integer
 begin
   k := alignquot(fsp)
@@ -668,13 +668,13 @@ end align
 
 
 // pcom.pas lines 676-845: printtables (simplified for Micron)
-proc printtables(fb: boolean)
+procedure printtables(fb: boolean)
   var i, lim: integer
   // Forward declarations for mutually recursive procs
   procedure^ markctp(fp: T.Ctp)
   procedure^ followctp(fp: T.Ctp)
 
-  proc markstp(fp: T.Stp)
+  procedure markstp(fp: T.Stp)
   begin
     if fp <> nil then
       fp.marked := true
@@ -694,7 +694,7 @@ proc printtables(fb: boolean)
     end
   end markstp
 
-  proc markctp(fp: T.Ctp)
+  procedure markctp(fp: T.Ctp)
   begin
     if fp <> nil then
       markctp(fp.llink); markctp(fp.rlink)
@@ -702,7 +702,7 @@ proc printtables(fb: boolean)
     end
   end markctp
 
-  proc followstp(fp: T.Stp)
+  procedure followstp(fp: T.Stp)
   begin
     if fp <> nil then
       if fp.marked then
@@ -741,7 +741,7 @@ proc printtables(fb: boolean)
     end
   end followstp
 
-  proc followctp(fp: T.Ctp)
+  procedure followctp(fp: T.Ctp)
   begin
     if fp <> nil then
       O.String("    "); printAlpha(fp.name)
@@ -775,7 +775,7 @@ begin
 end printtables
 
 // pcom.pas lines 847-850: genlabel
-proc genlabel(nxtlab: ^integer)
+procedure genlabel(nxtlab: ^integer)
 begin
   inc(intlabel)
   nxtlab^ := intlabel
@@ -794,7 +794,7 @@ procedure^ statement(fsys: T.SetOfSys)
 
 
 // pcom.pas lines 855-862: skip
-proc skip(fsys: T.SetOfSys)
+procedure skip(fsys: T.SetOfSys)
 begin
   if not F.Eof(srcfile) then
     while not T.symIn(fsys, sy) and not F.Eof(srcfile) do
@@ -806,7 +806,7 @@ end skip
 
 
 // pcom.pas lines 864-932: constant
-proc constant(fsys: T.SetOfSys; fsp: ^T.Stp; fvalu: ^T.Valu)
+procedure constant(fsys: T.SetOfSys; fsp: ^T.Stp; fvalu: ^T.Valu)
   var lsp: T.Stp; lcp: T.Ctp; sign: integer  // 0=none, 1=pos, 2=neg
       lvp: T.Csp; i: integer
 begin
@@ -868,7 +868,7 @@ end constant
 
 
 // pcom.pas lines 934-944: equalbounds
-proc equalbounds(fsp1, fsp2: T.Stp): boolean
+procedure equalbounds(fsp1, fsp2: T.Stp): boolean
   var lmin1, lmin2, lmax1, lmax2: integer
 begin
   if (fsp1 = nil) or (fsp2 = nil) then return true end
@@ -879,7 +879,7 @@ end equalbounds
 
 
 // pcom.pas lines 946-1016: comptypes
-proc comptypes(fsp1, fsp2: T.Stp): boolean
+procedure comptypes(fsp1, fsp2: T.Stp): boolean
   var nxt1, nxt2: T.Ctp; comp: boolean
       ltestp1, ltestp2: T.Testp
 begin
@@ -936,7 +936,7 @@ begin
 end comptypes
 
 // pcom.pas lines 1018-1023: string test
-proc isString(fsp: T.Stp): boolean
+procedure isString(fsp: T.Stp): boolean
 begin
   if fsp <> nil then
     if fsp.form = T.arrays then
@@ -948,7 +948,7 @@ end isString
 
 
 // pcom.pas lines 1029-1112: simpletype
-proc simpletype(fsys: T.SetOfSys; fsp: ^T.Stp; fsize: ^integer)
+procedure simpletype(fsys: T.SetOfSys; fsp: ^T.Stp; fsize: ^integer)
   var lsp, lsp1: T.Stp; lcp, lcp1: T.Ctp; ttop: integer
       lcnt: integer; lvalu: T.Valu
 begin
@@ -1030,7 +1030,7 @@ end simpletype
 
 
 // pcom.pas lines 1114-1244: fieldlist
-proc fieldlist(fsys: T.SetOfSys; frecvar: ^T.Stp; displ: ^integer)
+procedure fieldlist(fsys: T.SetOfSys; frecvar: ^T.Stp; displ: ^integer)
   var lcp, lcp1, nxt, nxt1: T.Ctp
       lsp, lsp1, lsp2, lsp3, lsp4: T.Stp
       minsize, maxsize, lsize: integer
@@ -1153,7 +1153,7 @@ begin
 end fieldlist
 
 // pcom.pas lines 1246-1385: typ
-proc typ(fsys: T.SetOfSys; fsp: ^T.Stp; fsize: ^integer)
+procedure typ(fsys: T.SetOfSys; fsp: ^T.Stp; fsize: ^integer)
   var lsp, lsp1, lsp2: T.Stp; oldtop: integer; lcp: T.Ctp
       lsize, displ: integer; lmin, lmax: integer
 begin
@@ -1279,7 +1279,7 @@ end typ
 
 
 // pcom.pas lines 1387-1415: labeldeclaration
-proc labeldeclaration(fsys: T.SetOfSys)
+procedure labeldeclaration(fsys: T.SetOfSys)
   var llp: T.Lbp; redef: boolean; lbname: integer
 begin
   loop
@@ -1312,7 +1312,7 @@ end labeldeclaration
 
 
 // pcom.pas lines 1417-1438: constdeclaration
-proc constdeclaration(fsys: T.SetOfSys)
+procedure constdeclaration(fsys: T.SetOfSys)
   var lcp: T.Ctp; lsp: T.Stp; lvalu: T.Valu
 begin
   if sy <> T.ident then error(2); skip(T.ssAdd(fsys, T.ident)) end
@@ -1334,7 +1334,7 @@ begin
 end constdeclaration
 
 // pcom.pas lines 1440-1481: typedeclaration
-proc typedeclaration(fsys: T.SetOfSys)
+procedure typedeclaration(fsys: T.SetOfSys)
   var lcp, lcp1, lcp2: T.Ctp; lsp: T.Stp; lsize: integer
 begin
   if sy <> T.ident then error(2); skip(T.ssAdd(fsys, T.ident)) end
@@ -1374,7 +1374,7 @@ end typedeclaration
 
 
 // pcom.pas lines 1483-1519: vardeclaration
-proc vardeclaration(fsys: T.SetOfSys)
+procedure vardeclaration(fsys: T.SetOfSys)
   var lcp, nxt: T.Ctp; lsp: T.Stp; lsize: integer
 begin
   nxt := nil
@@ -1412,7 +1412,7 @@ begin
 end vardeclaration
 
 // pcom.pas lines 1521-1694: procdeclaration
-proc procdeclaration(fsys: T.SetOfSys; fsy: T.Symbol)
+procedure procdeclaration(fsys: T.SetOfSys; fsy: T.Symbol)
   var oldlev: integer; lcp, lcp1: T.Ctp; lsp: T.Stp
       forw: boolean; oldtop: integer
       llc, lcm: integer; lbname: integer
@@ -1420,7 +1420,7 @@ proc procdeclaration(fsys: T.SetOfSys; fsy: T.Symbol)
 
   // pcom.pas lines 1533-1700: parameterlist
   // Takes fsy_ (set containing semicolon, or semicolon+colon for func)
-  proc parameterlist(fsy_: T.SetOfSys; fpar: ^T.Ctp; fsys: T.SetOfSys; forw: boolean)
+  procedure parameterlist(fsy_: T.SetOfSys; fpar: ^T.Ctp; fsys: T.SetOfSys; forw: boolean)
     var lcp, lcp1, lcp2, lcp3: T.Ctp; lsp: T.Stp; lkind: T.IdKind
         llc, lsize: integer; count: integer
   begin
@@ -1680,14 +1680,14 @@ end procdeclaration
 
 
 // pcom.pas lines 1825-1828: mes - track stack usage
-proc mes(i: integer)
+procedure mes(i: integer)
 begin
   topnew := topnew + cdx[i] * T.maxstack
   if topnew > topmax then topmax := topnew end
 end mes
 
 // pcom.pas lines 1830-1831: putic
-proc putic()
+procedure putic()
 begin
   if ic mod 10 = 0 then
     fWriteString(prr, "i"); fWriteInt(prr, ic, 5); fWriteLn(prr)
@@ -1695,14 +1695,14 @@ begin
 end putic
 
 // pcom.pas lines 1833-1837: gen0
-proc gen0(fop: integer)
+procedure gen0(fop: integer)
 begin
   if prcode then putic(); fWriteArr4(prr, mn[fop]); fWriteLn(prr) end
   ic := ic + 1; mes(fop)
 end gen0
 
 // pcom.pas lines 1839-1866: gen1
-proc gen1(fop: integer; fp2: integer)
+procedure gen1(fop: integer; fp2: integer)
   var k: integer
 begin
   if prcode then
@@ -1736,7 +1736,7 @@ begin
 end gen1
 
 // pcom.pas lines 1868-1902: gen2
-proc gen2(fop: integer; fp1, fp2: integer)
+procedure gen2(fop: integer; fp1, fp2: integer)
   var k: integer
 begin
   if prcode then
@@ -1782,7 +1782,7 @@ begin
 end gen2
 
 // pcom.pas lines 1904-1923: gentypindicator
-proc gentypindicator(fsp: T.Stp)
+procedure gentypindicator(fsp: T.Stp)
 begin
   if fsp <> nil then
     if fsp.form = T.scalar then
@@ -1802,7 +1802,7 @@ begin
 end gentypindicator
 
 // pcom.pas lines 1925-1934: gen0t
-proc gen0t(fop: integer; fsp: T.Stp)
+procedure gen0t(fop: integer; fsp: T.Stp)
 begin
   if prcode then
     putic(); fWriteArr4(prr, mn[fop]); gentypindicator(fsp); fWriteLn(prr)
@@ -1811,7 +1811,7 @@ begin
 end gen0t
 
 // pcom.pas lines 1936-1945: gen1t
-proc gen1t(fop: integer; fp2: integer; fsp: T.Stp)
+procedure gen1t(fop: integer; fp2: integer; fsp: T.Stp)
 begin
   if prcode then
     putic(); fWriteArr4(prr, mn[fop]); gentypindicator(fsp)
@@ -1821,7 +1821,7 @@ begin
 end gen1t
 
 // pcom.pas lines 1947-1956: gen2t
-proc gen2t(fop: integer; fp1, fp2: integer; fsp: T.Stp)
+procedure gen2t(fop: integer; fp1, fp2: integer; fsp: T.Stp)
   var w: integer
 begin
   if prcode then
@@ -1833,7 +1833,7 @@ begin
 end gen2t
 
 // pcom.pas lines 1958-1993: load
-proc load()
+procedure load()
 begin
   if gattr.typtr <> nil then
     if gattr.kind = T.cst then
@@ -1867,7 +1867,7 @@ begin
 end load
 
 // pcom.pas lines 1995-2006: store
-proc store(lattr: T.Attr)
+procedure store(lattr: T.Attr)
 begin
   if lattr.typtr <> nil then
     if lattr.access = T.drct then
@@ -1881,7 +1881,7 @@ begin
 end store
 
 // pcom.pas lines 2008-2033: loadaddress
-proc loadaddress()
+procedure loadaddress()
 begin
   if gattr.typtr <> nil then
     if gattr.kind = T.cst then
@@ -1906,7 +1906,7 @@ begin
 end loadaddress
 
 // pcom.pas lines 2036-2042: genfjp
-proc genfjp(faddr: ^integer)
+procedure genfjp(faddr: ^integer)
 begin
   load()
   if gattr.typtr <> nil then
@@ -1920,7 +1920,7 @@ begin
 end genfjp
 
 // pcom.pas lines 2044-2049: genujpxjp
-proc genujpxjp(fop: integer; fp2: ^integer)
+procedure genujpxjp(fop: integer; fp2: ^integer)
 begin
   if prcode then
     putic(); fWriteArr4(prr, mn[fop]); fWriteString(prr, "      l")
@@ -1930,7 +1930,7 @@ begin
 end genujpxjp
 
 // pcom.pas lines 2052-2059: gencupent
-proc gencupent(fop: integer; fp1, fp2: integer)
+procedure gencupent(fop: integer; fp1, fp2: integer)
 begin
   if prcode then
     putic(); fWriteArr4(prr, mn[fop]); fWriteInt(prr, fp1, 4)
@@ -1940,7 +1940,7 @@ begin
 end gencupent
 
 // pcom.pas lines 2062-2073: checkbnds
-proc checkbnds(fsp: T.Stp)
+procedure checkbnds(fsp: T.Stp)
   var lmin, lmax: integer
 begin
   if fsp <> nil then
@@ -1956,7 +1956,7 @@ begin
 end checkbnds
 
 // pcom.pas lines 2076-2078: putlabel
-proc putlabel(labname: integer)
+procedure putlabel(labname: integer)
 begin
   if prcode then
     fWriteString(prr, "l"); fWriteInt(prr, labname, 4); fWriteLn(prr)
@@ -1965,7 +1965,7 @@ end putlabel
 
 
 // pcom.pas lines 2086-2225: selector
-proc selector(fsys: T.SetOfSys; fcp: T.Ctp)
+procedure selector(fsys: T.SetOfSys; fcp: T.Ctp)
   var lattr: T.Attr; lcp: T.Ctp; lsize: integer; lmin, lmax: integer
 begin
   // Initialize gattr from fcp
@@ -2087,7 +2087,7 @@ begin
 end selector
 
 // pcom.pas lines 2230-2237: variable (nested in call)
-proc variable(fsys: T.SetOfSys)
+procedure variable(fsys: T.SetOfSys)
   var lcp: T.Ctp
 begin
   if sy = T.ident then
@@ -2097,11 +2097,11 @@ begin
 end variable
 
 // pcom.pas lines 2227-2737: call
-proc call(fsys: T.SetOfSys; fcp: T.Ctp)
+procedure call(fsys: T.SetOfSys; fcp: T.Ctp)
   var lkey: integer
 
   // pcom.pas lines 2239-2245: getputresetrewrite
-  proc getputresetrewrite(fsys: T.SetOfSys; lkey: integer)
+  procedure getputresetrewrite(fsys: T.SetOfSys; lkey: integer)
   begin
     variable(T.ssAdd(fsys, T.rparent)); loadaddress()
     if gattr.typtr <> nil then
@@ -2111,7 +2111,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end getputresetrewrite
 
   // pcom.pas lines 2247-2302: readProc
-  proc readProc(fsys: T.SetOfSys; lkey: integer)
+  procedure readProc(fsys: T.SetOfSys; lkey: integer)
     var llev: integer; laddr: integer; lsp: T.Stp
   begin
     llev := 1; laddr := T.lcaftermarkstack
@@ -2163,7 +2163,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end readProc
 
   // pcom.pas lines 2304-2396: writeProc
-  proc writeProc(fsys: T.SetOfSys; lkey: integer)
+  procedure writeProc(fsys: T.SetOfSys; lkey: integer)
     var lsp: T.Stp; default_: boolean; llkey: integer
         llev: integer; laddr, len: integer
   begin
@@ -2252,7 +2252,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end writeProc
 
   // pcom.pas lines 2398-2424: packProc
-  proc packProc(fsys: T.SetOfSys)
+  procedure packProc(fsys: T.SetOfSys)
     var lsp, lsp1: T.Stp
   begin
     error(399); variable(T.ssAdd(fsys, T.rparent))
@@ -2281,7 +2281,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end packProc
 
   // pcom.pas lines 2426-2452: unpackProc
-  proc unpackProc(fsys: T.SetOfSys)
+  procedure unpackProc(fsys: T.SetOfSys)
     var lsp, lsp1: T.Stp
   begin
     error(399); variable(T.ssAdd(fsys, T.rparent))
@@ -2310,7 +2310,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end unpackProc
 
   // pcom.pas lines 2454-2497: newProc
-  proc newProc(fsys: T.SetOfSys)
+  procedure newProc(fsys: T.SetOfSys)
     var lsp, lsp1: T.Stp; varts: integer; lsize: integer; lval: T.Valu
         found: boolean
   begin
@@ -2354,7 +2354,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end newProc
 
   // pcom.pas lines 2499-2505: markProc
-  proc markProc(fsys: T.SetOfSys)
+  procedure markProc(fsys: T.SetOfSys)
   begin
     variable(T.ssAdd(fsys, T.rparent))
     if gattr.typtr <> nil then
@@ -2365,7 +2365,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end markProc
 
   // pcom.pas lines 2507-2513: releaseProc
-  proc releaseProc(fsys: T.SetOfSys)
+  procedure releaseProc(fsys: T.SetOfSys)
   begin
     variable(T.ssAdd(fsys, T.rparent))
     if gattr.typtr <> nil then
@@ -2376,7 +2376,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end releaseProc
 
   // pcom.pas lines 2517-2524: absFunc
-  proc absFunc()
+  procedure absFunc()
   begin
     if gattr.typtr <> nil then
       if gattr.typtr = intptr then gen0(0)
@@ -2386,7 +2386,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end absFunc
 
   // pcom.pas lines 2526-2533: sqrFunc
-  proc sqrFunc()
+  procedure sqrFunc()
   begin
     if gattr.typtr <> nil then
       if gattr.typtr = intptr then gen0(24)
@@ -2396,7 +2396,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end sqrFunc
 
   // pcom.pas lines 2535-2541: truncFunc
-  proc truncFunc()
+  procedure truncFunc()
   begin
     if gattr.typtr <> nil then
       if gattr.typtr <> realptr then error(125) end
@@ -2405,7 +2405,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end truncFunc
 
   // pcom.pas lines 2543-2549: oddFunc
-  proc oddFunc()
+  procedure oddFunc()
   begin
     if gattr.typtr <> nil then
       if gattr.typtr <> intptr then error(125) end
@@ -2414,7 +2414,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end oddFunc
 
   // pcom.pas lines 2551-2557: ordFunc
-  proc ordFunc()
+  procedure ordFunc()
   begin
     if gattr.typtr <> nil then
       if ord(gattr.typtr.form) >= ord(T.power) then error(125) end
@@ -2423,7 +2423,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end ordFunc
 
   // pcom.pas lines 2559-2565: chrFunc
-  proc chrFunc()
+  procedure chrFunc()
   begin
     if gattr.typtr <> nil then
       if gattr.typtr <> intptr then error(125) end
@@ -2432,7 +2432,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end chrFunc
 
   // pcom.pas lines 2567-2573: predsucc
-  proc predsucc(lkey: integer)
+  procedure predsucc(lkey: integer)
   begin
     if gattr.typtr <> nil then
       if gattr.typtr.form <> T.scalar then error(125) end
@@ -2442,7 +2442,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end predsucc
 
   // pcom.pas lines 2575-2591: eofFunc
-  proc eofFunc(fsys: T.SetOfSys; lkey: integer)
+  procedure eofFunc(fsys: T.SetOfSys; lkey: integer)
   begin
     if sy = T.lparent then
       insymbol(); variable(T.ssAdd(fsys, T.rparent))
@@ -2460,7 +2460,7 @@ proc call(fsys: T.SetOfSys; fcp: T.Ctp)
   end eofFunc
 
   // pcom.pas lines 2595-2692: callnonstandard
-  proc callnonstandard(fsys: T.SetOfSys; fcp: T.Ctp)
+  procedure callnonstandard(fsys: T.SetOfSys; fcp: T.Ctp)
     var nxt, lcp: T.Ctp; lsp: T.Stp; lkind: T.IdKind; lb: boolean
         locpar, llc: integer
   begin
@@ -2581,7 +2581,7 @@ begin // call body
 end call
 
 // pcom.pas lines 2748-2896: factor
-proc factor(fsys: T.SetOfSys)
+procedure factor(fsys: T.SetOfSys)
   var lcp: T.Ctp; lvp: ^T.ConstantRec; varpart: boolean
       cstpart: T.SetTy; lsp: T.Stp
 begin
@@ -2704,7 +2704,7 @@ begin
 end factor
 
 // pcom.pas lines 2745-2951: term
-proc term(fsys: T.SetOfSys)
+procedure term(fsys: T.SetOfSys)
   var lattr: T.Attr; lop: T.Operator
 begin
   factor(T.ssAdd(fsys, T.mulop))
@@ -2742,7 +2742,7 @@ begin
 end term
 
 // pcom.pas lines 2742-3020: simpleexpression
-proc simpleexpression(fsys: T.SetOfSys)
+procedure simpleexpression(fsys: T.SetOfSys)
   var lattr: T.Attr; lop: T.Operator; signed: boolean
 begin
   signed := false
@@ -2789,7 +2789,7 @@ begin
 end simpleexpression
 
 // pcom.pas lines 2739-3102: expression
-proc expression(fsys: T.SetOfSys)
+procedure expression(fsys: T.SetOfSys)
   var lattr: T.Attr; lop: T.Operator; typind: char; lsize: integer
 begin
   simpleexpression(T.ssAdd(fsys, T.relop))
@@ -2852,7 +2852,7 @@ begin
 end expression
 
 // pcom.pas lines 3104-3144: assignment
-proc assignment(fsys: T.SetOfSys; fcp: T.Ctp)
+procedure assignment(fsys: T.SetOfSys; fcp: T.Ctp)
   var lattr: T.Attr
 begin
   selector(T.ssAdd(fsys, T.becomes), fcp)
@@ -2889,7 +2889,7 @@ begin
 end assignment
 
 // pcom.pas lines 3146-3172: gotostatement
-proc gotostatement(fsys: T.SetOfSys)
+procedure gotostatement(fsys: T.SetOfSys)
   var llp: T.Lbp; found: boolean; ttop, ttop1: integer
 begin
   if sy = T.intconst then
@@ -2916,7 +2916,7 @@ begin
 end gotostatement
 
 // pcom.pas lines 3174-3183: compoundstatement
-proc compoundstatement(fsys: T.SetOfSys)
+procedure compoundstatement(fsys: T.SetOfSys)
 begin
   loop
     loop
@@ -2931,7 +2931,7 @@ begin
 end compoundstatement
 
 // pcom.pas lines 3185-3198: ifstatement
-proc ifstatement(fsys: T.SetOfSys)
+procedure ifstatement(fsys: T.SetOfSys)
   var lcix1, lcix2: integer
 begin
   expression(T.ssAdd(fsys, T.thensy))
@@ -2954,7 +2954,7 @@ type CaseInfo = record
   cslab: integer
 end
 
-proc casestatement(fsys: T.SetOfSys)
+procedure casestatement(fsys: T.SetOfSys)
   var lsp, lsp1: T.Stp
       fstptr, lpt1, lpt2, lpt3: ^CaseInfo
       lval: T.Valu
@@ -3042,7 +3042,7 @@ begin
 end casestatement
 
 // pcom.pas lines 3291-3307: repeatstatement
-proc repeatstatement(fsys: T.SetOfSys)
+procedure repeatstatement(fsys: T.SetOfSys)
   var laddr: integer
 begin
   genlabel(@laddr); putlabel(laddr)
@@ -3065,7 +3065,7 @@ begin
 end repeatstatement
 
 // pcom.pas lines 3309-3315: whilestatement
-proc whilestatement(fsys: T.SetOfSys)
+procedure whilestatement(fsys: T.SetOfSys)
   var laddr, lcix: integer
 begin
   genlabel(@laddr); putlabel(laddr)
@@ -3075,7 +3075,7 @@ begin
 end whilestatement
 
 // pcom.pas lines 3317-3387: forstatement
-proc forstatement(fsys: T.SetOfSys)
+procedure forstatement(fsys: T.SetOfSys)
   var lattr: T.Attr; lsy: T.Symbol
       lcix, laddr: integer; llc: integer
       lcp: T.Ctp
@@ -3144,7 +3144,7 @@ begin
 end forstatement
 
 // pcom.pas lines 3390-3429: withstatement
-proc withstatement(fsys: T.SetOfSys)
+procedure withstatement(fsys: T.SetOfSys)
   var lcp: T.Ctp; lcnt1: integer; llc: integer
 begin
   lcnt1 := 0; llc := lc
@@ -3185,7 +3185,7 @@ begin
 end withstatement
 
 // pcom.pas lines 3431-3467: statement
-proc statement(fsys: T.SetOfSys)
+procedure statement(fsys: T.SetOfSys)
   var lcp: T.Ctp; llp: T.Lbp
 begin
   if level <= 1 then
@@ -3230,7 +3230,7 @@ begin
 end statement
 
 // pcom.pas lines 3469-3564: body - generates code for a block's body
-proc body(fsys: T.SetOfSys; fprocp_: T.Ctp)
+procedure body(fsys: T.SetOfSys; fprocp_: T.Ctp)
   var entname, segsize, stacktop: integer
       llc1: integer; lcp: T.Ctp; llp: T.Lbp; llcp: T.Ctp
       saveid: T.Alpha
@@ -3339,7 +3339,7 @@ end body
 
 
 // pcom.pas lines 3566-3588: block
-proc block(fsys: T.SetOfSys; fsy: T.Symbol; fprocp_: T.Ctp)
+procedure block(fsys: T.SetOfSys; fsy: T.Symbol; fprocp_: T.Ctp)
   var lsy: T.Symbol
 begin
   dp := true
@@ -3369,7 +3369,7 @@ end block
 
 
 // pcom.pas lines 3590-3621: programme
-proc programme(fsys: T.SetOfSys)
+procedure programme(fsys: T.SetOfSys)
   var extfp: T.ExtFileP
 begin
   if sy = T.progsy then
@@ -3406,7 +3406,7 @@ begin
 end programme
 
 // pcom.pas lines 3624-3639: stdnames
-proc stdnames()
+procedure stdnames()
 begin
   na[ 1] := "false   "; na[ 2] := "true    "; na[ 3] := "input   "
   na[ 4] := "output  "; na[ 5] := "get     "; na[ 6] := "put     "
@@ -3424,7 +3424,7 @@ begin
 end stdnames
 
 // pcom.pas lines 3641-3667: enterstdtypes
-proc enterstdtypes()
+procedure enterstdtypes()
 begin
   // integer
   new(intptr)
@@ -3457,7 +3457,7 @@ begin
 end enterstdtypes
 
 // pcom.pas lines 3669-3762: entstdnames
-proc entstdnames()
+procedure entstdnames()
   var cp, cp1: T.Ctp; i: integer
 begin
   // integer type name
@@ -3521,7 +3521,7 @@ begin
     cp.klass := T.procc; cp.pfdeckind := T.standard
     enterid(cp)
   end
-  // mark (standard proc, key=13)
+  // mark (standard procedure, key=13)
   new(cp)
   cp.name := na[35]; cp.idtype := nil
   cp.next := nil; cp.key := 13
@@ -3555,7 +3555,7 @@ end entstdnames
 
 
 // pcom.pas lines 3764-3796: enterundecl
-proc enterundecl()
+procedure enterundecl()
 begin
   new(utypptr)
   utypptr.name := "        "; utypptr.idtype := nil; utypptr.klass := T.types
@@ -3588,7 +3588,7 @@ end enterundecl
 
 
 // pcom.pas lines 3798-3809: initscalars
-proc initscalars()
+procedure initscalars()
 begin
   fwptr := nil
   prtables := false; list := true; prcode := true; debug := true
@@ -3603,7 +3603,7 @@ begin
 end initscalars
 
 // pcom.pas lines 3811-3821: initsets
-proc initsets()
+procedure initsets()
 begin
   constbegsys := T.ss5(T.addop, T.intconst, T.realconst, T.stringconst, T.ident)
   simptypebegsys := T.ssAdd(constbegsys, T.lparent)
@@ -3617,11 +3617,11 @@ end initsets
 
 
 // pcom.pas lines 3823-3976: inittables
-proc inittables()
+procedure inittables()
   var i: integer
 
   // pcom.pas lines 3824-3841: reswords
-  proc reswords()
+  procedure reswords()
   begin
     rw[ 1] := "if      "; rw[ 2] := "do      "; rw[ 3] := "of      "
     rw[ 4] := "to      "; rw[ 5] := "in      "; rw[ 6] := "or      "
@@ -3641,7 +3641,7 @@ proc inittables()
   end reswords
 
   // pcom.pas lines 3843-3864: symbols
-  proc symbols()
+  procedure symbols()
   begin
     rsy[ 1] := T.ifsy;      rsy[ 2] := T.dosy;      rsy[ 3] := T.ofsy
     rsy[ 4] := T.tosy;      rsy[ 5] := T.relop;     rsy[ 6] := T.addop
@@ -3666,7 +3666,7 @@ proc inittables()
   end symbols
 
   // pcom.pas lines 3867-3876: rators
-  proc rators()
+  procedure rators()
     var i: integer
   begin
     for i := 1 to 35 do rop[i] := T.noop end
@@ -3678,7 +3678,7 @@ proc inittables()
   end rators
 
   // pcom.pas lines 3878-3886: procmnemonics
-  proc procmnemonics()
+  procedure procmnemonics()
   begin
     sna[ 1] := " get"; sna[ 2] := " put"; sna[ 3] := " rdi"; sna[ 4] := " rdr"
     sna[ 5] := " rdc"; sna[ 6] := " wri"; sna[ 7] := " wro"; sna[ 8] := " wrr"
@@ -3689,7 +3689,7 @@ proc inittables()
   end procmnemonics
 
   // pcom.pas lines 3888-3906: instrmnemonics
-  proc instrmnemonics()
+  procedure instrmnemonics()
   begin
     mn[ 0] := " abi"; mn[ 1] := " abr"; mn[ 2] := " adi"; mn[ 3] := " adr"
     mn[ 4] := " and"; mn[ 5] := " dif"; mn[ 6] := " dvi"; mn[ 7] := " dvr"
@@ -3710,7 +3710,7 @@ proc inittables()
   end instrmnemonics
 
   // pcom.pas lines 3908-3944: chartypes
-  proc chartypes()
+  procedure chartypes()
     var i: integer
   begin
     for i := T.ordminchar to T.ordmaxchar do chartp[i] := T.illegal end
@@ -3741,7 +3741,7 @@ proc inittables()
   end chartypes
 
   // pcom.pas lines 3946-3970: initdx
-  proc initdx()
+  procedure initdx()
   begin
     cdx[ 0] :=  0; cdx[ 1] :=  0; cdx[ 2] := -1; cdx[ 3] := -1
     cdx[ 4] := -1; cdx[ 5] := -1; cdx[ 6] := -1; cdx[ 7] := -1

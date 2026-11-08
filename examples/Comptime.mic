@@ -1,0 +1,29 @@
+module Comptime
+
+const
+    KB      = 1024
+    BUFSIZE = getenv(uint32, "BUFSIZE", 16 * KB)   // micc -D BUFSIZE=...
+    WORDS   = BUFSIZE div size(integer)
+    DEBUG   = getenv(boolean, "DEBUG")             // false unless -D DEBUG
+
+procedure width(n: uint32): uint32 invar   // callable at compile time
+begin
+    if n < 2 then return 1 else return 1 + width(n div 2) end
+end width
+
+const
+    INDEXBITS = width(WORDS - 1)           // 12, computed by the compiler
+
+var
+    buf: array WORDS of integer
+    index: array INDEXBITS of boolean
+
+begin
+    println(len(buf))       // 4096
+    println(len(index))     // 12
+    <* if DEBUG then *>
+    println("debug build")
+    <* else *>
+    println("release build")
+    <* end *>
+end Comptime

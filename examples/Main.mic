@@ -1,0 +1,9 @@
+MODULE Main;
+    IMPORT Sorter;
+    VAR a: ARRAY 8 OF INTEGER; i: INTEGER;
+BEGIN
+    a := { 5, 3, 8, 1, 9, 2, 7, 4 };
+    Sorter.Sort(@a, LEN(a));
+    FOR i := 0 TO LEN(a)-1 DO PRINT(a[i]); PRINT(" ") END;
+    PRINTLN("")
+END Main.
