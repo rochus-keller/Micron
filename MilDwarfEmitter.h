@@ -38,11 +38,22 @@ namespace Mil
     // .debug_info    - Compilation unit, subprograms, variables, types
     // .debug_abbrev  - Abbreviation table (templates for DIEs)
     // .debug_line    - Line number program (source line -> address mapping)
-    // .debug_frame   - Call frame information (CFA = R11 + 8 for all frames)
+    // .debug_frame   - Call frame information
     // .debug_str     - String table (indirect strings referenced by DIEs)
     class DwarfEmitter
     {
     public:
+        struct FrameInstruction
+        {
+            enum Kind { DefineCfa, SaveRegister, SameValue };
+            quint32 address;
+            Kind kind;
+            quint32 reg;
+            qint32 offset;
+            FrameInstruction(quint32 pc, Kind k, quint32 r, qint32 off = 0):
+                address(pc), kind(k), reg(r), offset(off) {}
+        };
+
         DwarfEmitter(ElfWriter& elf, ElfWriter::Architecture arch = ElfWriter::ArchX86);
 
         // Begin a new compilation unit (one per module).
@@ -54,6 +65,7 @@ namespace Mil
 
         void addSubprogram(const QByteArray& name, quint32 lowPC, quint32 highPC, quint32 line,
                            quint32 prologuePC = 0);
+        void setFrameInstructions(const QList<FrameInstruction>& instructions);
         void addParameter(const QByteArray& name, qint32 fpOffset, quint32 typeRef);
         void addLocalVariable(const QByteArray& name, qint32 fpOffset, quint32 typeRef);
         void endSubprogram();
@@ -84,6 +96,7 @@ namespace Mil
         void buildAbbrevTable();
         void buildDebugFrame();
         void buildDebugLine();
+        void appendFrameInstructions(quint32 lowPC, const QList<FrameInstruction>& instructions);
 
         static void appendULEB128(QByteArray& buf, quint32 value);
         static void appendSLEB128(QByteArray& buf, qint32 value);
@@ -120,6 +133,7 @@ namespace Mil
         quint32 d_abbrevSymIdx;
         quint32 d_strSymIdx;
         quint32 d_lineSymIdx;
+        quint32 d_frameSymIdx;
 
         QByteArray d_info; // .debug_info
         QByteArray d_abbrev; // .debug_abbrev
@@ -149,11 +163,13 @@ namespace Mil
         quint32 d_lowPC;
         quint32 d_highPC;
 
-        enum RelocTarget { RELOC_TEXT, RELOC_DATA, RELOC_STR, RELOC_ABBREV, RELOC_LINE };
+        enum RelocTarget { RELOC_TEXT, RELOC_DATA, RELOC_STR, RELOC_ABBREV, RELOC_LINE, RELOC_FRAME };
         struct DwarfReloc {
             quint32 offset; // offset within the section (d_info or d_line)
             RelocTarget target; // which section symbol to relocate against
         };
+        void writeRelocations(const QByteArray& name, quint32 section, const QByteArray& data,
+                              const QList<DwarfReloc>& relocs, quint32 text, quint32 globals);
         QList<DwarfReloc> d_infoRelocs; // for .debug_info
         QList<DwarfReloc> d_lineRelocs; // for .debug_line
         QList<DwarfReloc> d_frameRelocs; // for .debug_frame
@@ -163,6 +179,7 @@ namespace Mil
             quint32 lowPC;
             quint32 highPC;
             quint32 prologuePC; // PC where push ebp; mov ebp, esp starts
+            QList<FrameInstruction> instructions;
         };
         QList<SubprogramBounds> d_fdes;
 

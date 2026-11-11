@@ -73,7 +73,7 @@ namespace Rv32
 
         void setHasFloat(bool v) { d_hasFloat = v; }
         bool hasFloat() const { return d_hasFloat; }
-        void setEmitDwarf(bool v) { d_emitDwarf = v; }
+        void setEmitDwarf(bool v) { d_emitDwarf = v; d_code.setGenerateLines(v); }
         bool emitDwarf() const { return d_emitDwarf; }
         void setUseRvAbi(bool v) { d_useRvAbi = v; }
         bool useRvAbi() const { return d_useRvAbi; }
@@ -109,12 +109,20 @@ namespace Rv32
         void emitPrologue(quint32 localsSize);
 
         void emitEpilogue();
+        void recordFrameInstruction(DwarfEmitter::FrameInstruction::Kind kind, quint32 reg, qint32 offset = 0);
+        void recordFrameBody();
 
         int emitOp(Vm::Procedure& proc, int pc);
 
         void loadImm32(Rv32::Register rd, quint32 value);
 
         void loadAddr(Rv32::Register rd, quint32 symbolIdx, qint32 addend = 0);
+
+        quint32 getOrCreateExceptionChainSymbol();
+        quint32 getOrCreateExceptionNilSymbol();
+        quint32 getOrCreateRuntimeSymbol(quint32& cache, const char* name);
+        quint32 getUnhandledExceptionMessage();
+        void emitUnhandledException();
 
         void loadFromSp(Rv32::Register rd, quint32 offset, Rv32::Register tmp = Rv32::T4);
 
@@ -205,6 +213,7 @@ namespace Rv32
 
         // Emit an indirect call via register
         void emitIndirectCall(Rv32::Register target);
+        void emitIndirectCallWithArgs(Rv32::Register target, quint32 argsSize, quint32 returnSize);
 
         AstModel* d_mdl;
         Vm::Code2 d_code;
@@ -218,6 +227,7 @@ namespace Rv32
         bool d_hasHwDiv;  // true for M extension (hardware div/rem); false = external helpers
 
         DwarfEmitter* d_dwarf;
+        QList<DwarfEmitter::FrameInstruction> d_frameInstructions;
 
         quint32 d_localsSize;
         quint32 d_argsSize;
@@ -240,6 +250,11 @@ namespace Rv32
         quint32 d_dataSymIdx;
         quint32 d_rodataSymIdx;
         quint32 d_globalsSymIdx;
+        quint32 d_exceptionChainSymIdx;
+        quint32 d_exceptionNilSymIdx;
+        quint32 d_printStrSymIdx;
+        quint32 d_exitSymIdx;
+        int d_unhandledExceptionMsgOff;
 
         QMap<int,quint32> d_procTextOffsets;
         QMap<int,quint32> d_procSymbols;

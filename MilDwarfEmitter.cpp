@@ -80,6 +80,7 @@ static const quint16 DW_LANG_lo_user = 0x8000;
 
 static const quint8 DW_OP_addr = 0x03; // 4-byte address
 static const quint8 DW_OP_reg5  = 0x55; // EBP (x86 frame pointer)
+static const quint8 DW_OP_reg8  = 0x58;
 static const quint8 DW_OP_reg11 = 0x5B; // R11 (ARM frame pointer)
 static const quint8 DW_OP_breg11  = 0x7B; // R11 + SLEB128 offset
 static const quint8 DW_OP_fbreg= 0x91; // frame base + SLEB128 offset
@@ -90,12 +91,15 @@ static const quint8 DW_CFA_advance_loc = 0x40; // high 2 bits = 01, low 6 = delt
 static const quint8 DW_CFA_nop  = 0x00;
 static const quint8 DW_CFA_def_cfa_register = 0x0D;
 static const quint8 DW_CFA_def_cfa_offset   = 0x0E;
+static const quint8 DW_CFA_same_value = 0x08;
 
 static const quint32 SHT_PROGBITS_VAL = 1;
 static const quint32 SHT_REL_VAL = 9;
+static const quint32 SHT_RELA_VAL = 4;
 static const quint32 ELF32_REL_SIZE = 8;
 static const quint8  R_ARM_ABS32_VAL = 2;
 static const quint8  R_386_32_VAL = 1;
+static const quint8  R_RISCV_32_VAL = 1;
 
 
 static void appendLE16(QByteArray& buf, quint16 val)
@@ -149,6 +153,7 @@ DwarfEmitter::DwarfEmitter(ElfWriter& elf, ElfWriter::Architecture arch)
     d_lineSymIdx = d_elf.addSectionSymbol(d_lineSecIdx);
 
     d_frameSecIdx = d_elf.addSection(QByteArray(".debug_frame"), SHT_PROGBITS_VAL, 0, 4);
+    d_frameSymIdx = d_arch == ElfWriter::ArchRISCV ? d_elf.addSectionSymbol(d_frameSecIdx) : 0;
 }
 
 void DwarfEmitter::appendULEB128(QByteArray& buf, quint32 value)
@@ -327,11 +332,18 @@ void DwarfEmitter::addSubprogram(const QByteArray& name, quint32 lowPC, quint32 
     appendULEB128(d_info, line);
 
     QByteArray expr;
-    expr.append(static_cast<char>(d_arch == ElfWriter::ArchX86 ? DW_OP_reg5 : DW_OP_reg11));
+    expr.append(static_cast<char>(d_arch == ElfWriter::ArchRISCV ? DW_OP_reg8 :
+                                 d_arch == ElfWriter::ArchX86 ? DW_OP_reg5 : DW_OP_reg11));
     appendULEB128(d_info, expr.size());
     d_info.append(expr);
 
     // DW_AT_external always present for exported procs
+}
+
+void DwarfEmitter::setFrameInstructions(const QList<FrameInstruction>& instructions)
+{
+    Q_ASSERT(!d_fdes.isEmpty());
+    d_fdes.last().instructions = instructions;
 }
 
 void DwarfEmitter::addParameter(const QByteArray& name, qint32 fpOffset, quint32 typeRef)
@@ -705,6 +717,51 @@ void DwarfEmitter::buildAbbrevTable()
     d_abbrev.append(static_cast<char>(0));
 }
 
+void DwarfEmitter::appendFrameInstructions(quint32 lowPC, const QList<FrameInstruction>& instructions)
+{
+    quint32 address = lowPC;
+    foreach( const FrameInstruction& instruction, instructions )
+    {
+        Q_ASSERT(instruction.address >= address && (instruction.address - address) % 4 == 0);
+        const quint32 advance = (instruction.address - address) / 4;
+        if( advance > 0 )
+        {
+            if( advance <= 63 )
+                d_frame.append(static_cast<char>(DW_CFA_advance_loc | advance));
+            else
+            {
+                d_frame.append(static_cast<char>(0x04));
+                appendLE32(d_frame,advance);
+            }
+        }
+        address = instruction.address;
+        switch( instruction.kind )
+        {
+        case FrameInstruction::DefineCfa:
+            Q_ASSERT(instruction.offset >= 0);
+            d_frame.append(static_cast<char>(DW_CFA_def_cfa));
+            appendULEB128(d_frame,instruction.reg);
+            appendULEB128(d_frame,instruction.offset);
+            break;
+        case FrameInstruction::SaveRegister:
+            Q_ASSERT(instruction.offset <= 0 && instruction.offset % 4 == 0);
+            if( instruction.reg < 64 )
+                d_frame.append(static_cast<char>(DW_CFA_offset | instruction.reg));
+            else
+            {
+                d_frame.append(static_cast<char>(0x05));
+                appendULEB128(d_frame,instruction.reg);
+            }
+            appendULEB128(d_frame,instruction.offset / -4);
+            break;
+        case FrameInstruction::SameValue:
+            d_frame.append(static_cast<char>(DW_CFA_same_value));
+            appendULEB128(d_frame,instruction.reg);
+            break;
+        }
+    }
+}
+
 void DwarfEmitter::buildDebugFrame()
 {
     d_frame.clear();
@@ -719,9 +776,10 @@ void DwarfEmitter::buildDebugFrame()
     // push ebp; mov ebp, esp.
 
     const bool isX86 = (d_arch == ElfWriter::ArchX86);
-    const quint32 spReg = isX86 ? 4 : 13;        // ESP=4, SP=13
-    const quint32 fpReg = isX86 ? 5 : 11;         // EBP=5, R11=11
-    const quint32 raReg = isX86 ? 8 : 14;         // EIP=8, LR=14
+    const bool isRv32 = (d_arch == ElfWriter::ArchRISCV);
+    const quint32 spReg = isRv32 ? 2 : isX86 ? 4 : 13;
+    const quint32 fpReg = isRv32 ? 8 : isX86 ? 5 : 11;
+    const quint32 raReg = isRv32 ? 1 : isX86 ? 8 : 14;
     const quint32 codeAlign = isX86 ? 1 : 4;      // x86 variable-length, ARM 4-byte
 
     int cieStart = d_frame.size();
@@ -748,10 +806,19 @@ void DwarfEmitter::buildDebugFrame()
     // Return address (EIP) is saved at CFA - 4 = [ESP].
     d_frame.append(static_cast<char>(DW_CFA_def_cfa));
     appendULEB128(d_frame, spReg);
-    appendULEB128(d_frame, 4);  // CFA = ESP + 4
+    appendULEB128(d_frame, isRv32 ? 0 : 4);
 
-    d_frame.append(static_cast<char>(DW_CFA_offset | raReg));
-    appendULEB128(d_frame, 1); // EIP at CFA - 1*4 = CFA - 4 = [ESP]
+    if( isRv32 )
+    {
+        d_frame.append(static_cast<char>(DW_CFA_same_value));
+        appendULEB128(d_frame, raReg);
+        d_frame.append(static_cast<char>(DW_CFA_same_value));
+        appendULEB128(d_frame, fpReg);
+    }else
+    {
+        d_frame.append(static_cast<char>(DW_CFA_offset | raReg));
+        appendULEB128(d_frame, 1);
+    }
 
     while ((d_frame.size() - cieStart) % 4 != 0)
         d_frame.append(static_cast<char>(DW_CFA_nop));
@@ -766,6 +833,13 @@ void DwarfEmitter::buildDebugFrame()
 
         // CIE pointer: in .debug_frame this is the byte offset to the CIE
         // from the beginning of the section (which is 0 = cieStart).
+        if( isRv32 )
+        {
+            DwarfReloc reference;
+            reference.offset = d_frame.size();
+            reference.target = RELOC_FRAME;
+            d_frameRelocs.append(reference);
+        }
         appendLE32(d_frame, cieStart);
 
         // Relocated start address of the function
@@ -777,6 +851,15 @@ void DwarfEmitter::buildDebugFrame()
 
         // Length of the function
         appendLE32(d_frame, d_fdes[i].highPC - d_fdes[i].lowPC);
+
+        if( isRv32 )
+        {
+            appendFrameInstructions(d_fdes[i].lowPC,d_fdes[i].instructions);
+            while( (d_frame.size() - fdeStart) % 4 != 0 )
+                d_frame.append(static_cast<char>(DW_CFA_nop));
+            patchLE32(d_frame,fdeStart,d_frame.size() - fdeStart - 4);
+            continue;
+        }
 
         // Emit prologue CFA instructions.
         // The prologue (push ebp; mov ebp, esp) may not start at lowPC for
@@ -975,41 +1058,46 @@ void DwarfEmitter::finalize(quint32 textSymIdx, quint32 dataSymIdx, quint32 glob
     d_elf.appendToSection(d_lineSecIdx, d_line);
     d_elf.appendToSection(d_frameSecIdx, d_frame);
 
-    if (!d_infoRelocs.isEmpty()) {
-        quint32 relInfoIdx = d_elf.addSection(QByteArray(".rel.debug_info"), SHT_REL_VAL, 0, 4);
-        d_elf.configureRelSection(relInfoIdx, d_infoSecIdx);
-        for (int i = 0; i < d_infoRelocs.size(); i++) {
-            const DwarfReloc& r = d_infoRelocs[i];
-            quint32 symIdx = 0;
-            if (r.target == RELOC_TEXT) symIdx = textSymIdx;
-            else if (r.target == RELOC_DATA) symIdx = globalsSymIdx ? globalsSymIdx : dataSymIdx;
-            else if (r.target == RELOC_STR) symIdx = d_strSymIdx;
-            else if (r.target == RELOC_ABBREV) symIdx = d_abbrevSymIdx;
-            else if (r.target == RELOC_LINE) symIdx = d_lineSymIdx;
-            quint8 relType = (d_arch == ElfWriter::ArchX86) ? R_386_32_VAL : R_ARM_ABS32_VAL;
-            d_elf.addRelocation(relInfoIdx, r.offset, symIdx, relType);
-        }
-    }
+    const quint32 globals = globalsSymIdx ? globalsSymIdx : dataSymIdx;
+    writeRelocations(".debug_info",d_infoSecIdx,d_info,d_infoRelocs,textSymIdx,globals);
+    writeRelocations(".debug_line",d_lineSecIdx,d_line,d_lineRelocs,textSymIdx,dataSymIdx);
+    writeRelocations(".debug_frame",d_frameSecIdx,d_frame,d_frameRelocs,textSymIdx,dataSymIdx);
+}
 
-    if (!d_lineRelocs.isEmpty()) {
-        quint32 relLineIdx = d_elf.addSection(QByteArray(".rel.debug_line"), SHT_REL_VAL, 0, 4);
-        d_elf.configureRelSection(relLineIdx, d_lineSecIdx);
-        quint8 relType = (d_arch == ElfWriter::ArchX86) ? R_386_32_VAL : R_ARM_ABS32_VAL;
-        for (int i = 0; i < d_lineRelocs.size(); i++) {
-            const DwarfReloc& r = d_lineRelocs[i];
-            quint32 symIdx = (r.target == RELOC_TEXT) ? textSymIdx : dataSymIdx;
-            d_elf.addRelocation(relLineIdx, r.offset, symIdx, relType);
+void DwarfEmitter::writeRelocations(const QByteArray& name, quint32 section, const QByteArray& data,
+                                   const QList<DwarfReloc>& relocs, quint32 text, quint32 globals)
+{
+    if( relocs.isEmpty() )
+        return;
+    const bool rela = d_arch == ElfWriter::ArchRISCV;
+    const quint32 index = d_elf.addSection((rela ? ".rela" : ".rel") + name,
+                                         rela ? SHT_RELA_VAL : SHT_REL_VAL,0,4);
+    d_elf.configureRelSection(index,section);
+    const quint8 type = rela ? R_RISCV_32_VAL :
+        d_arch == ElfWriter::ArchX86 ? R_386_32_VAL : R_ARM_ABS32_VAL;
+    foreach( const DwarfReloc& relocation, relocs )
+    {
+        quint32 symbol = 0;
+        switch( relocation.target )
+        {
+        case RELOC_TEXT: symbol = text; break;
+        case RELOC_DATA: symbol = globals; break;
+        case RELOC_STR: symbol = d_strSymIdx; break;
+        case RELOC_ABBREV: symbol = d_abbrevSymIdx; break;
+        case RELOC_LINE: symbol = d_lineSymIdx; break;
+        case RELOC_FRAME: symbol = d_frameSymIdx; break;
         }
-    }
-
-    if (!d_frameRelocs.isEmpty()) {
-        quint32 relFrameIdx = d_elf.addSection(QByteArray(".rel.debug_frame"), SHT_REL_VAL, 0, 4);
-        d_elf.configureRelSection(relFrameIdx, d_frameSecIdx);
-        quint8 relType = (d_arch == ElfWriter::ArchX86) ? R_386_32_VAL : R_ARM_ABS32_VAL;
-        for (int i = 0; i < d_frameRelocs.size(); i++) {
-            const DwarfReloc& r = d_frameRelocs[i];
-            quint32 symIdx = (r.target == RELOC_TEXT) ? textSymIdx : dataSymIdx;
-            d_elf.addRelocation(relFrameIdx, r.offset, symIdx, relType);
+        qint32 addend = 0;
+        if( rela )
+        {
+            Q_ASSERT(relocation.offset + 4 <= quint32(data.size()));
+            const unsigned char* p = reinterpret_cast<const unsigned char*>(data.constData()) +
+                relocation.offset;
+            addend = qint32(quint32(p[0]) | quint32(p[1]) << 8 |
+                           quint32(p[2]) << 16 | quint32(p[3]) << 24);
         }
+        d_elf.addRelocation(index,relocation.offset,symbol,type,addend);
     }
 }
+
+
