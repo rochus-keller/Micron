@@ -55,6 +55,8 @@ Renderer::Renderer(AstModel* mdl)
     : d_mdl(mdl), d_code(mdl, 4, 4), d_emitDwarf(false), d_cdeclReturns(false),
       d_dwarf(0), d_localsSize(0), d_argsSize(0),
       d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0), d_globalsSymIdx(0),
+      d_exceptionChainSymIdx(0), d_exceptionNilSymIdx(0),
+      d_printStrSymIdx(0), d_exitSymIdx(0), d_unhandledExceptionMsgOff(-1),
       d_elf(ElfWriter::ArchX86), d_currentModule(0)
 {
     d_code.setReverseArguments(true);
@@ -82,6 +84,26 @@ quint32 Renderer::getOrCreateExtSymbol(int procIdx)
     quint32 symIdx = d_elf.addSymbol(name, 0, 0, 0, STB_GLOBAL, STT_FUNC);
     d_extProcSymbols[procIdx] = symIdx;
     return symIdx;
+}
+
+quint32 Renderer::getOrCreateExceptionChainSymbol()
+{
+    if (!d_exceptionChainSymIdx) {
+        static const quint16 SHN_COMMON = 0xFFF2;
+        d_exceptionChainSymIdx = d_elf.addSymbol("MIC$$exchain", SHN_COMMON, 4, 4,
+                                                  STB_GLOBAL, STT_OBJECT);
+    }
+    return d_exceptionChainSymIdx;
+}
+
+quint32 Renderer::getOrCreateExceptionNilSymbol()
+{
+    if (!d_exceptionNilSymIdx) {
+        static const quint16 SHN_COMMON = 0xFFF2;
+        d_exceptionNilSymIdx = d_elf.addSymbol("MIC$$exnil", SHN_COMMON, 4, 4,
+                                                STB_GLOBAL, STT_OBJECT);
+    }
+    return d_exceptionNilSymIdx;
 }
 
 static const int MaxExtensions = 16;
@@ -420,6 +442,11 @@ bool Renderer::renderModule(Declaration* module)
 {
     Q_ASSERT(module && module->kind == Declaration::Module);
     d_currentModule = module;
+    d_printStrSymIdx = 0;
+    d_exitSymIdx = 0;
+    d_unhandledExceptionMsgOff = -1;
+    d_exceptionChainSymIdx = 0;
+    d_exceptionNilSymIdx = 0;
 
     if (!d_code.compile(module))
         return setError(QString("VmCode compilation failed for module %1").arg(QString(module->name)));
@@ -942,6 +969,34 @@ bool Renderer::renderProcedure(Procedure& proc, int procIdx)
     scanBranchTargets(proc);
     emitPrologue(d_localsSize);
 
+    if (proc.finallyPc >= 0) {
+        Q_ASSERT(proc.finallyRecordOffset >= 0);
+        const quint32 recordOffset = proc.finallyRecordOffset;
+        const quint32 chainSym = getOrCreateExceptionChainSymbol();
+        loadLocalAddr(ECX, recordOffset);
+        loadExternalAddr(EDX, chainSym);
+        d_emitter.mov_rm(EDX, EDX, 0);
+        d_emitter.mov_mr(ECX, 0, EDX);
+        d_emitter.mov_mr(ECX, 8, EBP);
+        d_emitter.mov_mr(ECX, 12, ESP);
+
+        X86::Label skipLandingPad;
+        quint32 callDisp = d_emitter.call_rel32(0);
+        loadLocalAddr(EDX, proc.exceptionOffset);
+        d_emitter.mov_mr(EDX, 0, EAX);
+        d_emitter.mov_ri(EDX, 1);
+        loadLocalAddr(ECX, proc.unwindOffset);
+        d_emitter.mov_mr(ECX, 0, EDX);
+        d_emitter.jmp(getLabel(proc.finallyPc));
+        d_emitter.bind(skipLandingPad);
+        d_emitter.patchLE32(callDisp, d_emitter.currentPosition() - (callDisp + 4));
+        d_emitter.pop_r(EDX);
+        loadLocalAddr(ECX, recordOffset);
+        d_emitter.mov_mr(ECX, 4, EDX);
+        loadExternalAddr(EDX, chainSym);
+        d_emitter.mov_mr(EDX, 0, ECX);
+    }
+
     // Initialize local object variables (vtable pointers + template data)
     for (size_t i = 0; i < proc.locals.size(); i++) {
         const Vm::Template& tmpl = proc.locals[i].second;
@@ -979,6 +1034,12 @@ bool Renderer::renderProcedure(Procedure& proc, int procIdx)
     int pc = 0;
     while (pc < (int)proc.ops.size()) {
         bindLabelIfNeeded(pc);
+        if (pc == proc.finallyPc) {
+            loadLocalAddr(ECX, proc.finallyRecordOffset);
+            d_emitter.mov_rm(EDX, ECX, 0);
+            loadExternalAddr(ECX, getOrCreateExceptionChainSymbol());
+            d_emitter.mov_mr(ECX, 0, EDX);
+        }
         int consumed = emitOp(proc, pc);
         if (consumed < 0)
             return false;
@@ -1052,6 +1113,13 @@ void Renderer::loadVarAddr(Register rd, quint32 milOffset)
     // The relocation patches the imm32 at (currentPosition - 4)
     quint32 immOffset = d_emitter.currentPosition() - 4;
     d_elf.addRelocation(d_sections.relText, immOffset, d_globalsSymIdx, R_386_32);
+}
+
+void Renderer::loadExternalAddr(Register rd, quint32 symbolIdx)
+{
+    d_emitter.mov_ri(rd, 0);
+    quint32 immOffset = d_emitter.currentPosition() - 4;
+    d_elf.addRelocation(d_sections.relText, immOffset, symbolIdx, R_386_32);
 }
 
 void Renderer::scanBranchTargets(Procedure& proc)
@@ -1138,6 +1206,41 @@ void Renderer::emitCallStackAdj(quint32 argsSize, quint32 returnSize, bool fpRet
             }
         }
     }
+}
+
+void Renderer::emitIndirectCallWithArgs(X86::Register target, quint32 argsSize,
+                                        quint32 returnSize, bool fpReturn)
+{
+    d_emitter.call_r(target);
+    emitCallStackAdj(argsSize, returnSize, fpReturn);
+}
+
+void Renderer::emitUnhandledException()
+{
+    if (d_unhandledExceptionMsgOff < 0) {
+        static const char message[] = "unhandled exception\n";
+        d_unhandledExceptionMsgOff = d_elf.sectionSize(d_sections.rodata);
+        d_elf.appendToSection(d_sections.rodata, message, sizeof(message));
+    }
+
+    X86::Emitter& em = d_emitter;
+    em.push_i(d_unhandledExceptionMsgOff);
+    quint32 immOff = em.currentPosition() - 4;
+    d_elf.addRelocation(d_sections.relText, immOff, d_rodataSymIdx, R_386_32);
+    quint32 printSym = d_printStrSymIdx;
+    if (!printSym)
+        d_printStrSymIdx = printSym = d_elf.addSymbol("MIC$$printStr", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+    quint32 callOff = em.call_rel32(-4);
+    d_elf.addRelocation(d_sections.relText, callOff, printSym, R_386_PC32);
+    emitCallStackAdj(4, 0);
+
+    em.push_i(1);
+    quint32 exitSym = d_exitSymIdx;
+    if (!exitSym)
+        d_exitSymIdx = exitSym = d_elf.addSymbol("MIC$$exit", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+    callOff = em.call_rel32(-4);
+    d_elf.addRelocation(d_sections.relText, callOff, exitSym, R_386_PC32);
+    emitCallStackAdj(4, 0);
 }
 
 quint32 Renderer::emitArgAlignment(Declaration* decl)
@@ -3120,8 +3223,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 argsSize = val & 0x7FF;
         quint32 returnSize = rawReturnSize & ~1u;
         popReg(EAX); // function pointer
-        em.call_r(EAX);
-        emitCallStackAdj(argsSize, returnSize, fpReturn);
+        emitIndirectCallWithArgs(EAX, argsSize, returnSize, fpReturn);
         return 1;
     }
     case LL_callmi: {
@@ -3344,9 +3446,68 @@ int Renderer::emitOp(Procedure& proc, int pc)
         em.nop();
         return 1;
 
-    case LL_pcall:
-    case LL_raise:
-        return setError("pcall/raise not yet supported on this target") ? -1 : -1;
+    case LL_pcall: {
+        const quint32 argsSize = val & 0x7FF;
+        Q_ASSERT(proc.pcallRecordOffset >= 0);
+        popReg(EAX);
+        const quint32 chainSym = getOrCreateExceptionChainSymbol();
+        const quint32 recordOffset = proc.pcallRecordOffset;
+        loadLocalAddr(ECX, recordOffset);
+        loadExternalAddr(EDX, chainSym);
+        d_emitter.mov_rm(EDI, EDX, 0);
+        d_emitter.mov_mr(ECX, 0, EDI);
+        d_emitter.mov_mr(ECX, 8, EBP);
+        d_emitter.mov_rr(EDI, ESP);
+        if (argsSize)
+            d_emitter.add_ri(EDI, argsSize);
+        d_emitter.mov_mr(ECX, 12, EDI);
+
+        quint32 callDisp = d_emitter.call_rel32(0);
+        loadLocalAddr(EDX, recordOffset);
+        d_emitter.mov_rm(EDI, EDX, 0);
+        loadExternalAddr(EDX, chainSym);
+        d_emitter.mov_mr(EDX, 0, EDI);
+        X86::Label join;
+        d_emitter.jmp(join);
+
+        d_emitter.patchLE32(callDisp, d_emitter.currentPosition() - (callDisp + 4));
+        d_emitter.pop_r(EDX);
+        loadLocalAddr(ECX, recordOffset);
+        d_emitter.mov_mr(ECX, 4, EDX);
+        loadExternalAddr(EDX, chainSym);
+        d_emitter.mov_mr(EDX, 0, ECX);
+        emitIndirectCallWithArgs(EAX, argsSize, 0, false);
+        loadLocalAddr(ECX, recordOffset);
+        d_emitter.mov_rm(EDI, ECX, 0);
+        loadExternalAddr(EDX, chainSym);
+        d_emitter.mov_mr(EDX, 0, EDI);
+        d_emitter.xor_rr(EAX, EAX);
+        d_emitter.bind(join);
+        pushReg(EAX);
+        return 1;
+    }
+    case LL_raise: {
+        popReg(EAX);
+        X86::Label hasException, handled, exitReturned;
+        d_emitter.test_rr(EAX, EAX);
+        d_emitter.jcc(CC_NE, hasException);
+        loadExternalAddr(EAX, getOrCreateExceptionNilSymbol());
+        d_emitter.bind(hasException);
+        loadExternalAddr(ECX, getOrCreateExceptionChainSymbol());
+        d_emitter.mov_rm(ECX, ECX, 0);
+        d_emitter.test_rr(ECX, ECX);
+        d_emitter.jcc(CC_NE, handled);
+        emitUnhandledException();
+        d_emitter.bind(exitReturned);
+        d_emitter.jmp(exitReturned);
+        d_emitter.bind(handled);
+        d_emitter.mov_rm(EDX, ECX, 4);
+        d_emitter.mov_rm(EBP, ECX, 8);
+        d_emitter.mov_rm(ESP, ECX, 12);
+        d_emitter.emitByte(0xFF);
+        d_emitter.emitByte(0xE2);
+        return 1;
+    }
 
     default:
         return setError(QString("Unknown LL_op: %1").arg(opcode)) ? -1 : -1;
@@ -3354,3 +3515,5 @@ int Renderer::emitOp(Procedure& proc, int pc)
 
     return 1;
 }
+
+

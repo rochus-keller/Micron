@@ -99,6 +99,7 @@ namespace X86
         void loadArgAddr(X86::Register rd, quint32 milOffset);
 
         void loadVarAddr(X86::Register rd, quint32 milOffset);
+        void loadExternalAddr(X86::Register rd, quint32 symbolIdx);
 
         void scanBranchTargets(Vm::Procedure& proc);
         X86::Label& getLabel(int milPc);
@@ -108,12 +109,16 @@ namespace X86
         // Stack adjustment after call, copy return value, adjust SP
         // fpReturn: true if the callee returns float/double in ST(0) per cdecl ABI
         void emitCallStackAdj(quint32 argsSize, quint32 returnSize, bool fpReturn = false);
+        void emitIndirectCallWithArgs(X86::Register target, quint32 argsSize, quint32 returnSize, bool fpReturn);
+        void emitUnhandledException();
 
         // Compute contiguous "pushed size" and rearrange stack to match aligned layout
         quint32 emitArgAlignment(Declaration* decl);
 
         bool setError(const QString& msg);
         quint32 getOrCreateExtSymbol(int procIdx);
+        quint32 getOrCreateExceptionChainSymbol();
+        quint32 getOrCreateExceptionNilSymbol();
         quint32 getOrEmitVtable(int vtableIdx);
         quint32 getOrCreateVtableSymbol(int vtableIdx);
         void emitVtableFixupAt(X86::Register destReg, quint32 offset, Type* t,
@@ -142,6 +147,11 @@ namespace X86
         quint32 d_dataSymIdx;
         quint32 d_rodataSymIdx;
         quint32 d_globalsSymIdx; // COMMON symbol for shared module variable memory
+        quint32 d_exceptionChainSymIdx;
+        quint32 d_exceptionNilSymIdx;
+        quint32 d_printStrSymIdx;
+        quint32 d_exitSymIdx;
+        int d_unhandledExceptionMsgOff;
 
         QMap<int,quint32> d_procTextOffsets;
         QMap<int,quint32> d_procSymbols;
