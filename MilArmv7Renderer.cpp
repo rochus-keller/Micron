@@ -45,7 +45,10 @@ static const int FP_TO_ARGS = 8;
 
 Renderer::Renderer(AstModel* mdl)
     : d_mdl(mdl), d_code(mdl, 4, 4), d_hasHwDiv(true), d_emitDwarf(false), d_useAapcs(false),
-      d_dwarf(0), d_localsSize(0), d_argsSize(0), d_returnSize(0), d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0), d_globalsSymIdx(0), d_elf(ElfWriter::ArchARM), d_currentModule(0),
+      d_dwarf(0), d_localsSize(0), d_argsSize(0), d_returnSize(0), d_textSymIdx(0), d_dataSymIdx(0), d_rodataSymIdx(0), d_globalsSymIdx(0),
+      d_exceptionChainSymIdx(0), d_exceptionNilSymIdx(0),
+      d_printStrSymIdx(0), d_exitSymIdx(0), d_unhandledExceptionMsgOff(-1),
+      d_elf(ElfWriter::ArchARM), d_currentModule(0),
       d_materializing(false), d_deferProc(false), d_parkUsed(0)
 {
     d_emitter.setHook(this);
@@ -76,6 +79,26 @@ quint32 Renderer::getOrCreateExtSymbol(int procIdx)
     quint32 symIdx = d_elf.addSymbol(name, 0 /*SHN_UNDEF*/, 0, 0, STB_GLOBAL, STT_FUNC);
     d_extProcSymbols[procIdx] = symIdx;
     return symIdx;
+}
+
+quint32 Renderer::getOrCreateExceptionChainSymbol()
+{
+    if (!d_exceptionChainSymIdx) {
+        static const quint16 SHN_COMMON = 0xFFF2;
+        d_exceptionChainSymIdx = d_elf.addSymbol("MIC$$exchain", SHN_COMMON, 4, 4,
+                                                  STB_GLOBAL, STT_OBJECT);
+    }
+    return d_exceptionChainSymIdx;
+}
+
+quint32 Renderer::getOrCreateExceptionNilSymbol()
+{
+    if (!d_exceptionNilSymIdx) {
+        static const quint16 SHN_COMMON = 0xFFF2;
+        d_exceptionNilSymIdx = d_elf.addSymbol("MIC$$exnil", SHN_COMMON, 4, 4,
+                                                STB_GLOBAL, STT_OBJECT);
+    }
+    return d_exceptionNilSymIdx;
 }
 
 static const int MaxExtensions = 16;
@@ -438,6 +461,11 @@ bool Renderer::renderModule(Declaration* module)
 {
     Q_ASSERT(module && module->kind == Declaration::Module);
     d_currentModule = module;
+    d_printStrSymIdx = 0;
+    d_exitSymIdx = 0;
+    d_unhandledExceptionMsgOff = -1;
+    d_exceptionChainSymIdx = 0;
+    d_exceptionNilSymIdx = 0;
 
     // Lower MIL AST to VmCode
     if (!d_code.compile(module))
@@ -754,6 +782,33 @@ bool Renderer::renderProcedure(Procedure& proc, int procIdx)
 
     emitPrologue(d_localsSize);
 
+    if (proc.finallyPc >= 0) {
+        Q_ASSERT(proc.finallyRecordOffset >= 0);
+        quint32 recordOffset = proc.finallyRecordOffset;
+        quint32 chainSym = getOrCreateExceptionChainSymbol();
+        loadLocalAddr(R0, recordOffset);
+        loadExternalAddr(R1, chainSym);
+        d_emitter.ldr_(AL, R2, MemOp(R1, 0));
+        d_emitter.str_(AL, R2, MemOp(R0, 0));
+        d_emitter.str_(AL, R11, MemOp(R0, 8));
+        d_emitter.str_(AL, SP, MemOp(R0, 12));
+
+        materializePending();
+        Arm::Label skipLandingPad;
+        d_emitter.bl_(AL, skipLandingPad);
+        loadLocalAddr(R1, proc.exceptionOffset);
+        d_emitter.str_(AL, R0, MemOp(R1, 0));
+        loadImm32(R1, 1);
+        loadLocalAddr(R2, proc.unwindOffset);
+        d_emitter.str_(AL, R1, MemOp(R2, 0));
+        materializePending();
+        d_emitter.b_(AL, getLabel(proc.finallyPc));
+
+        d_emitter.bind(skipLandingPad);
+        d_emitter.str_(AL, LR, MemOp(R0, 4));
+        d_emitter.str_(AL, R0, MemOp(R1, 0));
+    }
+
     // Initialize local object variables (vtable pointers + template data)
     {
         Emitter& em = d_emitter;
@@ -791,8 +846,18 @@ bool Renderer::renderProcedure(Procedure& proc, int procIdx)
 
     int pc = 0;
     while (pc < (int)proc.ops.size()) {
+        if (pc == proc.finallyPc)
+            materializePending();
         // Bind label if any branch targets this PC
         bindLabelIfNeeded(pc);
+
+        if (pc == proc.finallyPc) {
+            quint32 chainSym = getOrCreateExceptionChainSymbol();
+            loadLocalAddr(R0, proc.finallyRecordOffset);
+            d_emitter.ldr_(AL, R1, MemOp(R0, 0));
+            loadExternalAddr(R2, chainSym);
+            d_emitter.str_(AL, R1, MemOp(R2, 0));
+        }
 
         int consumed = emitOp(proc, pc);
         if (consumed < 0)
@@ -1529,6 +1594,15 @@ void Renderer::loadVarAddr(Register rd, quint32 milOffset)
     d_fixups.recordExternalAddr(movwOff, d_globalsSymIdx);
 }
 
+void Renderer::loadExternalAddr(Register rd, quint32 symbolIdx)
+{
+    parkPending();
+    quint32 movwOff = d_emitter.currentPosition();
+    d_emitter.movw_(AL, rd, 0);
+    d_emitter.movt_(AL, rd, 0);
+    d_fixups.recordExternalAddr(movwOff, symbolIdx);
+}
+
 
 quint32 Renderer::emitArgAlignment(Declaration* decl)
 {
@@ -1707,6 +1781,116 @@ void Renderer::emitCallStackAdj(quint32 argsSize, quint32 returnSize)
         }
         // else adj == 0: return value is already in the right place
     }
+}
+
+void Renderer::emitIndirectCallWithArgs(Register target, quint32 argsSize, quint32 returnSize)
+{
+    using namespace Arm;
+    if (d_useAapcs) {
+        quint32 regBytes = argsSize < 16 ? argsSize : 16;
+        quint32 overflowBytes = argsSize > 16 ? argsSize - 16 : 0;
+        if (regBytes >= 4)  d_emitter.ldr_(AL, R0, MemOp(SP, 0));
+        if (regBytes >= 8)  d_emitter.ldr_(AL, R1, MemOp(SP, 4));
+        if (regBytes >= 12) d_emitter.ldr_(AL, R2, MemOp(SP, 8));
+        if (regBytes >= 16) d_emitter.ldr_(AL, R3, MemOp(SP, 12));
+        if (regBytes > 0) {
+            if (Operand2::isValidImmediate(regBytes))
+                addImm(SP, SP, (qint32)regBytes, R12);
+            else {
+                loadImm32(R4, regBytes);
+                d_emitter.add(SP, SP, Operand2(R4));
+            }
+        }
+        quint32 paddingNeeded = 0;
+        if (returnSize > 8) {
+            qint32 extra = (qint32)returnSize - 16 - (qint32)overflowBytes;
+            if (extra > 0) {
+                paddingNeeded = ((quint32)extra + 3) & ~3;
+                if (Operand2::isValidImmediate(paddingNeeded))
+                    addImm(SP, SP, -(qint32)paddingNeeded, R12);
+                else {
+                    loadImm32(R4, paddingNeeded);
+                    d_emitter.sub(SP, SP, Operand2(R4));
+                }
+                for (quint32 w = 0; w < overflowBytes; w += 4) {
+                    d_emitter.ldr_(AL, R4, MemOp(SP, (qint32)(paddingNeeded + w)));
+                    d_emitter.str_(AL, R4, MemOp(SP, (qint32)w));
+                }
+            }
+        }
+        d_emitter.blx_(AL, target);
+        if (returnSize <= 8) {
+            if (overflowBytes > 0) {
+                if (Operand2::isValidImmediate(overflowBytes))
+                    addImm(SP, SP, (qint32)overflowBytes, R12);
+                else {
+                    loadImm32(R12, overflowBytes);
+                    d_emitter.add(SP, SP, Operand2(R12));
+                }
+            }
+            if (returnSize >= 8)
+                pushRegPair(R0, R1);
+            else if (returnSize >= 4)
+                pushReg(R0);
+        } else {
+            quint32 totalOnStack = 16 + overflowBytes + paddingNeeded;
+            if (totalOnStack > returnSize) {
+                quint32 excess = totalOnStack - returnSize;
+                for (qint32 w = (qint32)returnSize - 4; w >= 0; w -= 4) {
+                    d_emitter.ldr_(AL, R12, MemOp(SP, w));
+                    d_emitter.str_(AL, R12, MemOp(SP, (qint32)((qint32)w + (qint32)excess)));
+                }
+                if (Operand2::isValidImmediate(excess))
+                    addImm(SP, SP, (qint32)excess, R12);
+                else {
+                    loadImm32(R12, excess);
+                    d_emitter.add(SP, SP, Operand2(R12));
+                }
+            }
+        }
+    } else {
+        d_emitter.blx_(AL, target);
+        emitCallStackAdj(argsSize, returnSize);
+    }
+}
+
+void Renderer::emitUnhandledException()
+{
+    if (d_unhandledExceptionMsgOff < 0) {
+        static const char message[] = "unhandled exception\n";
+        d_unhandledExceptionMsgOff = d_elf.sectionSize(d_sections.rodata);
+        d_elf.appendToSection(d_sections.rodata, message, sizeof(message));
+    }
+
+    quint32 movwOffset = d_emitter.currentPosition();
+    d_emitter.movw_(AL, R0, d_unhandledExceptionMsgOff & 0xFFFF);
+    d_emitter.movt_(AL, R0, (d_unhandledExceptionMsgOff >> 16) & 0xFFFF);
+    d_fixups.recordExternalAddr(movwOffset, d_rodataSymIdx);
+
+    if (!d_useAapcs)
+        pushReg(R0);
+    quint32 printSym = d_printStrSymIdx;
+    if (!printSym)
+        d_printStrSymIdx = printSym = d_elf.addSymbol("MIC$$printStr", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+    materializePending();
+    quint32 blOffset = d_emitter.currentPosition();
+    d_emitter.emitWord(0xEBFFFFFE);
+    d_fixups.recordExternalCall(blOffset, printSym);
+    if (!d_useAapcs)
+        emitCallStackAdj(4, 0);
+
+    loadImm32(R0, 1);
+    if (!d_useAapcs)
+        pushReg(R0);
+    quint32 exitSym = d_exitSymIdx;
+    if (!exitSym)
+        d_exitSymIdx = exitSym = d_elf.addSymbol("MIC$$exit", 0, 0, 0, STB_GLOBAL, STT_FUNC);
+    materializePending();
+    blOffset = d_emitter.currentPosition();
+    d_emitter.emitWord(0xEBFFFFFE);
+    d_fixups.recordExternalCall(blOffset, exitSym);
+    if (!d_useAapcs)
+        emitCallStackAdj(4, 0);
 }
 
 bool Renderer::setError(const QString& msg)
@@ -3648,87 +3832,10 @@ int Renderer::emitOp(Procedure& proc, int pc)
 
     // Indirect calls
     case LL_calli: {
-        // Stack: [func_ptr] [arg1] ... [argN] (func_ptr on top, args in correct order)
-        // val encodes argsSize (lower 11 bits) and returnSize (upper 11 bits).
         quint32 argsSize = val & 0x7FF;
         quint32 returnSize = ((val >> 11) & 0x7FF) & ~1u; // bit 0 encodes fpReturn
-
-        // Pop the function pointer
         popReg(R12);
-
-        if (d_useAapcs) {
-            // AAPCS mode: naive word routing (all args treated as 4-byte words)
-            quint32 regBytes = argsSize < 16 ? argsSize : 16;
-            quint32 overflowBytes = argsSize > 16 ? argsSize - 16 : 0;
-            if (regBytes >= 4)  em.ldr_(AL, R0, MemOp(SP, 0));
-            if (regBytes >= 8)  em.ldr_(AL, R1, MemOp(SP, 4));
-            if (regBytes >= 12) em.ldr_(AL, R2, MemOp(SP, 8));
-            if (regBytes >= 16) em.ldr_(AL, R3, MemOp(SP, 12));
-            if (regBytes > 0) {
-                if (Operand2::isValidImmediate(regBytes))
-                    addImm(SP, SP, (qint32)regBytes, R12);
-                else {
-                    loadImm32(R4, regBytes);  // R4 as temp (R12 holds func ptr)
-                    em.add(SP, SP, Operand2(R4));
-                }
-            }
-
-            // For large returns: pre-allocate space
-            quint32 paddingNeeded = 0;
-            if (returnSize > 8) {
-                qint32 extra = (qint32)returnSize - 16 - (qint32)overflowBytes;
-                if (extra > 0) {
-                    paddingNeeded = ((quint32)extra + 3) & ~3;
-                    if (Operand2::isValidImmediate(paddingNeeded))
-                        addImm(SP, SP, -(qint32)paddingNeeded, R12);
-                    else {
-                        loadImm32(R4, paddingNeeded);
-                        em.sub(SP, SP, Operand2(R4));
-                    }
-                    for (quint32 w = 0; w < overflowBytes; w += 4) {
-                        em.ldr_(AL, R4, MemOp(SP, (qint32)(paddingNeeded + w)));
-                        em.str_(AL, R4, MemOp(SP, (qint32)w));
-                    }
-                }
-            }
-
-            em.blx_(AL, R12);
-
-            if (returnSize <= 8) {
-                // Small/void return: callee cleaned dump. Pop overflow.
-                if (overflowBytes > 0) {
-                    if (Operand2::isValidImmediate(overflowBytes))
-                        addImm(SP, SP, (qint32)overflowBytes, R12);
-                    else {
-                        loadImm32(R12, overflowBytes);
-                        em.add(SP, SP, Operand2(R12));
-                    }
-                }
-                if (returnSize >= 8)
-                    pushRegPair(R0, R1);
-                else if (returnSize >= 4)
-                    pushReg(R0);
-            } else {
-                // Large return: callee did NOT clean dump.
-                quint32 totalOnStack = 16 + overflowBytes + paddingNeeded;
-                if (totalOnStack > returnSize) {
-                    quint32 excess = totalOnStack - returnSize;
-                    for (qint32 w = (qint32)returnSize - 4; w >= 0; w -= 4) {
-                        em.ldr_(AL, R12, MemOp(SP, w));
-                        em.str_(AL, R12, MemOp(SP, (qint32)((qint32)w + (qint32)excess)));
-                    }
-                    if (Operand2::isValidImmediate(excess))
-                        addImm(SP, SP, (qint32)excess, R12);
-                    else {
-                        loadImm32(R12, excess);
-                        em.add(SP, SP, Operand2(R12));
-                    }
-                }
-            }
-        } else {
-            em.blx_(AL, R12);
-            emitCallStackAdj(argsSize, returnSize);
-        }
+        emitIndirectCallWithArgs(R12, argsSize, returnSize);
         return 1;
     }
     case LL_callmi: {
@@ -4139,9 +4246,71 @@ int Renderer::emitOp(Procedure& proc, int pc)
         em.nop();
         return 1;
 
-    case LL_pcall:
-    case LL_raise:
-        return setError("pcall/raise not yet supported on this target") ? -1 : -1;
+    case LL_pcall: {
+        const quint32 argsSize = val & 0x7FF;
+        Q_ASSERT(proc.pcallRecordOffset >= 0);
+        popReg(R12);
+        materializePending();
+        const quint32 chainSym = getOrCreateExceptionChainSymbol();
+        const quint32 recordOffset = proc.pcallRecordOffset;
+        loadLocalAddr(R0, recordOffset);
+        loadExternalAddr(R1, chainSym);
+        em.ldr_(AL, R2, MemOp(R1, 0));
+        em.str_(AL, R2, MemOp(R0, 0));
+        em.str_(AL, R11, MemOp(R0, 8));
+        if (Operand2::isValidImmediate(argsSize))
+            addImm(R2, SP, (qint32)argsSize, R4);
+        else {
+            loadImm32(R4, argsSize);
+            em.add(R2, SP, Operand2(R4));
+        }
+        em.str_(AL, R2, MemOp(R0, 12));
+
+        Arm::Label skipLandingPad, join;
+        em.bl_(AL, skipLandingPad);
+        loadLocalAddr(R2, recordOffset);
+        em.ldr_(AL, R3, MemOp(R2, 0));
+        loadExternalAddr(R1, chainSym);
+        em.str_(AL, R3, MemOp(R1, 0));
+        materializePending();
+        em.b_(AL, join);
+
+        em.bind(skipLandingPad);
+        em.str_(AL, LR, MemOp(R0, 4));
+        em.str_(AL, R0, MemOp(R1, 0));
+        emitIndirectCallWithArgs(R12, argsSize, 0);
+        loadLocalAddr(R0, recordOffset);
+        em.ldr_(AL, R2, MemOp(R0, 0));
+        loadExternalAddr(R1, chainSym);
+        em.str_(AL, R2, MemOp(R1, 0));
+        em.mov_(AL, false, R0, Operand2((quint32)0));
+
+        em.bind(join);
+        pushReg(R0);
+        return 1;
+    }
+    case LL_raise: {
+        popReg(R0);
+        materializePending();
+        Arm::Label hasException, handled, exitReturned;
+        em.cmp(R0, Operand2((quint32)0));
+        em.b_(NE, hasException);
+        loadExternalAddr(R0, getOrCreateExceptionNilSymbol());
+        em.bind(hasException);
+        loadExternalAddr(R1, getOrCreateExceptionChainSymbol());
+        em.ldr_(AL, R1, MemOp(R1, 0));
+        em.cmp(R1, Operand2((quint32)0));
+        em.b_(NE, handled);
+        emitUnhandledException();
+        em.bind(exitReturned);
+        em.b_(AL, exitReturned);
+        em.bind(handled);
+        em.ldr_(AL, R2, MemOp(R1, 4));
+        em.ldr_(AL, R11, MemOp(R1, 8));
+        em.ldr_(AL, SP, MemOp(R1, 12));
+        em.bx_(AL, R2);
+        return 1;
+    }
 
     default:
         return setError(QString("Unknown LL_op: %1").arg(opcode)) ? -1 : -1;
@@ -4368,3 +4537,4 @@ bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QStri
     // Write the ELF object file
     return elf.write(outputPath);
 }
+

@@ -151,6 +151,7 @@ namespace Arm
         void loadArgAddr(Arm::Register rd, quint32 milOffset);
 
         void loadVarAddr(Arm::Register rd, quint32 milOffset);
+        void loadExternalAddr(Arm::Register rd, quint32 symbolIdx);
 
         void scanBranchTargets(Vm::Procedure& proc);
 
@@ -161,10 +162,14 @@ namespace Arm
         void clearLabels();
 
         void emitCallStackAdj(quint32 argsSize, quint32 returnSize);
+        void emitIndirectCallWithArgs(Arm::Register target, quint32 argsSize, quint32 returnSize);
+        void emitUnhandledException();
 
         bool setError(const QString& msg);
 
         void registerExternals();
+        quint32 getOrCreateExceptionChainSymbol();
+        quint32 getOrCreateExceptionNilSymbol();
 
         AstModel* d_mdl;
         Vm::Code2 d_code; // VmCode2 lowering (reversed arg order for ARM)
@@ -188,6 +193,11 @@ namespace Arm
         quint32 d_dataSymIdx;
         quint32 d_rodataSymIdx;
         quint32 d_globalsSymIdx; // COMMON symbol for shared module variable memory
+        quint32 d_exceptionChainSymIdx;
+        quint32 d_exceptionNilSymIdx;
+        quint32 d_printStrSymIdx;
+        quint32 d_exitSymIdx;
+        int d_unhandledExceptionMsgOff;
 
         QMap<int,quint32> d_procTextOffsets; // proc index -> byte offset in .text
         QMap<int,quint32> d_procSymbols; // proc index -> ELF symbol index
