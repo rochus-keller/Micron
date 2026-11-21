@@ -649,6 +649,8 @@ QString Builtins::checkArgs(quint8 builtin, ExpList& args, Type** ret, AstModel*
         break;
     case Builtin::PRINT:
     case Builtin::PRINTLN: {
+            if( ev->langLevel < 1 )
+                throw "operation not supported on selected language level";
             expectingNArgs(args,1);
             Q_ASSERT(args.size() == 1);
             Type* t = args.first()->getType();

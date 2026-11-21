@@ -47,6 +47,7 @@
 #include <QTemporaryFile>
 #include <QCommandLineParser>
 #include <QDirIterator>
+#include <QSet>
 
 extern "C" {
 void Args_setArgcArgv(unsigned int c, char** v);
@@ -162,9 +163,11 @@ static bool writeDump(const QString& path, Mil::Declaration* module, bool dbg)
 static bool dumpMil(Mil::AstModel& model, const BuildOpts& opts)
 {
     // --dump=mil
-    foreach( Mil::Declaration* m, model.getModulesInDependencyOrder() )
+    const Mil::DeclList modules = model.getModulesInDependencyOrder();
+    const QSet<Mil::Declaration*> skipped = Mic::ModuleManager::modulesToSkip(modules, true, true);
+    foreach( Mil::Declaration* m, modules )
     {
-        if( m->name == "MIC$" || m->extern_ || m->generic )
+        if( skipped.contains(m) )
             continue;
         if( !writeDump(QDir(opts.outDir).absoluteFilePath(
                            QString::fromUtf8(Mil::CeeGen::escapeFilename(m->name)) + ".mil"),

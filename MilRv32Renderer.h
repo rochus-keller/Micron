@@ -92,7 +92,7 @@ namespace Rv32
 
         // Generate a standalone main.o that calls each module's $begin$ in order,
         // then exits.
-        static bool generateMainObject(const QByteArrayList& moduleNames, const QString& outputPath, bool indirect = false);
+        static bool generateMainObject(const QByteArrayList& moduleNames, const QString& outputPath, bool indirect = false, bool useRvAbi = false);
 
         bool writeToFile(const QString& filename);
 

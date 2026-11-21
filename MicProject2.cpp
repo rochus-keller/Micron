@@ -23,6 +23,7 @@
 #include <QtDebug>
 #include <QSettings>
 #include <QCoreApplication>
+#include <QSet>
 #include <qdatetime.h>
 #include "MicPpLexer.h"
 #include "MicParser2.h"
@@ -497,12 +498,13 @@ bool Project2::parse()
 {
     clear(false);
     QString configError;
-    if( !PpLexer::parseConfig(d_options, d_config, configError) )
+    QHash<QByteArray,QByteArray> config;
+    if( !PpLexer::parseConfig(d_options, config, configError) )
     {
         errors << Error(configError, RowCol(), d_filePath);
         return false;
     }
-    d_modMan.setConfig(d_config);
+    d_modMan.setConfig(config);
 
     if( useBuiltInOakwood() )
     {
@@ -543,6 +545,9 @@ bool Project2::parse()
 
 bool Project2::generateC(const QString &outDir)
 {
+    Mil::AstModel& model = d_modMan.getModel();
+    const Mil::DeclList modules = model.getModules();
+    const QSet<Mil::Declaration*> skipped = ModuleManager::modulesToSkip(modules, false, false);
     QStringList cFiles;
     bool haveScreen = false;
 #ifdef _MIC_HAVE_SCREEN_
@@ -552,11 +557,11 @@ bool Project2::generateC(const QString &outDir)
 
     QDir dir(outDir);
     // TODO: check if files can be created and written
-    foreach( Mil::Declaration* module, d_modMan.getModel().getModules() )
+    foreach( Mil::Declaration* module, modules )
         module->nobody = !Mil::CeeGen::requiresBody(module);
-    foreach( Mil::Declaration* module, d_modMan.getModel().getModules() )
+    foreach( Mil::Declaration* module, modules )
     {
-        if( module->generic ) // skip not fully instantiated modules
+        if( skipped.contains(module) )
             continue;
         Mil::CeeGen cg(&d_modMan.getModel());
         QFile header( dir.absoluteFilePath(escapeFilename(module->name) + ".h"));
@@ -579,7 +584,12 @@ bool Project2::generateC(const QString &outDir)
     out << "// main+.c" << endl;
     out << Mil::CeeGen::genDedication() << endl << endl;
 
-    Mil::DeclList roots = d_modMan.getModel().getRootModules();
+    Mil::DeclList roots = model.getRootModules();
+    for( int i = roots.size() - 1; i >= 0; --i )
+    {
+        if( skipped.contains(roots[i]) )
+            roots.removeAt(i);
+    }
     foreach( Mil::Declaration* module, roots )
         out << "#include \"" <<  escapeFilename(module->name) << ".h\"" << endl;
 
@@ -602,12 +612,14 @@ bool Project2::generateC(const QString &outDir)
 
 bool Project2::generateMil(const QString &outDir)
 {
+    const Mil::DeclList modules = d_modMan.getModel().getModules();
+    const QSet<Mil::Declaration*> skipped = ModuleManager::modulesToSkip(modules, true, false);
     QSet<Mil::Declaration*> used;
     QDir dir(outDir);
     // TODO: check if files can be created and written
-    foreach( Mil::Declaration* module, d_modMan.getModel().getModules() )
+    foreach( Mil::Declaration* module, modules )
     {
-        if( module->generic || module->name == "MIC$" ) // skip not fully instantiated modules
+        if( skipped.contains(module) )
             continue;
         Mil::Declaration* sub = module->subs;
         while(sub)
@@ -829,7 +841,7 @@ Declaration *Project2::loadModule(const Import &imp)
     d_depth++;
     Lex2 lex;
     lex.sourcePath = file->d_filePath; // to keep file name if invalid
-    lex.lex.setConfig(d_config);
+    lex.lex.setConfig(d_modMan.getConfig());
     QBuffer buf; // keep buffer here so it remains valid for the parse if needed
     if( !file->d_cache.isEmpty() )
     {
@@ -842,12 +854,11 @@ Declaration *Project2::loadModule(const Import &imp)
     Mil::Emitter e(&imr, d_dbg ? Mil::Emitter::RowsOnly : Mil::Emitter::None);
     Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
     p.setInterpreter(d_modMan.getInterpreter());
-    p.setConfig(&d_config);
+    p.setConfig(&d_modMan.getConfig());
     p.RunParser(fixedImp);
     d_sloc += lex.lex.getSloc();
     if( p.getModule() )
-        qDebug() << "*** parsing" << p.getModule()->name << "depth" << d_depth << (p.getModule()->generic?"generic":"")
-                 << "sloc" << lex.lex.getSloc(); // TEST
+        qDebug() << "*** parsing" << p.getModule()->name << "depth" << d_depth << (p.getModule()->generic?"generic":""); // TEST
     else
         qDebug() << "*** parse" << file->d_name; // TEST
     Mic::Declaration* res = 0;
@@ -1059,12 +1070,12 @@ void Project2::parseLib(const QString & name)
     Lex2 lex;
     QString path = QString(":/oakwood/%1.mic").arg(name);
     lex.sourcePath = path; // to keep file name if invalid
-    lex.lex.setConfig(d_config);
+    lex.lex.setConfig(d_modMan.getConfig());
     lex.lex.setStream(path);
     Mil::Emitter e(&imr, Mil::Emitter::RowsAndCols);
     Mic::Parser2 p(&d_mdl,&lex, &e, this, true);
     p.setInterpreter(d_modMan.getInterpreter());
-    p.setConfig(&d_config);
+    p.setConfig(&d_modMan.getConfig());
     p.RunParser();
     ModuleSlot ms;
     ms.decl = p.takeModule();

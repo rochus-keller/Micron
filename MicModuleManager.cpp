@@ -57,6 +57,39 @@ ModuleManager::ModuleManager(ModuleLocator* loc, bool d):locator(loc),d_milImpor
     d_interp = new Comptime(&mdl);
 }
 
+QSet<Mil::Declaration*> ModuleManager::modulesToSkip(const Mil::DeclList& modules, bool skipRuntime, bool skipExtern)
+{
+    QSet<Mil::Declaration*> skipped;
+    foreach( Mil::Declaration* module, modules )
+    {
+        if( module->generic || (skipRuntime && module->name == "MIC$") ||
+                (skipExtern && module->extern_) )
+            skipped.insert(module);
+    }
+
+    bool changed;
+    do
+    {
+        changed = false;
+        foreach( Mil::Declaration* module, modules )
+        {
+            if( skipped.contains(module) )
+                continue;
+            for( Mil::Declaration* sub = module->subs; sub; sub = sub->next )
+            {
+                if( sub->kind == Mil::Declaration::Importer && sub->imported &&
+                        skipped.contains(sub->imported) )
+                {
+                    skipped.insert(module);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }while( changed );
+    return skipped;
+}
+
 static QString s_runtimePath;
 
 void ModuleManager::setRuntimePath(const QString& path)

@@ -22,6 +22,11 @@
 #include <QtDebug>
 using namespace Mic;
 
+static bool isPointerOrProc(Type* t)
+{
+    return t && (t->kind == Type::Pointer || t->kind == Type::Proc);
+}
+
 bool Evaluator::evaluate(Expression* e, bool assureOnMilStack)
 {
     err.clear();
@@ -2491,9 +2496,6 @@ bool Evaluator::recursiveRun(Expression* e)
                         break;
                     }
 
-                    auto isPointerOrProc = [](Type* t) {
-                        return t && (t->kind == Type::Pointer || t->kind == Type::Proc);
-                    };
                     if( bi == Builtin::SIZE && !args.isEmpty() && args[0]->getType() &&
                             args[0]->getType()->kind >= Type::MaxBasicType )
                         return error("target-dependent operations are not allowed in INVAR procedures", e->pos);

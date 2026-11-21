@@ -18,7 +18,8 @@ Micron supports _language levels_: a module declares the level it needs, from le
 In addition to the specification, a free textbook is available which shows how each feature of Micron is used and why it is designed the way it is. Part III walks through the Micron System, a port of Wirth and Gutknecht's Project Oberon operating system, which is compiled, linked and booted on an emulated RISC-V machine with a single command each.
 
 - [PDF version](http://software.rochus-keller.ch/micron-textbook.pdf) of the book,
-- [Source and examples](https://github.com/micron-language/textbook) of the book; all examples compile and run with `micc`.
+- [Source and examples](https://github.com/micron-language/textbook) of the book; all examples compile and run with `micc`,
+- The https://github.com/micron-language group.
 
 ### Example applications and systems
 

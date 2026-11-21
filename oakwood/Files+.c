@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #include "Files.h"
 #include <assert.h>
 #include <stdlib.h>

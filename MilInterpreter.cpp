@@ -794,9 +794,9 @@ bool Interpreter::evalComptime(Declaration* proc, const QList<QVariant>& args, Q
         }
 
         Frame outer;
-        quint8 outerMemory[PreAllocSize] = {};
-        quint8 localMemory[PreAllocSize] = {};
-        quint8 stackMemory[PreAllocSize] = {};
+        quint8 outerMemory[PreAllocSize] = {0};
+        quint8 localMemory[PreAllocSize] = {0};
+        quint8 stackMemory[PreAllocSize] = {0};
         outer.stack.init(outerMemory, PreAllocSize);
         QList<QByteArray> strings;
         strings.reserve(args.size());

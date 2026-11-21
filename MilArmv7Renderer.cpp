@@ -111,10 +111,14 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
     Vm::Vtable* vt = d_code.getVtable(vtableIdx);
     Q_ASSERT(vt);
 
+    Type* vtType = vt->type ? vt->type->deref() : 0;
+    const bool isInterface = vtType && vtType->kind == Type::Interface;
+
     // Collect ancestor vtable indices (self at index 0, parent at 1, etc.)
     // Walk the Type hierarchy instead of Vtable.parent because parent links
     // are NULL when the base type is from an imported module.
     QList<int> ancestors;
+    if( !isInterface )
     {
         Type* curType = vt->type;
         while (curType) {
@@ -137,26 +141,29 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
         d_elf.appendToSection(d_sections.data, zeros, pad);
     }
 
-    // Pre-compute vtableOff so the self entry can reference it
-    quint32 vtableOff = d_elf.sectionSize(d_sections.data) + MaxExtensions * 4;
+    // Interface vtables contain only method entries.
+    quint32 vtableOff = d_elf.sectionSize(d_sections.data) + (isInterface ? 0 : MaxExtensions * 4);
     d_vtableOffsets[vtableIdx] = vtableOff;
 
-    // Emit extension level array (MaxExtensions entries at negative offsets).
-    int extlev = ancestors.size() - 1;
-    for (int k = MaxExtensions - 1; k >= 0; k--) {
-        quint32 entryPos = d_elf.sectionSize(d_sections.data);
-        quint32 zero = 0;
-        d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
-        if (k <= extlev) {
-            int ancestorIdx = ancestors[extlev - k];
-            // Use canonical global vtable symbol so cross-module isinst works
-            quint32 vtSym = getOrCreateVtableSymbol(ancestorIdx);
-            d_fixups.recordDataRef(entryPos, vtSym);
-            d_elf.patchWord(d_sections.data, entryPos, 0);
+    if( !isInterface )
+    {
+        // Emit extension level array (MaxExtensions entries at negative offsets).
+        int extlev = ancestors.size() - 1;
+        for (int k = MaxExtensions - 1; k >= 0; k--) {
+            quint32 entryPos = d_elf.sectionSize(d_sections.data);
+            quint32 zero = 0;
+            d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
+            if (k <= extlev) {
+                int ancestorIdx = ancestors[extlev - k];
+                // Use canonical global vtable symbol so cross-module isinst works
+                quint32 vtSym = getOrCreateVtableSymbol(ancestorIdx);
+                d_fixups.recordDataRef(entryPos, vtSym);
+                d_elf.patchWord(d_sections.data, entryPos, 0);
+            }
         }
-    }
 
-    Q_ASSERT(d_elf.sectionSize(d_sections.data) == vtableOff);
+        Q_ASSERT(d_elf.sectionSize(d_sections.data) == vtableOff);
+    }
 
     // Emit method pointers (zeros with relocations)
     for (size_t i = 0; i < vt->methods.size(); i++) {
@@ -716,11 +723,13 @@ bool Renderer::renderModule(Declaration* module)
 
     d_elf.appendToSection(d_sections.text, d_emitter.machineCode());
 
-    // Ensure every type declared in this module has its vtable emitted and its
+    // Ensure every object type declared in this module has its vtable emitted and its
     // canonical GLOBAL symbol defined, even if no code in this module references it.
     for (int vi = 0; vi < d_code.vtableCount(); vi++) {
         Vm::Vtable* vt = d_code.getVtable(vi);
-        if (vt && vt->type && vt->type->decl && vt->type->decl->getModule() == d_currentModule) {
+        Type* vtType = vt && vt->type ? vt->type->deref() : 0;
+        if (vtType && vtType->kind != Type::Interface && vt->type->decl &&
+                vt->type->decl->getModule() == d_currentModule) {
             getOrEmitVtable(vi);
             getOrCreateVtableSymbol(vi);
         }
@@ -1830,7 +1839,7 @@ void Renderer::emitIndirectCallWithArgs(Register target, quint32 argsSize, quint
             }
             if (returnSize >= 8)
                 pushRegPair(R0, R1);
-            else if (returnSize >= 4)
+            else if( returnSize > 0 )
                 pushReg(R0);
         } else {
             quint32 totalOnStack = 16 + overflowBytes + paddingNeeded;
@@ -3204,7 +3213,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 // Push return value from R0/R0-R1 onto eval stack
                 if (returnSize >= 8)
                     pushRegPair(R0, R1);
-                else if (returnSize >= 4)
+                else if( returnSize > 0 )
                     pushReg(R0);
                 // returnSize == 0: void
             } else {
@@ -3274,7 +3283,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 // AAPCS small return: pop return value into R0 (or R0-R1).
                 if (retSize >= 8)
                     popRegPair(R0, R1);
-                else if (retSize >= 4)
+                else if( retSize > 0 )
                     popReg(R0);
             } else {
                 // AAPCS large return (>8 bytes): write return value to [FP+8]
@@ -3903,7 +3912,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 }
                 if (returnSize >= 8)
                     pushRegPair(R0, R1);
-                else if (returnSize >= 4)
+                else if( returnSize > 0 )
                     pushReg(R0);
             } else {
                 // Large return: callee did NOT clean dump.
@@ -4007,7 +4016,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 }
                 if (returnSize >= 8)
                     pushRegPair(R0, R1);
-                else if (returnSize >= 4)
+                else if( returnSize > 0 )
                     pushReg(R0);
             } else {
                 // Large return: callee did NOT clean dump.

@@ -19,6 +19,7 @@
 
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QDir>
 #include "MilProject.h"
 #include "MilBackend.h"
 #include "Version.h"
@@ -134,13 +135,23 @@ int main(int argc, char *argv[])
     else
         outPath = QFileInfo(args.first()).absolutePath();
 
+    QStringList objFiles;
+    const bool nativeTarget = !arch_.isEmpty();
     if( arch_ == "arm7" || arch_ == "armv7" )
-        Mil::Backend::compileArm(mdl, outPath, libDirs, linkLibs, linkObjs, info.baseName(), dbg_, cp.isSet(aapcs));
-    if( arch_ == "rv32" || arch_ == "riscv32" )
-        Mil::Backend::compileRv32(mdl, outPath, libDirs, linkLibs, linkObjs, info.baseName(), dbg_, cp.isSet(aapcs),
+        objFiles = Mil::Backend::compileArm(mdl, outPath, dbg_, cp.isSet(aapcs), cp.isSet(aapcs));
+    else if( arch_ == "rv32" || arch_ == "riscv32" )
+        objFiles = Mil::Backend::compileRv32(mdl, outPath, dbg_, /*indirectMain*/false, cp.isSet(aapcs),
                     /*hasFloat*/true, /*hasHwDiv*/true, cp.isSet(esp32opt));
-    if( arch_ == "x86" || arch_ == "i386" )
-        Mil::Backend::compileX86(mdl, outPath, libDirs, linkLibs, linkObjs, info.baseName(), dbg_, cp.isSet(cdeclRet));
+    else if( arch_ == "x86" || arch_ == "i386" )
+        objFiles = Mil::Backend::compileX86(mdl, outPath, dbg_, true, cp.isSet(cdeclRet));
+    if( nativeTarget )
+    {
+        if( objFiles.isEmpty() )
+            return 1;
+        if( !Mil::Backend::linkExecutable(objFiles, libDirs, linkLibs, linkObjs,
+                    QDir(outPath).absoluteFilePath(info.baseName()), cp.isSet(esp32opt)) )
+            return 1;
+    }
 
     if( cp.isSet(cgen) )
         pro.generateC();

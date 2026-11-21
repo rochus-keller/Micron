@@ -3669,7 +3669,9 @@ void Parser2::Case(Type* t, CaseLabels& ll) {
     else
         ll += l;
     expect(Tok_Colon, false, "Case");
-    line(cur).case_(l.toList());
+    QList<qint64> labels = l.toList();
+    std::sort(labels.begin(), labels.end()); // avoid non-deterministic lists
+    line(cur).case_(labels);
     out->then_();
     StatementSequence();
 }

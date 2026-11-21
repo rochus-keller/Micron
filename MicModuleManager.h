@@ -23,6 +23,7 @@
 #include "MicAst.h"
 #include "MilAst.h"
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -77,6 +78,7 @@ namespace Mic
         void setMilImporter( Mil::Importer* i ) { d_milImporter = i; }
         void setConfig(const QHash<QByteArray,QByteArray>& config) { d_config = config; }
         const QHash<QByteArray,QByteArray>& getConfig() const { return d_config; }
+        static QSet<Mil::Declaration*> modulesToSkip( const Mil::DeclList& modules, bool skipRuntime, bool skipExtern );
 
         Declaration* loadProvider( const Location& loc, AstModel* into,
                                    ModuleResolver* resolver,

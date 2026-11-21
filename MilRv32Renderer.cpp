@@ -146,10 +146,14 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
     Vm::Vtable* vt = d_code.getVtable(vtableIdx);
     Q_ASSERT(vt);
 
+    Type* vtType = vt->type ? vt->type->deref() : 0;
+    const bool isInterface = vtType && vtType->kind == Type::Interface;
+
     // Collect ancestor vtable indices (self at index 0, parent at 1, etc.)
     // Walk the Type hierarchy instead of Vtable.parent because parent links
     // are NULL when the base type is from an imported module.
     QList<int> ancestors;
+    if( !isInterface )
     {
         Type* curType = vt->type;
         while (curType) {
@@ -171,25 +175,28 @@ quint32 Renderer::getOrEmitVtable(int vtableIdx)
         d_elf.appendToSection(d_sections.data, zeros, pad);
     }
 
-    // Pre-compute vtableOff so the self entry can reference it
-    quint32 vtableOff = d_elf.sectionSize(d_sections.data) + MaxExtensions * 4;
+    // Interface vtables contain only method entries.
+    quint32 vtableOff = d_elf.sectionSize(d_sections.data) + (isInterface ? 0 : MaxExtensions * 4);
     d_vtableOffsets[vtableIdx] = vtableOff;
 
-    // Emit extension level array (MaxExtensions entries at negative offsets).
-    int extlev = ancestors.size() - 1;
-    for (int k = MaxExtensions - 1; k >= 0; k--) {
-        quint32 entryPos = d_elf.sectionSize(d_sections.data);
-        quint32 zero = 0;
-        d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
-        if (k <= extlev) {
-            int ancestorIdx = ancestors[extlev - k];
-            // Use canonical global vtable symbol so cross-module isinst works
-            quint32 vtSym = getOrCreateVtableSymbol(ancestorIdx);
-            d_fixups.recordDataRef(entryPos, vtSym, 0);
+    if( !isInterface )
+    {
+        // Emit extension level array (MaxExtensions entries at negative offsets).
+        int extlev = ancestors.size() - 1;
+        for (int k = MaxExtensions - 1; k >= 0; k--) {
+            quint32 entryPos = d_elf.sectionSize(d_sections.data);
+            quint32 zero = 0;
+            d_elf.appendToSection(d_sections.data, (const char*)&zero, 4);
+            if (k <= extlev) {
+                int ancestorIdx = ancestors[extlev - k];
+                // Use canonical global vtable symbol so cross-module isinst works
+                quint32 vtSym = getOrCreateVtableSymbol(ancestorIdx);
+                d_fixups.recordDataRef(entryPos, vtSym, 0);
+            }
         }
-    }
 
-    Q_ASSERT(d_elf.sectionSize(d_sections.data) == vtableOff);
+        Q_ASSERT(d_elf.sectionSize(d_sections.data) == vtableOff);
+    }
 
     for (size_t i = 0; i < vt->methods.size(); i++) {
         quint32 zero = 0;
@@ -519,10 +526,8 @@ bool Renderer::renderModule(Declaration* module)
         }
     }
 
-    // Set RISC-V ELF flags for float ABI compatibility.
-    // Use double-float (0x4) when hardware float is enabled, soft-float (0x0) otherwise.
-    // This must match the ABI of the C runtime / sysroot being linked against.
-    if (d_hasFloat)
+    // The C calling convention uses the soft-float ABI.
+    if (d_hasFloat && !d_useRvAbi)
         d_elf.setElfFlags(0x4); // EF_RISCV_FLOAT_ABI_DOUBLE
     else
         d_elf.setElfFlags(0x0); // EF_RISCV_FLOAT_ABI_SOFT
@@ -723,11 +728,13 @@ bool Renderer::renderModule(Declaration* module)
 
     d_elf.appendToSection(d_sections.text, d_emitter.machineCode());
 
-    // Ensure every type declared in this module has its vtable emitted and its
+    // Ensure every object type declared in this module has its vtable emitted and its
     // canonical GLOBAL symbol defined, even if no code in this module references it.
     for (int vi = 0; vi < d_code.vtableCount(); vi++) {
         Vm::Vtable* vt = d_code.getVtable(vi);
-        if (vt && vt->type && vt->type->decl && vt->type->decl->getModule() == d_currentModule) {
+        Type* vtType = vt && vt->type ? vt->type->deref() : 0;
+        if (vtType && vtType->kind != Type::Interface && vt->type->decl &&
+                vt->type->decl->getModule() == d_currentModule) {
             getOrEmitVtable(vi);
             getOrCreateVtableSymbol(vi);
         }
@@ -829,9 +836,11 @@ void Renderer::emitEpilogue()
     recordFrameInstruction(DwarfEmitter::FrameInstruction::DefineCfa,Sp,d_useRvAbi ? 32 : 0);
 
     if (d_useRvAbi) {
-        // Pop the a0-a7 dump area
-        em.addi(Sp, Sp, 32);
-        recordFrameInstruction(DwarfEmitter::FrameInstruction::DefineCfa,Sp,0);
+        if (d_returnSize <= 8) {
+            // Pop the a0-a7 dump area
+            em.addi(Sp, Sp, 32);
+            recordFrameInstruction(DwarfEmitter::FrameInstruction::DefineCfa,Sp,0);
+        }
     }
 
     em.ret();
@@ -1650,7 +1659,7 @@ void Renderer::emitIndirectCallWithArgs(Register target, quint32 argsSize, quint
             }
             if (returnSize >= 8)
                 pushRegPair(A0, A1);
-            else if (returnSize >= 4)
+            else if( returnSize > 0 )
                 pushReg(A0);
         } else {
             quint32 totalOnStack = 32 + overflowBytes + paddingNeeded;
@@ -1719,7 +1728,7 @@ void Renderer::emitExternCall(quint32 symbolIdx, quint32 argsSize, quint32 retur
         emitCall(symbolIdx);
         if (returnSize >= 8)
             pushRegPair(A0, A1);
-        else if (returnSize >= 4)
+        else if( returnSize > 0 )
             pushReg(A0);
     } else {
         // The callee writes its return value to the base of the argument area, so
@@ -2697,22 +2706,22 @@ int Renderer::emitOp(Procedure& proc, int pc)
 
     case LL_add_r8: {
         quint32 sym = d_elf.addSymbol("__mic$add_r8", 0, 0, 0, STB_GLOBAL, STT_FUNC);
-        emitExternCall(sym, 16, 8, true);
+        emitExternCall(sym, 16, 8);
         return 1;
     }
     case LL_sub_r8: {
         quint32 sym = d_elf.addSymbol("__mic$sub_r8", 0, 0, 0, STB_GLOBAL, STT_FUNC);
-        emitExternCall(sym, 16, 8, true);
+        emitExternCall(sym, 16, 8);
         return 1;
     }
     case LL_mul_r8: {
         quint32 sym = d_elf.addSymbol("__mic$mul_r8", 0, 0, 0, STB_GLOBAL, STT_FUNC);
-        emitExternCall(sym, 16, 8, true);
+        emitExternCall(sym, 16, 8);
         return 1;
     }
     case LL_div_r8: {
         quint32 sym = d_elf.addSymbol("__mic$div_r8", 0, 0, 0, STB_GLOBAL, STT_FUNC);
-        emitExternCall(sym, 16, 8, true);
+        emitExternCall(sym, 16, 8);
         return 1;
     }
     case LL_neg_r8:
@@ -2972,17 +2981,17 @@ int Renderer::emitOp(Procedure& proc, int pc)
 
     case LL_ceq_r8: {
         quint32 sym = d_elf.addSymbol("__mic$ceq_r8", 0, 0, 0, STB_GLOBAL, STT_FUNC);
-        emitExternCall(sym, 16, 4, true);
+        emitExternCall(sym, 16, 4);
         return 1;
     }
     case LL_cgt_r8: {
         quint32 sym = d_elf.addSymbol("__mic$cgt_r8", 0, 0, 0, STB_GLOBAL, STT_FUNC);
-        emitExternCall(sym, 16, 4, true);
+        emitExternCall(sym, 16, 4);
         return 1;
     }
     case LL_clt_r8: {
         quint32 sym = d_elf.addSymbol("__mic$clt_r8", 0, 0, 0, STB_GLOBAL, STT_FUNC);
-        emitExternCall(sym, 16, 4, true);
+        emitExternCall(sym, 16, 4);
         return 1;
     }
 
@@ -3364,7 +3373,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 }
                 if (returnSize >= 8)
                     pushRegPair(A0, A1);
-                else if (returnSize >= 4)
+                else if( returnSize > 0 )
                     pushReg(A0);
             } else {
                 quint32 totalOnStack = 32 + overflowBytes + paddingNeeded;
@@ -3427,7 +3436,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
             if (retSize <= 8) {
                 if (retSize >= 8)
                     popRegPair(A0, A1);
-                else if (retSize >= 4)
+                else if( retSize > 0 )
                     popReg(A0);
             } else {
                 for (quint32 w = 0; w < retSize; w += 4) {
@@ -4009,12 +4018,15 @@ int Renderer::emitOp(Procedure& proc, int pc)
         quint32 allocSym = d_elf.addSymbol(allocator(opcode), 0, 0, 0, STB_GLOBAL, STT_FUNC);
         if (d_useRvAbi) {
             // RV-ABI: arg in a0, return in a0
-            pushReg(T0);    // save totalSize on stack
+            materializePending();
+            em.addi(Sp, Sp, -4);
+            em.sw(T0, Sp, 0);
             em.mv(A0, T0);   // a0 = totalSize (arg for MIC$$alloc)
             emitCall(allocSym);
             // a0 = allocated pointer
             em.mv(T0, A0);  // T0 = allocated ptr
-            popReg(T5);  // T5 = totalSize (restore saved copy)
+            em.lw(T5, Sp, 0);
+            em.addi(Sp, Sp, 4);
         } else {
             // Old convention: push size on stack, call MIC$$alloc
             pushReg(T0); // save totalSize
@@ -4034,6 +4046,8 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 quint32 tmplOff = getOrEmitTemplate(val);
                 // Save base ptr
                 pushReg(T0);
+                if( d_useRvAbi )
+                    materializePending();
                 // T3 = current dest, T5 = end
                 em.mv(T3, T0);
                 em.add(T5, T0, T5); // T5 = end
@@ -4175,7 +4189,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 }
                 if (returnSize >= 8)
                     pushRegPair(A0, A1);
-                else if (returnSize >= 4)
+                else if( returnSize > 0 )
                     pushReg(A0);
             } else {
                 quint32 totalOnStack = 32 + overflowBytes + paddingNeeded;
@@ -4284,7 +4298,7 @@ int Renderer::emitOp(Procedure& proc, int pc)
                 }
                 if (returnSize >= 8)
                     pushRegPair(A0, A1);
-                else if (returnSize >= 4)
+                else if( returnSize > 0 )
                     pushReg(A0);
             } else {
                 quint32 totalOnStack = 32 + overflowBytes + paddingNeeded;
@@ -4689,14 +4703,15 @@ static void appendSLEB128f(QByteArray& frame, qint32 val) {
     }
 }
 
-bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QString& outputPath, bool indirect)
+bool Renderer::generateMainObject(const QByteArrayList& moduleNames, const QString& outputPath, bool indirect, bool useRvAbi)
 {
     using namespace Rv32;
 
     ElfWriter elf(ElfWriter::ArchRISCV);
-    // Default to double-float ABI for sysroot compatibility.
-    // The entry point in main+.o contains no float instructions.
-    elf.setElfFlags(0x4); // EF_RISCV_FLOAT_ABI_DOUBLE
+    if (useRvAbi)
+        elf.setElfFlags(0x0); // EF_RISCV_FLOAT_ABI_SOFT
+    else
+        elf.setElfFlags(0x4); // EF_RISCV_FLOAT_ABI_DOUBLE
     Rv32::Emitter em;
 
     ElfWriter::StandardSections sec = elf.createStandardSections();

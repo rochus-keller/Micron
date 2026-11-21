@@ -21,7 +21,7 @@
 
 #include "MilParser2.h"
 #include <QtDebug>
-#include <limits> 
+#include <limits>
 using namespace Mil;
 
 static inline bool FIRST_Mil(int tt) {
@@ -1035,7 +1035,8 @@ Declaration* Parser2::trident(bool maybeQuali) {
     {
         expect(Tok_Dot, false, "trident");
         expect(Tok_ident, false, "trident");
-        if( d->getType()->kind != Type::Struct && d->getType()->kind != Type::Object && d->getType()->kind != Type::Interface )
+        if( d->getType()->kind != Type::Struct && d->getType()->kind != Type::Union &&
+                d->getType()->kind != Type::Object && d->getType()->kind != Type::Interface )
         {
             error(cur,QString("declaration '%1' in module '%2' is not a record, object or interface").
                   arg(cur.d_val.constData()).arg(m->name.constData()));
@@ -1227,11 +1228,15 @@ Type* Parser2::StructUnionType() {
 
     Declaration tmp;
     scopeStack.push_back(&tmp);
-    while( ( !( peek(1).d_code == Tok_END ) )  ) {
+    while( la.d_type != Tok_Eof && !( peek(1).d_code == Tok_END ) ) {
+        const Token before = la;
+        const int errorCount = errors.size();
         FieldList();
         if( la.d_type == Tok_Semi ) {
             expect(Tok_Semi, false, "StructUnionType");
         }
+        if( la.d_type == Tok_Eof || errors.size() != errorCount || la.toRowCol() == before.toRowCol() )
+            break;
     }
     expect(Tok_END, true, "StructUnionType");
     scopeStack.pop_back();

@@ -148,6 +148,39 @@ void MIC$$exit(int res)
     _Exit(res);
 }
 
+MIC$$Handler* MIC$$handlers = 0;
+static void* MIC$$current = 0;
+static char MIC$$nilException;
+
+void* MIC$$pcall(void (*fn)(void*), void* ctx)
+{
+    MIC$$Handler h;
+    h.prev = MIC$$handlers;
+    MIC$$handlers = &h;
+    if( setjmp(h.buf) == 0 )
+    {
+        fn(ctx);
+        MIC$$handlers = h.prev;
+        return 0;
+    }
+    return MIC$$current;
+}
+
+void MIC$$raise(void* e)
+{
+    if( !e )
+        e = &MIC$$nilException;
+    MIC$$Handler* h = MIC$$handlers;
+    if( !h )
+    {
+        MIC$$printStr("unhandled exception\n");
+        MIC$$exit(1);
+    }
+    MIC$$handlers = h->prev;
+    MIC$$current = e;
+    longjmp(h->buf, 1);
+}
+
 unsigned int MIC$$strlen(char* str)
 {
 	return strlen(str);

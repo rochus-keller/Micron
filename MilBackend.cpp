@@ -196,7 +196,7 @@ QStringList Backend::compileRv32(Mil::AstModel& mdl, const QString& outPath, boo
             moduleNames << module->name;
         }
         const QString mainObj = QDir(outPath).absoluteFilePath("main+.o");
-        if( Mil::Rv32::Renderer::generateMainObject(moduleNames, mainObj, indirectMain ))
+        if( Mil::Rv32::Renderer::generateMainObject(moduleNames, mainObj, indirectMain, useRvAbi ))
         {
             qDebug() << "  generated" << mainObj;
             objFiles << mainObj;
