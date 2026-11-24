@@ -18,9 +18,147 @@
 */
 
 #include "MilVmCode.h"
+#include "MilValidator.h"
 #include <QtDebug>
 using namespace Mil;
 using namespace Vm;
+
+static QByteArray escapeIdent(const QByteArray& part)
+{
+    const char* hex = "0123456789ABCDEF";
+    QByteArray name;
+    for( int i = 0; i < part.size(); i++ )
+    {
+        const unsigned char c = part.at(i);
+        if( (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '_' )
+            name += c;
+        else
+        {
+            name += '$';
+            name += hex[c >> 4];
+            name += hex[c & 0x0f];
+        }
+    }
+    return name;
+}
+
+static QByteArray interfaceThunkName(Type* iface, Type* cls, Declaration* method)
+{
+    Declaration* ifaceDecl = iface ? iface->decl : 0;
+    Declaration* clsDecl = cls ? cls->decl : 0;
+    QByteArray name;
+
+    if( ifaceDecl && ifaceDecl->getModule() )
+        name = escapeIdent(ifaceDecl->getModule()->name);
+    else
+        name = "Interface";
+    name += "$";
+    name += escapeIdent(ifaceDecl ? ifaceDecl->name : QByteArray("Interface"));
+    name += "$";
+    if( clsDecl && clsDecl->getModule() )
+        name += escapeIdent(clsDecl->getModule()->name);
+    else
+        name += "Module";
+    name += "$";
+    name += escapeIdent(clsDecl ? clsDecl->name : QByteArray("Object"));
+    name += "$";
+    name += escapeIdent(method->name);
+    name += "$thunk";
+    return name;
+}
+
+static Declaration* createInterfaceThunk(AstModel* mdl, Declaration* module, Type* iface,
+                                         Type* cls, Declaration* method)
+{
+    if( module == 0 || method == 0 )
+        return 0;
+
+    const QByteArray name = interfaceThunkName(iface, cls, method);
+    Declaration* sub = module->subs;
+    while( sub && sub->name != name )
+        sub = sub->next;
+    if( sub )
+    {
+        if( sub->kind != Declaration::Procedure || sub->typebound || !sub->body )
+            return 0;
+        sub->public_ = true;
+        sub->validated = true;
+        return sub;
+    }
+
+    const DeclList params = method->getParams();
+    if( params.isEmpty() )
+        return 0;
+
+    Declaration* thunk = new Declaration();
+    thunk->kind = Declaration::Procedure;
+    thunk->name = name;
+    thunk->outer = module;
+    thunk->public_ = true;
+    if( method->getType() )
+        thunk->setType(method->getType());
+
+    for( int i = 0; i < params.size(); i++ )
+    {
+        Declaration* param = new Declaration();
+        *param = *params[i];
+        param->outer = thunk;
+        param->next = 0;
+        param->ownstype = false;
+        param->typebound = false;
+        thunk->appendSub(param);
+    }
+
+    Statement* callStat = new Statement();
+    callStat->kind = (IL_op)Statement::ExprStat;
+    callStat->pos = method->pos;
+    Expression* exprs = 0;
+    Expression* last = 0;
+    for( int i = 0; i < params.size(); i++ )
+    {
+        Expression* arg = new Expression();
+        arg->kind = IL_ldarg;
+        arg->id = i;
+        arg->pos = method->pos;
+        arg->setType(params[i]->getType());
+        if( last )
+            last->next = arg;
+        else
+            exprs = arg;
+        last = arg;
+    }
+    Expression* call = new Expression();
+    call->kind = IL_callvirt;
+    call->d = method;
+    call->pos = method->pos;
+    if( method->getType() )
+        call->setType(method->getType());
+    if( last )
+        last->next = call;
+    else
+        exprs = call;
+    callStat->e = exprs;
+
+    Statement* ret = new Statement();
+    ret->kind = IL_ret;
+    ret->pos = method->pos;
+    callStat->next = ret;
+    thunk->body = callStat;
+
+    Validator validator(mdl);
+    if( !validator.validateProc(module, thunk) )
+    {
+        qCritical() << "cannot validate interface thunk" << name;
+        foreach( const Validator::Error& error, validator.errors )
+            qCritical() << error.where << error.pc << error.msg;
+        delete thunk;
+        return 0;
+    }
+    thunk->validated = true;
+    module->appendSub(thunk);
+    return thunk;
+}
 
 const char* Code::op_names[] = {
     "<invalid>",
@@ -1888,10 +2026,23 @@ bool Code::translateExpr(Procedure& proc, Expression* e)
                         return false;
                     if( clsmeths[j]->name.constData() == imethods[i]->name.constData() )
                     {
-                        const int off = findProc(clsmeths[j]);
-                        if( off < 0 )
-                            return false;
-                        vt->methods[i] = procs[off];
+                        if( cls->kind == Type::Object )
+                        {
+                            Declaration* module = proc.decl->getModule();
+                            Declaration* thunk = createInterfaceThunk(mdl, module, vt->type, cls, clsmeths[j]);
+                            if( thunk == 0 || !translateProcDecl(thunk) )
+                                return false;
+                            const int off = findProc(thunk);
+                            if( off < 0 )
+                                return false;
+                            vt->methods[i] = procs[off];
+                        }else
+                        {
+                            const int off = findProc(clsmeths[j]);
+                            if( off < 0 )
+                                return false;
+                            vt->methods[i] = procs[off];
+                        }
                         break;
                     }
                 }

@@ -24,6 +24,8 @@
 #include <QtDebug>
 using namespace Mil;
 
+static QByteArray toCStringLiteral(const QByteArray &in);
+
 static QByteArray escape(const QByteArray& str)
 {
 
@@ -47,7 +49,114 @@ static inline QByteArray name(Declaration* d)
     return escape(d->name);
 }
 
-CeeGen::CeeGen(AstModel* mdl):mdl(mdl),haveGc(false)
+static Declaration* typeDecl(Type* t)
+{
+    if( t == 0 )
+        return 0;
+    t = t->deref();
+    if( t && t->decl && t->decl->kind == Declaration::TypeDecl )
+        return t->decl;
+    return 0;
+}
+
+static bool pointerNeedsTypeDecl(Type* t)
+{
+    if( t == 0 )
+        return false;
+    t = t->deref();
+    if( t->kind == Type::Pointer )
+        return false;
+    return !t->isSOA() && t->kind != Type::Union;
+}
+
+static void collectTypeDeps(Type* t, bool byValue, bool scanMethods,
+                            QSet<Declaration*>& deps, QSet<Declaration*>& scanned,
+                            QSet<Type*>& seen)
+{
+    if( t == 0 )
+        return;
+
+    t = t->deref();
+    if( t == 0 )
+        return;
+
+    if( t->kind == Type::Pointer )
+    {
+        Type* target = t->getType();
+        if( target == 0 )
+            return;
+        Type* targetType = target->deref();
+        if( t->isPtrToOpenArray() && targetType && targetType->kind == Type::Array )
+            target = targetType->getType();
+        targetType = target ? target->deref() : 0;
+        if( targetType == 0 )
+            return;
+        if( targetType->kind == Type::Pointer )
+            collectTypeDeps(target, false, false, deps, scanned, seen);
+        else if( pointerNeedsTypeDecl(targetType) )
+            collectTypeDeps(target, true, false, deps, scanned, seen);
+        return;
+    }
+
+    Declaration* decl = typeDecl(t);
+    if( byValue && decl )
+    {
+        deps.insert(decl);
+        if( scanned.contains(decl) )
+            return;
+        scanned.insert(decl);
+    }
+
+    if( seen.contains(t) )
+        return;
+    seen.insert(t);
+
+    switch( t->kind )
+    {
+    case Type::Proc:
+        collectTypeDeps(t->getType(), true, false, deps, scanned, seen);
+        foreach( Declaration* param, t->subs )
+        {
+            if( !param->typebound )
+                collectTypeDeps(param->getType(), true, false, deps, scanned, seen);
+        }
+        break;
+    case Type::Array:
+        if( t->len )
+            collectTypeDeps(t->getType(), true, false, deps, scanned, seen);
+        break;
+    case Type::Struct:
+    case Type::Union:
+        foreach( Declaration* field, t->subs )
+        {
+            if( field->kind == Declaration::Field )
+                collectTypeDeps(field->getType(), true, false, deps, scanned, seen);
+        }
+        break;
+    case Type::Object:
+        foreach( Declaration* field, t->getFieldList(true) )
+            collectTypeDeps(field->getType(), true, false, deps, scanned, seen);
+        break;
+    default:
+        break;
+    }
+
+    if( scanMethods && (t->kind == Type::Object || t->kind == Type::Interface ||
+                        (t->typebound && t->kind == Type::Struct)) )
+    {
+        foreach( Declaration* proc, t->getMethodTable() )
+        {
+            collectTypeDeps(proc->getType(), true, false, deps, scanned, seen);
+            foreach( Declaration* param, proc->getParams() )
+            {
+                if( !param->typebound )
+                    collectTypeDeps(param->getType(), true, false, deps, scanned, seen);
+            }
+        }
+    }
+}
+
+CeeGen::CeeGen(AstModel* mdl):mdl(mdl),haveGc(false),inFrame(false),inFinallyBody(false),hasRaise(false),callTempDepth(0)
 {
     Q_ASSERT(mdl);
 }
@@ -167,8 +276,144 @@ QString CeeGen::genDedication()
                                     + QCoreApplication::applicationVersion() + " on " + QDateTime::currentDateTime().toString();
 }
 
+void CeeGen::enqueueHeaderCopy(Declaration* d, bool fromCopy,
+                               const QHash<Declaration*, int>& importPos,
+                               const QHash<Declaration*, int>& typePos, int firstTypePos,
+                               QSet<Declaration*>& copySet, QList<Declaration*>& pendingCopies)
+{
+    if( d == 0 || d->kind != Declaration::TypeDecl )
+        return;
+    Declaration* module = d->getModule();
+    if( module == 0 || module == curMod )
+        return;
+    const int importedAt = importPos.value(module, -1);
+    const int neededAt = typePos.value(d, firstTypePos);
+    if( importedAt >= 0 &&
+         ((fromCopy && firstTypePos >= 0 && importedAt < firstTypePos) ||
+          (!fromCopy && neededAt >= 0 && importedAt < neededAt)) )
+        return;
+    if( !copySet.contains(d) )
+    {
+        copySet.insert(d);
+        pendingCopies.append(d);
+    }
+}
+
+void CeeGen::orderHeaderCopy(Declaration* d,
+                             const QHash<Declaration*, QSet<Declaration*> >& copyDeps,
+                             QSet<Declaration*>& active, QSet<Declaration*>& emitted,
+                             QList<Declaration*>& order)
+{
+    if( emitted.contains(d) )
+        return;
+    if( active.contains(d) )
+        return;
+    active.insert(d);
+    foreach( Declaration* dep, copyDeps.value(d) )
+        orderHeaderCopy(dep, copyDeps, active, emitted, order);
+    active.remove(d);
+    emitted.insert(d);
+    order.append(d);
+}
+
+void CeeGen::emitGuardedType(Declaration* d, bool copy)
+{
+    const QByteArray guard = qualident(d) + "$def";
+    hout << "#ifndef " << guard << endl;
+    hout << "#define " << guard << endl;
+    typeDecl(hout, d);
+    hout << ";" << endl;
+    Type* t = deref(d->getType());
+    if( t && (t->kind == Type::Interface || (t->kind == Type::Proc && t->typebound)) )
+    {
+        const QByteArray typeName = qualident(d);
+        const char* secondField = t->kind == Type::Interface ? "vtab$" : "proc";
+        hout << "static inline int " << typeName << "$eq$(" << typeName << " a, " << typeName
+             << " b) { return a.self == b.self && a." << secondField << " == b."
+             << secondField << "; }" << endl;
+    }
+    if( t && t->objectInit && t->isSOA() )
+    {
+        if( copy )
+            hout << "void " << qualident(d) << "$init$(" << typeRef(t)
+                 << "* obj, unsigned int n);" << endl;
+        else
+            emitInitializer(d->getType());
+    }
+    hout << "#endif // " << guard << endl << endl;
+}
+
 void CeeGen::visitModule()
 {
+   QHash<Declaration*, int> importPos;
+   QHash<Declaration*, int> typePos;
+   int firstTypePos = -1;
+   int pos = 0;
+   bool hasImporter = false;
+   Declaration* scan = curMod->subs;
+   while( scan )
+   {
+       if( scan->kind == Declaration::Importer )
+           hasImporter = true;
+       else if( scan->kind == Declaration::Import && scan->imported )
+           importPos.insert(scan->imported, pos);
+       else if( scan->kind == Declaration::TypeDecl )
+       {
+           if( firstTypePos < 0 )
+               firstTypePos = pos;
+           typePos.insert(scan, pos);
+       }
+       scan = scan->next;
+       ++pos;
+   }
+
+   QSet<Declaration*> copySet;
+   QList<Declaration*> pendingCopies;
+   QHash<Declaration*, QSet<Declaration*> > copyDeps;
+
+   if( hasImporter && firstTypePos >= 0 )
+   {
+       pos = 0;
+       scan = curMod->subs;
+       while( scan )
+       {
+           if( scan->kind == Declaration::TypeDecl )
+           {
+               QSet<Declaration*> deps;
+               QSet<Declaration*> scanned;
+               QSet<Type*> seen;
+               collectTypeDeps(scan->getType(), true, true, deps, scanned, seen);
+               foreach( Declaration* dep, deps )
+                   enqueueHeaderCopy(dep, false, importPos, typePos, firstTypePos, copySet, pendingCopies);
+           }
+           scan = scan->next;
+           ++pos;
+       }
+
+       for( int i = 0; i < pendingCopies.size(); ++i )
+       {
+           Declaration* d = pendingCopies[i];
+           QSet<Declaration*> deps;
+           QSet<Declaration*> scanned;
+           QSet<Type*> seen;
+           collectTypeDeps(d->getType(), true, false, deps, scanned, seen);
+           foreach( Declaration* dep, deps )
+           {
+               const int before = copySet.size();
+               enqueueHeaderCopy(dep, true, importPos, typePos, firstTypePos, copySet, pendingCopies);
+               if( copySet.size() != before || copySet.contains(dep) )
+                   copyDeps[d].insert(dep);
+           }
+       }
+   }
+
+   QList<Declaration*> copyOrder;
+   QSet<Declaration*> active;
+   QSet<Declaration*> emitted;
+   foreach( Declaration* d, pendingCopies )
+       orderHeaderCopy(d, copyDeps, active, emitted, copyOrder);
+
+   bool copiesEmitted = false;
    Declaration* sub = curMod->subs;
    while( sub )
    {
@@ -178,15 +423,23 @@ void CeeGen::visitModule()
             hout << "#include \"" << escapeFilename(sub->name) << ".h\"" << endl;
             break;
        case Declaration::TypeDecl:
-           typeDecl(hout, sub);
-           hout << ";" << endl;
-           if( sub->getType()->objectInit && sub->getType()->isSOA() )
-               // for structs, objects and fixlen arrays whose fields or elements need object initialization, create an initializer
-               emitInitializer(sub->getType());
+           if( !copiesEmitted )
+           {
+               foreach( Declaration* copy, copyOrder )
+                   emitGuardedType(copy, true);
+               copiesEmitted = true;
+           }
+           emitGuardedType(sub, false);
            break;
        case Declaration::ConstDecl:
-           hout << "#define " << qualident(sub);
-           constValue(hout, sub->c, 0);
+           hout << "#define " << qualident(sub) << " ";
+           if( sub->c && sub->c->kind == Constant::B )
+           {
+               const ByteString* bytes = sub->c->b;
+               hout << toCStringLiteral(QByteArray::fromHex(
+                   QByteArray(reinterpret_cast<const char*>(bytes->b), bytes->len)));
+           }else
+               constValue(hout, sub->c, sub->getType());
            hout << endl;
            break;
        }
@@ -196,7 +449,7 @@ void CeeGen::visitModule()
    hout << endl;
 
    bout << "typedef struct $Class { struct $Class* super; } $Class;" << endl;
-   bout << "static int $isinst(void* super, void* sub) {" << endl;
+   bout << "static int $isinst(const void* super, void* sub) {" << endl;
    bout << "    $Class* cls = ($Class*)sub;" << endl;
    bout << "    while(cls) {" << endl;
    bout << "        if( cls == super ) return 1;" << endl;
@@ -261,59 +514,348 @@ void CeeGen::visitProcedure(Declaration* proc)
     hout << ";" << endl;
     done.clear();
 
-    const Type* receiver = proc->getReceiver();
+    Type* receiver = proc->getReceiver() ? deref(proc->getReceiver()) : 0;
 
     if( !proc->forward && !proc->extern_ && !proc->foreign_ && (receiver == 0 || receiver->kind != Type::Interface) )
     {
+        const bool hasFinally = proc->pd && proc->pd->finally;
         generateItabs(proc->body);
+        if( hasFinally )
+            generateItabs(proc->pd->finally);
 
-        procHeader(bout, proc);
-        bout << " {" << endl;
-        if( proc->entryPoint && !curMod->nobody )
+        scannedPcalls.clear();
+        pcallIds.clear();
+        pcallSites.clear();
+        hasRaise = false;
+        scanPcalls(proc->body);
+        if( hasFinally )
+            scanPcalls(proc->pd->finally);
+        int bodyCallTemps = 0;
+        int finallyCallTemps = 0;
+        scannedCallTemps.clear();
+        activeCallTemps.clear();
+        scanCallTemps(proc->body, 0, bodyCallTemps);
+        if( hasFinally )
         {
-            bout << ws(0) << "static int done$ = 0;" << endl;
-            bout << ws(0) << "if(!done$) {" << endl;
-            bout << ws(1) <<     "done$ = 1;" << endl;
-            Declaration* sub = curMod->subs;
-            while( sub )
+            scannedCallTemps.clear();
+            activeCallTemps.clear();
+            scanCallTemps(proc->pd->finally, 0, finallyCallTemps);
+        }
+        if( hasFinally || hasRaise || !pcallSites.isEmpty() )
+        {
+            bout << "#if defined(__GNUC__)" << endl;
+            bout << "extern void MIC$$raise(void* e) __attribute__((noreturn));" << endl;
+            bout << "#else" << endl;
+            bout << "extern void MIC$$raise(void* e);" << endl;
+            bout << "#endif" << endl;
+            bout << "extern void* MIC$$pcall(void (*fn)(void*), void* ctx);" << endl << endl;
+        }
+        for( int i = 0; i < pcallSites.size(); ++i )
+            emitPcallThunk(pcallSites[i], i);
+
+        if( hasFinally )
+        {
+            const QByteArray frameName = qualident(proc) + "$frame";
+            const QByteArray bodyName = qualident(proc) + "$body";
+            DeclList params = proc->getParams();
+            DeclList locals = proc->getLocals();
+            const bool hasResult = typeRef(proc->getType()) != "void";
+
+            bout << "typedef struct {" << endl;
+            foreach( Declaration* param, params )
+                bout << ws(0) << typeRef(param->getType()) << " " << paramName(param) << ";" << endl;
+            foreach( Declaration* local, locals )
+                bout << ws(0) << typeRef(local->getType()) << " " << name(local) << ";" << endl;
+            if( hasResult )
+                bout << ws(0) << typeRef(proc->getType()) << " ret$;" << endl;
+            if( params.isEmpty() && locals.isEmpty() && !hasResult )
+                bout << ws(0) << "char unused$;" << endl;
+            bout << "} " << frameName << ";" << endl << endl;
+
+            bout << "static void " << bodyName << "(void* c$) {" << endl;
+            bout << ws(0) << frameName << "* f$ = (" << frameName << "*)c$;" << endl;
+            bout << ws(0) << "void* _ptr$;" << endl;
+            bout << ws(0) << "unsigned int _len$;" << endl;
+            emitCallTemps(bout, bodyCallTemps);
+            done.clear();
+            inFrame = true;
+            inFinallyBody = true;
+            callTempDepth = 0;
+            createLdindLocals(proc->body);
+            statementSeq(bout, proc->body);
+            inFrame = false;
+            inFinallyBody = false;
+            bout << "}" << endl << endl;
+
+            procHeader(bout, proc);
+            bout << " {" << endl;
+            bout << ws(0) << frameName << " f$0;" << endl;
+            bout << ws(0) << frameName << "* f$ = &f$0;" << endl;
+            bout << ws(0) << "void* _ptr$;" << endl;
+            bout << ws(0) << "unsigned int _len$;" << endl;
+            emitCallTemps(bout, finallyCallTemps);
+            foreach( Declaration* param, params )
             {
-                if( sub->kind == Declaration::Import && !sub->imported->nobody )
-                     bout << ws(1) << name(sub->imported) << "$begin$();" << endl;
-                else if( sub->kind == Declaration::VarDecl )
-                    emitSoapInit(bout, qualident(sub), sub->getType(), 1 );
+                bout << ws(0) << "f$->" << paramName(param) << " = ";
+                if( param->typebound )
+                    bout << "(" << typeRef(param->getType()) << ")" << name(param);
+                else
+                    bout << name(param);
+                bout << ";" << endl;
+            }
+            foreach( Declaration* local, locals )
+                emitSoapInit(bout, "f$->" + name(local), local->getType(), 0 );
+
+            bout << ws(0) << "void* e$ = MIC$$pcall(" << bodyName << ", f$);" << endl;
+            done.clear();
+            inFrame = true;
+            inFinallyBody = false;
+            callTempDepth = 0;
+            createLdindLocals(proc->pd->finally);
+            statementSeq(bout, proc->pd->finally);
+            inFrame = false;
+            bout << ws(0) << "if( e$ ) MIC$$raise(e$);" << endl;
+            if( hasResult )
+                bout << ws(0) << "return f$->ret$;" << endl;
+            else
+                bout << ws(0) << "return;" << endl;
+            bout << "}" << endl << endl;
+        }else
+        {
+            procHeader(bout, proc);
+            bout << " {" << endl;
+            if( proc->entryPoint && !curMod->nobody )
+            {
+                bout << ws(0) << "static int done$ = 0;" << endl;
+                bout << ws(0) << "if(!done$) {" << endl;
+                bout << ws(1) <<     "done$ = 1;" << endl;
+                Declaration* sub = curMod->subs;
+                while( sub )
+                {
+                    if( sub->kind == Declaration::Import && !sub->imported->nobody )
+                         bout << ws(1) << name(sub->imported) << "$begin$();" << endl;
+                    else if( sub->kind == Declaration::VarDecl )
+                        emitSoapInit(bout, qualident(sub), sub->getType(), 1 );
+                    sub = sub->next;
+                }
+                bout << ws(0) << "} else return;" << endl;
+            }
+            bout << ws(0) << "void* _ptr$;" << endl;
+            bout << ws(0) << "unsigned int _len$;" << endl;
+            emitCallTemps(bout, bodyCallTemps);
+            Declaration* sub = proc->subs;
+            while(sub)
+            {
+                if( sub->kind == Declaration::LocalDecl )
+                {
+                    bout << ws(0);
+                    parameter(bout, sub);
+                    bout << ";" << endl;
+                    emitSoapInit(bout, name(sub), sub->getType(), 0 );
+                }else if( sub->kind == Declaration::ParamDecl && sub->typebound )
+                {
+                    bout << ws(0) << typeRef(sub->getType()) << " " << paramName(sub) <<
+                            " = (" << typeRef(sub->getType()) << ")" << name(sub) << ";" << endl;
+                }
                 sub = sub->next;
             }
-            bout << ws(0) << "} else return;" << endl;
+            callTempDepth = 0;
+            createLdindLocals(proc->body);
+            statementSeq(bout, proc->body);
+            bout << "}" << endl << endl;
         }
-        bout << ws(0) << "void* _ptr$;" << endl;
-        bout << ws(0) << "unsigned int _len$;" << endl;
-        Declaration* sub = proc->subs;
-        while(sub)
-        {
-            if( sub->kind == Declaration::LocalDecl )
-            {
-                bout << ws(0);
-                parameter(bout, sub);
-                bout << ";" << endl;
-                emitSoapInit(bout, name(sub), sub->getType(), 0 );
-            }else if( sub->kind == Declaration::ParamDecl && sub->typebound )
-            {
-                bout << ws(0) << typeRef(sub->getType()) << " " << paramName(sub) <<
-                        " = (" << typeRef(sub->getType()) << ")" << name(sub) << ";" << endl;
-            }
-            sub = sub->next;
-        }
-        createLdindLocals(proc->body);
-        statementSeq(bout, proc->body);
-        bout << "}" << endl << endl;
     }
     curProc = 0;
+}
+
+void CeeGen::scanPcalls(Statement* body)
+{
+    while( body )
+    {
+        if( body->kind == IL_raise )
+            hasRaise = true;
+        scanPcalls(body->args);
+        if( body->hasE() )
+            scanPcalls(body->e);
+        if( body->body )
+            scanPcalls(body->body);
+        body = body->next;
+    }
+}
+
+
+void CeeGen::scanPcalls(Expression* e)
+{
+    while( e )
+    {
+        if( scannedPcalls.contains(e) )
+        {
+            e = e->next;
+            continue;
+        }
+        scannedPcalls.insert(e);
+        if( e->kind == IL_pcall )
+        {
+            pcallIds.insert(e, pcallSites.size());
+            pcallSites.append(e);
+        }
+        scanPcalls(e->lhs);
+        scanPcalls(e->rhs);
+        if( e->hasE() )
+            scanPcalls(e->e);
+        e = e->next;
+    }
+}
+
+void CeeGen::scanCallTemps(Statement* body, int depth, int& maxDepth)
+{
+    while( body )
+    {
+        scanCallTemps(body->args, depth, maxDepth);
+        if( body->hasE() )
+            scanCallTemps(body->e, depth, maxDepth);
+        if( body->body )
+            scanCallTemps(body->body, depth, maxDepth);
+        body = body->next;
+    }
+}
+
+void CeeGen::scanCallTemps(Expression* e, int depth, int& maxDepth)
+{
+    QSet<Expression*> seenInList;
+    while( e )
+    {
+        if( seenInList.contains(e) )
+            return;
+        seenInList.insert(e);
+        if( !activeCallTemps.contains(e) &&
+                !(scannedCallTemps.contains(e) && scannedCallTemps.value(e) >= depth) )
+        {
+            scannedCallTemps.insert(e, depth);
+            activeCallTemps.insert(e);
+            const bool nestedCall = e->kind == IL_callvirt || e->kind == IL_callmi;
+            const int childDepth = nestedCall ? depth + 1 : depth;
+            if( nestedCall )
+                maxDepth = qMax(maxDepth, childDepth);
+            scanCallTemps(e->lhs, childDepth, maxDepth);
+            scanCallTemps(e->rhs, childDepth, maxDepth);
+            if( e->hasE() )
+                scanCallTemps(e->e, childDepth, maxDepth);
+            activeCallTemps.remove(e);
+        }
+        e = e->next;
+    }
+}
+
+bool CeeGen::isSimpleCallReceiver(Expression* e)
+{
+    if( e == 0 )
+        return false;
+    switch( e->kind )
+    {
+    case IL_ldvar:
+    case IL_ldarg:
+    case IL_ldarg_s:
+    case IL_ldarg_0:
+    case IL_ldarg_1:
+    case IL_ldarg_2:
+    case IL_ldarg_3:
+    case IL_ldloc:
+    case IL_ldloc_s:
+    case IL_ldloc_0:
+    case IL_ldloc_1:
+    case IL_ldloc_2:
+    case IL_ldloc_3:
+        return true;
+    case IL_ldfld:
+        return isSimpleCallReceiver(e->lhs);
+    case IL_ldind_i1:
+    case IL_ldind_i2:
+    case IL_ldind_i4:
+    case IL_ldind_i8:
+    case IL_ldind_ip:
+    case IL_ldind_ipp:
+    case IL_ldind_r4:
+    case IL_ldind_r8:
+    case IL_ldind_u1:
+    case IL_ldind_u2:
+    case IL_ldind_u4:
+    case IL_ldind_u8:
+        return isSimpleCallReceiver(e->lhs);
+    case IL_ldind:
+        if( e->lhs == 0 || e->lhs->getType() == 0 )
+            return false;
+        if( deref(e->lhs->getType())->isPtrToOpenCharArray() ||
+                deref(e->lhs->getType())->kind == Type::StringLit )
+            return false;
+        return isSimpleCallReceiver(e->lhs);
+    default:
+        return false;
+    }
+}
+
+void CeeGen::emitCallTemps(QTextStream& out, int count)
+{
+    for( int i = 0; i < count; ++i )
+        out << ws(0) << "void* _cv$" << i << ";" << endl;
+}
+
+QList<Declaration*> CeeGen::pcallFormals(Expression* e)
+{
+    if( e->d->kind == Declaration::Procedure )
+        return e->d->getParams();
+    return deref(e->d->getType())->subs;
+}
+
+void CeeGen::emitPcallThunk(Expression* e, int index)
+{
+    const QByteArray siteName = qualident(curProc) + "$pcall$" + QByteArray::number(index);
+    const QList<Declaration*> formals = pcallFormals(e);
+    bout << "typedef struct {" << endl;
+    bout << ws(0) << "void (*p)(";
+    if( formals.isEmpty() )
+        bout << "void";
+    else
+        for( int i = 0; i < formals.size(); ++i )
+        {
+            if( i != 0 )
+                bout << ", ";
+            bout << typeRef(formals[i]->getType());
+        }
+    bout << ");" << endl;
+    for( int i = 0; i < formals.size(); ++i )
+        bout << ws(0) << typeRef(formals[i]->getType()) << " a" << i << ";" << endl;
+    bout << "} " << siteName << ";" << endl << endl;
+    bout << "static void " << siteName << "$thunk(void* c) {" << endl;
+    bout << ws(0) << siteName << "* a = (" << siteName << "*)c;" << endl;
+    bout << ws(0) << "a->p(";
+    for( int i = 0; i < formals.size(); ++i )
+    {
+        if( i != 0 )
+            bout << ", ";
+        bout << "a->a" << i;
+    }
+    bout << ");" << endl;
+    bout << "}" << endl << endl;
+}
+
+QByteArray CeeGen::localRef(Declaration* d) const
+{
+    return (inFrame ? QByteArray("f$->") : QByteArray()) + name(d);
+}
+
+QByteArray CeeGen::paramRef(Declaration* d) const
+{
+    return (inFrame ? QByteArray("f$->") : QByteArray()) + paramName(d);
 }
 
 void CeeGen::visitMetaDecl(Declaration* d)
 {
     const QByteArray className = qualident(d);
+    const QByteArray guard = className + "$Vtab$$def";
     Type* t = deref(d->getType());
+    hout << "#ifndef " << guard << endl;
+    hout << "#define " << guard << endl;
     hout << "struct " << className << "$Vtab$ {" << endl;
 
     if( t->kind != Type::Interface)
@@ -321,7 +863,7 @@ void CeeGen::visitMetaDecl(Declaration* d)
 
     if( t->getType() )
     {
-        hout << ws(0) << "struct " << typeRef(t->getType()) << "$Vtag$* super$;" << endl;
+        hout << ws(0) << "const struct " << typeRef(t->getType()) << "$Vtab$* super$;" << endl;
         bout << ws(0) << "&" << typeRef(t->getType()) << "$vtab$," << endl;
     }else if(t->kind == Type::Object)
     {
@@ -355,6 +897,7 @@ void CeeGen::visitMetaDecl(Declaration* d)
     if( t->kind != Type::Interface)
         hout << "extern const struct " << className << "$Vtab$ " << className << "$vtab$;" << endl;
 
+    hout << "#endif // " << guard << endl;
 }
 
 QByteArray CeeGen::typeRef(Type* t)
@@ -410,7 +953,7 @@ QByteArray CeeGen::typeRef(Type* t)
         Type* to = deref(t->getType());
         if( t->isPtrToOpenArray())
             // pointer to open arrays have no extra typedef, instead we use element_type*
-            to = to->getType();
+            to = deref(to->getType());
         QByteArray prefix;
         if( to->isSOA() ) // array types are embedded in a struct
             prefix = "struct ";
@@ -693,6 +1236,7 @@ void CeeGen::constValue(QTextStream& out, Constant* c, Type* hint)
     case Constant::C:
         {
             bool fixArray = false;
+            Type* cType = c->c->type ? deref(c->c->type) : 0;
             if( c->c->type )
             {
                 Type* t = c->c->type;
@@ -701,7 +1245,7 @@ void CeeGen::constValue(QTextStream& out, Constant* c, Type* hint)
                     t = hint;
 #endif
                 out << "(" << typeRef(t) << ")";
-                if( c->c->type->kind == Type::Array && c->c->type->len != 0 )
+                if( cType && cType->kind == Type::Array && cType->len != 0 )
                     fixArray = true;
             }
             out << "{";
@@ -713,7 +1257,7 @@ void CeeGen::constValue(QTextStream& out, Constant* c, Type* hint)
                     out << ", ";
                 if( !c->c->c[i].name.isEmpty() )
                 {
-                    if( c->c->type->kind == Type::Array )
+                    if( cType && cType->kind == Type::Array )
                         out << "[" << escape(c->c->c[i].name) << "]=";
                     else
                         out << "." << escape(c->c->c[i].name) << "=";
@@ -725,6 +1269,62 @@ void CeeGen::constValue(QTextStream& out, Constant* c, Type* hint)
             out << "}";
         }
         break;
+    }
+}
+
+void CeeGen::expressionAs(QTextStream& out, Expression* e, Type* targetType,
+                          Type* hint, bool targetIsVoidPointer)
+{
+    Type* target = targetType ? deref(targetType) : 0;
+    Type* source = e && e->getType() ? deref(e->getType()) : 0;
+    const QByteArray targetRef = typeRef(targetType);
+    const QByteArray sourceRef = e && e->getType() ? typeRef(e->getType()) : QByteArray();
+    Type* exprHint = hint ? hint : targetType;
+
+    if( !targetIsVoidPointer && source && source->kind == Type::Pointer &&
+        target && target->kind == Type::Pointer && targetRef != sourceRef )
+    {
+        if( targetIsVoidPointer || (target && target->kind == Type::Pointer) )
+            exprHint = targetType;
+        out << "(" << targetRef << ")(";
+        expression(out, e, exprHint);
+        out << ")";
+    }else
+    {
+        if( targetIsVoidPointer || (target && target->kind == Type::Pointer) )
+            exprHint = targetType;
+        expression(out, e, exprHint);
+    }
+}
+
+void CeeGen::emitAssignment(QTextStream& out, const QString& lhs, Type* lhsType,
+                            Expression* rhs, Type* hint)
+{
+    Type* rhsType = rhs ? rhs->getType() : 0;
+    Type* lhsValueType = deref(lhsType);
+    Type* rhsValueType = deref(rhsType);
+    const bool lhsAggregate = lhsValueType->kind == Type::Struct ||
+            lhsValueType->kind == Type::Union || lhsValueType->kind == Type::Object ||
+            (lhsValueType->kind == Type::Array && lhsValueType->len != 0);
+    const bool rhsAggregate = rhsValueType->kind == Type::Struct ||
+            rhsValueType->kind == Type::Union || rhsValueType->kind == Type::Object ||
+            (rhsValueType->kind == Type::Array && rhsValueType->len != 0);
+    const QByteArray lhsRef = typeRef(lhsType);
+    const QByteArray rhsRef = typeRef(rhsType);
+
+    if( !lhsAggregate || !rhsAggregate || lhsRef == rhsRef ||
+            lhsRef == "void" || lhsRef == "NULL" ||
+            rhsRef == "void" || rhsRef == "NULL" ||
+            lhsRef.contains("?TYPE") || rhsRef.contains("?TYPE") )
+    {
+        out << lhs << " = ";
+        expressionAs(out, rhs, lhsType, hint);
+    }else
+    {
+        out << "memcpy(&(" << lhs << "), &(union { " << rhsRef
+             << " source; " << lhsRef << " target; }){ .source = ";
+        expression(out, rhs, rhsType);
+        out << " }, sizeof(" << lhsRef << ")";
     }
 }
 
@@ -823,8 +1423,13 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             {
                 DeclList locals = curProc->getLocals();
                 Q_ASSERT(s->id < locals.size());
-                out << ws(level) << name(locals[s->id]) << " = ";
-                expression(out, s->args, locals[s->id]->getType());
+                out << ws(level);
+                QString lhsText;
+                QTextStream lhsOut(&lhsText);
+                lhsOut << localRef(locals[s->id]);
+                lhsOut.flush();
+                emitAssignment(out, lhsText, locals[s->id]->getType(), s->args,
+                               locals[s->id]->getType());
                 out << ";" << endl;
             }
             break;
@@ -836,15 +1441,19 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                 DeclList params = curProc->getParams();
                 Q_ASSERT(s->id < params.size());
                 out << ws(level);
-                out << paramName(params[s->id]);
-                out  << " = ";
-                expression(out, s->args, params[s->id]->getType());
+                QString lhsText;
+                QTextStream lhsOut(&lhsText);
+                lhsOut << paramRef(params[s->id]);
+                lhsOut.flush();
+                emitAssignment(out, lhsText, params[s->id]->getType(), s->args,
+                               params[s->id]->getType());
                 out << ";" << endl;
             }
             break;
 
         case IL_stind:
         case IL_stind_i1:
+        case IL_stind_i2:
         case IL_stind_i4:
         case IL_stind_i8:
         case IL_stind_r4:
@@ -853,10 +1462,26 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             // ASSIG
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
-                out << ws(level) << "*";
-                expression(out, s->args->lhs);
-                out << " = ";
-                expression(out, s->args->rhs, s->args->lhs->getType());
+                Type* pointeeType = deref(s->args->lhs->getType())->getType();
+                Type* storeType = s->kind == IL_stind && s->d ?
+                            s->d->getType() : pointeeType;
+                const bool castAddress = s->kind == IL_stind && s->d &&
+                            typeRef(storeType) != typeRef(pointeeType);
+                out << ws(level);
+                QString lhsText;
+                QTextStream lhsOut(&lhsText);
+                if( castAddress )
+                {
+                    lhsOut << "(*(" << typeRef(storeType) << "*)";
+                    expression(lhsOut, s->args->lhs);
+                    lhsOut << ")";
+                }else
+                {
+                    lhsOut << "*";
+                    expression(lhsOut, s->args->lhs);
+                }
+                lhsOut.flush();
+                emitAssignment(out, lhsText, storeType, s->args->rhs, s->args->lhs->getType());
                 out << ";" << endl;
             }
             break;
@@ -868,9 +1493,13 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                 out << ws(level) << "*";
                 expression(out, s->args->lhs);
                 out << " = ";
+                Type* storeType = deref(s->args->lhs->getType())->getType();
                 if( s->args->rhs->kind == IL_ldmeth )
+                {
                     out << "(" << typeRef(s->args->lhs->getType()->getType()) << ")";
-                expression(out, s->args->rhs, s->args->lhs->getType());
+                    expression(out, s->args->rhs, s->args->lhs->getType());
+                }else
+                    expressionAs(out, s->args->rhs, storeType, s->args->lhs->getType());
                 out << ";" << endl;
             }
             break;
@@ -889,14 +1518,27 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
                           s->args->lhs && s->args->rhs &&
                           s->args->next && s->args->next->kind == Expression::Argument &&
                           s->args->next->rhs && s->args->next->lhs == 0);
+                Type* arrayType = deref(s->args->next->rhs->getType())->getType();
+                Type* elementType = arrayType->getType();
+                Type* storeType = s->kind == IL_stelem && s->d ?
+                            s->d->getType() : elementType;
+                const bool castAddress = s->kind == IL_stelem && s->d &&
+                            typeRef(storeType) != typeRef(elementType);
                 out << ws(level);
-                expression(out, s->args->next->rhs);
+                QString lhsText;
+                QTextStream lhsOut(&lhsText);
+                if( castAddress )
+                    lhsOut << "(*(" << typeRef(storeType) << "*)&(";
+                expression(lhsOut, s->args->next->rhs);
                 if( deref(s->args->next->rhs->getType())->isPtrToFixArray() )
-                    out << "->_";
-                out << "[";
-                expression(out, s->args->lhs);
-                out << "] = ";
-                expression(out, s->args->rhs, s->args->next->rhs->getType()->getType());
+                    lhsOut << "->_";
+                lhsOut << "[";
+                expression(lhsOut, s->args->lhs);
+                lhsOut << "]";
+                if( castAddress )
+                    lhsOut << "))";
+                lhsOut.flush();
+                emitAssignment(out, lhsText, storeType, s->args->rhs, elementType);
                 out << ";" << endl;
             }
             break;
@@ -905,32 +1547,57 @@ void CeeGen::statementSeq(QTextStream& out, Statement* s, int level)
             // ASSIG
             {
                 Q_ASSERT( s->args && s->args->kind == Expression::Argument );
-                out << ws(level) << "(";
-                expression(out, s->args->lhs);
-                out << ")->";
-                out << name(s->d);
-                out << " = ";
-                expression(out, s->args->rhs, s->d->getType());
+                out << ws(level);
+                QString lhsText;
+                QTextStream lhsOut(&lhsText);
+                lhsOut << "(";
+                expression(lhsOut, s->args->lhs);
+                lhsOut << ")->" << name(s->d);
+                lhsOut.flush();
+                emitAssignment(out, lhsText, s->d->getType(), s->args->rhs, s->d->getType());
                 out << ";" << endl;
             }
             break;
 
         case IL_stvar:
             // ASSIG
-            out << ws(level) << qualident(s->d);
-            out << " = ";
-            expression(out, s->args, s->d->getType());
+            {
+                out << ws(level);
+                QString lhsText;
+                QTextStream lhsOut(&lhsText);
+                lhsOut << qualident(s->d);
+                lhsOut.flush();
+                emitAssignment(out, lhsText, s->d->getType(), s->args, s->d->getType());
+            }
             out << ";" << endl;
             break;
 
         case IL_ret:
-            out << ws(level) << "return";
-            if( s->args )
+            if( inFinallyBody )
             {
-                out << " ";
-                expression(out, s->args, curProc->getType() );
+                if( s->args )
+                {
+                    out << ws(level) << "{ f$->ret$ = ";
+                    expressionAs(out, s->args, curProc->getType(), curProc->getType());
+                    out << "; return; }" << endl;
+                }else
+                    out << ws(level) << "return;" << endl;
+            }else
+            {
+                out << ws(level) << "return";
+                if( s->args )
+                {
+                    out << " ";
+                    expressionAs(out, s->args, curProc->getType(), curProc->getType());
+                }
+                out << ";" << endl;
             }
-            out << ";" << endl;
+            break;
+
+        case IL_raise:
+            out << ws(level) << "MIC$$raise(";
+            expression(out, s->args);
+            out << ");" << endl;
             break;
 
         case IL_pop:
@@ -1067,7 +1734,7 @@ void CeeGen::emitInitializer(Type* t)
     else if( t->kind == Type::Array && t->len && t->objectInit )
     {
         Type* et = deref(t->getType());
-        bout << ws(1) << qualident(et->decl) << "$init$(obj, " << t->len << ");" << endl;
+        bout << ws(1) << qualident(et->decl) << "$init$(obj[i]._, " << t->len << ");" << endl;
     }
 
     foreach( Declaration* field, t->subs )
@@ -1357,7 +2024,13 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         out << "NULL";
         break;
     case IL_ldnull_ipp:
-        out << "{ NULL, NULL }";
+        {
+            Type* t = deref(hint);
+            if( hint && (t->kind == Type::Interface || (t->kind == Type::Proc && t->typebound)) )
+                out << "(" << typeRef(hint) << "){ NULL, NULL }";
+            else
+                out << "{ NULL, NULL }";
+        }
         break;
 
 
@@ -1401,7 +2074,29 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
 
 
     case IL_ceq:
-        emitRelOP(out, e, "==");
+        {
+            Type* lhsType = deref(e->lhs->getType());
+            Type* rhsType = deref(e->rhs->getType());
+            const bool lhsTwoWord = lhsType->kind == Type::Interface ||
+                    (lhsType->kind == Type::Proc && lhsType->typebound) || lhsType->kind == Type::DBLNIL;
+            const bool rhsTwoWord = rhsType->kind == Type::Interface ||
+                    (rhsType->kind == Type::Proc && rhsType->typebound) || rhsType->kind == Type::DBLNIL;
+            if( lhsTwoWord || rhsTwoWord )
+            {
+                Type* type = lhsType->kind == Type::DBLNIL ? rhsType : lhsType;
+                if( type->kind == Type::DBLNIL )
+                    emitRelOP(out, e, "==");
+                else
+                {
+                    out << typeRef(type) << "$eq$(";
+                    expression(out, e->lhs, type);
+                    out << ", ";
+                    expression(out, e->rhs, type);
+                    out << ")";
+                }
+            }else
+                emitRelOP(out, e, "==");
+        }
         break;
     case IL_cgt_un: // TODO: UN
     case IL_cgt:
@@ -1430,7 +2125,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         {
             DeclList params = curProc->getParams();
             Q_ASSERT( e->id < params.size() );
-            out << paramName(params[e->id]);
+            out << paramRef(params[e->id]);
         }
         break;
 
@@ -1440,7 +2135,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             DeclList params = curProc->getParams();
             Q_ASSERT( e->id < params.size() );
             prefix(out,e->getType());
-            out << paramName(params[e->id]);
+            out << paramRef(params[e->id]);
             postfix(out,e->getType());;
         }
         break;
@@ -1454,7 +2149,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         {
             DeclList locals = curProc->getLocals();
             Q_ASSERT( e->id < locals.size() );
-            out << name(locals[e->id]);
+            out << localRef(locals[e->id]);
         }
         break;
 
@@ -1464,7 +2159,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             DeclList locals = curProc->getLocals();
             Q_ASSERT( e->id < locals.size() );
             prefix(out,e->getType());
-            out << name(locals[e->id]);
+            out << localRef(locals[e->id]);
             postfix(out,e->getType());
         }
         break;
@@ -1491,9 +2186,18 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             out << ", __tmp$" << typeRef(e->d->getType()) << ")";
         }else
         {
-            out << "(*";
+            Type* pointeeType = deref(e->lhs->getType())->getType();
+            const bool castAddress = e->kind == IL_ldind && e->d &&
+                        typeRef(e->d->getType()) != typeRef(pointeeType);
+            if( castAddress )
+                out << "(*(" << typeRef(e->d->getType()) << "*)(";
+            else
+                out << "(*";
             expression(out, e->lhs);
-            out << ")";
+            if( castAddress )
+                out << "))";
+            else
+                out << ")";
         }
         break;
 
@@ -1509,12 +2213,22 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_ldelem_u4:
     case IL_ldelem_u8:
     case IL_ldelem:
-        expression(out, e->lhs);
-        if( deref(e->lhs->getType())->isPtrToFixArray() )
-            out << "->_";
-        out << "[";
-        expression(out, e->rhs);
-        out << "]";
+        {
+            Type* arrayType = deref(e->lhs->getType())->getType();
+            Type* elementType = arrayType->getType();
+            const bool castAddress = e->kind == IL_ldelem && e->d &&
+                        typeRef(e->d->getType()) != typeRef(elementType);
+            if( castAddress )
+                out << "(*(" << typeRef(e->d->getType()) << "*)&(";
+            expression(out, e->lhs);
+            if( deref(e->lhs->getType())->isPtrToFixArray() )
+                out << "->_";
+            out << "[";
+            expression(out, e->rhs);
+            out << "]";
+            if( castAddress )
+                out << "))";
+        }
         break;
 
     case IL_ldelema:
@@ -1561,6 +2275,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
         }break;
 
     case IL_ldmeth: {
+            Declaration* method = e->d->forwardToProc();
             Type* cls = deref(e->lhs->getType());
             if( cls->kind == Type::Pointer )
                 cls = deref(cls->getType());
@@ -1571,14 +2286,14 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
                 out << "{(_ptr$ = &";
                 expression(out, e->lhs);
                 out << ", ((" << typeRef(e->lhs->getType()) << "*)_ptr$)->self), ((" << typeRef(e->lhs->getType()) << "*)_ptr$)";
-                out << "->vtab$->" << name(e->d) << "}";
+                out << "->vtab$->" << name(method) << "}";
             }else if( cls->kind == Type::Struct )
             {
                 if( hint )
                     out << "(" << typeRef(hint) << ")";
                 out << "{";
                 expression(out, e->lhs);
-                out << ", " << qualident(e->d) << "}";
+                out << ", " << qualident(method) << "}";
             }else
             {
                 if( hint )
@@ -1586,7 +2301,7 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
                 out << "{(_ptr$ = ";
                 expression(out, e->lhs);
                 out << ", _ptr$), ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
-                out << "->vtab$->" << name(e->d) << "}";
+                out << "->vtab$->" << name(method) << "}";
             }
         } break;
 
@@ -1595,9 +2310,15 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             Type* tt = deref(e->d->getType());
             if( tt->kind == Type::Array && tt->len == 0 )
             {
+                const QByteArray targetRef = typeRef(e->getType());
+                const QByteArray sourceRef = typeRef(e->lhs->getType());
                 // TODO: if e->d->getType() is an open array, qualident(t->decl) is not declared.
                 // despite this fix, there are still crashes in S9
+                if( targetRef != sourceRef )
+                    out << "(" << targetRef << ")(";
                 expression(out, e->lhs );
+                if( targetRef != sourceRef )
+                    out << ")";
             }else
             {
                 out << "((" << typeRef(e->d->getType()) << "*)";
@@ -1609,18 +2330,20 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_call:
     case IL_callinst:
         {
-            out << qualident(e->d) << "(";
+            Declaration* proc = e->d->forwardToProc();
+            out << qualident(proc) << "(";
             QList<Expression*> args;
             if( e->kind == IL_callinst )
                 args << e->lhs;
             collectArgs(e->rhs, args);
-            QList<Declaration*> formals = e->d->getParams(true);
+            QList<Declaration*> formals = proc->getParams(true);
             Q_ASSERT( args.size() == formals.size() );
             for( int i = 0; i < args.size(); i++ )
             {
                 if( i != 0 )
                     out << ", ";
-                expression(out, args[i], formals[i]->getType());
+                expressionAs(out, args[i], formals[i]->getType(),
+                             formals[i]->getType(), formals[i]->typebound);
             }
             out << ")";
         }
@@ -1628,20 +2351,36 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
 
     case IL_callvirt:
         {
-            out << "(_ptr$ = ";
-            expression(out, e->lhs);
-            out << ", ((" << typeRef(e->lhs->getType()) << ")_ptr$)";
-            out << "->vtab$->" << name(e->d) << "(_ptr$";
+            Declaration* method = e->d->forwardToProc();
+            QList<Declaration*> selfFormals = method->getParams(true);
+            Type* selfType = selfFormals.isEmpty() ? 0 : selfFormals.first()->getType();
+            const bool selfIsVoidPointer = !selfFormals.isEmpty() && selfFormals.first()->typebound;
+            const int depth = callTempDepth++;
+            const bool direct = isSimpleCallReceiver(e->lhs);
+            if( direct )
+            {
+                out << "((" << typeRef(e->lhs->getType()) << ")";
+                expression(out, e->lhs);
+                out << ")->vtab$->" << name(method) << "(";
+                expressionAs(out, e->lhs, selfType, selfType, selfIsVoidPointer);
+            }else
+            {
+                out << "(_cv$" << depth << " = ";
+                expression(out, e->lhs);
+                out << ", ((" << typeRef(e->lhs->getType()) << ")_cv$" << depth << ")";
+                out << "->vtab$->" << name(method) << "(_cv$" << depth;
+            }
             QList<Expression*> args;
             collectArgs(e->rhs, args);
-            QList<Declaration*> formals = e->d->getParams(false);
+            QList<Declaration*> formals = method->getParams(false);
             Q_ASSERT( args.size() == formals.size() );
             for( int i = 0; i < args.size(); i++ )
             {
                 out << ", ";
-                expression(out, args[i], formals[i]->getType());
+                expressionAs(out, args[i], formals[i]->getType(), formals[i]->getType());
             }
-            out << "))";
+            out << (direct ? ")" : "))");
+            --callTempDepth;
         }
         break;
 
@@ -1657,35 +2396,85 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             {
                 if( i != 0 )
                     out << ", ";
-                expression(out, args[i], proc->subs[i]->getType());
+                expressionAs(out, args[i], proc->subs[i]->getType(),
+                             proc->subs[i]->getType(), proc->subs[i]->typebound);
             }
             out << ")";
+        }
+        break;
+
+    case IL_pcall:
+        {
+            const int index = pcallIds.value(e, -1);
+            Q_ASSERT(index >= 0);
+            const QByteArray siteName = qualident(curProc) + "$pcall$" + QByteArray::number(index);
+            const QList<Declaration*> formals = pcallFormals(e);
+            QList<Expression*> args;
+            collectArgs(e->rhs, args);
+            Q_ASSERT(args.size() == formals.size());
+            out << "MIC$$pcall(" << siteName << "$thunk, &(" << siteName << "){ ";
+            expression(out, e->lhs);
+            for( int i = 0; i < args.size(); ++i )
+            {
+                out << ", ";
+                expressionAs(out, args[i], formals[i]->getType(), formals[i]->getType());
+            }
+            out << " })";
         }
         break;
 
     case IL_callmi:
         if( e->lhs && e->lhs->kind == IL_ldmeth && e->d && deref(e->d->getReceiver())->kind == Type::Interface )
         {
-            out << "(_ptr$ = &";
-            expression(out, e->lhs->lhs );
-            out << ", ((" << typeRef(e->lhs->lhs->getType()) << "*)_ptr$)->vtab$->" << name(e->d);
-            out << "(((" << typeRef(e->lhs->lhs->getType()) << "*)_ptr$)->self";
+            Expression* receiver = e->lhs->lhs;
+            const int depth = callTempDepth++;
+            const bool direct = isSimpleCallReceiver(receiver);
+            if( direct )
+            {
+                out << "((" << typeRef(receiver->getType()) << "*)&";
+                expression(out, receiver);
+                out << ")->vtab$->" << name(e->d);
+                out << "(((" << typeRef(receiver->getType()) << "*)&";
+                expression(out, receiver);
+                out << ")->self";
+            }else
+            {
+                out << "(_cv$" << depth << " = &";
+                expression(out, receiver);
+                out << ", ((" << typeRef(receiver->getType()) << "*)_cv$" << depth << ")->vtab$->" << name(e->d);
+                out << "(((" << typeRef(receiver->getType()) << "*)_cv$" << depth << ")->self";
+            }
             QList<Expression*> args;
             collectArgs(e->rhs, args);
-            Type* proc = deref(e->lhs->lhs->getType());
+            Type* proc = deref(receiver->getType());
             Q_ASSERT( args.size() == proc->subs.size() );
             for( int i = 0; i < args.size(); i++ )
             {
                 out << ", ";
-                expression(out, args[i], proc->subs[i]->getType());
+                expressionAs(out, args[i], proc->subs[i]->getType(),
+                             proc->subs[i]->getType(), proc->subs[i]->typebound);
             }
-            out << "))";
+            out << (direct ? ")" : "))");
+            --callTempDepth;
         }else
         {
-            out << "(_ptr$ = &";
-            expression(out, e->lhs, e->lhs->getType() );
-            out << ", ((" << typeRef(e->lhs->getType()) << "*)_ptr$)->proc(((";
-            out << typeRef(e->lhs->getType()) << "*)_ptr$)->self";
+            const int depth = callTempDepth++;
+            const bool direct = isSimpleCallReceiver(e->lhs);
+            if( direct )
+            {
+                out << "((" << typeRef(e->lhs->getType()) << "*)&";
+                expression(out, e->lhs, e->lhs->getType() );
+                out << ")->proc(((";
+                out << typeRef(e->lhs->getType()) << "*)&";
+                expression(out, e->lhs, e->lhs->getType() );
+                out << ")->self";
+            }else
+            {
+                out << "(_cv$" << depth << " = &";
+                expression(out, e->lhs, e->lhs->getType() );
+                out << ", ((" << typeRef(e->lhs->getType()) << "*)_cv$" << depth << ")->proc(((";
+                out << typeRef(e->lhs->getType()) << "*)_cv$" << depth << ")->self";
+            }
             QList<Expression*> args;
             collectArgs(e->rhs, args);
             Type* proc = deref(e->lhs->getType());
@@ -1693,9 +2482,11 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
             for( int i = 0; i < args.size(); i++ )
             {
                 out << ", ";
-                expression(out, args[i], proc->subs[i]->getType());
+                expressionAs(out, args[i], proc->subs[i]->getType(),
+                             proc->subs[i]->getType(), proc->subs[i]->typebound);
             }
-            out << "))";
+            out << (direct ? ")" : "))");
+            --callTempDepth;
         }
         break;
 
@@ -1704,7 +2495,8 @@ void CeeGen::expression(QTextStream& out, Expression* e, Type *hint)
     case IL_newobj0:
     case IL_newobjgc:
         Q_ASSERT(e->getType()->kind == Type::Pointer);
-        if( deref(e->getType())->objectInit )
+        if( deref(e->getType())->objectInit ||
+                (e->d && deref(e->d->getType())->objectInit) )
         {
             const QByteArray name = typeRef(e->d->getType());
             if( haveGc && e->kind == IL_newobjgc )

@@ -51,3 +51,14 @@ begin
 
   println(p.y)
 end Interface1
+
+(* output:
+
+drawing
+drawing
+drawing
+drawing
+drawing
+34
+
+*)

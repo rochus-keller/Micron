@@ -64,3 +64,16 @@ begin
 
   println(p.y)
 end Interface2
+
+(* output:
+
+1 drawing Point
+2 drawing Point
+3 drawing Point
+4 drawing Point 
+5 drawing Point
+6 drawing Point
+7 drawing Point
+34
+
+*)

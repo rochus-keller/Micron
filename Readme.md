@@ -278,10 +278,9 @@ To make the transition from Pascal easier, Micron supports Pascal operators like
 - [ ] Integrate cross-compilation features with IDE
 - [ ] Integrate RV32 emulator with debugging/DAP support in IDE
 
-The compiler and interpreter are implemented and up-to-date with the specification.
-Development continues on native backends and the C transpiler (pending pcall, raise, finally),
-IDE integration, tooling and additional system ports.
-Also note that the current backends are mostly stack based for simplicity (and expect that there are still bugs).
+The compiler, interpreter, native backends and the C transpiler are implemented and up-to-date with the specification.
+Development continues on IDE integration, tooling and additional system ports.
+Also note that the current native backends are mostly stack based for simplicity (and expect that there are still bugs).
 Register based implementations were considered but postponed to keep the first version of the backends simple and easy to verify.
 The textbook explains why neither Wirth's compilers nor mine so far include any global optimization infrastructure.
 

@@ -23,6 +23,8 @@
 #include <Micron/MilAst.h>
 #include <QTextStream>
 #include <QSet>
+#include <QHash>
+#include <QList>
 
 class QIODevice;
 
@@ -68,6 +70,16 @@ namespace Mil
         void postfix(QTextStream& out,Type*);
         void generateItabs(Statement* body);
         void generateItabs(Expression* e);
+        void scanPcalls(Statement* body);
+        void scanPcalls(Expression* e);
+        void scanCallTemps(Statement* body, int depth, int& maxDepth);
+        void scanCallTemps(Expression* e, int depth, int& maxDepth);
+        bool isSimpleCallReceiver(Expression* e);
+        void emitCallTemps(QTextStream& out, int count);
+        QList<Declaration*> pcallFormals(Expression* e);
+        void emitPcallThunk(Expression* e, int index);
+        QByteArray localRef(Declaration* d) const;
+        QByteArray paramRef(Declaration* d) const;
 
         inline QByteArray ws(int level)
         {
@@ -75,6 +87,19 @@ namespace Mil
             return QByteArray((level+1)*4,' ');
         }
     private:
+        void enqueueHeaderCopy(Declaration* d, bool fromCopy,
+                               const QHash<Declaration*, int>& importPos,
+                               const QHash<Declaration*, int>& typePos, int firstTypePos,
+                               QSet<Declaration*>& copySet, QList<Declaration*>& pendingCopies);
+        void orderHeaderCopy(Declaration* d,
+                             const QHash<Declaration*, QSet<Declaration*> >& copyDeps,
+                             QSet<Declaration*>& active, QSet<Declaration*>& emitted,
+                             QList<Declaration*>& order);
+        void emitGuardedType(Declaration* d, bool copy);
+        void emitAssignment(QTextStream& out, const QString& lhs, Type* lhsType, Expression* rhs, Type* hint);
+        void expressionAs(QTextStream& out, Expression* e, Type* targetType,
+                          Type* hint = 0, bool targetIsVoidPointer = false);
+
         AstModel* mdl;
         QTextStream hout;
         QTextStream bout;
@@ -84,6 +109,15 @@ namespace Mil
         QSet<QPair<Type*,Type*> > itabs;
         int curLevel;
         bool haveGc;
+        QSet<Expression*> scannedPcalls;
+        QHash<Expression*, int> scannedCallTemps;
+        QSet<Expression*> activeCallTemps;
+        QHash<Expression*, int> pcallIds;
+        QList<Expression*> pcallSites;
+        bool inFrame;
+        bool inFinallyBody;
+        bool hasRaise;
+        int callTempDepth;
     };
 }
 
